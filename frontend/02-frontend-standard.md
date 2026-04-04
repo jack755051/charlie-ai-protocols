@@ -38,11 +38,27 @@
   - 內容層: `block__content`
   - 子元素: `block__element`
 
-## 5. 狀態管理與表單 (State & Forms)
+## 5. 邏輯拆分與狀態管理 (Logic Separation & State)
 
-- **狀態收斂**：全域狀態（如語系、使用者權限）交由 Provider / Store / Facade / Service 等框架對應機制管理。局部 UI 狀態請留在元件內，或抽離至 Hook / Composable / Facade / helper service。
-- **可重用邏輯拆分原則**：`hooks` / `composables` / `facades` 等目錄只放「真正可重用」的邏輯。若只是單一元件內的輔助邏輯，請留在元件旁，不要為了符合特定行數門檻硬拆抽象層。
-- **表單驅動**：複雜表單統一使用 Schema-based 驗證（如 Zod）搭配表單狀態庫。Schema 定義應與 Section 放在同一 feature 目錄下（高內聚）。表單錯誤 UI 需沿用專案既有模式，禁止各自發明錯誤提示 DOM。
+當單一功能模組（Feature）邏輯過於複雜時，必須嚴格遵守「職責分離 (Separation of Concerns)」將邏輯抽離，禁止將所有 API、配置與商業邏輯塞在同一個 View 元件中。
+
+- **三層式邏輯抽離模式 (3-Tier Logic Separation)**：
+  針對大型 Feature（如客戶管理、訂單處理），應將邏輯拆分為以下三個維度；以下命名為抽象示意，實際檔名與類別命名可由各 framework strategy 覆蓋：
+  1. **Feature API 協調層 (`useXxxApi` / `XxxApiService`)**：僅負責封裝該 Feature 需要的 Service 呼叫與 Request orchestration，不處理 UI 狀態；HTTP Client、Endpoint/DTO、Mapper 仍須遵守第 1、2 節的 `api` / `services` 邊界，禁止在 Feature 內重複拼 URL 或直接把 Raw DTO 往 View 傳。
+  2. **配置層 (`useXxxFields` / `XxxConfig`)**：統一管理靜態或半靜態的 UI 設定（如 Table 欄位定義、表單 Schema 驗證規則、搜尋列配置）。
+  3. **業務邏輯層 (`useXxxBusiness` / `XxxDomainService`)**：負責核心的 Domain / UI orchestration logic，如過濾、計算、跨 API 組裝與畫面所需衍生狀態；DTO -> Domain Model 的基礎欄位轉換仍應優先留在 Mapper / Service 邊界，不要散落在 View。
+
+- **外觀模式聚合 (Facade Pattern)**：
+  若為了降低 View 層（UI 元件）的調用複雜度，或維持重構時的向後兼容性，應建立一個「聚合器 (Facade)」(如 `useXxxManage` / `XxxFacade`) 將上述三層封裝，對 View 層提供單一、乾淨的呼叫介面。
+
+- **狀態收斂**：
+  全域狀態（如語系、使用者權限）交由 Provider / Store / Facade 等框架對應機制管理。局部 UI 狀態請留在元件內，或由上述的業務邏輯層封裝。
+
+- **可重用邏輯拆分原則**：
+  `hooks` / `composables` / `utils` 等公用目錄只放「跨頁面真正可重用」的邏輯。若是屬於單一 Feature 的拆分邏輯（如上述的三層模式），應建立專屬的 Feature 目錄（高內聚），不要為了符合特定行數門檻硬拆抽象層並丟入全域目錄。
+
+- **表單驅動**：
+  複雜表單統一使用 Schema-based 驗證（如 Zod）搭配表單狀態庫。Schema 定義應與 Section 放在同一 feature 目錄下（屬於上述的配置層）。表單錯誤 UI 需沿用專案既有模式，禁止各自發明錯誤提示 DOM。
 
 ## 6. 多語系文案規則 (i18n Strictness)
 
