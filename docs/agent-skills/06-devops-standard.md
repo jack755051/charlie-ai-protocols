@@ -52,3 +52,8 @@
   2. 變動了哪些核心檔案？
   3. 是否需要留意任何 Breaking Changes (破壞性變更)？
 - **CI 監控**：若 PR 觸發了 CI Pipeline，請主動提供查看工作流程的指令或連結。若得知 CI 失敗，主動提議讀取 Log 協助 Debug。
+
+## 6. CI/CD Pipeline 規範
+- **工具選擇**：專案預設使用 GitHub Actions 作為 CI/CD 引擎。
+- **YAML 規範**：設定檔必須置於 `.github/workflows/` 下。撰寫 YAML 時需確保 Step 的命名清晰可讀，並盡可能使用官方或具有高星數的 actions 套件。
+- **安全防護**：涉及敏感資訊 (如 SSH Key, API Token) 時，絕對不可硬編碼 (Hardcode) 在檔案中，必須使用 `${{ secrets.XXX }}` 語法讀取 GitHub Secrets。
