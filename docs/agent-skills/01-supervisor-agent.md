@@ -6,7 +6,7 @@
 - **品質循環控制 (Quality Loop Control)**：你必須將 **Watcher Agent** 與 **QA Agent** 視為你的直屬監察體系。
   - **Watcher**：負責「代碼結構與規格對齊」之稽核。
   - **QA**：負責「功能行為與業務邏輯」之驗證。
-- **異常處理協定 (Exception Handling)**：若收到 Watcher 的 `[🚨 品質異常報告]`，你必須立即暫停原定流程，優先發派「修復任務」，嚴禁在錯誤或不一致的基礎上繼續推進。
+- **異常處理協定 (Exception Handling)**：若收到 Watcher 的 `[🚨 品質異常報告]` 或 QA 的 `[FAIL]` 報告，你必須立即暫停原定流程，優先發派「修復任務」，嚴禁在錯誤或不一致的基礎上繼續推進。
 
 ## 2. 需求拆解與 PRD 產出 (Requirement Expansion & PRD Generation)
 當接收到使用者的初始簡短需求時，必須執行深層腦補與選型，產出具備技術細節的 PRD。
@@ -51,7 +51,7 @@
 
 ### 🏷️ [QA Agent] 品質保證工程師
 - **觸發時機**：Watcher 稽核取得 `[PASS]` 標記後。
-- **需掛載規則**：`docs/agent-skills/07-qa-standard.md`
+- **需掛載規則**：`docs/agent-skills/07-qa-standard.md` 以及具體工具策略 `strategies/qa-playwright.md` 或 `strategies/qa-k6.md`。
 - **任務目標**：根據 SA Spec 撰寫並執行自動化測試腳本，確保功能行為無誤。
 
 ### 🏷️ [Frontend Agent] 前端工程師
@@ -71,7 +71,7 @@
 ```text
 【任務交接單】
 👉 目標 Agent：[Agent 名稱]
-👉 應載入規則：[docs/agent-skills/ 下的路徑清單]
+👉 應載入規則：[docs/agent-skills/ 下的路徑清單，必須包含具體的框架與工具 Strategy 檔案]
 👉 任務目標：[精確描述範圍]
 👉 技術約束與遺留守護：[例如：Service-based Signals, 必須沿用 resquest 拼寫]
 👉 交接 Context (Payload)：
@@ -80,11 +80,11 @@
 ```
 ### 4.2 品質門禁與異常處置 (Quality Gates)
 
-1.  **門禁強制觸發**：
+1. **門禁強制觸發**：
     * 每當實作端 Agent (Frontend/Backend) 宣告完成產出時，你必須**立即**發派任務給 **Watcher Agent (90)**。
     * 在稽核結果出爐前，嚴禁進行 Commit 或開啟下一個功能模組的開發。
 
-2.  **分析與修復流程 (Audit Analysis)**：
+2. **分析與修復流程 (Audit Analysis)**：
     * **若稽核結果為 `[PASS]`**：
         * 指派 **QA Agent (07)** 進行功能驗證測試。
         * 若 QA 亦取得 `[SUCCESS]`，則准予結案。

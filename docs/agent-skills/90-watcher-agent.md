@@ -6,12 +6,12 @@
 
 ## 2. 稽核執行流 (Audit Workflow)
 1. **讀取交接單**：確認 01 PM 指定的前、後端技術棧，並獲取最新的 `02-SA-Spec` 與 `docs/architecture/database/schema.md`。
-2. **加載對應字典**：讀取 `docs/agent-skills/strategies/` 下對應的框架規範（如 `backend-nestjs.md` 或 `backend-dotnet.md`）。
+2. **加載對應字典**：讀取 `docs/agent-skills/strategies/` 下對應的框架與測試規範（包含 `qa-playwright.md` 與 `qa-k6.md`）。
 3. **實體交叉比對**：
     - **規範 vs 代碼**：檢查是否違反框架特化策略。
     - **SSOT vs 代碼**：檢查 Entity/Migration 與 `schema.md` 是否 100% 同步。
+    - **測試策略稽核**：檢查 QA 腳本是否符合 Playwright POM 模式與 k6 門檻設定。
     - **遺留規範 vs 代碼**：檢查指定拼寫（如 `resquest`）是否被破壞。
-    - **測試稽核**：當 QA Agent 產出腳本時，稽核其測試案例是否覆蓋了 SA Spec 定義的所有 Edge Cases。
 4. **回報**：PASS 則允許進入紀錄與交付階段，FAIL 則發出【🚨 品質異常報告】並強制暫停流水線。
 
 ## 3. 深度稽核清單 (Deep Audit Checklist)
@@ -34,16 +34,25 @@
 ### 3.3 後端特化稽核 (Backend Framework Rules)
 #### **IF [NestJS]：**
 - **[ ] 異常攔截**：Service 內禁止 `try-catch` 後拋出 `HttpException`，必須拋出 `DomainException`。
-- **[ ] 依賴注入**：檢查是否正確使用 Constructor Injection，嚴禁手動 `new` 實例。
+- **[ ] 依賴注入**：檢查是否正確使用 Constructor Injection，嚴禁手動 `new`實例。
 - **[ ] 裝飾器合規**：檢查 DTO 是否標記 `class-validator` 裝飾器，且全域掛載 `ValidationPipe`。
 #### **IF [C# .NET]：**
 - **[ ] 非同步標準**：所有 I/O 方法名必須以 `Async` 結尾並接收/傳遞 `CancellationToken`。
 - **[ ] 物件映射**：禁止在 Controller 手動賦值，檢查是否使用了 `AutoMapper` 或 `Mapster`。
 - **[ ] 配置注入**：禁止直接讀取 `_configuration`，必須使用 `IOptions<T>`。
 
-### 3.4 測試品質稽核 (QA Quality Audit)
-- **[ ] 測試覆蓋率**：檢查 QA 腳本是否包含 SA Spec 中定義的所有異常分支 (Error Handling)。
-- **[ ] 環境隔離**：檢查測試腳本是否具備正確的 Mock 機制，嚴禁在測試中污染真實開發資料庫。
+### 3.4 測試品質稽核 (QA Strategy Audit)
+> **⚠️ 硬性規定：嚴格對齊兩大測試策略檔。**
+
+#### **IF [Playwright - E2E]：**
+- **[ ] Locator 優先級**：稽核是否使用了脆弱的 CSS Selector。必須優先使用 Role 或 TestId，遵循 `qa-playwright.md` 優先級。
+- **[ ] POM 模式**：頁面操作邏輯必須封裝在 `*.page.ts` 中，`.spec.ts` 僅能包含斷言邏輯。
+- **[ ] 異步斷言**：嚴禁使用 `waitForTimeout()`。必須使用 Web-first Assertions（如 `toBeVisible()`）。
+
+#### **IF [k6 - Performance]：**
+- **[ ] 阻斷門檻 (Thresholds)**：腳本必須包含 `http_req_duration: ['p(95)<500']` 與 `http_req_failed: ['rate<0.01']`。
+- **[ ] 真實行為模擬**：腳本必須包含 `sleep()` (Think Time)，嚴禁死迴圈壓測。
+- **[ ] 識別標籤**：標頭必須包含 `User-Agent: k6-load-test`。
 
 ### 3.5 共通稽核
 - **[ ] 統一回應**：所有 API 回傳（含 Error）必須包裹在 `ApiResponse<T>` 內。
@@ -53,7 +62,7 @@
 發現異常時必須使用：
 > ### 🚨 品質異常報告 (Quality Alert)
 > - **稽核對象**：[Agent 名稱]
-> - **衝突類型**：[資料庫不對齊 / 策略違反 / 遺留慣例破壞 / 測試覆蓋不足]
-> - **錯誤詳情**：[具體描述，例如：Entity 漏掉 version 欄位，違反 schema.md]
-> - **參考規範**：[引用對應的 .md 檔案或 schema.md 章節]
-> - **修復建議**：[給出具體修改代碼建議]
+> - **衝突類型**：[資料庫不對齊 / 策略違反 / 遺留慣例破壞 / 測試指標缺失]
+> - **錯誤詳情**：[具體描述，例如：k6 腳本漏掉 p(95) 門檻設定，違反 qa-k6.md]
+> - **參考規範**：[引用對應的 .md 檔案或策略章節]
+> - **修復建議**：[給出具體修改建議]
