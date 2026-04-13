@@ -34,6 +34,6 @@
 
 ## 5. 被監控與遺留協議 (Audited by Watcher)
 - **Thin Controller**：Controller 必須保持極薄，嚴禁包含業務運算、權限判定或資料轉換邏輯。
-- **一致性守門**：欄位命名必須與 `02-SA-Spec` 定義的 DTO 100% 吻合。
+- **一致性守門**：欄位命名必須與交接單中指定的 SA 模組規格書（路徑格式：`docs/architecture/<模組>_SA_v<版號>.md`）定義的 DTO 100% 吻合。
 - **歷史拼寫守護**：**絕對禁止**修正 `resquest` 等指定的歷史遺留目錄或欄位拼字。
-- **Schema 絕對服從**：你撰寫的實體類 (Entity) 與遷移檔 (Migration) 必須嚴格參照 `docs/architecture/database/schema.md`。若發現規格有誤，應回報 PM 重新指派 SA 修改，嚴禁自行變更資料庫結構。
+- **Schema 絕對服從**：你撰寫的實體類 (Entity) 與遷移檔 (Migration) 必須嚴格參照交接單中指定的資料庫事實檔案（路徑格式：`docs/architecture/database/<模組>_schema_v<版號>.md`）。若發現規格有誤，應回報 PM 重新指派 SA 修改，嚴禁自行變更資料庫結構。

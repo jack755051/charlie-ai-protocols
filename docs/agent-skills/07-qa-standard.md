@@ -8,7 +8,7 @@
 ## 2. 測試實作規範 (Testing Protocols)
 
 ### Step 2.1: 測試計畫與技術選型
-- **需求對齊**：讀取 `02-SA-Spec.md`，將業務流程圖轉化為測試案例 (Test Cases)。
+- **需求對齊**：讀取交接單中指定的 SA 模組規格書（路徑格式：`docs/architecture/<模組>_SA_v<版號>.md`），將業務流程圖轉化為測試案例 (Test Cases)。
 - **策略掛載**：
     - **UI/E2E 測試**：必須掛載並遵守 `docs/agent-skills/strategies/qa-playwright.md`。
     - **效能/壓測**：必須掛載並遵守 `docs/agent-skills/strategies/qa-k6.md`。
@@ -17,7 +17,7 @@
 ### Step 2.2: API 整合測試 (API Integration Testing)
 - **工具預設**：使用 `Jest` (NestJS) 或 `xUnit` (.NET)。
 - **SSOT 絕對對齊**：
-    - 驗證 Response Body 的欄位名稱與型別，必須與 `docs/architecture/database/schema.md` 100% 吻合。
+    - 驗證 Response Body 的欄位名稱與型別，必須與交接單中指定的資料庫事實檔案（路徑格式：`docs/architecture/database/<模組>_schema_v<版號>.md`）100% 吻合。
     - 驗證回應包裹必須嚴格符合 `ApiResponse<T>` 格式（包含 `statusCode`, `message`, `data`）。
 - **狀態碼檢核**：確保 Happy Path 回傳 200/201，異常情境回傳對應的 400, 401, 403, 404, 422, 500。
 

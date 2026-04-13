@@ -5,7 +5,7 @@
 - **最高準則**：**規格書 (Spec) 即是真理**。實作代碼與測試腳本必須同時符合「通用架構」、「框架策略 (strategies/)」、「資料庫 SSOT (schema.md)」以及「數位防禦規範 (08-security-standard.md)」。任何偏離一律判定為異常。
 
 ## 2. 稽核執行流 (Audit Workflow)
-1. **讀取交接單**：確認 01 PM 指定的前、後端技術棧，並獲取最新的 `02-SA-Spec` 與 `docs/architecture/database/schema.md`。
+1. **讀取交接單**：確認 01 PM 指定的前、後端技術棧，並獲取最新的 SA 模組規格書（`docs/architecture/<模組>_SA_v<版號>.md`）與對應的資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`）。
 2. **加載對應字典**：讀取 `docs/agent-skills/strategies/` 下對應的框架、測試與安全規範（包含 `qa-playwright.md`、`qa-k6.md` 與 `08-security-standard.md`）。
 3. **實體交叉比對**：
     - **規範 vs 代碼**：檢查是否違反框架特化策略。
@@ -18,7 +18,7 @@
 ## 3. 深度稽核清單 (Deep Audit Checklist)
 
 ### 3.1 資料庫與一致性 (SSOT & Sync)
-- **[ ] Schema 絕對服從**：比對後端 Entity 與 Migration 檔案，其欄位名稱、型別、約束是否與 `docs/architecture/database/schema.md` 100% 一致。
+- **[ ] Schema 絕對服從**：比對後端 Entity 與 Migration 檔案，其欄位名稱、型別、約束是否與交接單指定的資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`）100% 一致。
 - **[ ] 併發控制檢查**：若 `schema.md` 定義了 `version` 欄位，實作代碼必須包含 `@VersionColumn` (NestJS) 或 `[Timestamp]` (.NET)。
 - **[ ] 遺留規範守護**：嚴格檢查 `src/api/resquest` 等指定路徑。若被修正為 `request`，判定為 **FAIL**。
 - **[ ] API 契約對齊**：前端 Mapper/Service 與後端 Controller 欄位是否與 SA Spec 定義的 DTO 100% 對齊。
@@ -42,10 +42,11 @@
 - **[ ] 物件映射**：禁止在 Controller 手動賦值，檢查是否使用了 `AutoMapper` 或 `Mapster`。
 - **[ ] 配置注入**：禁止直接讀取 `_configuration`，必須使用 `IOptions<T>`。
 
-### 3.4 安全合規預審 (Security Pre-Audit)
-- **[ ] 敏感資訊掃描**：代碼中嚴禁出現任何硬編碼的 API Key、Password 或 Token（交叉驗證 08 檢核結果）。
-- **[ ] IDOR 防禦結構**：稽核 Service 層查詢時，是否包含對 `owner_id` 的檢核邏輯（對齊 `08-security-standard.md`）。
-- **[ ] 異常屏蔽**：檢查後端回傳格式，確保無 `Stack Trace` 或底層錯誤詳情外洩。
+### 3.4 安全合規交叉驗證 (Security Cross-Verification)
+> **⚠️ 注意職責邊界**：深度安全掃描由 **Security Agent (08)** 負責。Watcher 在此僅負責「確認 08 的稽核結果已存在且已被納入」，而非重複執行安全審查。
+- **[ ] 稽核結果確認**：確認 Security Agent (08) 已對本次產出執行安全稽核，且結果為 `[PASS]` 或異常已被 PM 派單修復。
+- **[ ] 敏感資訊快篩**：代碼中嚴禁出現任何硬編碼的 API Key、Password 或 Token（與 08 檢核結果交叉驗證）。
+- **[ ] 異常屏蔽確認**：檢查後端回傳格式，確保無 `Stack Trace` 或底層錯誤詳情外洩（對齊 `08-security-standard.md` 的稽核標準）。
 
 ### 3.5 測試品質稽核 (QA Strategy Audit)
 > **⚠️ 硬性規定：嚴格對齊兩大測試策略檔。**

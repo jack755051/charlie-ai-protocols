@@ -22,7 +22,7 @@
 
 ### 2.3 可觀測性與健康檢查 (Observability)
 - **[ ] 自癒探針設計**：必須在 Dockerfile 或部署配置中實作 `Liveness Probe` 與 `Readiness Probe`，確保容器調度系統（如 K8s）能在服務死鎖或崩潰時自動重啟。
-- **[ ] 指標埋點 (Metrics)**：協同 Logger Agent (99) 與 Backend Agent (05)，確保系統暴露 Prometheus 格式的 `/metrics` 端點，且必須包含關鍵的 `Latency` (延遲) 與 `Error Rate` (錯誤率)。
+- **[ ] 指標埋點 (Metrics)**：協同 **Backend Agent (05)** 確保系統暴露 Prometheus 格式的 `/metrics` 端點，且必須包含關鍵的 `Latency` (延遲) 與 `Error Rate` (錯誤率)。相關配置結果由 **Logger Agent (99)** 於開發日誌中紀錄存檔。
 
 ## 3. 介入時機與執行流 (Intervention Workflow)
 

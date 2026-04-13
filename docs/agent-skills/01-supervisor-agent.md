@@ -43,7 +43,7 @@
 ### 🏷️ [SA Agent] 系統架構師 (02)
 - **觸發時機**：PRD 確認後，負責定義業務流程、API 契約與資料庫建模。
 - **需掛載規則**：`docs/agent-skills/02-sa-standard.md`
-- **期望產出**：模組 SA 規格書與 `docs/architecture/database/schema.md` (SSOT)。
+- **期望產出**：模組 SA 規格書（`docs/architecture/<模組>_SA_v<版號>.md`）與資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`）(SSOT)。
 
 ### 🏷️ [UI Agent] 視覺與交互設計師 (03)
 - **觸發時機**：SA 架構師產出 PRD 與功能規格後。
@@ -52,14 +52,14 @@
 
 ### 🏷️ [Frontend Agent] 前端工程師 (04)
 - **觸發時機**：SA 規格與 UI 標註皆通過 Watcher 審核後。
-- **需掛載規則**：`docs/agent-skills/04-frontend-standard.md` 以及具體的框架策略（如 `strategies/frontend-nuxt.md`）。
+- **需掛載規則**：`docs/agent-skills/04-frontend-standard.md` 以及具體的框架策略（如 `strategies/frontend-angular.md`、`strategies/frontend-nextjs.md`、`strategies/frontend-nuxtjs.md`，依技術棧選擇對應檔案）。
 - **任務目標**：依據 UI 規格與 API 契約實作畫面與互動邏輯。必須嚴格遵守組件化與狀態管理規範，並預埋 QA 所需的 `data-testid`。
 
 ### 🏷️ [Backend Agent] 後端工程師 (05)
-- **觸發時機**：SA 規格與 `schema.md` 通過 Watcher 審核後。
-- **需掛載規則**：`docs/agent-skills/05-backend-standard.md` 以及具體的框架策略（如 `strategies/backend-nestjs.md`）。
+- **觸發時機**：SA 規格與資料庫事實檔案通過 Watcher 審核後。
+- **需掛載規則**：`docs/agent-skills/05-backend-standard.md` 以及具體的框架策略（如 `strategies/backend-nestjs.md`、`strategies/backend-dotnet.md`，依技術棧選擇對應檔案）。
 - **任務目標**：實作 API 路由、業務邏輯層與資料庫存取層。**必須同時實作 SRE 要求的健康探針 (/health)、監控指標 (/metrics) 與快取防禦策略。**
-- **最高禁令**：**嚴禁在沒有 `schema.md` 的情況下實作資料庫邏輯。**
+- **最高禁令**：**嚴禁在沒有資料庫事實檔案（`<模組>_schema_v<版號>.md`）的情況下實作資料庫邏輯。**
 
 ### 🏷️ [DevOps Agent] 部署與運維專家 (06)
 - **觸發時機**：模組代碼通過 Watcher, Security, QA 三重門禁後，準備發布或容器化時。
@@ -84,7 +84,7 @@
 ### 🏷️ [Watcher Agent] 專案監控員 (90)
 - **觸發時機**：任一實作 Agent 產出檔案後。
 - **需掛載規則**：`docs/agent-skills/90-watcher-agent.md`
-- **任務目標**：交叉比對程式碼、規格書、測試策略與資料庫事實來源 (schema.md) 是否 100% 一致。
+- **任務目標**：交叉比對程式碼、規格書、測試策略與資料庫事實來源（`<模組>_schema_v<版號>.md`）是否 100% 一致。
 
 ### 🏷️ [Logger Agent] 專案書記官 (99)
 - **觸發時機**：功能模組取得全數 `[PASS]` 與 `[SUCCESS]` 並准予結案時。
@@ -104,7 +104,7 @@
 👉 技術約束與遺留守護：[例如：Service-based Signals, 必須沿用 resquest 拼寫]
 👉 交接 Context (Payload)：
    - 核心規格路徑：[例如：docs/architecture/auth_SA_v1.0.md]
-   - 資料庫事實路徑：[docs/architecture/database/schema.md]
+   - 資料庫事實路徑：[docs/architecture/database/<模組>_schema_v<版號>.md]
 ```
 ### 4.2 品質門禁與異常處置 (Quality Gates)
 
