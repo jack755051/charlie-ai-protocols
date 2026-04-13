@@ -1,83 +1,82 @@
+這是一份根據您實際的目錄結構（包含 `docs/agent-skills` 11 人團隊設定、`engine` CrewAI 執行緒以及 `workspace` 產出區），並融合我們先前討論的「前台 PM (OpenClaw) + 後台執行團隊 (CrewAI)」混合架構概念，為您重新改寫的最外部 `README.md`。
+
+這份改寫版本分為 **「架構介紹」** 與 **「操作使用」** 兩大核心，確保能精準反映您目前的系統設計：
+
+***
+
 # Charlie's AI Protocols
 
-> 這裡是 Charlie 的 AI 輔助開發規則中控台 (AI-driven Workflow Standards)。
-> 本 Repo 收錄了跨語言通用的開發紀律、前端架構標準，以及特定框架的實作策略。透過標準化 AI 的上下文 (Context)，確保產出的程式碼高度對齊團隊架構與開發哲學。
+> 這裡是 Charlie 的 AI 多代理協作系統與開發規則中控台 (AI-driven Workflow Standards)。
+> 本 Repo 收錄了跨語言通用的開發紀律、各職能 AI Agent 的核心人設 (Prompt/Context)，以及基於 CrewAI 的執行引擎。透過標準化 AI 的上下文，確保 AI 產出的架構與程式碼能高度對齊團隊的開發哲學與安全標準。
 
-## 📂 目錄結構與讀取協議 (Directory Structure & Reading Protocol)
+## 🏛 架構介紹 (Architecture Overview)
 
-AI 助手在執行任務時，請根據當前專案的性質，**依序讀取**以下文件組合：
+本系統採用 **「最高決策者 (PM) 與 專業開發團隊 (Crew)」** 的分離架構。最外圍可由 OpenClaw 或其他對話介面作為總 PM 釐清需求，確認後透過本 Repo 的底層引擎 (`engine`) 喚醒 11 人的 AI 團隊進行非同步協作與開發。
 
-### 1. 核心引擎 (General Engine) - 🌟 所有專案必讀
-- `01-general-engine.md`: 定義跨領域通用的 AI 協作協議（如 Checklist 回報機制）、Git 禮儀與 TypeScript 等基礎語言品質門檻。
+### 📂 目錄結構與職責劃分
 
-### 2. 前端領域 (Frontend Domain) - 🖥️ 前端專案必讀
-- `frontend/02-frontend-standard.md`: 定義前端架構邊界 (UI/Service/API)、Data Flow (Mapper 轉換機制)、Headless UI 哲學與 i18n 策略。
-- **特定框架策略 (選讀其中一項):**
-  - `frontend/strategies/nextjs-app-router.md`: 若專案為 Next.js App Router，需讀取此檔（包含 RSC 規則與 shadcn/ui 限制）。
-  - `frontend/strategies/angular-enterprise.md`: 若專案為 Angular，需讀取此檔（包含 Standalone、OnPush、RxJS、NgRx 與 Interceptor 規範）。
-  - `frontend/strategies/nuxt-composition.md`: 若專案為 Nuxt 3/4 + Composition API，需讀取此檔（包含 SSR 資料流、Pinia、shadcn-vue 與 runtimeConfig 規範）。
+系統依據職責與運行階段，切分為以下核心目錄：
 
-### 3. Git / DevOps 工作流 (Workflow Domain) - 🌿 版本控制任務必讀
-- `workflow/04-git-workflow-policy.md`: 定義 Git 管家角色邊界、Conventional Commits、分支決策邏輯、Pre-commit 自檢與 PR/CI 協作規範。
+#### 1. 🧠 代理技能庫 (`docs/agent-skills/`)
+這裡是整個 AI 團隊的大腦與人設儲存區，所有 Agent 在實作前皆須讀取對應的 Markdown 檔案：
+*   **管理與監控組**：`01-supervisor-agent.md` (主控/PM)、`90-watcher-agent.md` (監控者)、`99-logger-agent.md` (紀錄員)。
+*   **核心開發組**：`02-sa-standard.md` (架構師)、`03-ui-standard.md` (UI 設計)、`04-frontend-standard.md` (前端)、`05-backend-standard.md` (後端)。
+*   **維運與品質組**：`06-devops-standard.md`、`07-qa-standard.md`、`08-security-standard.md`、`11-sre-optimization-standard.md`。
+*   **策略擴充 (`strategies/`)**：針對特定技術棧的詳細實作策略（如 `frontend-nextjs.md`、`backend-dotnet.md`、`qa-playwright.md` 等）。
 
-### 4. 未來擴充領域 (Future Domains)
-- `backend/`: 預留給 Node.js, Golang, C# 等後端標準。
-- `hardware/`: 預留給 C++, MCU 韌體等硬體標準。
+#### 2. ⚙️ 核心引擎 (`engine/`)
+驅動 11 人 AI 團隊實際運作的 Python 執行緒：
+*   `factory.py`: 負責讀取 `docs/agent-skills/` 中的 Markdown 檔案，動態生成 CrewAI 的代理物件與指派任務。
+*   `main.py`: 系統啟動點，負責實例化 `AgentFactory` 並一次喚醒整個開發團隊執行專案。
+*   `requirements.txt`: 定義了系統依賴，包含 `crewai`、`langchain-openai` 與 `python-dotenv`。
 
----
-
-## 🚀 步驟一：如何在專案中引入 (Integration)
-
-強烈建議將此 Repo 作為 Git Submodule 掛載到目標專案的 `docs/skills/` 目錄下，以確保規則的統一與同步更新。
-
-在你的目標專案根目錄執行：
-```bash
-git submodule add https://github.com/jack755051/charlie-ai-protocols.git docs/skills
-```
+#### 3. 📁 實體工作區 (`workspace/`)
+AI 團隊的專屬沙盒與產出目錄，嚴格隔離不同階段的產出物：
+*   `architecture/`: 存放 SA 架構師規劃的系統文件與資料庫 Schema (`database/`)。
+*   `design/`: 存放 UI/UX 設計與規格標註。
+*   `history/`: Logger Agent 專用的日誌存放區，紀錄所有溝通與除錯歷程。
 
 ---
 
-## 🤖 步驟二：自動初始化 AI 大腦 (Auto-Initialization)
+## 🚀 操作使用 (Getting Started & Operation)
 
-本 Repo 內建強大的組裝腳本 (init-ai.sh)，可自動將規則合併為 AI 代理支援的設定檔（如 .cursorrules 或 CLI Prompt）。
-
-在專案根目錄執行以下指令：
-
-【情境 A：初始化開發大腦 (寫 Code 用)】
+### 步驟一：環境準備與依賴安裝
+請確認您的宿主機（如 Mac mini）已安裝 Python 3.10+ 環境，接著安裝 CrewAI 核心引擎的依賴套件：
 
 ```bash
-# 針對 Next.js 專案：
-bash docs/skills/init-ai.sh nextjs
+# 進入專案目錄
+cd charlie-ai-protocols
 
-# 針對 Angular 專案：
-bash docs/skills/init-ai.sh angular
-
-# 針對 Nuxt 專案：
-bash docs/skills/init-ai.sh nuxt
-
-# (未來擴充) 針對 C++ 硬體專案：
-# bash docs/skills/init-ai.sh cpp
+# 安裝 CrewAI, LangChain 與相關套件
+pip install -r engine/requirements.txt
 ```
 
-【情境 B：初始化 DevOps 管家大腦 (版本控制用)】
+### 步驟二：設定環境變數 (API Keys)
+為了系統安全性，請勿將金鑰寫死在程式碼中。我們使用 `python-dotenv` 進行管理：
+在專案根目錄建立 `.env` 檔案，並填入您的 LLM 授權碼（預設為 OpenAI，亦可抽換為 Claude/Gemini）：
+```env
+OPENAI_API_KEY="your-openai-api-key-here"
+```
+
+### 步驟三：自動初始化專案大腦 (Auto-Initialization)
+當您準備開始一個新專案（或新任務）時，使用內建的腳本將基礎規則與特定技術策略進行綁定。
+
+在專案根目錄執行：
 ```bash
-# 建立 Git 自動化代理設定檔：
-bash docs/skills/init-ai.sh git-agent
+# 針對特定技術棧初始化 AI 的上下文策略
+# 例如：指定前端使用 Next.js，後端使用 .NET
+bash init-ai.sh frontend-nextjs
+bash init-ai.sh backend-dotnet
 ```
+*(執行後，系統會將 `docs/agent-skills/strategies/` 中的特定設定匯入給對應的 AI 代理。)*
 
-💡 進階提示： 若直接在本 Repo 內開發或驗證，也可以在 repo root 執行 bash init-ai.sh [type]；腳本會動態定位並以自身所在目錄作為規則來源。
+### 步驟四：喚醒 AI 團隊執行開發 (Run the Crew)
+您可以直接透過終端機啟動引擎，或者透過最外層的 OpenClaw PM Agent 呼叫 Terminal Tools 來觸發此腳本：
 
-執行成功後，腳本會依角色在目前專案根目錄產生對應設定檔：
-
-【前端開發角色：輸出 `.cursorrules`】
-- `01-general-engine.md`
-- `frontend/02-frontend-standard.md`
-- 對應的 framework strategy 文件
-
-【Git 管家角色：輸出 `.openclaw-system-prompt`】
-- `01-general-engine.md`
-- `workflow/04-git-workflow-policy.md`
-
-> 若直接在本 Repo 內開發或驗證，也可以在 repo root 執行 `bash init-ai.sh nextjs|angular|nuxt`；腳本會自動以自身所在目錄作為規則來源。
-
----
+```bash
+python engine/main.py
+```
+**執行流程說明：**
+1.  **載入設定**：`factory.py` 將會讀取所有的 Agent 核心協議與策略檔。
+2.  **團隊成軍**：`main.py` 會透過 `AgentFactory.build_team()` 喚醒 11 位專職 Agent。
+3.  **協作與審查**：各 Agent 將遵循嚴格的依賴關係工作（例如 Frontend 必須等待 SA 產出架構圖），最後由 Watcher 與 Security 審查並將最終成果歸檔至 `workspace/` 資料夾中。
