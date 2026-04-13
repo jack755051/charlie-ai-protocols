@@ -1,96 +1,76 @@
 #!/bin/bash
 
-# 從腳本所在位置定位 protocols 目錄，讓 submodule 與本 repo root 兩種執行方式都可用
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROTOCOLS_DIR="$SCRIPT_DIR"
-SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+# ==========================================
+# Charlie's AI Protocols - 初始化與啟動樞紐
+# ==========================================
 
-# 通用組裝函數：接收 目標檔名、Edition名稱，以及 不定數量的規則檔案路徑
-build_rules() {
-    local target_file="$1"
-    local edition_name="$2"
-    shift 2 # 移除前兩個參數，剩下的 $@ 就是檔案陣列
+# 1. 路徑定義：從腳本所在位置定位各個目錄
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE}")" && pwd)"
+PROTOCOLS_DIR="${SCRIPT_DIR}/docs/agent-skills"
+ENGINE_DIR="${SCRIPT_DIR}/engine"
 
-    # 1. 檢查所有傳入的檔案是否存在
-    for file in "$@"; do
-        if [ ! -f "$file" ]; then
-            echo "❌ 錯誤：找不到規則檔 $(basename "$file")"
-            echo "請確認路徑正確：$file"
-            exit 1
-        fi
-    done
+# OpenClaw 預設工作區路徑 (可依據您的 OpenClaw 設定調整)
+OPENCLAW_WORKSPACE="${HOME}/.openclaw/workspace"
 
-    # 2. 寫入起手式
-    echo "# Charlie's AI Protocols (${edition_name})" > "$target_file"
-    echo "你是一位資深專家與系統架構師，請嚴格遵守以下所有規則與開發邊界：" >> "$target_file"
-    echo "" >> "$target_file"
+SCRIPT_NAME="$(basename "${BASH_SOURCE}")"
 
-    # 3. 依序合併檔案
-    for file in "$@"; do
-        cat "$file" >> "$target_file"
-        echo "" >> "$target_file" # 加上空行確保排版不會黏在一起
-    done
-}
-
+# 2. 幫助與提示說明
 print_usage() {
     echo "👉 語法：bash ${SCRIPT_NAME} [type]"
-    echo "👉 可用前端：nextjs | angular | nuxt"
-    echo "👉 可用管家：git-agent"
-    echo "👉 未來擴充：cpp"
+    echo "👉 可用前端策略：nextjs | angular | nuxt"
+    echo "👉 範例：bash ${SCRIPT_NAME} nextjs"
 }
 
-# ==========================================
-# 核心派發邏輯包裝 (Dispatcher Function)
-# ==========================================
+# 3. 核心派發與執行邏輯 (Dispatcher Function)
 run_dispatcher() {
     local role_type="$1"
+    local strategy_file=""
 
+    echo "🚀 正在為 [${role_type}] 環境初始化 AI 團隊大腦..."
+
+    # Step A: 判定使用者選擇的技術策略
     case "$role_type" in
-        "nextjs")
-            echo "🤖 正在為 Next.js 專案初始化 AI 規則..."
-            build_rules ".cursorrules" "Next.js Edition" \
-                "$PROTOCOLS_DIR/01-general-engine.md" \
-                "$PROTOCOLS_DIR/frontend/02-frontend-standard.md" \
-                "$PROTOCOLS_DIR/frontend/strategies/nextjs-app-router.md"
-            echo "✅ 成功產出 .cursorrules！Next.js 專家已就緒。"
-            ;;
-
-        "angular")
-            echo "🤖 正在為 Angular 企業級專案初始化 AI 規則..."
-            build_rules ".cursorrules" "Angular Edition" \
-                "$PROTOCOLS_DIR/01-general-engine.md" \
-                "$PROTOCOLS_DIR/frontend/02-frontend-standard.md" \
-                "$PROTOCOLS_DIR/frontend/strategies/angular-enterprise.md"
-            echo "✅ 成功產出 .cursorrules！Angular 專家已就緒。"
-            ;;
-
-        "nuxt")
-            echo "🤖 正在為 Nuxt 專案初始化 AI 規則..."
-            build_rules ".cursorrules" "Nuxt Composition Edition" \
-                "$PROTOCOLS_DIR/01-general-engine.md" \
-                "$PROTOCOLS_DIR/frontend/02-frontend-standard.md" \
-                "$PROTOCOLS_DIR/frontend/strategies/nuxt-composition.md"
-            echo "✅ 成功產出 .cursorrules！Nuxt 專家已就緒。"
-            ;;
-
-        "git-agent")
-            echo "🤖 正在初始化 Git 自動化管家大腦..."
-            build_rules ".openclaw-system-prompt" "Git & DevOps Agent Persona" \
-                "$PROTOCOLS_DIR/01-general-engine.md" \
-                "$PROTOCOLS_DIR/workflow/04-git-workflow-policy.md"
-            echo "✅ 成功產出 .openclaw-system-prompt！Git 管家已就緒。"
-            ;;
-
-        "cpp")
-            echo "⚠️ 敬請期待：C++ 韌體規則尚在建置中。"
-            ;;
-
+        nextjs)  strategy_file="frontend-nextjs.md" ;;
+        angular) strategy_file="frontend-angular.md" ;;
+        nuxt)    strategy_file="frontend-nuxtjs.md" ;;
         *)
-            echo "❌ 錯誤：未知的專案/角色類型 '$role_type'"
+            echo "❌ 錯誤：未知的類型 '${role_type}'"
             print_usage
             exit 1
             ;;
     esac
+
+    # Step B: 準備 OpenClaw 的 PM 大腦 (注入 SOUL.md)
+    # 將 Supervisor Agent 的規則掛載為 OpenClaw 的最高指導原則
+    if [ -f "${PROTOCOLS_DIR}/01-supervisor-agent.md" ]; then
+        mkdir -p "${OPENCLAW_WORKSPACE}"
+        cp "${PROTOCOLS_DIR}/01-supervisor-agent.md" "${OPENCLAW_WORKSPACE}/SOUL.md"
+        echo "✅ [1/3] 已將總 PM (Supervisor) 規則注入 OpenClaw 工作區: ${OPENCLAW_WORKSPACE}/SOUL.md"
+    else
+        echo "❌ 警告：找不到 PM 規則檔 (${PROTOCOLS_DIR}/01-supervisor-agent.md)"
+    fi
+
+    # Step C: 準備 CrewAI 開發團隊的技術策略 (掛載給 Frontend/Backend 讀取)
+    # 這裡將選定的策略檔複製到 engine 下，讓 main.py 知道現在用哪套框架
+    if [ -f "${PROTOCOLS_DIR}/strategies/${strategy_file}" ]; then
+        cp "${PROTOCOLS_DIR}/strategies/${strategy_file}" "${ENGINE_DIR}/active-strategy.md"
+        echo "✅ [2/3] CrewAI 團隊策略已鎖定為: ${strategy_file}"
+    else
+        echo "❌ 錯誤：找不到技術策略檔 (${PROTOCOLS_DIR}/strategies/${strategy_file})"
+        exit 1
+    fi
+
+    # Step D: 提供一鍵喚醒團隊的選項 (觸發 CrewAI)
+    echo "✅ [3/3] 規則組裝完畢！"
+    echo "--------------------------------------------------"
+    read -p "🤖 是否要立即喚醒 11 人 AI 開發團隊 (執行 CrewAI 引擎)? (y/n): " confirm
+    if [[ "$confirm" == [yY] || "$confirm" == [yY][eE][sS] ]]; then
+        echo "🚀 啟動 CrewAI 引擎中..."
+        # 進入 engine 資料夾並執行 main.py
+        cd "${ENGINE_DIR}" && python main.py
+    else
+        echo "🛑 已取消啟動。您可以稍後透過指令 'python engine/main.py' 自行喚醒團隊。"
+    fi
 }
 
 # ==========================================
@@ -105,34 +85,10 @@ fi
 
 # 判斷使用者是否完全沒有輸入參數
 if [ -z "${1:-}" ]; then
-    if [ ! -t 0 ]; then
-        echo "❌ 錯誤：目前是非互動式環境，請直接帶入角色類型參數。"
-        print_usage
-        exit 1
-    fi
-
-    # --- 互動式選單模式 ---
-    echo "========================================"
-    echo "  🤖 Charlie's AI Agent Selector 🤖  "
-    echo "========================================"
-    echo "請選擇您要喚醒的 AI 助理角色："
-    echo "  1) ⚛️  Next.js 前端開發大腦"
-    echo "  2) 🛡️  Angular 企業級大腦"
-    echo "  3) ⛰️  Nuxt 前端開發大腦"
-    echo "  4) 🐙 Git & DevOps 管家大腦"
-    echo "  0) ❌ 離開"
-    echo "----------------------------------------"
-    read -p "請輸入數字 [0-4]: " choice
-
-    case $choice in
-        1) run_dispatcher "nextjs" ;;
-        2) run_dispatcher "angular" ;;
-        3) run_dispatcher "nuxt" ;;
-        4) run_dispatcher "git-agent" ;;
-        0) echo "👋 取消操作，掰掰！"; exit 0 ;;
-        *) echo "❌ 無效的選擇"; exit 1 ;;
-    esac
+    echo "❌ 錯誤：請帶入您要開發的框架參數。"
+    print_usage
+    exit 1
 else
-    # --- CLI 參數模式 (CI/CD 或快速指令) ---
+    # --- CLI 參數模式 ---
     run_dispatcher "$1"
 fi

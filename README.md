@@ -1,82 +1,150 @@
-這是一份根據您實際的目錄結構（包含 `docs/agent-skills` 11 人團隊設定、`engine` CrewAI 執行緒以及 `workspace` 產出區），並融合我們先前討論的「前台 PM (OpenClaw) + 後台執行團隊 (CrewAI)」混合架構概念，為您重新改寫的最外部 `README.md`。
-
-這份改寫版本分為 **「架構介紹」** 與 **「操作使用」** 兩大核心，確保能精準反映您目前的系統設計：
-
-***
-
 # Charlie's AI Protocols
 
-> 這裡是 Charlie 的 AI 多代理協作系統與開發規則中控台 (AI-driven Workflow Standards)。
-> 本 Repo 收錄了跨語言通用的開發紀律、各職能 AI Agent 的核心人設 (Prompt/Context)，以及基於 CrewAI 的執行引擎。透過標準化 AI 的上下文，確保 AI 產出的架構與程式碼能高度對齊團隊的開發哲學與安全標準。
-
-## 🏛 架構介紹 (Architecture Overview)
-
-本系統採用 **「最高決策者 (PM) 與 專業開發團隊 (Crew)」** 的分離架構。最外圍可由 OpenClaw 或其他對話介面作為總 PM 釐清需求，確認後透過本 Repo 的底層引擎 (`engine`) 喚醒 11 人的 AI 團隊進行非同步協作與開發。
-
-### 📂 目錄結構與職責劃分
-
-系統依據職責與運行階段，切分為以下核心目錄：
-
-#### 1. 🧠 代理技能庫 (`docs/agent-skills/`)
-這裡是整個 AI 團隊的大腦與人設儲存區，所有 Agent 在實作前皆須讀取對應的 Markdown 檔案：
-*   **管理與監控組**：`01-supervisor-agent.md` (主控/PM)、`90-watcher-agent.md` (監控者)、`99-logger-agent.md` (紀錄員)。
-*   **核心開發組**：`02-sa-standard.md` (架構師)、`03-ui-standard.md` (UI 設計)、`04-frontend-standard.md` (前端)、`05-backend-standard.md` (後端)。
-*   **維運與品質組**：`06-devops-standard.md`、`07-qa-standard.md`、`08-security-standard.md`、`11-sre-optimization-standard.md`。
-*   **策略擴充 (`strategies/`)**：針對特定技術棧的詳細實作策略（如 `frontend-nextjs.md`、`backend-dotnet.md`、`qa-playwright.md` 等）。
-
-#### 2. ⚙️ 核心引擎 (`engine/`)
-驅動 11 人 AI 團隊實際運作的 Python 執行緒：
-*   `factory.py`: 負責讀取 `docs/agent-skills/` 中的 Markdown 檔案，動態生成 CrewAI 的代理物件與指派任務。
-*   `main.py`: 系統啟動點，負責實例化 `AgentFactory` 並一次喚醒整個開發團隊執行專案。
-*   `requirements.txt`: 定義了系統依賴，包含 `crewai`、`langchain-openai` 與 `python-dotenv`。
-
-#### 3. 📁 實體工作區 (`workspace/`)
-AI 團隊的專屬沙盒與產出目錄，嚴格隔離不同階段的產出物：
-*   `architecture/`: 存放 SA 架構師規劃的系統文件與資料庫 Schema (`database/`)。
-*   `design/`: 存放 UI/UX 設計與規格標註。
-*   `history/`: Logger Agent 專用的日誌存放區，紀錄所有溝通與除錯歷程。
+> AI 多代理協作系統與開發規則中控台。
+> 透過標準化 11 位 AI Agent 的職能人設，結合 CrewAI 執行引擎，實現工業級的軟體開發流水線。
 
 ---
 
-## 🚀 操作使用 (Getting Started & Operation)
+## 🏛 核心架構 (The 3-Tier Architecture)
 
-### 步驟一：環境準備與依賴安裝
-請確認您的宿主機（如 Mac mini）已安裝 Python 3.10+ 環境，接著安裝 CrewAI 核心引擎的依賴套件：
+系統分為「大腦、引擎、沙盒」三大物理隔離層，確保 AI 在開發過程中不會發生邏輯污染：
+
+### 1. 🧠 代理技能庫 (`docs/agent-skills/`) — 大腦
+
+存放所有 Agent 的 **System Prompts**，是系統的「單一事實來源 (SSOT)」。
+
+| 分組 | Agent | 職責 |
+|---|---|---|
+| **管理組** | 01 Supervisor, 90 Watcher, 99 Logger | 調度、門禁稽核、日誌紀錄 |
+| **開發組** | 02 SA, 03 UI, 04 Frontend, 05 Backend | 架構設計、UI 設計、前後端實作 |
+| **維運組** | 06 DevOps, 07 QA, 08 Security, 11 SRE | CI/CD、測試、資安審查、效能優化 |
+
+* **策略庫 (`strategies/`)**: 存放特定框架的戰術執行細節（如 `frontend-nextjs.md`、`backend-dotnet.md`、`qa-playwright.md`）。
+
+### 2. ⚙️ 核心引擎 (`engine/`) — 肉體
+
+基於 Python 與 CrewAI 的自動化執行緒：
+
+| 檔案 | 職責 |
+|---|---|
+| `factory.py` | 動態讀取 `docs/agent-skills/*.md` 規則，喚醒對應的 Agent 實例 |
+| `main.py` | 接收人類需求，觸發 PM Agent 啟動流水線 |
+| `requirements.txt` | 系統依賴（crewai, langchain-openai, python-dotenv） |
+
+### 3. 📁 實體工作區 (`workspace/`) — 產出
+
+AI Agent 的唯一工作沙盒，所有程式碼與文件皆產出於此：
+
+| 目錄 | 產出者 | 內容 |
+|---|---|---|
+| `architecture/` | SA (02) | 系統設計文件與資料庫 Schema |
+| `design/` | UI (03) | 視覺規範與 Design Tokens |
+| `history/` | Logger (99) | 開發日誌 (devlog) 與決策紀錄 |
+
+---
+
+## 🚀 快速啟動 (Quick Start)
+
+### 1. 環境準備
 
 ```bash
-# 進入專案目錄
-cd charlie-ai-protocols
+# 建議使用 Python 3.10+ 虛擬環境
+python -m venv .venv
+source .venv/bin/activate
 
-# 安裝 CrewAI, LangChain 與相關套件
+# 安裝 CrewAI 引擎依賴
 pip install -r engine/requirements.txt
 ```
 
-### 步驟二：設定環境變數 (API Keys)
-為了系統安全性，請勿將金鑰寫死在程式碼中。我們使用 `python-dotenv` 進行管理：
-在專案根目錄建立 `.env` 檔案，並填入您的 LLM 授權碼（預設為 OpenAI，亦可抽換為 Claude/Gemini）：
-```env
-OPENAI_API_KEY="your-openai-api-key-here"
-```
+### 2. 設定環境變數
 
-### 步驟三：自動初始化專案大腦 (Auto-Initialization)
-當您準備開始一個新專案（或新任務）時，使用內建的腳本將基礎規則與特定技術策略進行綁定。
+複製範本並填入你的 LLM API Key：
 
-在專案根目錄執行：
 ```bash
-# 針對特定技術棧初始化 AI 的上下文策略
-# 例如：指定前端使用 Next.js，後端使用 .NET
-bash init-ai.sh frontend-nextjs
-bash init-ai.sh backend-dotnet
+cp .env.example .env
 ```
-*(執行後，系統會將 `docs/agent-skills/strategies/` 中的特定設定匯入給對應的 AI 代理。)*
 
-### 步驟四：喚醒 AI 團隊執行開發 (Run the Crew)
-您可以直接透過終端機啟動引擎，或者透過最外層的 OpenClaw PM Agent 呼叫 Terminal Tools 來觸發此腳本：
+編輯 `.env`，將 `your-openai-api-key-here` 替換為你的真實金鑰：
+
+```env
+OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+### 3. 初始化技術策略
+
+使用 `init-ai.sh` 為本次任務鎖定前端框架策略：
+
+```bash
+# 可用選項：nextjs | angular | nuxt
+bash init-ai.sh nextjs
+```
+
+> 執行後，腳本會將對應的 `strategies/frontend-*.md` 掛載為 CrewAI 的 active-strategy，
+> 並將 Supervisor 規則注入 OpenClaw 工作區。
+
+### 4. 執行開發任務
+
+若在步驟 3 選擇不自動啟動，可手動喚醒團隊：
 
 ```bash
 python engine/main.py
 ```
-**執行流程說明：**
-1.  **載入設定**：`factory.py` 將會讀取所有的 Agent 核心協議與策略檔。
-2.  **團隊成軍**：`main.py` 會透過 `AgentFactory.build_team()` 喚醒 11 位專職 Agent。
-3.  **協作與審查**：各 Agent 將遵循嚴格的依賴關係工作（例如 Frontend 必須等待 SA 產出架構圖），最後由 Watcher 與 Security 審查並將最終成果歸檔至 `workspace/` 資料夾中。
+
+---
+
+## 🛡 品質門禁機制 (Quality Gates)
+
+本系統內建強制性的多重稽核流程，由 PM (01) 在 `4.2 Quality Gates` 中定義：
+
+```
+實作完成 (04/05)
+  │
+  ├─→ [90 Watcher] 結構稽核 ──┐
+  │                            ├─→ 雙方皆 PASS
+  └─→ [08 Security] 資安掃描 ─┘
+                                    │
+                                    ▼
+                            [07 QA] E2E + 壓測
+                                    │
+                              PASS ─┤─ FAIL → [11 SRE] 效能診斷
+                                    │
+                                    ▼
+                          [99 Logger] 歸檔
+                          CHANGELOG + devlog
+```
+
+* **任一環節 FAIL**：PM 強制產生修復交接單退回原實作 Agent，修復後重新走完整流程。
+* **全數 PASS**：Logger 寫入 `CHANGELOG.md` 並存檔至 `workspace/history/`，准予進入下一模組。
+
+---
+
+## 📂 完整目錄結構
+
+```
+charlie-ai-protocols/
+├── docs/                          # 版控文件區
+│   ├── agent-skills/              # Agent System Prompts (SSOT)
+│   │   ├── 00-core-protocol.md    #   全域憲法
+│   │   ├── 01-supervisor-agent.md #   主控 PM
+│   │   ├── 02 ~ 99-*.md          #   各職能 Agent
+│   │   ├── strategies/            #   框架特化策略
+│   │   └── README.md              #   Agent 架構藍圖與流水線說明
+│   ├── architecture/              # SA 產出的資料庫 Schema 索引
+│   │   └── database/
+│   └── hardware/                  # 嵌入式 / 硬體相關標準
+├── engine/                        # CrewAI 執行引擎
+│   ├── factory.py
+│   ├── main.py
+│   └── requirements.txt
+├── workspace/                     # Agent 執行期產出 (gitignored)
+│   ├── architecture/              #   SA 規格書與 Schema
+│   ├── design/                    #   UI 視覺規範
+│   ├── history/                   #   開發日誌 (devlog)
+│   ├── src/                       #   Agent 產出的原始碼
+│   └── CHANGELOG.md               #   專案變更紀錄
+├── init-ai.sh                     # 技術策略初始化腳本
+├── .cursorrules                   # Cursor IDE 共用 AI 規則
+├── .openclaw-system-prompt        # OpenClaw PM 系統提示
+├── .env.example                   # 環境變數範本
+└── .gitignore
+```
