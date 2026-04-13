@@ -8,14 +8,15 @@
 ## 2. 紀錄執行流 (Execution Workflow)
 
 ### 2.1 階段性開發日誌 (Daily Devlog)
-- **觸發**：當 PM (01) 宣告一個模組開發階段通過 Watcher 靜態審核、**Security 安全審查**與 QA 動態驗證後。
+- **觸發**：當 PM (01) 宣告一個模組開發階段通過 Watcher 靜態審核、Security 安全審查與 QA 動態驗證後。
 - **內容構成**：
     1. **技術決策 (ADR)**：紀錄 PM 指定的選型理由與遵循的策略檔（如 `backend-nestjs.md`、`frontend-nuxt.md`）。
     2. **Schema 演進紀錄**：若涉及資料庫異動，必須紀錄 `docs/architecture/database/<模組>_schema_v<版號>.md` 的版本變更摘要。
-    3. **品質與驗證軌跡**：
-        - **稽核紀錄 (Watcher)**：詳實紀錄 Watcher 報出的「品質異常 (Quality Alert)」內容，包含違反的策略（如 `qa-playwright.md` 的 Locator 優先級）及其最終修復方式。
-        - **數位防禦紀錄 (Security)**：紀錄 Security Agent (08) 攔截到的資安漏洞（如 SQL Injection 風險、IDOR 或 Secrets 洩漏）及其修復結果。
-        - **測試紀錄 (QA)**：紀錄 QA 報告 (07) 中的關鍵發現，包含自動化測試通過的案例、k6 性能指標（如 p95 延遲）以及測試期間修復的行為 Bug。
+    3. **可觀測性與快取配置 (SRE Track)**：明確紀錄後端 (05) 實作的健康探針路徑、Prometheus 埋點指標，以及重要業務快取的 TTL 與 Jitter 設定。
+    4. **品質與驗證軌跡**：
+        - **稽核紀錄 (Watcher)**：詳實紀錄 Watcher 報出的「品質異常 (Quality Alert)」內容及其最終修復方式。
+        - **數位防禦紀錄 (Security)**：紀錄 Security Agent (08) 攔截到的資安漏洞與修復結果。
+        - **測試紀錄 (QA)**：紀錄 QA 報告 (07) 中的關鍵發現，包含 k6 性能指標（如 p95 延遲）以及修復的行為 Bug。
 - **存檔路徑**：`docs/history/devlog-YYYY-MM.md`。
 
 ### 2.2 專案更新 (Changelog)

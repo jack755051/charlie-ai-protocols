@@ -23,14 +23,17 @@
 
 ## 4. 實作規範與工程化要求 (Implementation & Engineering)
 - **統一回應格式**：所有 API 回傳必須封裝於 `ApiResponse<T>`。列表型 API 強制使用 `PaginatedResponse<T>` 並包含完整 Meta。
-- **非同步與可觀測性**：
+- **非同步與追蹤埋點**：
   - 強制使用 `async/await` 處理所有 I/O。
-  - **追蹤埋點**：關鍵業務邏輯處必須埋入 `OpenTelemetry` Trace，確保分佈式環境下的請求鏈路追蹤。
+  - 關鍵業務邏輯處必須埋入 `OpenTelemetry` Trace，確保分佈式環境下的請求鏈路追蹤。
 - **數據遷移規範 (Migration)**：**絕對禁止**手動修改數據庫 Schema。所有變動必須透過 Migration 代碼化，並隨 CI/CD 自動執行。
-- **快取更新策略**：明確定義快取更新策略（預設 Cache Aside），避免 Stale Data 影響業務判斷。
+- **[SRE 擴展] 快取防禦策略 (Caching)**：明確定義快取更新策略（預設 Cache Aside）。**嚴禁無限期存活的快取**，必須套用 SRE 定義的 TTL 並加入 Random Jitter 避免快取雪崩。
+- **[SRE 擴展] 系統探針與指標 (Observability)**：
+  - **健康探針**：必須實作 `/api/health` 端點，供 DevOps 配置 Liveness/Readiness 探針。
+  - **效能指標**：必須暴露 `/metrics` 端點 (如 Prometheus 格式)，提供 API 延遲與錯誤率數據供 SRE 監控。
 
 ## 5. 被監控與遺留協議 (Audited by Watcher)
 - **Thin Controller**：Controller 必須保持極薄，嚴禁包含業務運算、權限判定或資料轉換邏輯。
 - **一致性守門**：欄位命名必須與 `02-SA-Spec` 定義的 DTO 100% 吻合。
 - **歷史拼寫守護**：**絕對禁止**修正 `resquest` 等指定的歷史遺留目錄或欄位拼字。
-Schema 絕對服從：你撰寫的實體類 (Entity) 與遷移檔 (Migration) 必須嚴格參照 docs/architecture/database/schema.md。若發現規格有誤，應回報 PM 重新指派 SA 修改，嚴禁自行變更資料庫結構。
+- **Schema 絕對服從**：你撰寫的實體類 (Entity) 與遷移檔 (Migration) 必須嚴格參照 `docs/architecture/database/schema.md`。若發現規格有誤，應回報 PM 重新指派 SA 修改，嚴禁自行變更資料庫結構。

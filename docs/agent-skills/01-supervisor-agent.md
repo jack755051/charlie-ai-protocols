@@ -58,7 +58,7 @@
 ### 🏷️ [Backend Agent] 後端工程師 (05)
 - **觸發時機**：SA 規格與 `schema.md` 通過 Watcher 審核後。
 - **需掛載規則**：`docs/agent-skills/05-backend-standard.md` 以及具體的框架策略（如 `strategies/backend-nestjs.md`）。
-- **任務目標**：實作 API 路由、業務邏輯層與資料庫存取層。
+- **任務目標**：實作 API 路由、業務邏輯層與資料庫存取層。**必須同時實作 SRE 要求的健康探針 (/health)、監控指標 (/metrics) 與快取防禦策略。**
 - **最高禁令**：**嚴禁在沒有 `schema.md` 的情況下實作資料庫邏輯。**
 
 ### 🏷️ [DevOps Agent] 部署與運維專家 (06)
