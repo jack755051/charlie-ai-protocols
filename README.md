@@ -55,11 +55,23 @@ make run FRAMEWORK=nuxt # 指定框架（nextjs | angular | nuxt）
 
 > 完整指令清單：`make help`
 
+### 5. 全域安裝（選用）
+
+將 Agent 技能註冊至 User Scope，讓任何 Repo 都能直接使用 `$skill`：
+
+```bash
+make install    # 安裝至 ~/.agents/skills/ + ~/.codex/AGENTS.md
+make uninstall  # 移除全域安裝（不影響本地）
+```
+
+> 全域與本地的差異詳見 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+
 ---
 
 ## 💡 BYOCLI 模式 — 臨時調用 Agent 技能
 
-在任何支援 `.agents/` 的 AI CLI（如 Codex）中，透過 `$` 前綴臨時調用單一 Agent：
+在任何支援 `.agents/` 的 AI CLI（如 Codex）中，透過 `$` 前綴臨時調用單一 Agent。
+本地（`make sync`）或全域（`make install`）安裝後皆可使用：
 
 ```
 $qa 請幫我針對這段 API 寫單元測試。

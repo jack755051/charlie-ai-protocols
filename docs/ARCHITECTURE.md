@@ -28,20 +28,24 @@
 
 ### 三消費者路徑
 
-| 消費者 | 讀取來源 | 機制 | 用途 |
+| 消費者 | 讀取來源 | 機制 | 需要 mapper？ |
 |---|---|---|---|
-| **CrewAI 引擎** | `docs/agent-skills/*-agent.md` | `factory.py` 直接 glob SSOT 原始檔 | 全自動流水線，11 Agent 協作 |
-| **Claude Code** | `docs/agent-skills/*.md` | `CLAUDE.md` 用 `@` 引用 + `.claude/rules/` 路徑限定 | 開發時即時輔助，遵循專案規範 |
-| **Codex / AI CLI** | `.agents/skills/` 短名 symlink | `AGENTS.md` 的 `$skill` 映射表 | BYOCLI 模式，臨時調用單一技能 |
+| **CrewAI 引擎** | `docs/agent-skills/*-agent.md` | `factory.py` 直接 glob SSOT 原始檔 | 不需要 |
+| **Claude Code** | `docs/agent-skills/*.md` | `CLAUDE.md` 用 `@` 引用 + `.claude/rules/` 路徑限定 | 不需要 |
+| **Codex / AI CLI** | `.agents/skills/` symlink | `AGENTS.md` 的 `$skill` 映射表 | **需要**（`make sync` 或 `make install`） |
 
-### 為什麼 Claude Code 不走 symlink？
+> **`scripts/mapper.sh` 是專門為 Codex 生態系服務的。** CrewAI 和 Claude Code 都直接讀取 SSOT 原始檔，不經過 `.agents/skills/`。
 
-Claude Code 有自己的原生機制：
+### 為什麼 Claude Code 和 CrewAI 不需要 mapper？
+
+**Claude Code** 有自己的原生機制：
 
 - `CLAUDE.md` 透過 `@path` 語法直接引用 SSOT 原始檔（如 `@docs/agent-skills/00-core-protocol.md`），不需要 symlink 中介。
 - `.claude/rules/*.md` 使用 `paths:` frontmatter 做路徑限定，當你編輯 `docs/agent-skills/` 或 `engine/` 下的檔案時，對應規則會自動載入。
 
-因此 Claude Code 是**直接消費 SSOT**，不經過 `.agents/skills/`。
+**CrewAI 引擎** 的 `factory.py` 直接 glob `docs/agent-skills/*-agent.md`，在 Python 層完成檔案發現，同樣不依賴 symlink。
+
+因此只有 Codex 等外部 AI CLI 需要透過 mapper 建立的 `.agents/skills/` 路徑來存取 Agent 定義。
 
 ---
 
@@ -64,6 +68,44 @@ Claude Code 有自己的原生機制：
 ```
 
 **為什麼不衝突？** `factory.py` 只 glob `*-agent.md`，短名 `qa.md` 不匹配，天然被排除。
+
+---
+
+## 🌐 雙層 Scope — 本地 vs 全域
+
+Agent 技能可以安裝在兩個層級，Codex 啟動時依序載入並合併：
+
+```
+┌──────────────────────────────────────────────────────┐
+│  User Scope（全域，跨所有 Repo）                      │
+│  ~/.codex/AGENTS.md       ← 全域憲法與技能表          │
+│  ~/.agents/skills/        ← 絕對路徑 symlink → SSOT  │
+│                                                      │
+│  安裝：make install    移除：make uninstall           │
+├──────────────────────────────────────────────────────┤
+│  Project Scope（本地，僅限當前 Repo）                  │
+│  ./AGENTS.md              ← 專案專屬指令（可覆寫全域）│
+│  ./.agents/skills/        ← 相對路徑 symlink → SSOT  │
+│                                                      │
+│  安裝：make sync                                     │
+└──────────────────────────────────────────────────────┘
+
+載入順序：User Scope → Project Scope（後者覆寫前者）
+```
+
+| 比較 | 本地（`make sync`） | 全域（`make install`） |
+|---|---|---|
+| 目標路徑 | `./.agents/skills/` | `~/.agents/skills/` |
+| Symlink 類型 | 相對路徑 | 絕對路徑 |
+| 額外產出 | 無 | `~/.codex/AGENTS.md` |
+| 作用範圍 | 僅限此 Repo | 電腦上所有 Repo |
+| 覆寫機制 | 覆寫全域同名技能 | 被專案層覆寫 |
+
+### 典型使用情境
+
+- **只用這個 Repo**：`make sync` 即可。
+- **跨 Repo 共用大腦**：先 `make install`，新 Repo 無需任何設定就能使用 `$qa`、`$security` 等技能。
+- **專案有特殊規則**：在新 Repo 建立自己的 `AGENTS.md`，Codex 會自動合併全域 + 專案層。
 
 ---
 
