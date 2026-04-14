@@ -20,13 +20,22 @@ mkdir -p "${TARGET_DIR}"
 find "${TARGET_DIR}" -type l -delete
 
 count=0
+alias_count=0
 
 for src in "${SOURCE_DIR}"/*-agent.md; do
   [ -f "${src}" ] || continue
   filename="$(basename "${src}")"
+
+  # 長名 symlink：07-qa-agent.md（供 factory.py glob *-agent.md）
   ln -s "../../docs/agent-skills/${filename}" "${TARGET_DIR}/${filename}"
   count=$((count + 1))
+
+  # 短名 symlink：qa.md（供 Codex $qa 調用）
+  # 解析規則：{number}-{role_key}-agent.md → role_key.md
+  short_name="$(echo "${filename}" | sed 's/^[0-9]*-//; s/-agent\.md/.md/')"
+  ln -s "../../docs/agent-skills/${filename}" "${TARGET_DIR}/${short_name}"
+  alias_count=$((alias_count + 1))
 done
 
-echo "✅ 已建立 ${count} 個 symlink → .agents/skills/"
+echo "✅ 已建立 ${count} 個 agent symlink + ${alias_count} 個短名 alias → .agents/skills/"
 ls -l "${TARGET_DIR}" | grep -v total
