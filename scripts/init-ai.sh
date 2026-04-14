@@ -5,9 +5,10 @@
 # ==========================================
 
 # 1. 路徑定義：從腳本所在位置定位各個目錄
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE}")" && pwd)"
-PROTOCOLS_DIR="${SCRIPT_DIR}/docs/agent-skills"
-ENGINE_DIR="${SCRIPT_DIR}/engine"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="${SCRIPT_DIR}/.."
+PROTOCOLS_DIR="${PROJECT_ROOT}/docs/agent-skills"
+ENGINE_DIR="${PROJECT_ROOT}/engine"
 
 # OpenClaw 預設工作區路徑 (可依據您的 OpenClaw 設定調整)
 OPENCLAW_WORKSPACE="${HOME}/.openclaw/workspace"

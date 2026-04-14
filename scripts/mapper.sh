@@ -9,8 +9,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SOURCE_DIR="${SCRIPT_DIR}/docs/agent-skills"
-TARGET_DIR="${SCRIPT_DIR}/.agents/skills"
+PROJECT_ROOT="${SCRIPT_DIR}/.."
+SOURCE_DIR="${PROJECT_ROOT}/docs/agent-skills"
+TARGET_DIR="${PROJECT_ROOT}/.agents/skills"
 
 # 確保目標目錄存在
 mkdir -p "${TARGET_DIR}"
