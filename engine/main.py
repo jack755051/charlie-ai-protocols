@@ -1,5 +1,6 @@
 import os
-from crewai import Task, Crew, Process
+
+from crewai import Crew, Process, Task
 from dotenv import load_dotenv
 
 from factory import AgentFactory
@@ -59,7 +60,7 @@ def main():
 
     print("\n=======================================================")
     print("🎉 專案開發結束！PM 的最終結案報告：")
-    print(result)
+    print(result.raw)
 
 if __name__ == "__main__":
     main()
