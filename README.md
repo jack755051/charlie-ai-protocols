@@ -129,6 +129,8 @@ charlie-ai-protocols/
 │   │   ├── 02 ~ 99-*-agent.md    #   各職能 Agent
 │   │   ├── strategies/            #   框架特化策略
 │   │   └── README.md              #   Agent 架構藍圖與流水線說明
+│   ├── policies/                  # 跨工具通用策略 (任何 AI CLI 可直接讀取)
+│   │   └── git-workflow.md        #   Git 版本控制與 PR 規範
 │   ├── architecture/              # SA 產出的資料庫 Schema 索引
 │   │   └── database/
 │   └── hardware/                  # 嵌入式 / 硬體相關標準

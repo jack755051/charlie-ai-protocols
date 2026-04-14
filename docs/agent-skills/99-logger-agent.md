@@ -33,7 +33,7 @@
 
 ### 2.3 專案更新 (Changelog)
 - **觸發**：當模組準備合併分支或進行正式發布前。
-- **格式要求**：遵循「Keep a Changelog」標準格式。
+- **格式要求**：遵循「Keep a Changelog」標準格式，Commit Type 分類須對齊 `docs/policies/git-workflow.md` 的 Conventional Commits 規範。
 - **內容彙整**：
     - **Added**: 新增的 API、UI 元件、Schema 資料表、E2E 測試腳本、k6 壓測套件或**安全防護策略 (Security Policies)**。
     - **Fixed**: 紀錄被 Watcher 攔截並修正的架構衝突、策略違反（如未傳遞 `CancellationToken`）、**被 Security 發現的資安漏洞**，以及被 QA 發現並修正的功能邏輯 Bug。
