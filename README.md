@@ -126,7 +126,7 @@ charlie-ai-protocols/
 │   ├── agent-skills/              # Agent System Prompts (SSOT)
 │   │   ├── 00-core-protocol.md    #   全域憲法
 │   │   ├── 01-supervisor-agent.md #   主控 PM
-│   │   ├── 02 ~ 99-*.md          #   各職能 Agent
+│   │   ├── 02 ~ 99-*-agent.md    #   各職能 Agent
 │   │   ├── strategies/            #   框架特化策略
 │   │   └── README.md              #   Agent 架構藍圖與流水線說明
 │   ├── architecture/              # SA 產出的資料庫 Schema 索引
@@ -143,8 +143,6 @@ charlie-ai-protocols/
 │   ├── src/                       #   Agent 產出的原始碼
 │   └── CHANGELOG.md               #   專案變更紀錄
 ├── init-ai.sh                     # 技術策略初始化腳本
-├── .cursorrules                   # Cursor IDE 共用 AI 規則
-├── .openclaw-system-prompt        # OpenClaw PM 系統提示
 ├── .env.example                   # 環境變數範本
 └── .gitignore
 ```

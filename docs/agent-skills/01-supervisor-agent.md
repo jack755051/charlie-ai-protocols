@@ -42,43 +42,43 @@
 
 ### 🏷️ [SA Agent] 系統架構師 (02)
 - **觸發時機**：PRD 確認後，負責定義業務流程、API 契約與資料庫建模。
-- **需掛載規則**：`docs/agent-skills/02-sa-standard.md`
+- **需掛載規則**：`docs/agent-skills/02-sa-agent.md`
 - **期望產出**：模組 SA 規格書（`docs/architecture/<模組>_SA_v<版號>.md`）與資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`）(SSOT)。
 
 ### 🏷️ [UI Agent] 視覺與交互設計師 (03)
 - **觸發時機**：SA 架構師產出 PRD 與功能規格後。
-- **需掛載規則**：`docs/agent-skills/03-ui-standard.md`
+- **需掛載規則**：`docs/agent-skills/03-ui-agent.md`
 - **任務目標**：定義 Design Tokens、視覺層級、RWD 規範與狀態標註，產出供 Frontend 實作的無歧義 UI Spec。
 
 ### 🏷️ [Frontend Agent] 前端工程師 (04)
 - **觸發時機**：SA 規格與 UI 標註皆通過 Watcher 審核後。
-- **需掛載規則**：`docs/agent-skills/04-frontend-standard.md` 以及具體的框架策略（如 `strategies/frontend-angular.md`、`strategies/frontend-nextjs.md`、`strategies/frontend-nuxtjs.md`，依技術棧選擇對應檔案）。
+- **需掛載規則**：`docs/agent-skills/04-frontend-agent.md` 以及具體的框架策略（如 `strategies/frontend-angular.md`、`strategies/frontend-nextjs.md`、`strategies/frontend-nuxtjs.md`，依技術棧選擇對應檔案）。
 - **任務目標**：依據 UI 規格與 API 契約實作畫面與互動邏輯。必須嚴格遵守組件化與狀態管理規範，並預埋 QA 所需的 `data-testid`。
 
 ### 🏷️ [Backend Agent] 後端工程師 (05)
 - **觸發時機**：SA 規格與資料庫事實檔案通過 Watcher 審核後。
-- **需掛載規則**：`docs/agent-skills/05-backend-standard.md` 以及具體的框架策略（如 `strategies/backend-nestjs.md`、`strategies/backend-dotnet.md`，依技術棧選擇對應檔案）。
+- **需掛載規則**：`docs/agent-skills/05-backend-agent.md` 以及具體的框架策略（如 `strategies/backend-nestjs.md`、`strategies/backend-dotnet.md`，依技術棧選擇對應檔案）。
 - **任務目標**：實作 API 路由、業務邏輯層與資料庫存取層。**必須同時實作 SRE 要求的健康探針 (/health)、監控指標 (/metrics) 與快取防禦策略。**
 - **最高禁令**：**嚴禁在沒有資料庫事實檔案（`<模組>_schema_v<版號>.md`）的情況下實作資料庫邏輯。**
 
 ### 🏷️ [DevOps Agent] 部署與運維專家 (06)
 - **觸發時機**：模組代碼通過 Watcher, Security, QA 三重門禁後，準備發布或容器化時。
-- **需掛載規則**：`docs/agent-skills/06-devops-standard.md`
+- **需掛載規則**：`docs/agent-skills/06-devops-agent.md`
 - **任務目標**：撰寫 CI/CD 腳本、Docker 封裝與伺服器環境配置。
 
 ### 🏷️ [QA Agent] 品質保證工程師 (07)
 - **觸發時機**：Watcher 與 Security 靜態稽核皆取得 `[PASS]` 標記後。
-- **需掛載規則**：`docs/agent-skills/07-qa-standard.md` 及其對應工具策略（Playwright / k6）。
+- **需掛載規則**：`docs/agent-skills/07-qa-agent.md` 及其對應工具策略（Playwright / k6）。
 - **任務目標**：撰寫並執行 E2E 自動化測試與壓力測試，驗證功能行為與邊界保護無誤。
 
 ### 🏷️ [Security Agent] 安全與合規審查員 (08)
 - **觸發時機**：與 Watcher 同步執行，或在 Watcher 通過後立即執行。
-- **需掛載規則**：`docs/agent-skills/08-security-standard.md`
+- **需掛載規則**：`docs/agent-skills/08-security-agent.md`
 - **任務目標**：執行左移安全 (Shift-Left) 審查，阻斷 SQL 注入、IDOR、機敏資訊外洩與 Auth 漏洞。
 
 ### 🏷️ [SRE Agent] 效能與可靠性工程師 (11)
 - **觸發時機**：QA 壓力測試未達標，或系統上線後出現效能瓶頸時。
-- **需掛載規則**：`docs/agent-skills/11-sre-optimization-standard.md`
+- **需掛載規則**：`docs/agent-skills/11-sre-agent.md`
 - **任務目標**：分析慢查詢、前端 Bundle 過大或記憶體洩漏問題，並提出重構優化方案。
 
 ### 🏷️ [Watcher Agent] 專案監控員 (90)

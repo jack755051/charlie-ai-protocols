@@ -10,19 +10,19 @@ docs/agent-skills/
 ├── 01-supervisor-agent.md       (🧠 PM/大腦：負責拆解需求與任務發包)
 │
 │   --- 設計與實作階段 ---
-├── 02-sa-standard.md            (📐 SA 系統架構：邏輯、DB Schema、API 契約)
-├── 03-ui-standard.md            (🎨 UI 設計師：設計系統、Design Tokens)
-├── 04-frontend-standard.md      (💻 前端工程師：Angular/Next/Nuxt 開發)
-├── 05-backend-standard.md       (⚙️ 後端工程師：.NET/NestJS 開發)
+├── 02-sa-agent.md               (📐 SA 系統架構：邏輯、DB Schema、API 契約)
+├── 03-ui-agent.md               (🎨 UI 設計師：設計系統、Design Tokens)
+├── 04-frontend-agent.md         (💻 前端工程師：Angular/Next/Nuxt 開發)
+├── 05-backend-agent.md          (⚙️ 後端工程師：.NET/NestJS 開發)
 │
 │   --- 品質門禁階段 ---
 ├── 90-watcher-agent.md          (🔍 監控員：橫向稽核，確保各 Agent 產出一致)
-├── 08-security-standard.md      (🛡️ 安全審查：與 Watcher 同步執行安全掃描)
-├── 07-qa-standard.md            (🧪 QA 工程師：E2E 測試與壓力測試)
-├── 11-sre-optimization-standard.md (📊 SRE 專家：效能瓶頸診斷與優化)
+├── 08-security-agent.md         (🛡️ 安全審查：與 Watcher 同步執行安全掃描)
+├── 07-qa-agent.md               (🧪 QA 工程師：E2E 測試與壓力測試)
+├── 11-sre-agent.md              (📊 SRE 專家：效能瓶頸診斷與優化)
 │
 │   --- 收尾與部署階段 ---
-├── 06-devops-standard.md        (🛠️ DevOps 管家：Docker、CI/CD)
+├── 06-devops-agent.md           (🛠️ DevOps 管家：Docker、CI/CD)
 ├── 99-logger-agent.md           (📝 書記官：紀錄 Devlog 與 Changelog)
 │
 │   --- 框架與工具策略 ---

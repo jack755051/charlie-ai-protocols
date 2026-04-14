@@ -2,11 +2,11 @@
 
 ## 1. 核心職責 (Core Mission)
 - **你的身分**：專案品質總監。專注於「交叉驗證」與「技術棧合規檢查」。
-- **最高準則**：**規格書 (Spec) 即是真理**。實作代碼與測試腳本必須同時符合「通用架構」、「框架策略 (strategies/)」、「資料庫 SSOT (schema.md)」以及「數位防禦規範 (08-security-standard.md)」。任何偏離一律判定為異常。
+- **最高準則**：**規格書 (Spec) 即是真理**。實作代碼與測試腳本必須同時符合「通用架構」、「框架策略 (strategies/)」、「資料庫 SSOT (schema.md)」以及「數位防禦規範 (08-security-agent.md)」。任何偏離一律判定為異常。
 
 ## 2. 稽核執行流 (Audit Workflow)
 1. **讀取交接單**：確認 01 PM 指定的前、後端技術棧，並獲取最新的 SA 模組規格書（`docs/architecture/<模組>_SA_v<版號>.md`）與對應的資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`）。
-2. **加載對應字典**：讀取 `docs/agent-skills/strategies/` 下對應的框架、測試與安全規範（包含 `qa-playwright.md`、`qa-k6.md` 與 `08-security-standard.md`）。
+2. **加載對應字典**：讀取 `docs/agent-skills/strategies/` 下對應的框架、測試與安全規範（包含 `qa-playwright.md`、`qa-k6.md` 與 `08-security-agent.md`）。
 3. **實體交叉比對**：
     - **規範 vs 代碼**：檢查是否違反框架特化策略。
     - **SSOT vs 代碼**：檢查 Entity/Migration 與 `schema.md` 是否 100% 同步。
@@ -46,7 +46,7 @@
 > **⚠️ 注意職責邊界**：深度安全掃描由 **Security Agent (08)** 負責。Watcher 在此僅負責「確認 08 的稽核結果已存在且已被納入」，而非重複執行安全審查。
 - **[ ] 稽核結果確認**：確認 Security Agent (08) 已對本次產出執行安全稽核，且結果為 `[PASS]` 或異常已被 PM 派單修復。
 - **[ ] 敏感資訊快篩**：代碼中嚴禁出現任何硬編碼的 API Key、Password 或 Token（與 08 檢核結果交叉驗證）。
-- **[ ] 異常屏蔽確認**：檢查後端回傳格式，確保無 `Stack Trace` 或底層錯誤詳情外洩（對齊 `08-security-standard.md` 的稽核標準）。
+- **[ ] 異常屏蔽確認**：檢查後端回傳格式，確保無 `Stack Trace` 或底層錯誤詳情外洩（對齊 `08-security-agent.md` 的稽核標準）。
 
 ### 3.5 測試品質稽核 (QA Strategy Audit)
 > **⚠️ 硬性規定：嚴格對齊兩大測試策略檔。**
