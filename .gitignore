@@ -19,7 +19,8 @@ build/
 # ===========================
 # AI IDE 工具（個人設定）
 # ===========================
-.claude/
+.claude/*
+!.claude/rules/
 .aider*
 .continue/
 .copilot/
@@ -42,6 +43,12 @@ Thumbs.db
 workspace/**
 !workspace/**/
 !workspace/**/.gitkeep
+
+# ===========================
+# Agent Skills Symlink（由 mapper.sh 產生）
+# ===========================
+.agents/skills/*
+!.agents/skills/.gitkeep
 
 # ===========================
 # 系統與暫存

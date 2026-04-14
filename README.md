@@ -20,26 +20,39 @@
 | **維運組** | 06 DevOps, 07 QA, 08 Security, 11 SRE | CI/CD、測試、資安審查、效能優化 |
 
 * **策略庫 (`strategies/`)**: 存放特定框架的戰術執行細節（如 `frontend-nextjs.md`、`backend-dotnet.md`、`qa-playwright.md`）。
+* **統一入口 (`.agents/skills/`)**: 透過 `mapper.sh` 建立的 symlink，讓任何 AI CLI 工具可從固定路徑讀取 Agent 定義，SSOT 仍為 `docs/agent-skills/`。
 
 ### 2. ⚙️ 核心引擎 (`engine/`) — 肉體
 
-基於 Python 與 CrewAI 的自動化執行緒：
+基於 Python 與 CrewAI（>= 1.14，無 LangChain 依賴）的自動化執行緒：
 
 | 檔案 | 職責 |
 |---|---|
-| `factory.py` | 動態讀取 `docs/agent-skills/*.md` 規則，喚醒對應的 Agent 實例 |
+| `factory.py` | 動態讀取 `docs/agent-skills/*-agent.md`，注入 `00-core-protocol.md` 為共用前言，喚醒 Agent 實例 |
 | `main.py` | 接收人類需求，觸發 PM Agent 啟動流水線 |
-| `requirements.txt` | 系統依賴（crewai, langchain-openai, python-dotenv） |
+| `requirements.txt` | 系統依賴（crewai, python-dotenv） |
 
 ### 3. 📁 實體工作區 (`workspace/`) — 產出
 
-AI Agent 的唯一工作沙盒，所有程式碼與文件皆產出於此：
+AI Agent 的唯一工作沙盒（gitignored，透過 `.gitkeep` 保留目錄結構）：
 
 | 目錄 | 產出者 | 內容 |
 |---|---|---|
 | `architecture/` | SA (02) | 系統設計文件與資料庫 Schema |
 | `design/` | UI (03) | 視覺規範與 Design Tokens |
 | `history/` | Logger (99) | 開發日誌 (devlog) 與決策紀錄 |
+| `src/` | Frontend (04) / Backend (05) | Agent 產出的原始碼 |
+
+### 4. 🤖 AI CLI 整合層
+
+讓不同 AI 編碼工具都能讀取本專案的規則與 Agent 定義：
+
+| 路徑 | 用途 | 消費者 |
+|---|---|---|
+| `CLAUDE.md` | 專案指令（引用核心協議與 Git 規範） | Claude Code |
+| `.claude/rules/` | 路徑限定規則（agent-skills、engine） | Claude Code |
+| `AGENTS.md` | 專案結構與 Agent 清單 | OpenAI Codex / 通用 AI CLI |
+| `.agents/skills/` | symlink → `docs/agent-skills/*-agent.md` | 任何支援該路徑的 AI 工具 |
 
 ---
 
@@ -70,7 +83,17 @@ cp .env.example .env
 OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-### 3. 初始化技術策略
+### 3. 建立 Agent Skills Symlink
+
+將 `docs/agent-skills/` 的 Agent 定義映射到 `.agents/skills/`，供外部 AI CLI 工具統一讀取：
+
+```bash
+bash mapper.sh
+```
+
+> 可隨時重新執行，腳本會清除舊 symlink 後重建。
+
+### 4. 初始化技術策略
 
 使用 `init-ai.sh` 為本次任務鎖定前端框架策略：
 
@@ -80,11 +103,11 @@ bash init-ai.sh nextjs
 ```
 
 > 執行後，腳本會將對應的 `strategies/frontend-*.md` 掛載為 CrewAI 的 active-strategy，
-> 並將 Supervisor 規則注入 OpenClaw 工作區。
+> 並將 Supervisor 規則注入工作區。
 
-### 4. 執行開發任務
+### 5. 執行開發任務
 
-若在步驟 3 選擇不自動啟動，可手動喚醒團隊：
+若在步驟 4 選擇不自動啟動，可手動喚醒團隊：
 
 ```bash
 python engine/main.py
@@ -124,16 +147,13 @@ python engine/main.py
 charlie-ai-protocols/
 ├── docs/                          # 版控文件區
 │   ├── agent-skills/              # Agent System Prompts (SSOT)
-│   │   ├── 00-core-protocol.md    #   全域憲法
+│   │   ├── 00-core-protocol.md    #   全域憲法（非 Agent）
 │   │   ├── 01-supervisor-agent.md #   主控 PM
 │   │   ├── 02 ~ 99-*-agent.md    #   各職能 Agent
-│   │   ├── strategies/            #   框架特化策略
+│   │   ├── strategies/            #   框架特化策略（非 Agent）
 │   │   └── README.md              #   Agent 架構藍圖與流水線說明
-│   ├── policies/                  # 跨工具通用策略 (任何 AI CLI 可直接讀取)
-│   │   └── git-workflow.md        #   Git 版本控制與 PR 規範
-│   ├── architecture/              # SA 產出的資料庫 Schema 索引
-│   │   └── database/
-│   └── hardware/                  # 嵌入式 / 硬體相關標準
+│   └── policies/                  # 跨工具通用策略
+│       └── git-workflow.md        #   Git 版本控制與 PR 規範
 ├── engine/                        # CrewAI 執行引擎
 │   ├── factory.py
 │   ├── main.py
@@ -142,9 +162,15 @@ charlie-ai-protocols/
 │   ├── architecture/              #   SA 規格書與 Schema
 │   ├── design/                    #   UI 視覺規範
 │   ├── history/                   #   開發日誌 (devlog)
-│   ├── src/                       #   Agent 產出的原始碼
-│   └── CHANGELOG.md               #   專案變更紀錄
+│   └── src/                       #   Agent 產出的原始碼
+├── .agents/                       # AI CLI 工具統一入口
+│   └── skills/                    #   symlink → docs/agent-skills/*-agent.md
+├── .claude/                       # Claude Code 規則
+│   └── rules/                     #   路徑限定規則 (agent-skills, engine)
+├── CLAUDE.md                      # Claude Code 專案指令
+├── AGENTS.md                      # OpenAI Codex / 通用 AI CLI 指令
 ├── init-ai.sh                     # 技術策略初始化腳本
+├── mapper.sh                      # Agent Skills symlink 建立腳本
 ├── .env.example                   # 環境變數範本
 └── .gitignore
 ```
