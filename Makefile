@@ -1,9 +1,12 @@
 .PHONY: help setup sync run install uninstall list
 
-VENV     := .venv
-PIP      := $(VENV)/bin/pip
-PYTHON   := $(VENV)/bin/python
+VENV      := .venv
+PIP       := $(VENV)/bin/pip
+PYTHON    := $(VENV)/bin/python
 FRAMEWORK ?= nextjs
+SHELL_RC  := $(HOME)/.zshrc
+CAP_TAG   := \# CAP - Charlie AI Protocols
+CAP_ALIAS := alias cap='make -C $(CURDIR)'
 
 help: ## 列出所有可用指令
 	@echo "Charlie's AI Protocols - 可用指令:"
@@ -29,11 +32,20 @@ $(VENV)/bin/activate: engine/requirements.txt
 sync: ## 重建本地 Agent Skills symlink（更新大腦後執行）
 	@bash scripts/mapper.sh
 
-install: sync ## 全域安裝 Agent 技能至 ~/.agents/skills/ 與 ~/.codex/
+install: sync ## 全域安裝 Agent 技能至 ~/.agents/skills/、~/.claude/ 並註冊 cap 指令
 	@bash scripts/mapper.sh --global
+	@sed -i '' '/$(CAP_TAG)/d' "$(SHELL_RC)" 2>/dev/null || true
+	@sed -i '' '/^alias cap=/d' "$(SHELL_RC)" 2>/dev/null || true
+	@echo '' >> "$(SHELL_RC)"
+	@echo '$(CAP_TAG)' >> "$(SHELL_RC)"
+	@printf "alias cap='make -C %s'\n" "$(CURDIR)" >> "$(SHELL_RC)"
+	@echo "✅ 已註冊 cap alias → 請執行 source ~/.zshrc 或開新終端機生效"
 
-uninstall: ## 移除全域安裝（不影響本地）
+uninstall: ## 移除全域安裝與 cap 指令
 	@bash scripts/mapper.sh --uninstall
+	@sed -i '' '/$(CAP_TAG)/d' "$(SHELL_RC)" 2>/dev/null || true
+	@sed -i '' '/^alias cap=/d' "$(SHELL_RC)" 2>/dev/null || true
+	@echo "✅ 已從 $(SHELL_RC) 移除 cap alias"
 
 list: ## 列出所有可用的 Agent Skills
 	@echo "Agent Skills (docs/agent-skills/):"
