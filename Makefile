@@ -50,6 +50,8 @@ uninstall: ## 移除全域安裝與 cap 指令
 	@sed -i '' '/$(CAP_TAG)/d' "$(SHELL_RC)" 2>/dev/null || true
 	@sed -i '' '/^alias cap=/d' "$(SHELL_RC)" 2>/dev/null || true
 	@echo "✅ 已從 $(SHELL_RC) 移除 cap alias"
+	@echo ""
+	@echo "👉 當前終端仍有殘留，請執行 unalias cap 或開新終端機。"
 
 list: ## 列出所有可用的 Agent Skills
 	@echo "Agent Skills (docs/agent-skills/):"

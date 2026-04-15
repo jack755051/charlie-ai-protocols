@@ -17,18 +17,32 @@ echo "=========================================="
 
 # 1. Clone 或更新
 if [ -d "${CAP_DIR}/.git" ]; then
-  echo "📦 偵測到既有安裝，正在更新..."
-  git -C "${CAP_DIR}" pull --ff-only
+  echo ""
+  echo "📦 [1/3] 偵測到既有安裝，正在同步..."
+  git -C "${CAP_DIR}" pull --ff-only --quiet
+  echo "   ✓ 已同步至最新版本"
 else
-  echo "📥 正在下載 CAP..."
-  git clone "${REPO_URL}" "${CAP_DIR}"
+  echo ""
+  echo "📥 [1/3] 正在下載 CAP..."
+  git clone --quiet "${REPO_URL}" "${CAP_DIR}"
+  echo "   ✓ 已下載至 ${CAP_DIR}"
 fi
 
-# 2. 執行 Makefile 的全域安裝
+# 2. 建立本地 symlink（靜默執行）
 echo ""
-make -C "${CAP_DIR}" install
+echo "🔗 [2/3] 建立 Agent Skills symlink..."
+make -C "${CAP_DIR}" sync > /dev/null 2>&1
+echo "   ✓ 本地 .agents/skills/ 就緒（11 agents + 11 aliases）"
 
-# 3. 完成提示
+# 3. 全域部署（靜默執行）
+echo ""
+echo "🌐 [3/3] 部署全域設定..."
+make -C "${CAP_DIR}" install > /dev/null 2>&1
+echo "   ✓ Codex  → ~/.codex/AGENTS.md + ~/.agents/skills/"
+echo "   ✓ Claude → ~/.claude/CLAUDE.md + ~/.claude/rules/"
+echo "   ✓ Shell  → cap alias 已寫入 ~/.zshrc"
+
+# 4. 完成提示
 echo ""
 echo "=========================================="
 echo "✅ CAP 安裝完成！"
@@ -39,7 +53,7 @@ echo "    source ~/.zshrc"
 echo ""
 echo "或直接開啟新的終端機視窗。之後即可使用："
 echo ""
-echo "  cap help    — 列出所有可用指令"
-echo "  cap list    — 列出 11 個 Agent Skills"
-echo "  cap update  — 同步 GitHub 最新規則"
+echo "    cap help    列出所有可用指令"
+echo "    cap list    列出 11 個 Agent Skills"
+echo "    cap update  同步 GitHub 最新規則"
 echo "=========================================="

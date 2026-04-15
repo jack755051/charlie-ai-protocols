@@ -202,4 +202,7 @@ CLAUDE_EOF
   echo "✅ 已 symlink ${rule_count} 個 agent 規則 → ~/.claude/rules/"
 fi
 
-ls -l "${TARGET_DIR}" | grep -v total
+# 詳細列表僅在 --verbose 時顯示
+if [ "${VERBOSE:-}" = true ]; then
+  ls -l "${TARGET_DIR}" | grep -v total
+fi
