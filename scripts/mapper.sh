@@ -109,13 +109,13 @@ for src in "${SOURCE_DIR}"/*-agent.md; do
   fi
 
   # 長名 symlink：07-qa-agent.md（供 factory.py glob *-agent.md）
-  ln -s "${link_target}" "${TARGET_DIR}/${filename}"
+  ln -sf "${link_target}" "${TARGET_DIR}/${filename}"
   count=$((count + 1))
 
   # 短名 symlink：qa.md（供 Codex $qa 調用）
   # 解析規則：{number}-{role_key}-agent.md → role_key.md
   short_name="$(echo "${filename}" | sed 's/^[0-9]*-//; s/-agent\.md/.md/')"
-  ln -s "${link_target}" "${TARGET_DIR}/${short_name}"
+  ln -sf "${link_target}" "${TARGET_DIR}/${short_name}"
   alias_count=$((alias_count + 1))
 done
 
