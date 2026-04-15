@@ -1,4 +1,4 @@
-.PHONY: help setup sync run install uninstall list
+.PHONY: help setup sync run install uninstall update list
 
 VENV      := .venv
 PIP       := $(VENV)/bin/pip
@@ -40,6 +40,10 @@ install: sync ## 全域安裝 Agent 技能至 ~/.agents/skills/、~/.claude/ 並
 	@echo '$(CAP_TAG)' >> "$(SHELL_RC)"
 	@printf "alias cap='make -C %s'\n" "$(CURDIR)" >> "$(SHELL_RC)"
 	@echo "✅ 已註冊 cap alias → 請執行 source ~/.zshrc 或開新終端機生效"
+
+update: ## 從 GitHub 拉取最新規則並重新安裝
+	@git pull --ff-only
+	@$(MAKE) install
 
 uninstall: ## 移除全域安裝與 cap 指令
 	@bash scripts/mapper.sh --uninstall
