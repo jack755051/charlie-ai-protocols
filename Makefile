@@ -9,17 +9,18 @@ CAP_TAG   := \# CAP - Charlie AI Protocols
 CAP_ALIAS := alias cap='make -C $(CURDIR)'
 
 help: ## 列出所有可用指令
-	@echo "Charlie's AI Protocols - 可用指令:"
+	@echo "Charlie's AI Protocols (CAP) - 可用指令:"
 	@echo ""
-	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-14s %s\n", $$1, $$2}'
+	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  cap %-15s %s\n", $$1, $$2}'
 	@echo ""
 	@echo "範例："
-	@echo "  make setup              # 首次環境初始化"
-	@echo "  make sync               # 更新 Agent 定義後重建本地 symlink"
-	@echo "  make install            # 全域安裝（跨 Repo 共用）"
-	@echo "  make uninstall          # 移除全域安裝"
-	@echo "  make run                # 以預設 nextjs 啟動"
-	@echo "  make run FRAMEWORK=nuxt # 指定框架啟動"
+	@echo "  cap setup               # 首次環境初始化"
+	@echo "  cap sync                # 更新 Agent 定義後重建本地 symlink"
+	@echo "  cap install             # 全域安裝（跨 Repo 共用）"
+	@echo "  cap uninstall           # 移除全域安裝"
+	@echo "  cap update              # 同步 GitHub 最新規則"
+	@echo "  cap run                 # 以預設 nextjs 啟動"
+	@echo "  cap run FRAMEWORK=nuxt  # 指定框架啟動"
 
 setup: $(VENV)/bin/activate ## 建立 venv 並安裝依賴（首次執行）
 	@echo "✅ 虛擬環境就緒：$(VENV)"
