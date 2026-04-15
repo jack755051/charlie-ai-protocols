@@ -58,7 +58,15 @@ if [ "${MODE}" = "--uninstall" ]; then
     rm "${HOME}/.claude/CLAUDE.md"
   fi
 
-  echo "✅ 全域安裝已移除（Codex + Claude Code）。"
+  # --- Shell：移除 cap alias ---
+  SHELL_RC="${HOME}/.zshrc"
+  if grep -q "# CAP (Charlie's AI Protocols)" "${SHELL_RC}" 2>/dev/null; then
+    sed -i '' '/# CAP (Charlie.s AI Protocols)/d' "${SHELL_RC}"
+    sed -i '' "/alias cap='make -C.*charlie-ai-protocols'/d" "${SHELL_RC}"
+    echo "✅ 已從 ${SHELL_RC} 移除 cap alias"
+  fi
+
+  echo "✅ 全域安裝已移除（Codex + Claude Code + Shell alias）。"
   exit 0
 fi
 
@@ -200,6 +208,23 @@ CLAUDE_EOF
   done
 
   echo "✅ 已 symlink ${rule_count} 個 agent 規則 → ~/.claude/rules/"
+
+  # ==============================================================
+  # Shell：註冊 cap alias（CAP = Charlie's AI Protocols）
+  # ==============================================================
+  SHELL_RC="${HOME}/.zshrc"
+  CAP_ALIAS="alias cap='make -C ${PROJECT_ROOT}'"
+
+  # 先清除舊的，避免重複
+  sed -i '' '/# CAP (Charlie.s AI Protocols)/d' "${SHELL_RC}" 2>/dev/null || true
+  sed -i '' "/alias cap='make -C.*charlie-ai-protocols'/d" "${SHELL_RC}" 2>/dev/null || true
+
+  # 寫入新的
+  echo "" >> "${SHELL_RC}"
+  echo "# CAP (Charlie's AI Protocols)" >> "${SHELL_RC}"
+  echo "${CAP_ALIAS}" >> "${SHELL_RC}"
+
+  echo "✅ 已註冊 shell alias → cap（請執行 source ~/.zshrc 或開新終端機生效）"
 fi
 
 ls -l "${TARGET_DIR}" | grep -v total
