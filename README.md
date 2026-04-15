@@ -1,4 +1,4 @@
-# Charlie's AI Protocols
+# Charlie's AI Protocols (CAP)
 
 > AI 多代理協作系統與開發規則中控台。
 > 透過標準化 11 位 AI Agent 的職能人設，結合 CrewAI 執行引擎，實現工業級的軟體開發流水線。
@@ -9,17 +9,57 @@
 
 ## 🤖 Agent 一覽
 
-| 分組 | Agent | 職責 |
-|---|---|---|
-| **管理組** | 01 Supervisor, 90 Watcher, 99 Logger | 調度、門禁稽核、日誌紀錄 |
-| **開發組** | 02 SA, 03 UI, 04 Frontend, 05 Backend | 架構設計、UI 設計、前後端實作 |
-| **維運組** | 06 DevOps, 07 QA, 08 Security, 11 SRE | CI/CD、測試、資安審查、效能優化 |
+| 分組 | Agent | `$` 前綴 | 職責 |
+|---|---|---|---|
+| **管理組** | 01 Supervisor | `$supervisor` | 需求拆解、任務調度、品質門禁 |
+| | 90 Watcher | `$watcher` | 橫向稽核、規格交叉驗證 |
+| | 99 Logger | `$logger` | 開發日誌、Changelog 紀錄 |
+| **開發組** | 02 SA | `$sa` | 系統架構、DB Schema、API 契約 |
+| | 03 UI | `$ui` | 設計系統、Design Tokens |
+| | 04 Frontend | `$frontend` | Angular / Next.js / Nuxt 實作 |
+| | 05 Backend | `$backend` | .NET / NestJS 實作 |
+| **維運組** | 06 DevOps | `$devops` | Docker、CI/CD |
+| | 07 QA | `$qa` | E2E 測試、壓力測試 |
+| | 08 Security | `$security` | 資安審查、Shift-Left |
+| | 11 SRE | `$sre` | 效能診斷、可靠性優化 |
 
 ---
 
-## 🚀 快速啟動 (Quick Start)
+## 🚀 一鍵安裝
 
-所有操作透過 `Makefile` 作為唯一入口：
+```bash
+curl -fsSL https://raw.githubusercontent.com/jack755051/charlie-ai-protocols/main/install.sh | bash
+```
+
+安裝完成後，依提示執行：
+
+```bash
+source ~/.zshrc
+```
+
+從此在終端機的**任何目錄**都能使用 `cap` 指令。
+
+---
+
+## 📋 指令總覽
+
+安裝後執行 `cap help` 即可查看完整清單：
+
+| 指令 | 說明 |
+|---|---|
+| `cap help` | 列出所有可用指令 |
+| `cap list` | 列出 11 個 Agent Skills（編號、檔名、`$` 前綴、角色） |
+| `cap setup` | 建立 Python venv 並安裝 CrewAI 依賴（首次執行） |
+| `cap sync` | 更新 Agent 定義後，重建本地 `.agents/skills/` symlink |
+| `cap install` | 全域安裝至 `~/.claude/`、`~/.agents/`、`~/.codex/` 並註冊 `cap` alias |
+| `cap update` | 從 GitHub 拉取最新規則並重新安裝 |
+| `cap uninstall` | 移除全域安裝與 `cap` alias |
+| `cap run` | 以預設 Next.js 啟動 CrewAI 引擎 |
+| `cap run FRAMEWORK=nuxt` | 指定框架啟動（`nextjs` / `angular` / `nuxt`） |
+
+---
+
+## ⚡ 快速啟動 CrewAI 引擎
 
 ### 1. 設定環境變數
 
@@ -28,50 +68,19 @@ cp .env.example .env
 # 編輯 .env，填入 OPENAI_API_KEY
 ```
 
-### 2. 首次環境初始化
-
-自動建立 Python venv 並安裝 CrewAI 依賴：
+### 2. 首次初始化 + 啟動
 
 ```bash
-make setup
+cap setup              # 建立 venv + 安裝依賴
+cap run                # 預設 nextjs
+cap run FRAMEWORK=nuxt # 指定框架
 ```
-
-### 3. 同步 Agent 定義
-
-更新 `docs/agent-skills/` 後，重建 `.agents/skills/` symlink（含長名與短名 alias）：
-
-```bash
-make sync
-```
-
-### 4. 啟動 CrewAI 引擎
-
-一鍵完成 setup → sync → 初始化策略 → 啟動流水線：
-
-```bash
-make run                # 預設使用 nextjs
-make run FRAMEWORK=nuxt # 指定框架（nextjs | angular | nuxt）
-```
-
-> 完整指令清單：`make help`
-
-### 5. 全域安裝（選用）
-
-將 Agent 技能註冊至 User Scope，讓任何 Repo 都能直接使用 `$skill`：
-
-```bash
-make install    # 安裝至 ~/.agents/skills/ + ~/.codex/AGENTS.md
-make uninstall  # 移除全域安裝（不影響本地）
-```
-
-> 全域與本地的差異詳見 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ---
 
 ## 💡 BYOCLI 模式 — 臨時調用 Agent 技能
 
-在任何支援 `.agents/` 的 AI CLI（如 Codex）中，透過 `$` 前綴臨時調用單一 Agent。
-本地（`make sync`）或全域（`make install`）安裝後皆可使用：
+在任何支援 `.agents/` 的 AI CLI（如 OpenAI Codex）中，透過 `$` 前綴臨時調用單一 Agent：
 
 ```
 $qa 請幫我針對這段 API 寫單元測試。
@@ -85,7 +94,23 @@ $security 請掃描目前檔案有沒有 SQL Injection 的風險。
 完成後切換為 $logger，將稽核結果寫入 workspace/history/audit-log.md。
 ```
 
-> 短名 alias（`qa.md`、`security.md` 等）由 `make sync` 自動產生，與長名 `*-agent.md` 指向同一個 SSOT。
+> 短名 alias（`qa.md`、`security.md` 等）由 `cap sync` 自動產生，與長名 `*-agent.md` 指向同一個 SSOT。
+
+---
+
+## 🔧 全域安裝細節
+
+`cap install` 一次部署三個 AI 工具的全域設定：
+
+| 工具 | 部署位置 | 作用 |
+|---|---|---|
+| **Claude Code** | `~/.claude/CLAUDE.md` | 使用 `@` 匯入核心憲法 + Git 工作流 |
+| | `~/.claude/rules/` | 11 個 agent symlink，作為背景知識 |
+| **OpenAI Codex** | `~/.codex/AGENTS.md` | 全域指令檔 |
+| | `~/.agents/skills/` | 22 個 symlink（11 長名 + 11 短名 alias） |
+| **Shell** | `~/.zshrc` | `cap` alias → `make -C <CAP路徑>` |
+
+> 開發者建議直接從開發 repo 執行 `make install`；`install.sh` 是給只需消費 protocols 的團隊成員使用。
 
 ---
 
@@ -119,9 +144,10 @@ charlie-ai-protocols/
 ├── scripts/                       # Shell 腳本
 │   ├── init-ai.sh                 #   技術策略初始化
 │   └── mapper.sh                  #   Agent Skills symlink 建立
+├── install.sh                     # 一鍵安裝腳本（curl | bash）
 ├── CLAUDE.md                      # Claude Code 專案指令
 ├── AGENTS.md                      # OpenAI Codex / 通用 AI CLI 指令
-├── Makefile                       # 唯一操作入口（make help）
+├── Makefile                       # 操作入口（cap help）
 ├── .env.example                   # 環境變數範本
 └── .gitignore
 ```
