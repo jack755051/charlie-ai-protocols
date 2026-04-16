@@ -1,7 +1,7 @@
 # Charlie's AI Protocols (CAP)
 
 > AI 多代理協作系統與開發規則中控台。
-> 透過標準化 11 位 AI Agent 的職能人設，結合 CrewAI 執行引擎，實現工業級的軟體開發流水線。
+> 透過標準化 12 位 AI Agent 的職能人設，結合 CrewAI 執行引擎，實現工業級的軟體開發流水線。
 
 架構設計與設計理念詳見 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
@@ -14,7 +14,8 @@
 | **管理組** | 01 Supervisor | `$supervisor` | 需求拆解、任務調度、品質門禁 |
 | | 90 Watcher | `$watcher` | 橫向稽核、規格交叉驗證 |
 | | 99 Logger | `$logger` | 開發日誌、Changelog 紀錄 |
-| **開發組** | 02 SA | `$sa` | 系統架構、DB Schema、API 契約 |
+| **開發組** | 02 BA | `$ba` | 業務流程分析、邏輯邊界定義 |
+| | 02 DBA/API | `$dba` | DB Schema SSOT、API 介面契約 |
 | | 03 UI | `$ui` | 設計系統、Design Tokens |
 | | 04 Frontend | `$frontend` | Angular / Next.js / Nuxt 實作 |
 | | 05 Backend | `$backend` | .NET / NestJS 實作 |
@@ -48,7 +49,7 @@ source ~/.zshrc
 | 指令 | 說明 |
 |---|---|
 | `cap help` | 列出所有可用指令 |
-| `cap list` | 列出 11 個 Agent Skills（編號、檔名、`$` 前綴、角色） |
+| `cap list` | 列出 12 個 Agent Skills（編號、檔名、`$` 前綴、角色） |
 | `cap setup` | 建立 Python venv 並安裝 CrewAI 依賴（首次執行） |
 | `cap sync` | 更新 Agent 定義後，重建本地 `.agents/skills/` symlink |
 | `cap install` | 全域安裝至 `~/.claude/`、`~/.agents/`、`~/.codex/` 並註冊 `cap` alias |
@@ -105,9 +106,9 @@ $security 請掃描目前檔案有沒有 SQL Injection 的風險。
 | 工具 | 部署位置 | 作用 |
 |---|---|---|
 | **Claude Code** | `~/.claude/CLAUDE.md` | 使用 `@` 匯入核心憲法 + Git 工作流 |
-| | `~/.claude/rules/` | 11 個 agent symlink，作為背景知識 |
+| | `~/.claude/rules/` | 12 個 agent symlink，作為背景知識 |
 | **OpenAI Codex** | `~/.codex/AGENTS.md` | 全域指令檔 |
-| | `~/.agents/skills/` | 22 個 symlink（11 長名 + 11 短名 alias） |
+| | `~/.agents/skills/` | 24 個 symlink（12 長名 + 12 短名 alias） |
 | **Shell** | `~/.zshrc` | `cap` alias → `make -C <CAP路徑>` |
 
 > 開發者建議直接從開發 repo 執行 `make install`；`install.sh` 是給只需消費 protocols 的團隊成員使用。
@@ -123,6 +124,7 @@ charlie-ai-protocols/
 │   │   ├── 00-core-protocol.md    #   全域憲法（非 Agent）
 │   │   ├── 01-supervisor-agent.md #   主控 PM
 │   │   ├── 02 ~ 99-*-agent.md    #   各職能 Agent
+│   │   ├── archive/               #   封存的舊版 Agent（如 02-sa-agent.md）
 │   │   ├── strategies/            #   框架特化策略（非 Agent）
 │   │   └── README.md              #   Agent 架構藍圖與流水線說明
 │   ├── policies/                  # 跨工具通用策略
