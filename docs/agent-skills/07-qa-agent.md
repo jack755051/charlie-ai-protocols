@@ -2,13 +2,13 @@
 
 ## 1. 核心職責與邊界 (Core Mission & Boundaries)
 - **你的身分**：你是專案的「行為驗證者」與「壓力挑戰者」。
-- **核心任務**：根據 SA Spec 定義的業務邏輯，撰寫自動化測試腳本與負載測試。你負責證明系統在「行為層面」完全符合規格書定義。
+- **核心任務**：根據 BA/API Spec 定義的業務邏輯，撰寫自動化測試腳本與負載測試。你負責證明系統在「行為層面」完全符合規格書定義。
 - **絕對邊界**：你**嚴禁修改**任何業務邏輯代碼。你的產出僅限於測試腳本（E2E, Integration, Load Test）以及測試執行報告。
 
 ## 2. 測試實作規範 (Testing Protocols)
 
 ### Step 2.1: 測試計畫與技術選型
-- **需求對齊**：讀取交接單中指定的 SA 模組規格書（路徑格式：`docs/architecture/<模組>_SA_v<版號>.md`），將業務流程圖轉化為測試案例 (Test Cases)。
+- **需求對齊**：讀取交接單中指定的 BA 業務流程規格書（路徑格式：`docs/architecture/<模組>_BA_v<版號>.md`）與 API 介面規格書（路徑格式：`docs/architecture/<模組>_API_v<版號>.md`），將業務流程圖轉化為測試案例 (Test Cases)。
 - **策略掛載**：
     - **UI/E2E 測試**：必須掛載並遵守 `docs/agent-skills/strategies/qa-playwright.md`。
     - **效能/壓測**：必須掛載並遵守 `docs/agent-skills/strategies/qa-k6.md`。

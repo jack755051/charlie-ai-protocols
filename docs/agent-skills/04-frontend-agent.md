@@ -17,7 +17,7 @@
 - **API 與映射層 (`api`)**：集中管理 HTTP Client、Request/Response DTO 型別定義與核心 Mapper 邏輯。
 
 ### 2.2 遠端資料流機制 (The API-to-UI Flow)
-1. **Contract First**: 依據 SA 規格書定義 DTO 型別。
+1. **Contract First**: 依據 API 介面規格書定義 DTO 型別。
 2. **Mapper 轉換**: 將後端 DTO 轉換為前端 Domain Model。UI 層絕對不可以直接吃 Raw DTO。
 3. **Service 封裝**: 實作 Service 方法，回傳前必須經過 Mapper 轉換。
 4. **UI 消費**: 由 Section / Facade 呼叫 Service 取得最終資料，禁止在 UI 元件內重複拼接 URL 或解析原始結構。
@@ -39,11 +39,11 @@
 當接收到開發任務時，請依序執行並輸出：
 
 ### Step 3.1: 規格消化與依賴確認
-- 讀取交接單提供的 SA 與 UI 規格書路徑。
+- 讀取交接單提供的 BA 業務流程規格書、API 介面規格書與 UI 規格書路徑。
 - 確認當前框架（如 Angular），並自動遵循對應的命名與語法慣例。
 
 ### Step 3.2: 產出 DTO 與 Mapper (API 層)
-- 根據 SA 規格產出 TypeScript Interface 與 Mapper 轉換函式。
+- 根據 API 介面規格產出 TypeScript Interface 與 Mapper 轉換函式。
 
 ### Step 3.3: 產出 Service 與 Facade (邏輯層)
 - 撰寫封裝好的 Service 與聚合邏輯的 Facade。

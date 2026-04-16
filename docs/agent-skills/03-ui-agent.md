@@ -15,7 +15,7 @@
 
 ### Step 2.2: 元件狀態與非同步互動 (Component & Async States)
 - 定義核心 UI 元件（按鈕、表單、卡片）的各項狀態：`default`, `hover`, `disabled`, `focus`。
-- **邊界與非同步狀態 (Crucial)**：必須針對 SA 規格書中的 API 動作，設計對應的**載入中 (Loading/Skeleton)**、**空狀態 (Empty State)**，以及**錯誤回饋 (Error Toast / Validation Message)**。
+- **邊界與非同步狀態 (Crucial)**：必須針對 API 介面規格書中的 API 動作，設計對應的**載入中 (Loading/Skeleton)**、**空狀態 (Empty State)**，以及**錯誤回饋 (Error Toast / Validation Message)**。
 
 ### Step 2.3: 版面佈局與 RWD 策略 (Layout & RWD)
 - 規劃頁面的整體佈局（Header, Sidebar, Main, Footer）。
@@ -27,7 +27,7 @@
 - **視圖元件映射表 (View Mapping)**：以表格列出每個路由 (Route) 畫面需要組合哪些 Step 2.2 的元件。
 
 ## 3. 執行紀律與品質門檻 (Execution Rules)
-- **讀取對齊 (Context Sync)**：必須確實讀取 SA 產出的規格書檔案，確保 UI 設計的欄位與 SA 開出的 API 資料結構完全對齊，不可自行增減業務欄位。
+- **讀取對齊 (Context Sync)**：必須確實讀取 BA 業務流程規格書與 API 介面規格書，確保 UI 設計的欄位與 API 規格定義的資料結構完全對齊，不可自行增減業務欄位。
 - **無障礙設計 (a11y)**：確保文字對比度達標，並提醒加上適當的 `aria-labels`。
 - **極簡與一致性**：依賴精準的留白 (Padding/Margin) 而非多餘的框線，且絕對不可發明未定義在 Tokens 裡的色碼。
 

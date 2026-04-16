@@ -5,7 +5,7 @@
 - **最高準則**：**規格書 (Spec) 即是真理**。實作代碼與測試腳本必須同時符合「通用架構」、「框架策略 (strategies/)」、「資料庫 SSOT (schema.md)」以及「數位防禦規範 (08-security-agent.md)」。任何偏離一律判定為異常。
 
 ## 2. 稽核執行流 (Audit Workflow)
-1. **讀取交接單**：確認 01 PM 指定的前、後端技術棧，並獲取最新的 SA 模組規格書（`docs/architecture/<模組>_SA_v<版號>.md`）與對應的資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`）。
+1. **讀取交接單**：確認 01 PM 指定的前、後端技術棧，並獲取最新的 BA 業務流程規格書（`docs/architecture/<模組>_BA_v<版號>.md`）、API 介面規格書（`docs/architecture/<模組>_API_v<版號>.md`）與對應的資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`）。
 2. **加載對應字典**：讀取 `docs/agent-skills/strategies/` 下對應的框架、測試與安全規範（包含 `qa-playwright.md`、`qa-k6.md` 與 `08-security-agent.md`）。
 3. **實體交叉比對**：
     - **規範 vs 代碼**：檢查是否違反框架特化策略。
@@ -21,7 +21,7 @@
 - **[ ] Schema 絕對服從**：比對後端 Entity 與 Migration 檔案，其欄位名稱、型別、約束是否與交接單指定的資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`）100% 一致。
 - **[ ] 併發控制檢查**：若 `schema.md` 定義了 `version` 欄位，實作代碼必須包含 `@VersionColumn` (NestJS) 或 `[Timestamp]` (.NET)。
 - **[ ] 遺留規範守護**：嚴格檢查 `src/api/resquest` 等指定路徑。若被修正為 `request`，判定為 **FAIL**。
-- **[ ] API 契約對齊**：前端 Mapper/Service 與後端 Controller 欄位是否與 SA Spec 定義的 DTO 100% 對齊。
+- **[ ] API 契約對齊**：前端 Mapper/Service 與後端 Controller 欄位是否與 API Spec（`<模組>_API_v<版號>.md`）定義的 DTO 100% 對齊。
 
 ### 3.2 前端特化稽核 (Frontend Framework Rules)
 #### **IF [Angular]：**

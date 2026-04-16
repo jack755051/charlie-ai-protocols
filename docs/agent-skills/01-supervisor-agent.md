@@ -32,7 +32,7 @@
 2. **核心價值與受眾**：解決什麼商業痛點。
 3. **技術堆疊與架構定案 (Architecture Specs)**：列出前後端框架、設計模式、資料庫類型及快取方案。
 4. **預期功能清單**：列出 3-5 個核心模組。
-5. **下一步調度建議**：說明即將啟動哪位 Agent (通常先由 SA 開始)。
+5. **下一步調度建議**：說明即將啟動哪位 Agent (通常先由 BA 進行業務分析，再由 DBA/API 進行資料庫與介面設計)。
 
 > ⚠️ 只有在使用者回覆「同意/確認」後，才能進入任務發包流程。
 
@@ -40,23 +40,28 @@
 
 ## 3.1 可用子代理 (Sub-Agents Registry)
 
-### 🏷️ [SA Agent] 系統架構師 (02)
-- **觸發時機**：PRD 確認後，負責定義業務流程、API 契約與資料庫建模。
-- **需掛載規則**：`docs/agent-skills/02-sa-agent.md`
-- **期望產出**：模組 SA 規格書（`docs/architecture/<模組>_SA_v<版號>.md`）與資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`）(SSOT)。
+### 🏷️ [BA Agent] 業務分析師 (02)
+- **觸發時機**：PRD 確認後，負責將業務需求轉化為系統流程與邏輯邊界。
+- **需掛載規則**：`docs/agent-skills/02-ba-agent.md`
+- **期望產出**：業務流程規格書（`docs/architecture/<模組>_BA_v<版號>.md`）。
+
+### 🏷️ [DBA Agent] 資料庫與介面架構師 (02)
+- **觸發時機**：BA 產出業務流程規格書後，負責資料庫建模與 API 介面合約設計。
+- **需掛載規則**：`docs/agent-skills/02-dba-api-agent.md`
+- **期望產出**：資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`）(SSOT) 與 API 介面規格書（`docs/architecture/<模組>_API_v<版號>.md`）。
 
 ### 🏷️ [UI Agent] 視覺與交互設計師 (03)
-- **觸發時機**：SA 架構師產出 PRD 與功能規格後。
+- **觸發時機**：BA 與 DBA/API 架構師產出業務流程與介面規格後。
 - **需掛載規則**：`docs/agent-skills/03-ui-agent.md`
 - **任務目標**：定義 Design Tokens、視覺層級、RWD 規範與狀態標註，產出供 Frontend 實作的無歧義 UI Spec。
 
 ### 🏷️ [Frontend Agent] 前端工程師 (04)
-- **觸發時機**：SA 規格與 UI 標註皆通過 Watcher 審核後。
+- **觸發時機**：BA 流程規格、API 介面規格與 UI 標註皆通過 Watcher 審核後。
 - **需掛載規則**：`docs/agent-skills/04-frontend-agent.md` 以及具體的框架策略（如 `strategies/frontend-angular.md`、`strategies/frontend-nextjs.md`、`strategies/frontend-nuxtjs.md`，依技術棧選擇對應檔案）。
 - **任務目標**：依據 UI 規格與 API 契約實作畫面與互動邏輯。必須嚴格遵守組件化與狀態管理規範，並預埋 QA 所需的 `data-testid`。
 
 ### 🏷️ [Backend Agent] 後端工程師 (05)
-- **觸發時機**：SA 規格與資料庫事實檔案通過 Watcher 審核後。
+- **觸發時機**：API 介面規格與資料庫事實檔案通過 Watcher 審核後。
 - **需掛載規則**：`docs/agent-skills/05-backend-agent.md` 以及具體的框架策略（如 `strategies/backend-nestjs.md`、`strategies/backend-dotnet.md`，依技術棧選擇對應檔案）。
 - **任務目標**：實作 API 路由、業務邏輯層與資料庫存取層。**必須同時實作 SRE 要求的健康探針 (/health)、監控指標 (/metrics) 與快取防禦策略。**
 - **最高禁令**：**嚴禁在沒有資料庫事實檔案（`<模組>_schema_v<版號>.md`）的情況下實作資料庫邏輯。**
@@ -103,7 +108,8 @@
 👉 任務目標：[精確描述範圍]
 👉 技術約束與遺留守護：[例如：Service-based Signals, 必須沿用 resquest 拼寫]
 👉 交接 Context (Payload)：
-   - 核心規格路徑：[例如：docs/architecture/auth_SA_v1.0.md]
+   - 業務流程規格路徑：[例如：docs/architecture/auth_BA_v1.0.md]
+   - API 介面規格路徑：[例如：docs/architecture/auth_API_v1.0.md]
    - 資料庫事實路徑：[docs/architecture/database/<模組>_schema_v<版號>.md]
 ```
 ### 4.2 品質門禁與異常處置 (Quality Gates)

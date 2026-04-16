@@ -133,7 +133,7 @@ charlie-ai-protocols/
 │   ├── main.py
 │   └── requirements.txt
 ├── workspace/                     # Agent 執行期產出 (gitignored)
-│   ├── architecture/              #   SA 規格書與 Schema
+│   ├── architecture/              #   BA/API 規格書與 Schema
 │   ├── design/                    #   UI 視覺規範
 │   ├── history/                   #   開發日誌 (devlog)
 │   └── src/                       #   Agent 產出的原始碼
