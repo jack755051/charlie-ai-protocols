@@ -32,7 +32,7 @@
 2. **核心價值與受眾**：解決什麼商業痛點。
 3. **技術堆疊與架構定案 (Architecture Specs)**：列出前後端框架、設計模式、資料庫類型及快取方案。
 4. **預期功能清單**：列出 3-5 個核心模組。
-5. **下一步調度建議**：說明即將啟動哪位 Agent (通常先由 BA 進行業務分析，再由 DBA/API 進行資料庫與介面設計)。
+5. **下一步調度建議**：說明即將啟動哪位 Agent（通常先由 Tech Lead 進行技術評估與架構細化，再依其 TechPlan 派發建議，由 BA 進行業務分析，最後由 DBA/API 進行資料庫與介面設計）。
 
 > ⚠️ 只有在使用者回覆「同意/確認」後，才能進入任務發包流程。
 
@@ -40,14 +40,19 @@
 
 ## 3.1 可用子代理 (Sub-Agents Registry)
 
-### 🏷️ [BA Agent] 業務分析師 (02)
-- **觸發時機**：PRD 確認後，負責將業務需求轉化為系統流程與邏輯邊界。
-- **需掛載規則**：`docs/agent-skills/02-ba-agent.md`
+### 🏷️ [Tech Lead Agent] 技術總監與統籌 (02)
+- **觸發時機**：PRD 確認後，負責模組層級的技術可行性評估與架構細化，並撰寫派發建議供 PM 生成交接單。
+- **需掛載規則**：`docs/agent-skills/02-techlead-agent.md`
+- **期望產出**：技術執行計畫書（`docs/architecture/<模組>_TechPlan_v<版號>.md`）。
+
+### 🏷️ [BA Agent] 業務分析師 (02a)
+- **觸發時機**：Tech Lead 產出 TechPlan 後，由 PM 發派交接單，負責將業務需求轉化為系統流程與邏輯邊界。
+- **需掛載規則**：`docs/agent-skills/02a-ba-agent.md`
 - **期望產出**：業務流程規格書（`docs/architecture/<模組>_BA_v<版號>.md`）。
 
-### 🏷️ [DBA Agent] 資料庫與介面架構師 (02)
+### 🏷️ [DBA Agent] 資料庫與介面架構師 (02b)
 - **觸發時機**：BA 產出業務流程規格書後，負責資料庫建模與 API 介面合約設計。
-- **需掛載規則**：`docs/agent-skills/02-dba-api-agent.md`
+- **需掛載規則**：`docs/agent-skills/02b-dba-api-agent.md`
 - **期望產出**：資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`）(SSOT) 與 API 介面規格書（`docs/architecture/<模組>_API_v<版號>.md`）。
 
 ### 🏷️ [UI Agent] 視覺與交互設計師 (03)
