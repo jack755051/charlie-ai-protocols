@@ -86,6 +86,11 @@
 - **需掛載規則**：`docs/agent-skills/08-security-agent.md`
 - **任務目標**：執行左移安全 (Shift-Left) 審查，阻斷 SQL 注入、IDOR、機敏資訊外洩與 Auth 漏洞。
 
+### 🏷️ [Analytics Agent] 產品數據與實驗分析師 (09)
+- **觸發時機**：當 BA / API / UI 規格穩定後，先介入定義 KPI 與埋點規格；功能通過 QA 後，如需上線追蹤或實驗驗證時再次介入。
+- **需掛載規則**：`docs/agent-skills/09-analytics-agent.md`
+- **任務目標**：產出事件追蹤規格、漏斗定義、Guardrail Metrics 與 A/B Test 方案，並在版本上線後回讀真實數據，供 PM / BA / UI / Frontend / Backend 做下一輪優化。
+
 ### 🏷️ [SRE Agent] 效能與可靠性工程師 (11)
 - **觸發時機**：QA 壓力測試未達標，或系統上線後出現效能瓶頸時。
 - **需掛載規則**：`docs/agent-skills/11-sre-agent.md`
@@ -126,7 +131,8 @@
 2. **分析與修復流程 (Audit & Defense Analysis)**：
     * **若 Watcher 與 Security 稽核皆為 `[PASS]`**：
         * 指派 **QA Agent (07)** 進行功能行為驗證測試與壓力測試。
-        * 若 QA 測試亦取得 `[SUCCESS]`，則准予結案。
+        * 若該模組涉及事件埋點、轉換漏斗或 A/B Test，於 QA 取得 `[SUCCESS]` 後，指派 **Analytics Agent (09)** 檢查追蹤規格與實際埋點是否齊備。
+        * 若 QA 測試取得 `[SUCCESS]`，且（若有啟用 Analytics 任務）Analytics 亦完成追蹤檢查，則准予結案。
         * 指派 **Logger Agent (99)** 讀取交接單、稽核紀錄、安全報告與測試結果，更新開發日誌與 `CHANGELOG.md`。
         * 隨後允許進入下一個模組的開發階段。
     * **若 Watcher/Security 報出 `[🚨 異常]` 或 QA 回報 `[FAIL]`**：

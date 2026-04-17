@@ -15,6 +15,10 @@ echo ""
 echo "🧠 Charlie's AI Protocols (CAP) 安裝程式"
 echo "=========================================="
 
+agent_count() {
+  find "${CAP_DIR}/docs/agent-skills" -maxdepth 1 -type f -name '*-agent.md' | wc -l | tr -d ' '
+}
+
 # 1. Clone 或更新
 if [ -d "${CAP_DIR}/.git" ]; then
   echo ""
@@ -32,7 +36,8 @@ fi
 echo ""
 echo "🔗 [2/3] 建立 Agent Skills symlink..."
 make -C "${CAP_DIR}" sync > /dev/null 2>&1
-echo "   ✓ 本地 .agents/skills/ 就緒（13 agents + 13 aliases）"
+count="$(agent_count)"
+echo "   ✓ 本地 .agents/skills/ 就緒（${count} agents + ${count} aliases）"
 
 # 3. 全域部署（靜默執行）
 echo ""
@@ -54,6 +59,6 @@ echo ""
 echo "或直接開啟新的終端機視窗。之後即可使用："
 echo ""
 echo "    cap help    列出所有可用指令"
-echo "    cap list    列出 13 個 Agent Skills"
+echo "    cap list    列出所有 Agent Skills"
 echo "    cap update  同步 GitHub 最新規則"
 echo "=========================================="

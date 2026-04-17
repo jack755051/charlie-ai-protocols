@@ -1,6 +1,6 @@
 # Charlie's AI Protocols
 
-AI multi-agent collaboration system with 13 specialized agents, powered by CrewAI.
+AI multi-agent collaboration system with specialized agents, powered by CrewAI.
 
 ## Core Protocol
 
@@ -37,6 +37,7 @@ Each agent has two symlinks — a full name for CrewAI (`*-agent.md`) and a shor
 | `$devops` | `06-devops-agent.md` | DevOps & CI/CD |
 | `$qa` | `07-qa-agent.md` | QA Engineer |
 | `$security` | `08-security-agent.md` | Security Auditor |
+| `$analytics` | `09-analytics-agent.md` | Product Analytics & Experimentation |
 | `$sre` | `11-sre-agent.md` | SRE & Performance |
 | `$watcher` | `90-watcher-agent.md` | Quality Watcher |
 | `$logger` | `99-logger-agent.md` | Technical Writer |

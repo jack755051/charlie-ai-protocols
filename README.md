@@ -1,7 +1,7 @@
 # Charlie's AI Protocols (CAP)
 
 > AI 多代理協作系統與開發規則中控台。
-> 透過標準化 13 位 AI Agent 的職能人設，結合 CrewAI 執行引擎，實現工業級的軟體開發流水線。
+> 透過標準化多位 AI Agent 的職能人設，結合 CrewAI 執行引擎，實現工業級的軟體開發流水線。
 
 架構設計與設計理念詳見 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
@@ -23,6 +23,7 @@
 | **維運組** | 06 DevOps | `$devops` | Docker、CI/CD |
 | | 07 QA | `$qa` | E2E 測試、壓力測試 |
 | | 08 Security | `$security` | 資安審查、Shift-Left |
+| | 09 Analytics | `$analytics` | KPI、埋點、A/B Test |
 | | 11 SRE | `$sre` | 效能診斷、可靠性優化 |
 
 ---
@@ -50,7 +51,7 @@ source ~/.zshrc
 | 指令 | 說明 |
 |---|---|
 | `cap help` | 列出所有可用指令 |
-| `cap list` | 列出 13 個 Agent Skills（編號、檔名、`$` 前綴、角色） |
+| `cap list` | 列出所有 Agent Skills（編號、檔名、`$` 前綴、角色） |
 | `cap setup` | 建立 Python venv 並安裝 CrewAI 依賴（首次執行） |
 | `cap sync` | 更新 Agent 定義後，重建本地 `.agents/skills/` symlink |
 | `cap install` | 全域安裝至 `~/.claude/`、`~/.agents/`、`~/.codex/` 並註冊 `cap` alias |
