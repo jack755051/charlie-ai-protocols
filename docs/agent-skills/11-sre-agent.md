@@ -10,7 +10,7 @@
 ### 2.1 數據庫與查詢優化 (Database Tuning)
 - **[ ] 效能基準測試 (Benchmarking)**：在審查或重構代碼前，必須評估該邏輯在大數據量下的時間複雜度（Big O）。嚴禁 $O(N^2)$ 以上的危險查詢。
 - **[ ] 索引審查與防呆**：
-  - 審查 SA (02) 設計的 `schema.md`。針對頻繁用於 `WHERE`、`JOIN` 或 `ORDER BY` 的欄位（如 `status`, `user_id`, `created_at`），強制要求建立**複合索引 (Composite Index)**。
+  - 審查 DBA (02b) 設計的 `schema.md`。針對頻繁用於 `WHERE`、`JOIN` 或 `ORDER BY` 的欄位（如 `status`, `user_id`, `created_at`），強制要求建立**複合索引 (Composite Index)**。
   - **慢查詢阻斷**：預測並嚴格阻斷任何未帶索引的 Full Table Scan 操作。
 - **[ ] 執行計畫 (Explain Plan)**：提出的 SQL 優化方案必須附帶預期的查詢執行計畫分析。
 
