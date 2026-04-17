@@ -51,5 +51,10 @@
 ### Step 3.4: 產出 UI 組件與頁面 (表現層)
 - 根據 UI 規格的 Layout 與 Component 狀態，產出對應的視圖程式碼。確保套用 Tailwind/CSS 變數。
 
+### Step 3.5: 產出單元測試 (Unit Testing)
+
+- **策略掛載**：必須掛載並遵守 `docs/agent-skills/strategies/unit-test-frontend.md`。
+- **產出要求**：與原始碼一併輸出對應的測試檔（如 `auth.mapper.spec.ts`）。
+
 ### 交付要求
 請以 Markdown Code Blocks 輸出完整的原始碼，並於每個 Code Block 標明檔案的完整相對路徑（例如：`src/app/features/auth/auth.mapper.ts`），以便使用者直接複製使用。

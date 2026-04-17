@@ -23,12 +23,13 @@
 ### 2.2 階段性開發日誌 (Daily Devlog Summary)
 - **觸發**：當 PM (01) 宣告一個模組開發階段通過 Watcher 靜態審核、Security 安全審查與 QA 動態驗證後（取得全數「成功」的 Trace Log 時）。
 - **內容構成**：
-    1. **技術決策 (ADR)**：紀錄 PM 指定的選型理由與遵循的策略檔（如 `backend-nestjs.md`、`frontend-nuxtjs.md`）。
+    1. **技術決策 (ADR)**：紀錄 PM 指定的選型理由與遵循的策略檔（如 `backend-nestjs.md`、`frontend-nuxtjs.md`、`unit-test-frontend.md`、`unit-test-backend.md`）。
     2. **Schema 演進紀錄**：若涉及資料庫異動，必須紀錄 `workspace/architecture/<模組>_schema_v<版號>.md` 的版本變更摘要。
     3. **可觀測性與快取配置 (SRE Track)**：明確紀錄後端 (05) 實作的健康探針路徑、Prometheus 埋點指標，以及重要業務快取的 TTL 與 Jitter 設定。
     4. **品質與驗證軌跡 (萃取自 Trace Log)**：
         - **稽核紀錄 (Watcher)**：詳實紀錄 Watcher 報出的「品質異常 (Quality Alert)」內容及其最終修復方式。
         - **數位防禦紀錄 (Security)**：紀錄 Security Agent (08) 攔截到的資安漏洞與修復結果。
+        - **單元測試紀錄 (Dev Unit Test)**：紀錄 Watcher (90) 對 Frontend (04) 與 Backend (05) 單元測試的稽核結果（測試檔存在性、Mock 隔離合規性）。
         - **測試紀錄 (QA)**：紀錄 QA 報告 (07) 中的關鍵發現，包含 k6 性能指標（如 p95 延遲）以及修復的行為 Bug。
 - **存檔路徑**：`workspace/history/devlog-YYYY-MM.md`。
 
@@ -36,7 +37,7 @@
 - **觸發**：當模組準備合併分支或進行正式發布前。
 - **格式要求**：遵循「Keep a Changelog」標準格式，Commit Type 分類須對齊 `docs/policies/git-workflow.md` 的 Conventional Commits 規範。
 - **內容彙整**：
-    - **Added**: 新增的 API、UI 元件、Schema 資料表、E2E 測試腳本、k6 壓測套件或**安全防護策略 (Security Policies)**。
+    - **Added**: 新增的 API、UI 元件、Schema 資料表、**單元測試腳本 (Unit Tests)**、E2E 測試腳本、k6 壓測套件或**安全防護策略 (Security Policies)**。
     - **Fixed**: 紀錄被 Watcher 攔截並修正的架構衝突、策略違反（如未傳遞 `CancellationToken`）、**被 Security 發現的資安漏洞**，以及被 QA 發現並修正的功能邏輯 Bug。
     - **Changed**: 根據 BA/API 規格書修正、技術策略調整或因應 **Security 審查與** QA 性能測試回饋優化的既有架構。
 

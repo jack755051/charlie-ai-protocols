@@ -62,12 +62,12 @@
 
 ### 🏷️ [Frontend Agent] 前端工程師 (04)
 - **觸發時機**：BA 流程規格、API 介面規格與 UI 標註皆通過 Watcher 審核後。
-- **需掛載規則**：`docs/agent-skills/04-frontend-agent.md` 以及具體的框架策略（如 `strategies/frontend-angular.md`、`strategies/frontend-nextjs.md`、`strategies/frontend-nuxtjs.md`，依技術棧選擇對應檔案）。
+- **需掛載規則**：`docs/agent-skills/04-frontend-agent.md`、`strategies/unit-test-frontend.md` 以及具體的框架策略（如 `strategies/frontend-angular.md`、`strategies/frontend-nextjs.md`、`strategies/frontend-nuxtjs.md`，依技術棧選擇對應檔案）。
 - **任務目標**：依據 UI 規格與 API 契約實作畫面與互動邏輯。必須嚴格遵守組件化與狀態管理規範，並預埋 QA 所需的 `data-testid`。
 
 ### 🏷️ [Backend Agent] 後端工程師 (05)
 - **觸發時機**：API 介面規格與資料庫事實檔案通過 Watcher 審核後。
-- **需掛載規則**：`docs/agent-skills/05-backend-agent.md` 以及具體的框架策略（如 `strategies/backend-nestjs.md`、`strategies/backend-dotnet.md`，依技術棧選擇對應檔案）。
+- **需掛載規則**：`docs/agent-skills/05-backend-agent.md`、`strategies/unit-test-backend.md` 以及具體的框架策略（如 `strategies/backend-nestjs.md`、`strategies/backend-dotnet.md`，依技術棧選擇對應檔案）。
 - **任務目標**：實作 API 路由、業務邏輯層與資料庫存取層。**必須同時實作 SRE 要求的健康探針 (/health)、監控指標 (/metrics) 與快取防禦策略。**
 - **最高禁令**：**嚴禁在沒有資料庫事實檔案（`<模組>_schema_v<版號>.md`）的情況下實作資料庫邏輯。**
 

@@ -6,7 +6,7 @@
 
 ## 2. 稽核執行流 (Audit Workflow)
 1. **讀取交接單**：確認 01 PM 指定的前、後端技術棧，並獲取最新的 BA 業務流程規格書（`docs/architecture/<模組>_BA_v<版號>.md`）、API 介面規格書（`docs/architecture/<模組>_API_v<版號>.md`）與對應的資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`）。
-2. **加載對應字典**：讀取 `docs/agent-skills/strategies/` 下對應的框架、測試與安全規範（包含 `qa-playwright.md`、`qa-k6.md` 與 `08-security-agent.md`）。
+2. **加載對應字典**：讀取 `docs/agent-skills/strategies/` 下對應的框架、測試與安全規範（包含 `qa-playwright.md`、`qa-k6.md`、`unit-test-frontend.md`、`unit-test-backend.md` 與 `08-security-agent.md`）。
 3. **實體交叉比對**：
     - **規範 vs 代碼**：檢查是否違反框架特化策略。
     - **SSOT vs 代碼**：檢查 Entity/Migration 與 `schema.md` 是否 100% 同步。
@@ -61,7 +61,16 @@
 - **[ ] 真實行為模擬**：腳本必須包含 `sleep()` (Think Time)，嚴禁死迴圈壓測。
 - **[ ] 識別標籤**：標頭必須包含 `User-Agent: k6-load-test`。
 
-### 3.6 共通稽核
+### 3.6 開發者單元測試稽核 (Dev Unit Test Audit)
+
+> **⚠️ 稽核字典**：前端對齊 `strategies/unit-test-frontend.md`，後端對齊 `strategies/unit-test-backend.md`。
+
+- **[ ] 測試檔存在性**：當審核 **Frontend (04)** 或 **Backend (05)** 的產出時，必須檢查是否同步提交了對應的測試檔案（前端 `.spec.ts` / `.test.ts`，後端 `.spec.ts` / `*Tests.cs`）。缺少測試檔直接判定為 **FAIL**。
+- **[ ] Mock 隔離合規**：依據對應的 `unit-test-*.md` 策略，檢查單元測試是否確實 Mock 了外部依賴（前端：HTTP Client / Router / Store；後端：Repository / Cache / 第三方服務）。若發現單元測試連線真實資料庫或外部 API，直接判定為 **FAIL**。
+- **[ ] 核心邏輯覆蓋**：檢查測試案例是否涵蓋策略檔定義的各測試分層（前端：Mapper / Service / UI 組件；後端：Domain / Application / Mapper），而非僅測試 trivial getter/setter。
+- **[ ] 框架特化合規**：依據策略檔的 `IF [Framework]` 條件段落，檢查測試是否遵守框架專屬規範（如 Angular 的 Standalone TestBed、NestJS 的最小化測試模組、.NET 的 AAA 結構）。
+
+### 3.7 共通稽核
 - **[ ] 統一回應**：所有 API 回傳（含 Error）必須包裹在 `ApiResponse<T>` 內。
 - **[ ] 樣式鎖定**：檢查前端是否出現硬編碼色碼，必須套用 UI Spec 定義的 Tokens。
 

@@ -35,7 +35,9 @@ docs/agent-skills/
     ├── backend-nestjs.md        (NestJS 特化規範)
     ├── backend-dotnet.md        (.NET 特化規範)
     ├── qa-playwright.md         (Playwright E2E 策略)
-    └── qa-k6.md                 (k6 壓測策略)
+    ├── qa-k6.md                 (k6 壓測策略)
+    ├── unit-test-frontend.md    (前端單元測試策略)
+    └── unit-test-backend.md     (後端單元測試策略)
 ```
 
 ## 流水線流程 (Pipeline Flow)

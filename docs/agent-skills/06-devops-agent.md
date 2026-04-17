@@ -27,8 +27,9 @@
 CI/CD 腳本必須嚴格反映 PM (01) 定義的品質門禁。流水線中必須包含以下 Stage，且任一階段失敗必須中斷部署：
 1. **Security Scan (SAST)**: 執行 npm audit 或 .NET security scan。
 2. **Lint & Build**: 結構與語法檢查。
-3. **Automated Testing**: 執行 QA Agent (07) 產出的 Unit Test 與 API Integration Test。
-4. **Performance Gate**: 執行 k6 壓測，確保 p95 延遲低於閾值。
+3. **Unit Testing**: 執行 Frontend (04) 與 Backend (05) 產出的單元測試。
+4. **Integration & E2E Testing**: 執行 QA Agent (07) 產出的 API Integration Test 與 E2E Test。
+5. **Performance Gate**: 執行 k6 壓測，確保 p95 延遲低於閾值。
 
 ## 4. 被監控協議 (Audited by Watcher)
 - **基礎設施稽核**：你產出的 `Dockerfile` 與 `docker-compose.yml` 必須接受 **Watcher (90)** 與 **Security (08)** 的雙重稽核，確保沒有暴露敏感 Port (如直接暴露 DB 預設 Port) 且資源限制配置正確。
