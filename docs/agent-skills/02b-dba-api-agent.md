@@ -13,6 +13,7 @@
 ### Step 2.0: 權限與目錄初始化 (Environment Init)
 - **環境確認**：在開始任何設計前，必須先讀取 `docs/architecture/database/README.md` 以確認資料庫設計的權限與異動協議。
 - **技術上下文消化**：同時讀取 Tech Lead (02) 的技術執行計畫書（`docs/architecture/<模組名稱>_TechPlan_v<版本號>.md`），以獲取資料庫選型指令、快取策略要求與安全防禦提示。TechPlan 中的技術約束為你的設計基準。
+- **DDD 對齊**：必須完整讀取 BA (02a) 產出的 `Bounded Context` 切分、領域語彙表與跨 Context 互動說明。這些語意邊界是你建立 Schema SSOT 與 API 合約的前提。
 - **目錄建立**：若 `docs/architecture/database/` 目錄不存在，你必須主動建立該目錄及其對應的 `README.md`（內容須符合資料庫事實來源之定義）。
 
 ### Step 2.1: 資料庫事實來源建立 (Database SSOT Modeling)
@@ -20,6 +21,10 @@
 
 - **文件路徑**：`docs/architecture/database/<模組名稱>_schema_v<版本號>.md`
 - **執行準則**：根據專案指定的選型進行建模，嚴格遵守以下細節：
+- **DDD 建模要求**：
+  1. Schema 必須依 BA 定義的 `Bounded Context` 切分；**禁止**把不同 Context 的一致性規則硬塞進同一聚合。
+  2. 你必須在 Schema 文件中明確標示每個 `Aggregate Root`、其內部 `Entity`、可封裝為 `Value Object` 的欄位群，以及跨 Aggregate 的引用方式。
+  3. 跨 Aggregate 關聯預設以識別碼 / FK 表達；若設計會讓子物件可被直接繞過根實體修改，視為不合格設計。
 
 #### **情境 A：SQL (預設 PostgreSQL) - 關聯視覺化**
 1. **實體關聯圖**：強制使用 **DBML 語法** 撰寫，包裹在 ````dbml ... ```` 中。此 DBML 可直接貼入 [dbdiagram.io](https://dbdiagram.io) 渲染 ER Diagram。
@@ -43,6 +48,8 @@
 - **輸出路徑**：`docs/architecture/<模組名稱>_API_v<版本號>.md`
 - **強制對齊 Schema**：DTO 欄位名稱必須與 Schema 文件內的資料庫欄位 **100% 吻合**。
 - **強制覆蓋 BA**：你開立的 API 路由，必須涵蓋 `_BA_v.md` 中定義的所有「狀態流轉」與「使用者互動行為」。
+- **聚合根守門**：所有會改變狀態的 API，必須以 `Aggregate Root` 為主要命令入口；**禁止**設計可直接繞過根實體、修改子 Entity 的寫入路由，除非 BA / TechPlan 明確授權且已說明風險。
+- **事件觸發標註**：若 BA 定義了跨 `Bounded Context` 的後續協調行為，你必須在 API 規格中明確標註事件觸發點與後續處理需求，供 Backend (05) 建模 `Domain Event`。
 - **標準包裹格式**：`{ statusCode, message, data: T }`
 - **架構師擴充職責**：針對每一支 API，你必須明確定義以下屬性：
   1. **存取控制 (Auth/RBAC)**：誰可以呼叫？
@@ -58,6 +65,12 @@
 完成設計後，你必須確保以下檔案結構正確：
 
 1. **資料庫事實檔案 (SSOT)**：`docs/architecture/database/<模組名稱>_schema_v<版本號>.md`
+   - 包含：`Bounded Context` 標籤、`Aggregate Root / Entity / Value Object` 分類、欄位與索引設計、跨 Aggregate 引用說明。
 2. **API 介面規格書**：`docs/architecture/<模組名稱>_API_v<版本號>.md`
-   - 包含：API 路由設計、Request/Response DTO 定義、授權機制、架構風險提示（如 N+1 查詢風險等）。
+   - 包含：API 路由設計、Request/Response DTO 定義、授權機制、聚合修改邊界、事件觸發點標註、架構風險提示（如 N+1 查詢風險等）。
 3. **索引維護**：你必須在 `docs/architecture/database/README.md` 中手動更新檔案索引列表，確保 SSOT 入口可追蹤。
+
+## 5. 被稽核協議 (Audited by Watcher)
+- **Context 對齊**：Watcher (90) 須確認你的 Schema 與 API 設計未偏離 BA 定義的 `Bounded Context` 邊界與領域語彙。
+- **聚合邊界合理性**：Watcher 須確認你已標明 `Aggregate Root`，且不存在明顯可繞過根實體直接修改子 Entity 的 API 或 Schema 暗示。
+- **SSOT 完整性**：Watcher 須確認資料庫事實檔案已涵蓋索引、併發欄位 (`version`) 與跨 Aggregate 引用說明，並與 API 規格保持一致。
