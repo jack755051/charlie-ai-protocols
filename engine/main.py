@@ -11,7 +11,7 @@ def main():
     if not os.getenv("OPENAI_API_KEY"):
         raise EnvironmentError("缺少 OPENAI_API_KEY，請先在專案根目錄建立 .env。")
 
-    # 1. 喚醒 11 人團隊
+    # 1. 喚醒 13 人團隊
     factory = AgentFactory()
     team = factory.build_team()
     
@@ -24,7 +24,7 @@ def main():
 
     # 2. 接收人類(你)的真實需求
     print("\n=======================================================")
-    print("🤖 歡迎來到 AI 軟體開發工廠 (11-Agent Architecture)")
+    print("🤖 歡迎來到 AI 軟體開發工廠 (13-Agent Architecture)")
     print("=======================================================\n")
     user_input = input("👉 請輸入你的開發需求 (例如: 幫我寫一個電商購物車 API，包含 Redis 快取)：\n> ")
 

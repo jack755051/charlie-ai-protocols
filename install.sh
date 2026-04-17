@@ -32,7 +32,7 @@ fi
 echo ""
 echo "🔗 [2/3] 建立 Agent Skills symlink..."
 make -C "${CAP_DIR}" sync > /dev/null 2>&1
-echo "   ✓ 本地 .agents/skills/ 就緒（11 agents + 11 aliases）"
+echo "   ✓ 本地 .agents/skills/ 就緒（13 agents + 13 aliases）"
 
 # 3. 全域部署（靜默執行）
 echo ""
@@ -54,6 +54,6 @@ echo ""
 echo "或直接開啟新的終端機視窗。之後即可使用："
 echo ""
 echo "    cap help    列出所有可用指令"
-echo "    cap list    列出 11 個 Agent Skills"
+echo "    cap list    列出 13 個 Agent Skills"
 echo "    cap update  同步 GitHub 最新規則"
 echo "=========================================="
