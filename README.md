@@ -108,9 +108,9 @@ $security 請掃描目前檔案有沒有 SQL Injection 的風險。
 | 工具 | 部署位置 | 作用 |
 |---|---|---|
 | **Claude Code** | `~/.claude/CLAUDE.md` | 使用 `@` 匯入核心憲法 + Git 工作流 |
-| | `~/.claude/rules/` | 13 個 agent symlink，作為背景知識 |
+| | `~/.claude/rules/` | 所有 `*-agent.md` symlink，作為背景知識 |
 | **OpenAI Codex** | `~/.codex/AGENTS.md` | 全域指令檔 |
-| | `~/.agents/skills/` | 26 個 symlink（13 長名 + 13 短名 alias） |
+| | `~/.agents/skills/` | 長名 + 短名 symlink（對應所有 Agent） |
 | **Shell** | `~/.zshrc` | `cap` alias → `make -C <CAP路徑>` |
 
 > 開發者建議直接從開發 repo 執行 `make install`；`install.sh` 是給只需消費 protocols 的團隊成員使用。

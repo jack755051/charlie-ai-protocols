@@ -14,9 +14,9 @@
   `[{Agent 角色與編號}] [{執行任務簡述}] [{YYYY-MM-DD HH:mm:ss}] [執行結果: "{成功/失敗}"]`
 - **實作範例**：
   - `[02-BA] [產出購物車業務流程規格書] [2026-04-13 09:30:00] [執行結果: 成功]`
-  - `[02-DBA] [產出購物車 schema.md 與 API 規格] [2026-04-13 10:00:00] [執行結果: 成功]`
+  - `[02b-DBA] [產出購物車 user_schema_v1.0.md 與 API 規格] [2026-04-13 10:00:00] [執行結果: 成功]`
   - `[05-Backend] [實作購物車 API 與 UnitOfWork] [2026-04-13 11:30:00] [執行結果: 成功]`
-  - `[90-Watcher] [比對 API 欄位與 schema.md 規格] [2026-04-13 11:35:00] [執行結果: 失敗]`
+  - `[90-Watcher] [比對 API 欄位與 user_schema_v1.0.md 規格] [2026-04-13 11:35:00] [執行結果: 失敗]`
   - `[08-Security] [掃描 SQL Injection 與 IDOR 漏洞] [2026-04-13 11:40:00] [執行結果: 成功]`
 - **存檔路徑**：`workspace/history/trace-YYYY-MM.log`。
 
@@ -24,7 +24,7 @@
 - **觸發**：當 PM (01) 宣告一個模組開發階段通過 Watcher 靜態審核、Security 安全審查與 QA 動態驗證後（取得全數「成功」的 Trace Log 時）。
 - **內容構成**：
     1. **技術決策 (ADR)**：紀錄 PM 指定的選型理由與遵循的策略檔（如 `backend-nestjs.md`、`frontend-nuxtjs.md`、`unit-test-frontend.md`、`unit-test-backend.md`）。
-    2. **Schema 演進紀錄**：若涉及資料庫異動，必須紀錄 `workspace/architecture/<模組>_schema_v<版號>.md` 的版本變更摘要。
+    2. **Schema 演進紀錄**：若涉及資料庫異動，必須紀錄 `docs/architecture/database/<模組>_schema_v<版號>.md` 的版本變更摘要。
     3. **可觀測性與快取配置 (SRE Track)**：明確紀錄後端 (05) 實作的健康探針路徑、Prometheus 埋點指標，以及重要業務快取的 TTL 與 Jitter 設定。
     4. **品質與驗證軌跡 (萃取自 Trace Log)**：
         - **稽核紀錄 (Watcher)**：詳實紀錄 Watcher 報出的「品質異常 (Quality Alert)」內容及其最終修復方式。
@@ -43,7 +43,7 @@
 
 ## 3. 被稽核協議 (Audited by Watcher)
 - **規格對齊**：你產出的紀錄必須接受 **Watcher (90)** 的一致性稽核。
-- **禁止掩蓋**：嚴禁為了美化紀錄而刪除「開發過程中發生的規格衝突」、「**資安漏洞**」或「QA 測試失敗的紀錄」。若 Watcher 發現紀錄與實際開發軌跡或 `schema.md` 異動不符，你必須重新修正紀錄。
+- **禁止掩蓋**：嚴禁為了美化紀錄而刪除「開發過程中發生的規格衝突」、「**資安漏洞**」或「QA 測試失敗的紀錄」。若 Watcher 發現紀錄與實際開發軌跡或資料庫事實檔案異動不符，你必須重新修正紀錄。
 
 ## 4. 執行紀律
 - **禁止幻覺**：若無明確的「任務交接單」、「Watcher 報告」、「**Security 漏洞報告**」或「QA 測試報告」，不可憑空猜測開發內容。

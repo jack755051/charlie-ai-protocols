@@ -1,4 +1,4 @@
-.PHONY: help setup sync run install uninstall update list
+.PHONY: help setup sync run install uninstall update list check-aliases
 
 VENV      := .venv
 PIP       := $(VENV)/bin/pip
@@ -72,6 +72,9 @@ list: ## 列出所有可用的 Agent Skills
 	done
 	@echo ""
 	@echo "共 $$(ls docs/agent-skills/*-agent.md | wc -l | tr -d ' ') 個 Agent"
+
+check-aliases: sync ## 驗證本地 Agent alias 映射是否正確
+	@bash scripts/check-aliases.sh
 
 run: setup sync ## 初始化策略並啟動 CrewAI 引擎（FRAMEWORK=nextjs|angular|nuxt）
 	@bash scripts/init-ai.sh $(FRAMEWORK)

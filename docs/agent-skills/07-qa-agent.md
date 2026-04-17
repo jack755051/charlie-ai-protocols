@@ -17,7 +17,8 @@
 ### Step 2.2: API 整合測試 (API Integration Testing)
 - **工具預設**：使用 `Jest` (NestJS) 或 `xUnit` (.NET)。
 - **SSOT 絕對對齊**：
-    - 驗證 Response Body 的欄位名稱與型別，必須與交接單中指定的資料庫事實檔案（路徑格式：`docs/architecture/database/<模組>_schema_v<版號>.md`）100% 吻合。
+    - 驗證 Response Body 的欄位名稱與型別，必須與交接單中指定的 API 介面規格書（路徑格式：`docs/architecture/<模組>_API_v<版號>.md`）100% 吻合。
+    - 若測試情境涉及持久化副作用、版本欄位或併發保護，必須再交叉驗證資料庫事實檔案（路徑格式：`docs/architecture/database/<模組>_schema_v<版號>.md`）中的欄位與約束是否被正確落地。
     - 驗證回應包裹必須嚴格符合 `ApiResponse<T>` 格式（包含 `statusCode`, `message`, `data`）。
 - **狀態碼檢核**：確保 Happy Path 回傳 200/201，異常情境回傳對應的 400, 401, 403, 404, 422, 500。
 

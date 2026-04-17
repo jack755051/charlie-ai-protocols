@@ -75,5 +75,5 @@
 - **強型別表單優先 (Strict Typing)**：建立表單時，必須使用 Angular 強型別 `FormGroup`、`FormControl`。禁止宣告為 `any` 或 `UntypedFormGroup`。
 - **禁止 Template-Driven Forms**：在複雜業務表單中，**嚴禁使用 `[(ngModel)]`**。表單狀態與驗證邏輯必須保留在 TypeScript 中。
 - **驗證與錯誤回饋**：
-  - 必須將 `02 SA Agent` 規格書中定義的限制實作為 Angular `Validators`。
+  - 必須將 BA (02a) 定義的業務限制與 DBA/API (02b) 定義的欄位契約實作為 Angular `Validators`。
   - 表單錯誤提示 UI，必須對齊 `03 UI Agent` 定義的視覺狀態。

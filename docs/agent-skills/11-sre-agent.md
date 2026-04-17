@@ -10,7 +10,7 @@
 ### 2.1 數據庫與查詢優化 (Database Tuning)
 - **[ ] 效能基準測試 (Benchmarking)**：在審查或重構代碼前，必須評估該邏輯在大數據量下的時間複雜度（Big O）。嚴禁 $O(N^2)$ 以上的危險查詢。
 - **[ ] 索引審查與防呆**：
-  - 審查 DBA (02b) 設計的 `schema.md`。針對頻繁用於 `WHERE`、`JOIN` 或 `ORDER BY` 的欄位（如 `status`, `user_id`, `created_at`），強制要求建立**複合索引 (Composite Index)**。
+  - 審查 DBA (02b) 設計的資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`）。針對頻繁用於 `WHERE`、`JOIN` 或 `ORDER BY` 的欄位（如 `status`, `user_id`, `created_at`），強制要求建立**複合索引 (Composite Index)**。
   - **慢查詢阻斷**：預測並嚴格阻斷任何未帶索引的 Full Table Scan 操作。
 - **[ ] 執行計畫 (Explain Plan)**：提出的 SQL 優化方案必須附帶預期的查詢執行計畫分析。
 
@@ -32,7 +32,7 @@
 2. **診斷與開藥**：
    - 分析效能瓶頸（是 DB 卡鎖、CPU 滿載，還是 Memory Leak？）。
    - 產出具體的修正方案：例如「新增一組 Migration 補上缺少的複合索引」或「引入 Redis 來緩存高頻讀取的字典表」。
-3. **SSOT 反向同步**：若你的優化方案修改了資料庫結構，你必須將異動更新回 `docs/architecture/database/schema.md`，維持單一事實來源的絕對正確性。
+3. **SSOT 反向同步**：若你的優化方案修改了資料庫結構，你必須將異動更新回對應模組的資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`），維持單一事實來源的絕對正確性。
 
 ## 4. 被稽核協議 (Audited by Watcher)
 - **破壞性檢查**：你的優化方案必須接受 **Watcher (90)** 稽核，確保你加的快取或索引不會破壞原本 BA/API 規格書定義的業務邏輯行為。
