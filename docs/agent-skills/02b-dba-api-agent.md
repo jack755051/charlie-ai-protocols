@@ -22,19 +22,22 @@
 - **執行準則**：根據專案指定的選型進行建模，嚴格遵守以下細節：
 
 #### **情境 A：SQL (預設 PostgreSQL) - 關聯視覺化**
-1. **實體關聯圖**：強制使用 **DBML 語法** 撰寫，包裹在 ````dbml ... ```` 中。
+1. **實體關聯圖**：強制使用 **DBML 語法** 撰寫，包裹在 ````dbml ... ```` 中。此 DBML 可直接貼入 [dbdiagram.io](https://dbdiagram.io) 渲染 ER Diagram。
 2. **欄位定義**：明確標示型別、PK、FK，並使用 `Note` 註明用途。
 3. **索引設計**：必須在 DBML 的 `Table` 定義後，使用 `indexes { ... }` 區塊列出所需的單一或複合索引 (Composite Indexes)。
 4. **強制標配**：包含 `created_at`, `updated_at`, `deleted_at`, 以及 `version` (樂觀併發檢核欄位)。
+5. **可視化指引**：在 Schema 文件末尾附上渲染提示：`> 📊 將上方 DBML 貼入 https://dbdiagram.io 即可產生 ER Diagram`。
 
 #### **情境 B：NoSQL (如 MongoDB) - 文件層級視覺化**
-1. **結構視覺化**：強制使用 **Mermaid 的 `classDiagram` 語法** 來描繪 Document 結構（`*--` 表示內嵌，`o--` 表示引用）。
+1. **結構視覺化**：強制使用 **Mermaid 的 `classDiagram` 語法** 來描繪 Document 結構（`*--` 表示內嵌，`o--` 表示引用）。此 Mermaid 可直接貼入 [mermaid.live](https://mermaid.live) 渲染互動式圖表。
 2. **遷移策略**：強制加入 `schema_version` 欄位。
 3. **索引設計**：以文字條列出需要建立的 Compound Index 或 TTL Index。
+4. **可視化指引**：在 Schema 文件末尾附上渲染提示：`> 📊 將上方 Mermaid 貼入 https://mermaid.live 即可產生互動式結構圖`。
 
 #### **情境 C：Vector DB (向量資料庫) - 空間與元資料視覺化**
-1. **結構視覺化**：使用 **Mermaid 的 `classDiagram`** 繪製，區分為 `VectorConfig` 與 `MetadataSchema`。
+1. **結構視覺化**：使用 **Mermaid 的 `classDiagram`** 繪製，區分為 `VectorConfig` 與 `MetadataSchema`。此 Mermaid 可直接貼入 [mermaid.live](https://mermaid.live) 渲染互動式圖表。
 2. **索引規格**：明確定義維度大小與度量方式 (Cosine, DotProduct 等)。
+3. **可視化指引**：在 Schema 文件末尾附上渲染提示：`> 📊 將上方 Mermaid 貼入 https://mermaid.live 即可產生互動式結構圖`。
 
 ### Step 2.2: API 介面合約與路由定義 (API Routing & Contracts)
 - **輸出路徑**：`docs/architecture/<模組名稱>_API_v<版本號>.md`
