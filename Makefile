@@ -62,9 +62,13 @@ list: ## 列出所有可用的 Agent Skills
 	@for f in docs/agent-skills/*-agent.md; do \
 		name=$$(basename "$$f"); \
 		num=$$(echo "$$name" | sed 's/-.*//' ); \
-		role=$$(echo "$$name" | sed 's/^[0-9]*-//; s/-agent\.md//'); \
+		case "$$name" in \
+			02a-ba-agent.md) alias_name="ba" ;; \
+			02b-dba-api-agent.md) alias_name="dba" ;; \
+			*) alias_name=$$(echo "$$name" | sed -E 's/^[0-9]+[a-z]*-//; s/-agent\.md$$//') ;; \
+		esac; \
 		title=$$(head -1 "$$f" | sed 's/^# *//'); \
-		printf "  %-6s %-26s \$$%-13s %s\n" "$$num" "$$name" "$$role" "$$title"; \
+		printf "  %-6s %-26s \$$%-13s %s\n" "$$num" "$$name" "$$alias_name" "$$title"; \
 	done
 	@echo ""
 	@echo "共 $$(ls docs/agent-skills/*-agent.md | wc -l | tr -d ' ') 個 Agent"

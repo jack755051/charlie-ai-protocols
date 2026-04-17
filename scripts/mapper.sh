@@ -19,6 +19,22 @@ SOURCE_DIR="${PROJECT_ROOT}/docs/agent-skills"
 
 MODE="${1:---local}"
 
+resolve_short_name() {
+  local filename="$1"
+
+  case "${filename}" in
+    02a-ba-agent.md)
+      echo "ba.md"
+      ;;
+    02b-dba-api-agent.md)
+      echo "dba.md"
+      ;;
+    *)
+      echo "${filename}" | sed -E 's/^[0-9]+[a-z]*-//; s/-agent\.md$/.md/'
+      ;;
+  esac
+}
+
 # ----------------------------------------------------------
 # 移除全域安裝
 # ----------------------------------------------------------
@@ -113,8 +129,7 @@ for src in "${SOURCE_DIR}"/*-agent.md; do
   count=$((count + 1))
 
   # 短名 symlink：qa.md（供 Codex $qa 調用）
-  # 解析規則：{number}-{role_key}-agent.md → role_key.md
-  short_name="$(echo "${filename}" | sed 's/^[0-9]*-//; s/-agent\.md/.md/')"
+  short_name="$(resolve_short_name "${filename}")"
   ln -sf "${link_target}" "${TARGET_DIR}/${short_name}"
   alias_count=$((alias_count + 1))
 done
