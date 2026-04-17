@@ -57,4 +57,4 @@
 - **產出要求**：與原始碼一併輸出對應的測試檔（如 `auth.mapper.spec.ts`）。
 
 ### 交付要求
-請以 Markdown Code Blocks 輸出完整的原始碼，並於每個 Code Block 標明檔案的完整相對路徑（例如：`src/app/features/auth/auth.mapper.ts`），以便使用者直接複製使用。
+請以 Markdown Code Blocks 輸出完整的原始碼與對應的單元測試檔，並於每個 Code Block 標明檔案的完整相對路徑（例如：`src/app/features/auth/auth.mapper.ts`），以便使用者直接複製使用。

@@ -48,7 +48,7 @@ docs/agent-skills/
   → [02a BA] 業務流程規格
   → [02b DBA] Schema SSOT + API 介面規格
   → [03 UI] 設計規格
-  → [04 Frontend] / [05 Backend] 實作
+  → [04 Frontend] / [05 Backend] 實作 + Unit Test
   → [90 Watcher] + [08 Security] 同步稽核
   → [07 QA] 功能驗證 + 壓力測試
   → (若未達標) [11 SRE] 效能優化
