@@ -5,7 +5,7 @@ paths:
 
 # Agent Skills Editing Rules
 
-- All agent files MUST end with `-agent.md` (e.g. `02-ba-agent.md`). This is how `factory.py` discovers them.
+- All agent files MUST end with `-agent.md` (e.g. `02-techlead-agent.md`). This is how `factory.py` discovers them.
 - `00-core-protocol.md` is the only non-agent file — it is the shared constitution, NOT an agent.
 - `strategies/` files are framework-specific details, NOT agents. Do not rename them to `*-agent.md`.
 - When adding a new agent, also update:

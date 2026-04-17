@@ -1,6 +1,6 @@
 # Charlie's AI Protocols
 
-AI multi-agent collaboration system with 11 specialized agents, powered by CrewAI.
+AI multi-agent collaboration system with 13 specialized agents, powered by CrewAI.
 
 ## Core Protocol
 
