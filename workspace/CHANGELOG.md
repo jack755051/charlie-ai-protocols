@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.5] - 2026-04-19
+### Added
+- 新增可選的第二層設計同步流程，透過 `12-figma-agent` 將 `03-ui-agent` 產出的設計資產同步至 Figma。
+
+### Changed
+- 調整 Supervisor、UI、Watcher、Logger、Agent Registry 與 README，使 `assets_only` / `assets_plus_figma` 的設計交付模式與 Figma 同步條件可被正式編排與追蹤。
+
 ## [1.0.4] - 2026-04-19
 ### Added
 - 為 `03-ui-agent` 建立第一階段可維護設計資產輸出規範，主交付物包含 `UI Spec`、`tokens.json`、`screens.json` 與 `prototype.html`。

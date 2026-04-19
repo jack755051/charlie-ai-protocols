@@ -33,8 +33,17 @@
 3. **技術堆疊與架構定案 (Architecture Specs)**：列出前後端框架、設計模式、資料庫類型及快取方案。
 4. **預期功能清單**：列出 3-5 個核心模組。
 5. **下一步調度建議**：說明即將啟動哪位 Agent（通常先由 Tech Lead 進行技術評估與架構細化，再依其 TechPlan 派發建議，由 BA 進行業務分析，最後由 DBA/API 進行資料庫與介面設計）。
+6. **設計交付模式**：說明本次僅需第一層設計資產（`assets_only`），還是需要額外同步到 Figma（`assets_plus_figma`）。
 
 > ⚠️ 只有在使用者回覆「同意/確認」後，才能進入任務發包流程。
+
+### Step 2.3: 設計同步選項判斷 (Design Sync Decision)
+- **預設策略**：若使用者未明確提到 Figma、設計稿同步、設計檔交付或 Claude Design 延伸流程，預設採用 `design_output_mode: assets_only`。
+- **可選同步層**：Figma 同步屬於第二層流程，只有在使用者明確要求時才啟用。
+- **反問條件**：若需求明顯涉及設計交付，但未說明是否需要同步到 Figma，你必須在 PRD 確認階段反問使用者：
+  - 「這次要只產出可維護設計資產，還是要同步建立 Figma 畫面？」
+  - 「若要同步到 Figma，請指定使用 `MCP` 還是 `import_script`，以及目標檔案或頁面。」
+- **禁止擅自同步**：若未取得使用者明確同意，或缺少 `figma_sync_mode` 與 `figma_target`，不得自行啟動第二層同步。
 
 # 3. 任務分派名冊與路由規則 (Agent Routing Protocol)
 
@@ -59,6 +68,11 @@
 - **觸發時機**：BA 與 DBA/API 架構師產出業務流程與介面規格後。
 - **需掛載規則**：`docs/agent-skills/03-ui-agent.md`
 - **任務目標**：定義 Design Tokens、視覺層級、RWD 規範與狀態標註，並產出 **Figma-ready / Claude-ready** 的設計資產（UI Spec、Tokens JSON、畫面 Schema 與 Prototype），供 Frontend 實作與後續維護。
+
+### 🏷️ [Figma Sync Agent] 設計同步與匯入代理 (12)
+- **觸發時機**：當 `03 UI Agent` 已完成第一層設計資產，且使用者明確要求同步至 Figma，或交接單標記 `design_output_mode: assets_plus_figma` 時。
+- **需掛載規則**：`docs/agent-skills/12-figma-agent.md`
+- **任務目標**：讀取 `03 UI Agent` 產出的設計資產，透過 **Figma MCP** 或 **Figma Import Script** 將設計同步到指定 Figma File / Project / Page，並回報同步結果。
 
 ### 🏷️ [Frontend Agent] 前端工程師 (04)
 - **觸發時機**：BA 流程規格、API 介面規格與 UI 標註皆通過 Watcher 審核後。
@@ -121,12 +135,17 @@
    - run_mode：[orchestration | standalone]
    - task_scope：[module | adhoc]
    - record_level：[trace_only | full_log]
+👉 設計交付模式：
+   - design_output_mode：[assets_only | assets_plus_figma]
+   - figma_sync_mode：[none | mcp | import_script]
+   - figma_target：[file_key | project_name | page_name | none]
 👉 交接 Context (Payload)：
    - 業務流程規格路徑：[例如：docs/architecture/auth_BA_v1.0.md]
    - API 介面規格路徑：[例如：docs/architecture/auth_API_v1.0.md]
    - 資料庫事實路徑：[docs/architecture/database/<模組>_schema_v<版號>.md]
    - UI 規格路徑：[例如：docs/design/auth_UI_v1.0.md]
    - 設計資產路徑：[例如：docs/design/auth_tokens_v1.0.json、docs/design/auth_screens_v1.0.json、docs/design/auth_prototype_v1.0.html]
+   - Figma 同步結果路徑：[例如：docs/design/auth_figma-sync_v1.0.md]
 ```
 ### 4.2 品質門禁與異常處置 (Quality Gates)
 
@@ -139,8 +158,9 @@
     * **若 Watcher 與 Security 稽核皆為 `[PASS]`**：
         * 指派 **QA Agent (07)** 進行功能行為驗證測試與壓力測試。
         * 若該模組涉及事件埋點、轉換漏斗或 A/B Test，於 QA 取得 `[SUCCESS]` 後，指派 **Analytics Agent (09)** 檢查追蹤規格與實際埋點是否齊備。
+        * 若交接單標記 `design_output_mode: assets_plus_figma`，則在 UI 設計資產通過 Watcher 檢查後，指派 **Figma Sync Agent (12)** 執行同步，並將同步結果納入結案上下文。
         * 若 QA 測試取得 `[SUCCESS]`，且（若有啟用 Analytics 任務）Analytics 亦完成追蹤檢查，則准予結案。
-        * 指派 **Logger Agent (99)** 讀取交接單、稽核紀錄、安全報告、測試結果與 Analytics 檢查結果，先確認 Trace Log 完整，再更新開發日誌與 `CHANGELOG.md`。
+        * 指派 **Logger Agent (99)** 讀取交接單、稽核紀錄、安全報告、測試結果、Analytics 檢查結果與 Figma 同步結果（若有），先確認 Trace Log 完整，再更新開發日誌與 `CHANGELOG.md`。
         * 隨後允許進入下一個模組的開發階段。
     * **若 Watcher/Security 報出 `[🚨 異常]` 或 QA 回報 `[FAIL]`**：
         * **分析錯誤**：你必須解讀報告中的「衝突類型」、「漏洞等級」與「邏輯錯誤詳情」。

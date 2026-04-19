@@ -12,7 +12,7 @@
 - **情境 A：整批角色編排 (Orchestration Run)**：
   - 由 **Supervisor (01)** 發出【任務交接單】、帶有模組名稱、版本號或上下游依賴時，視為流程型任務。
   - 你必須為流程中的每一次 Agent 完成事件追加一筆 Trace Log。
-  - 當該流程取得全數門禁結果（Watcher / Security / QA / Analytics，如適用）後，你必須再彙整寫入 Devlog，必要時更新 `CHANGELOG.md`。
+  - 當該流程取得全數門禁結果（Watcher / Security / QA / Analytics / Figma Sync，如適用）後，你必須再彙整寫入 Devlog，必要時更新 `CHANGELOG.md`。
 - **情境 B：單獨角色呼叫 (Standalone Run)**：
   - 當使用者直接呼叫單一 Agent（如 `02`、`02a`、`02b`、`11`）處理一次性任務時，預設視為單次任務。
   - 你仍必須留下 Trace Log，但**預設不得**直接升級為 Devlog 或 `CHANGELOG.md`。
@@ -41,8 +41,9 @@
     1. **技術決策 (ADR)**：紀錄 PM 指定的選型理由與遵循的策略檔（如 `backend-nestjs.md`、`frontend-nuxtjs.md`、`unit-test-frontend.md`、`unit-test-backend.md`）。
     2. **Schema 演進紀錄**：若涉及資料庫異動，必須紀錄 `docs/architecture/database/<模組>_schema_v<版號>.md` 的版本變更摘要。
     3. **設計資產紀錄 (Design Track)**：若涉及 UI / UX 設計變更，必須紀錄 `docs/design/` 下的 UI Spec、Tokens JSON、畫面 Schema 與 Prototype 版本變化。
-    4. **可觀測性與快取配置 (SRE Track)**：明確紀錄後端 (05) 實作的健康探針路徑、Prometheus 埋點指標，以及重要業務快取的 TTL 與 Jitter 設定。
-    5. **品質與驗證軌跡 (萃取自 Trace Log)**：
+    4. **Figma 同步紀錄 (Figma Track)**：若啟用第二層同步，必須紀錄同步模式（`mcp` / `import_script`）、同步目標、成功同步的頁面與待人工補齊項目。
+    5. **可觀測性與快取配置 (SRE Track)**：明確紀錄後端 (05) 實作的健康探針路徑、Prometheus 埋點指標，以及重要業務快取的 TTL 與 Jitter 設定。
+    6. **品質與驗證軌跡 (萃取自 Trace Log)**：
         - **稽核紀錄 (Watcher)**：詳實紀錄 Watcher 報出的「品質異常 (Quality Alert)」內容及其最終修復方式。
         - **數位防禦紀錄 (Security)**：紀錄 Security Agent (08) 攔截到的資安漏洞與修復結果。
         - **單元測試紀錄 (Dev Unit Test)**：紀錄 Watcher (90) 對 Frontend (04) 與 Backend (05) 單元測試的稽核結果（測試檔存在性、Mock 隔離合規性）。

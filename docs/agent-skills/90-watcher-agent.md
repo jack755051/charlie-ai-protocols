@@ -10,6 +10,7 @@
 3. **實體交叉比對**：
     - **規範 vs 代碼**：檢查是否違反框架特化策略。
     - **設計資產 vs 規格**：檢查 UI Spec、Tokens JSON、畫面 Schema、Prototype 之間是否互相一致。
+    - **Figma 同步結果 vs 設計資產**：若本次有啟用 `12 Figma Sync Agent`，檢查同步報告是否能回推到相同版本的 Tokens、Screens 與 Prototype。
     - **SSOT vs 代碼**：檢查 Entity/Migration 與交接單指定的資料庫事實檔案是否 100% 同步。
     - **安全標籤稽核**：檢查代碼是否已通過 **Security Agent (08)** 的檢核，且未包含硬編碼 Secrets。
     - **測試策略稽核**：檢查 QA 腳本是否符合 Playwright POM 模式與 k6 門檻設定。
@@ -84,6 +85,7 @@
 - **[ ] 統一回應**：所有 API 回傳（含 Error）必須包裹在 `ApiResponse<T>` 內。
 - **[ ] 樣式鎖定**：檢查前端是否出現硬編碼色碼，必須套用 UI Spec 定義的 Tokens。
 - **[ ] 設計資產可維護性**：檢查 `docs/design/` 下是否存在可版本控制的設計中介資產（Markdown / JSON / Mermaid / HTML），而不是只有不可 diff 的截圖或外部連結。
+- **[ ] Figma 同步可追溯性**：若啟用 Figma 同步，必須存在 `figma-sync` 報告，且能清楚標示同步模式、目標、成功/失敗範圍與人工補齊事項。
 
 ## 4. 異常回報格式 (Report Format)
 發現異常時必須使用：

@@ -13,7 +13,8 @@ docs/agent-skills/
 ├── 02-techlead-agent.md         (🧭 Tech Lead：技術評估、架構細化、派發建議)
 ├── 02a-ba-agent.md              (📋 BA 業務分析：流程可視化、邏輯邊界)
 ├── 02b-dba-api-agent.md         (📐 DBA/API 架構：DB Schema SSOT、API 契約)
-├── 03-ui-agent.md               (🎨 UI 設計師：設計系統、Design Tokens)
+├── 03-ui-agent.md               (🎨 UI 設計師：設計系統、第一層設計資產)
+├── 12-figma-agent.md            (🖼️ Figma 同步：將設計資產同步至 Figma)
 ├── 09-analytics-agent.md        (📈 產品分析師：KPI、埋點規格、A/B Test)
 ├── 04-frontend-agent.md         (💻 前端工程師：Angular/Next/Nuxt 開發)
 ├── 05-backend-agent.md          (⚙️ 後端工程師：.NET/NestJS 開發)
@@ -48,7 +49,8 @@ docs/agent-skills/
   → [02 Tech Lead] 技術執行計畫 (TechPlan)
   → [02a BA] 業務流程規格
   → [02b DBA] Schema SSOT + API 介面規格
-  → [03 UI] 設計規格
+  → [03 UI] 設計規格 + 第一層設計資產
+  → (若使用者要求) [12 Figma] 同步到 Figma
   → [09 Analytics] KPI + 埋點規格
   → [04 Frontend] / [05 Backend] 實作 + Unit Test
   → [90 Watcher] + [08 Security] 同步稽核

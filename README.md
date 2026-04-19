@@ -17,7 +17,8 @@
 | **開發組** | 02 Tech Lead | `$techlead` | 技術評估、架構細化、派發建議 |
 | | 02a BA | `$ba` | 業務流程分析、邏輯邊界定義 |
 | | 02b DBA/API | `$dba` | DB Schema SSOT、API 介面契約 |
-| | 03 UI | `$ui` | 設計系統、Design Tokens |
+| | 03 UI | `$ui` | 設計系統、第一層設計資產 |
+| | 12 Figma Sync | `$figma` | 同步設計資產到 Figma |
 | | 04 Frontend | `$frontend` | Angular / Next.js / Nuxt 實作 |
 | | 05 Backend | `$backend` | .NET / NestJS 實作 |
 | **維運組** | 06 DevOps | `$devops` | Docker、CI/CD |
@@ -95,6 +96,13 @@ $security 請掃描目前檔案有沒有 SQL Injection 的風險。
 ```
 請使用 $security 檢查登入模組。
 完成後切換為 $logger，將稽核結果寫入 workspace/history/audit-log.md。
+```
+
+若要把第一層設計資產同步到 Figma：
+
+```
+請先使用 $ui 產出 UI Spec、tokens.json、screens.json 與 prototype.html。
+完成後切換為 $figma，同步到指定 Figma 檔案或頁面。
 ```
 
 > 短名 alias（`qa.md`、`security.md` 等）由 `cap sync` 自動產生，與長名 `*-agent.md` 指向同一個 SSOT。
