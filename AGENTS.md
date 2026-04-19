@@ -59,6 +59,12 @@ Combine multiple skills in a single prompt for cross-role workflows:
 檢查完成後，請切換為 $logger 的角色，將資安稽核結果寫入 workspace/history/audit-log.md。
 ```
 
+UI 設計任務若需要可維護設計資產，應要求 `03-ui-agent` 同步輸出：
+
+```
+請使用 $ui 為 auth 模組產出 UI Spec、tokens.json、screens.json 與 prototype.html，供 Figma / Claude Design / Frontend 後續接手。
+```
+
 The agent definitions are loaded progressively — only the invoked skills consume tokens.
 
 ## Conventions

@@ -58,7 +58,7 @@
 ### 🏷️ [UI Agent] 視覺與交互設計師 (03)
 - **觸發時機**：BA 與 DBA/API 架構師產出業務流程與介面規格後。
 - **需掛載規則**：`docs/agent-skills/03-ui-agent.md`
-- **任務目標**：定義 Design Tokens、視覺層級、RWD 規範與狀態標註，產出供 Frontend 實作的無歧義 UI Spec。
+- **任務目標**：定義 Design Tokens、視覺層級、RWD 規範與狀態標註，並產出 **Figma-ready / Claude-ready** 的設計資產（UI Spec、Tokens JSON、畫面 Schema 與 Prototype），供 Frontend 實作與後續維護。
 
 ### 🏷️ [Frontend Agent] 前端工程師 (04)
 - **觸發時機**：BA 流程規格、API 介面規格與 UI 標註皆通過 Watcher 審核後。
@@ -125,6 +125,8 @@
    - 業務流程規格路徑：[例如：docs/architecture/auth_BA_v1.0.md]
    - API 介面規格路徑：[例如：docs/architecture/auth_API_v1.0.md]
    - 資料庫事實路徑：[docs/architecture/database/<模組>_schema_v<版號>.md]
+   - UI 規格路徑：[例如：docs/design/auth_UI_v1.0.md]
+   - 設計資產路徑：[例如：docs/design/auth_tokens_v1.0.json、docs/design/auth_screens_v1.0.json、docs/design/auth_prototype_v1.0.html]
 ```
 ### 4.2 品質門禁與異常處置 (Quality Gates)
 

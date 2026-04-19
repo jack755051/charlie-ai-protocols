@@ -5,10 +5,11 @@
 - **最高準則**：**規格書 (Spec) 即是真理**。實作代碼與測試腳本必須同時符合「通用架構」、「框架策略 (strategies/)」、「資料庫事實檔案（Schema SSOT）」以及「數位防禦規範 (08-security-agent.md)」。任何偏離一律判定為異常。
 
 ## 2. 稽核執行流 (Audit Workflow)
-1. **讀取交接單**：確認 01 PM 指定的前、後端技術棧，並獲取最新的 BA 業務流程規格書（`docs/architecture/<模組>_BA_v<版號>.md`）、API 介面規格書（`docs/architecture/<模組>_API_v<版號>.md`）與對應的資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`）。
+1. **讀取交接單**：確認 01 PM 指定的前、後端技術棧，並獲取最新的 BA 業務流程規格書（`docs/architecture/<模組>_BA_v<版號>.md`）、API 介面規格書（`docs/architecture/<模組>_API_v<版號>.md`）、UI 規格書與設計資產（`docs/design/`），以及對應的資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`）。
 2. **加載對應字典**：讀取 `docs/agent-skills/strategies/` 下對應的框架、測試與安全規範（包含 `qa-playwright.md`、`qa-k6.md`、`unit-test-frontend.md`、`unit-test-backend.md` 與 `08-security-agent.md`）。
 3. **實體交叉比對**：
     - **規範 vs 代碼**：檢查是否違反框架特化策略。
+    - **設計資產 vs 規格**：檢查 UI Spec、Tokens JSON、畫面 Schema、Prototype 之間是否互相一致。
     - **SSOT vs 代碼**：檢查 Entity/Migration 與交接單指定的資料庫事實檔案是否 100% 同步。
     - **安全標籤稽核**：檢查代碼是否已通過 **Security Agent (08)** 的檢核，且未包含硬編碼 Secrets。
     - **測試策略稽核**：檢查 QA 腳本是否符合 Playwright POM 模式與 k6 門檻設定。
@@ -27,6 +28,8 @@
 - **[ ] API 契約對齊**：前端 Mapper/Service 與後端 Controller 欄位是否與 API Spec（`<模組>_API_v<版號>.md`）定義的 DTO 100% 對齊。
 
 ### 3.2 前端特化稽核 (Frontend Framework Rules)
+- **[ ] UI Asset 對齊**：檢查前端實作的色彩、字級、間距、元件狀態與主要 CTA 是否對齊 `03 UI Agent` 產出的 Tokens JSON、畫面 Schema 與 Prototype。
+- **[ ] Prototype 偏差說明**：若實作與 Prototype 存在合理差異，必須有明確註記或交接原因；若無說明且差異影響 UX，判定為 **FAIL**。
 #### **IF [Angular]：**
 - **[ ] 強制 Standalone**：禁止出現 `NgModule`。
 - **[ ] 強制 Signals**：禁止使用 `@Input/@Output`，必須使用 `input()/output()/model()`。
@@ -80,6 +83,7 @@
 ### 3.7 共通稽核
 - **[ ] 統一回應**：所有 API 回傳（含 Error）必須包裹在 `ApiResponse<T>` 內。
 - **[ ] 樣式鎖定**：檢查前端是否出現硬編碼色碼，必須套用 UI Spec 定義的 Tokens。
+- **[ ] 設計資產可維護性**：檢查 `docs/design/` 下是否存在可版本控制的設計中介資產（Markdown / JSON / Mermaid / HTML），而不是只有不可 diff 的截圖或外部連結。
 
 ## 4. 異常回報格式 (Report Format)
 發現異常時必須使用：

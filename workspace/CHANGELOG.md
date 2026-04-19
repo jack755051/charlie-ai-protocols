@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.4] - 2026-04-19
+### Added
+- 為 `03-ui-agent` 建立第一階段可維護設計資產輸出規範，主交付物包含 `UI Spec`、`tokens.json`、`screens.json` 與 `prototype.html`。
+
+### Changed
+- 同步調整 Supervisor、Frontend、Watcher、Logger 與 `AGENTS.md`，使 UI 設計資產交接、稽核與紀錄流程對齊第一階段輸出格式。
+
 ## [1.0.3] - 2026-04-19
 ### Added
 - 為 Supervisor、Tech Lead、BA、DBA、SRE 與 Logger 補上標準化交接摘要欄位與紀錄模式欄位，統一單次任務與編排流程的交接格式。
