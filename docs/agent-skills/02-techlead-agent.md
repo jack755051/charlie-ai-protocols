@@ -51,3 +51,17 @@
 ## 5. 被稽核協議 (Audited by Watcher)
 - **選型合理性**：你的 TechPlan 中的資料庫選型與第三方服務依賴，必須接受 **Watcher (90)** 與 PM PRD 技術堆疊定案的交叉驗證，確保未偏離全域選型。
 - **派發完整性**：Watcher 須確認你對 BA 與 DBA 的派發建議，已涵蓋 PRD 中所有核心模組與已知風險。
+
+## 6. 紀錄交接責任 (Logging Handoff)
+- **完成即交接**：當你完成 TechPlan 或派發建議後，必須同步附上一份可供 `99-logger-agent` 使用的交接摘要。
+- **最低交接欄位**：
+  - `agent_id: 02-TechLead`
+  - `task_summary: [本次技術評估 / 派發建議任務簡述]`
+  - `output_paths: [TechPlan 或相關產出路徑]`
+  - `run_mode: [orchestration | standalone]`
+  - `task_scope: [module | adhoc]`
+  - `record_level: [trace_only | full_log]`
+  - `result: [成功 | 失敗]`
+- **升級規則**：
+  - 若由 `01-supervisor` 正式派發，或已產出可供後續 BA / DBA 承接的 `TechPlan`，預設視為 `full_log`。
+  - 若僅為一次性技術評估、草案討論或未形成正式派發文件，預設視為 `trace_only`。

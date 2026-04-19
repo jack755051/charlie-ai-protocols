@@ -41,3 +41,17 @@
 - **邊界完整性**：Watcher 須確認邊界異常處理 (Edge Cases) 未遺漏 TechPlan 中提示的風險情境。
 - **Context 清晰度**：Watcher 須確認 BA 已明確標示 `Bounded Context` 邊界，且未將不同領域責任揉成單一模糊模組。
 - **語彙一致性**：Watcher 須確認 BA 的領域名詞在文件內前後一致，且已標註禁止混用或易混淆詞。
+
+## 6. 紀錄交接責任 (Logging Handoff)
+- **完成即交接**：當你完成 BA 規格書後，必須一併附上可供 `99-logger-agent` 使用的交接摘要，不得只交檔案不交紀錄上下文。
+- **最低交接欄位**：
+  - `agent_id: 02a-BA`
+  - `task_summary: [本次分析任務簡述]`
+  - `output_paths: [產出的 BA 文件路徑]`
+  - `run_mode: [orchestration | standalone]`
+  - `task_scope: [module | adhoc]`
+  - `record_level: [trace_only | full_log]`
+  - `result: [成功 | 失敗]`
+- **升級規則**：
+  - 若由 `01-supervisor` 正式派發，或產出正式模組規格書供後續角色承接，預設視為 `full_log`。
+  - 若為使用者直接呼叫你做一次性分析、且未形成正式模組交付，預設視為 `trace_only`。

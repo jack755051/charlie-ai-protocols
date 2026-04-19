@@ -74,3 +74,17 @@
 - **Context 對齊**：Watcher (90) 須確認你的 Schema 與 API 設計未偏離 BA 定義的 `Bounded Context` 邊界與領域語彙。
 - **聚合邊界合理性**：Watcher 須確認你已標明 `Aggregate Root`，且不存在明顯可繞過根實體直接修改子 Entity 的 API 或 Schema 暗示。
 - **SSOT 完整性**：Watcher 須確認資料庫事實檔案已涵蓋索引、併發欄位 (`version`) 與跨 Aggregate 引用說明，並與 API 規格保持一致。
+
+## 6. 紀錄交接責任 (Logging Handoff)
+- **完成即交接**：當你完成 Schema / API 規格設計後，必須同步產出一份簡潔交接摘要，供 `99-logger-agent` 寫入 Trace Log。
+- **最低交接欄位**：
+  - `agent_id: 02b-DBA`
+  - `task_summary: [本次 Schema / API 任務簡述]`
+  - `output_paths: [schema.md、API 規格、README 索引等路徑]`
+  - `run_mode: [orchestration | standalone]`
+  - `task_scope: [module | adhoc]`
+  - `record_level: [trace_only | full_log]`
+  - `result: [成功 | 失敗]`
+- **升級規則**：
+  - 若本次任務新增或更新 `docs/architecture/database/`、`docs/architecture/*_API_v*.md` 等正式規格文件，預設至少為 `full_log`。
+  - 若僅是一次性諮詢、草案比較或未落地的設計討論，預設為 `trace_only`。

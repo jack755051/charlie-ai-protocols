@@ -37,3 +37,17 @@
 ## 4. 被稽核協議 (Audited by Watcher)
 - **破壞性檢查**：你的優化方案必須接受 **Watcher (90)** 稽核，確保你加的快取或索引不會破壞原本 BA/API 規格書定義的業務邏輯行為。
 - **安全防護**：你的 `/metrics` 監控端點或健康探針必須接受 **Security (08)** 稽核，確保不會對外洩漏系統內部敏感數據。
+
+## 5. 紀錄交接責任 (Logging Handoff)
+- **完成即交接**：無論你是被動診斷或主動優化，任務完成後都必須留下可供 `99-logger-agent` 使用的交接摘要。
+- **最低交接欄位**：
+  - `agent_id: 11-SRE`
+  - `task_summary: [本次效能 / 可靠性任務簡述]`
+  - `output_paths: [探針設定、索引腳本、重構建議或相關文件路徑]`
+  - `run_mode: [orchestration | standalone]`
+  - `task_scope: [module | adhoc]`
+  - `record_level: [trace_only | full_log]`
+  - `result: [成功 | 失敗]`
+- **升級規則**：
+  - 若你修改了正式 NFR 規格、部署設定、快取策略或資料庫 SSOT，必須標記為 `full_log`，讓 `99` 升級寫入 Devlog。
+  - 若只是單次診斷、壓測解讀或優化建議而未形成正式交付，預設為 `trace_only`。

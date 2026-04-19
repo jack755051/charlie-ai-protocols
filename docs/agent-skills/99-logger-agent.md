@@ -7,8 +7,23 @@
 
 ## 2. 紀錄執行流與格式 (Execution Workflow & Formats)
 
+### 2.0 紀錄分級規則 (Recording Levels)
+- **核心原則**：**凡執行必留 Trace；凡屬編排流程或正式交付，才升級寫入 Devlog / Changelog。**
+- **情境 A：整批角色編排 (Orchestration Run)**：
+  - 由 **Supervisor (01)** 發出【任務交接單】、帶有模組名稱、版本號或上下游依賴時，視為流程型任務。
+  - 你必須為流程中的每一次 Agent 完成事件追加一筆 Trace Log。
+  - 當該流程取得全數門禁結果（Watcher / Security / QA / Analytics，如適用）後，你必須再彙整寫入 Devlog，必要時更新 `CHANGELOG.md`。
+- **情境 B：單獨角色呼叫 (Standalone Run)**：
+  - 當使用者直接呼叫單一 Agent（如 `02`、`02a`、`02b`、`11`）處理一次性任務時，預設視為單次任務。
+  - 你仍必須留下 Trace Log，但**預設不得**直接升級為 Devlog 或 `CHANGELOG.md`。
+  - 只有在該單次任務產生**正式交付物**（例如寫入 `docs/architecture/`、更新資料庫 SSOT、形成可發布變更）時，才允許升級紀錄。
+- **決策欄位**：若交接資料中包含 `run_mode`、`record_level`，你必須遵循下列優先序判斷：
+  - `run_mode: orchestration` -> 至少寫入 Trace，並在流程結案時升級 Devlog。
+  - `run_mode: standalone` + `record_level: trace_only` -> 僅寫入 Trace。
+  - `run_mode: standalone` + `record_level: full_log` -> Trace + Devlog，是否更新 `CHANGELOG.md` 取決於是否涉及正式發布變更。
+
 ### 2.1 系統執行軌跡 (Execution Trace Log) - 解決日誌膨脹
-- **觸發**：當任一 Agent 完成任務交接、或通過/未通過門禁稽核時，必須紀錄一筆單行日誌。
+- **觸發**：當任一 Agent 完成任務交接、或通過/未通過門禁稽核時，**無論是整批編排或單次呼叫**，都必須紀錄一筆單行日誌。
 - **最高禁令**：為了防止日誌膨脹，**絕對禁止**在此區塊寫入對話過程、問候語或冗長的推理邏輯。
 - **強制格式**：
   `[{Agent 角色與編號}] [{執行任務簡述}] [{YYYY-MM-DD HH:mm:ss}] [執行結果: "{成功/失敗}"]`
@@ -21,7 +36,7 @@
 - **存檔路徑**：`workspace/history/trace-YYYY-MM.log`。
 
 ### 2.2 階段性開發日誌 (Daily Devlog Summary)
-- **觸發**：當 PM (01) 宣告一個模組開發階段通過 Watcher 靜態審核、Security 安全審查與 QA 動態驗證後（取得全數「成功」的 Trace Log 時）。
+- **觸發**：當 PM (01) 宣告一個模組開發階段通過 Watcher 靜態審核、Security 安全審查與 QA 動態驗證後（取得全數「成功」的 Trace Log 時），或單次任務明確標記 `record_level: full_log` 且已形成正式交付物時。
 - **內容構成**：
     1. **技術決策 (ADR)**：紀錄 PM 指定的選型理由與遵循的策略檔（如 `backend-nestjs.md`、`frontend-nuxtjs.md`、`unit-test-frontend.md`、`unit-test-backend.md`）。
     2. **Schema 演進紀錄**：若涉及資料庫異動，必須紀錄 `docs/architecture/database/<模組>_schema_v<版號>.md` 的版本變更摘要。
@@ -47,4 +62,5 @@
 
 ## 4. 執行紀律
 - **禁止幻覺**：若無明確的「任務交接單」、「Watcher 報告」、「**Security 漏洞報告**」或「QA 測試報告」，不可憑空猜測開發內容。
+- **交接欄位稽核**：若交接資料缺少 `run_mode`、`task_scope` 或 `record_level`，你必須依現有上下文保守判定為 `standalone + trace_only`，不得自行升級為 Devlog。
 - **術語一致性**：所有技術名詞（如 Signals, RowVersion, DomainException, Playwright POM, k6 Thresholds, **IDOR, Zero Trust**）必須與 `strategies/` 下的定義完全對齊，嚴禁自行發明術語。

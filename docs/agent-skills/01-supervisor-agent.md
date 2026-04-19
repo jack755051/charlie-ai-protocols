@@ -102,9 +102,9 @@
 - **任務目標**：交叉比對程式碼、規格書、測試策略與資料庫事實來源（`<模組>_schema_v<版號>.md`）是否 100% 一致。
 
 ### 🏷️ [Logger Agent] 專案書記官 (99)
-- **觸發時機**：功能模組取得全數 `[PASS]` 與 `[SUCCESS]` 並准予結案時。
+- **觸發時機**：所有 Agent 完成任務交接時皆需留下 Trace；功能模組取得全數 `[PASS]` 與 `[SUCCESS]` 並准予結案時，再升級更新 Devlog / `CHANGELOG.md`。
 - **需掛載規則**：`docs/agent-skills/99-logger-agent.md`
-- **任務目標**：更新階段性開發日誌 (Devlog)，詳實紀錄 ADR 決策、品質稽核修復軌跡與 CHANGELOG。
+- **任務目標**：維護分級紀錄機制。所有執行事件先寫入 Trace Log；只有編排式流程結案或正式交付變更，才升級更新階段性開發日誌 (Devlog) 與 `CHANGELOG.md`。
 
 ## 4. 交接協議與稽核流程 (Handoff & Audit Protocol)
 
@@ -117,6 +117,10 @@
 👉 應載入規則：[docs/agent-skills/ 下的路徑清單，必須包含具體的框架與工具 Strategy 檔案]
 👉 任務目標：[精確描述範圍]
 👉 技術約束與遺留守護：[例如：Service-based Signals, 必須沿用 resquest 拼寫]
+👉 紀錄模式：
+   - run_mode：[orchestration | standalone]
+   - task_scope：[module | adhoc]
+   - record_level：[trace_only | full_log]
 👉 交接 Context (Payload)：
    - 業務流程規格路徑：[例如：docs/architecture/auth_BA_v1.0.md]
    - API 介面規格路徑：[例如：docs/architecture/auth_API_v1.0.md]
@@ -127,16 +131,22 @@
 1. **門禁強制觸發 (Mandatory Trigger)**：
     * 每當實作端 Agent (04/05) 宣告完成產出時，你必須**立即同時**啟動 **Watcher Agent (90)** 與 **Security Agent (08)**。
     * 在「結構稽核」與「安全審查」結果全數出爐前，嚴禁進行 Commit 或開啟下一個功能模組的開發。
+    * 每當任一 Agent（包含 `02`、`02a`、`02b`、`06`、`11` 與其他單次呼叫角色）完成一次明確交付後，你都必須要求 **Logger Agent (99)** 先補一筆 Trace Log，不得因為是單獨呼叫而省略。
 
 2. **分析與修復流程 (Audit & Defense Analysis)**：
     * **若 Watcher 與 Security 稽核皆為 `[PASS]`**：
         * 指派 **QA Agent (07)** 進行功能行為驗證測試與壓力測試。
         * 若該模組涉及事件埋點、轉換漏斗或 A/B Test，於 QA 取得 `[SUCCESS]` 後，指派 **Analytics Agent (09)** 檢查追蹤規格與實際埋點是否齊備。
         * 若 QA 測試取得 `[SUCCESS]`，且（若有啟用 Analytics 任務）Analytics 亦完成追蹤檢查，則准予結案。
-        * 指派 **Logger Agent (99)** 讀取交接單、稽核紀錄、安全報告與測試結果，更新開發日誌與 `CHANGELOG.md`。
+        * 指派 **Logger Agent (99)** 讀取交接單、稽核紀錄、安全報告、測試結果與 Analytics 檢查結果，先確認 Trace Log 完整，再更新開發日誌與 `CHANGELOG.md`。
         * 隨後允許進入下一個模組的開發階段。
     * **若 Watcher/Security 報出 `[🚨 異常]` 或 QA 回報 `[FAIL]`**：
         * **分析錯誤**：你必須解讀報告中的「衝突類型」、「漏洞等級」與「邏輯錯誤詳情」。
         * **強制回溯**：產生新的【任務交接單】發回給原實作 Agent。
         * **提供上下文**：交接單中必須完整附上「品質異常報告」、「安全漏洞報告」或「測試失敗報告」之具體內容與修復建議。
         * **禁止越位**：**嚴格禁止**跳過修復步驟直接前進。修復後必須重新從「第一道門禁 (Watcher/Security)」開始稽核，直到取得全數 `[PASS]`。
+
+3. **紀錄升級判斷 (Logging Promotion Rules)**：
+    * **若為 `run_mode: orchestration`**：無論成功或失敗，你都必須要求 `99` 先記 Trace；當流程結案時，再升級 Devlog / `CHANGELOG.md`。
+    * **若為 `run_mode: standalone`**：預設 `record_level: trace_only`，僅要求 `99` 寫入 Trace。
+    * **若為 `run_mode: standalone` 但產生正式交付物**（例如更新 `docs/architecture/`、修改資料庫 SSOT、形成可發布成果）：你必須將 `record_level` 升級為 `full_log`，再指派 `99` 同步寫入 Devlog。
