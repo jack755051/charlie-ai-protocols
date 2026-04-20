@@ -18,22 +18,41 @@ sanitize_text() {
     | awk '{ if (length($0) > 180) { print substr($0, 1, 177) "..." } else { print } }'
 }
 
+json_escape() {
+  printf '%s' "$1" \
+    | python3 -c 'import json, sys; print(json.dumps(sys.stdin.read()))'
+}
+
 append_trace() {
   local source="$1"
   local summary="$2"
   local result="$3"
   local trace_file
+  local trace_jsonl_file
   local timestamp
+  local source_clean
+  local summary_clean
+  local result_clean
 
   mkdir -p "${TRACE_DIR}"
   trace_file="${TRACE_DIR}/trace-$(date '+%Y-%m').log"
+  trace_jsonl_file="${TRACE_DIR}/trace-$(date '+%Y-%m').jsonl"
   timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+  source_clean="$(sanitize_text "${source}")"
+  summary_clean="$(sanitize_text "${summary}")"
+  result_clean="$(sanitize_text "${result}")"
 
   printf '[%s] [%s] [%s] [執行結果: %s]\n' \
-    "$(sanitize_text "${source}")" \
-    "$(sanitize_text "${summary}")" \
+    "${source_clean}" \
+    "${summary_clean}" \
     "${timestamp}" \
-    "$(sanitize_text "${result}")" >> "${trace_file}"
+    "${result_clean}" >> "${trace_file}"
+
+  printf '{%s,%s,%s,%s}\n' \
+    "\"timestamp\":$(json_escape "${timestamp}")" \
+    "\"source\":$(json_escape "${source_clean}")" \
+    "\"summary\":$(json_escape "${summary_clean}")" \
+    "\"result\":$(json_escape "${result_clean}")" >> "${trace_jsonl_file}"
 
   printf '%s\n' "${trace_file}"
 }

@@ -6,19 +6,36 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CAP_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 show_help() {
-  make -C "${CAP_ROOT}" help
+  cat <<'EOF'
+Charlie's AI Protocols (CAP) - 可用指令:
+
+  cap help                         列出所有可用指令
+  cap setup                        建立 venv 並安裝依賴（首次執行）
+  cap sync                         重建本地 Agent Skills symlink（不支援時自動 fallback 為 copy）
+  cap install                      全域安裝 Agent 技能並註冊 CAP shell wrapper
+  cap update                       從 GitHub 拉取最新規則並重新安裝
+  cap uninstall                    移除全域安裝與 CAP shell wrapper
+  cap list                         列出所有可用的 Agent Skills
+  cap check-aliases                驗證本地 Agent alias 映射是否正確
+  cap run                          初始化策略並啟動 CrewAI 引擎（FRAMEWORK=nextjs|angular|nuxt）
+  cap codex [ARGS...]              透過 wrapper 啟動 Codex，並自動寫入 session trace
+  cap claude [ARGS...]             透過 wrapper 啟動 Claude，並自動寫入 session trace
+  cap agent <agent> [prompt]       啟動指定 agent 的互動 session，並自動記錄 trace
+
+範例：
+  cap setup
+  cap sync
+  cap install
+  cap codex
+  cap claude --agent reviewer
+  cap agent frontend "幫我檢查 auth module"
+  cap agent qa "幫我補 E2E"
+
+提示：
+  若已安裝 shell wrapper，直接輸入 codex / claude 也會經過同一套 trace backend。
+EOF
   echo ""
-  echo "CLI wrappers:"
-  echo "  cap codex [ARGS...]             透過 wrapper 啟動 Codex，並自動寫入 session trace"
-  echo "  cap claude [ARGS...]            透過 wrapper 啟動 Claude，並自動寫入 session trace"
-  echo "  cap agent <agent> [prompt]      啟動指定 agent 的互動 session，並自動記錄 trace"
-  echo ""
-  echo "範例："
-  echo "  cap codex"
-  echo "  cap claude --agent reviewer"
-  echo "  cap agent frontend \"幫我檢查 auth module\""
-  echo ""
-  echo "提示：若已安裝 shell wrapper，直接輸入 codex / claude 也會經過同一套 trace backend。"
+  make -C "${CAP_ROOT}" help >/dev/null
 }
 
 COMMAND="${1:-help}"

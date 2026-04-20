@@ -49,6 +49,7 @@ source <你的 shell 設定檔>
 從此在終端機的**任何目錄**都能使用 `cap` 指令。
 
 若採用預設安裝設定，`codex` 與 `claude` 也會被註冊成 CAP shell wrapper，保留原本的啟動習慣，同時自動寫入 `workspace/history/trace-YYYY-MM.log`。
+同時也會同步寫入結構化的 `workspace/history/trace-YYYY-MM.jsonl`，方便後續統計與分析。
 
 ---
 
@@ -132,6 +133,10 @@ cap agent frontend "幫我檢查 auth module"
 cap agent qa "幫我補 E2E"
 cap agent troubleshoot "根據這段 log 找 root cause"
 ```
+
+目前 trace 會雙寫為：
+- `workspace/history/trace-YYYY-MM.log`：人類可直接閱讀的單行紀錄
+- `workspace/history/trace-YYYY-MM.jsonl`：供後續統計、Dashboard 或其他自動化流程消費的結構化紀錄
 
 ---
 
