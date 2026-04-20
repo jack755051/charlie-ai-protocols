@@ -23,11 +23,13 @@
 ### 2.3 可觀測性與健康檢查 (Observability)
 - **[ ] 自癒探針設計**：必須在 Dockerfile 或部署配置中實作 `Liveness Probe` 與 `Readiness Probe`，確保容器調度系統（如 K8s）能在服務死鎖或崩潰時自動重啟。
 - **[ ] 指標埋點 (Metrics)**：協同 **Backend Agent (05)** 確保系統暴露 Prometheus 格式的 `/metrics` 端點，且必須包含關鍵的 `Latency` (延遲) 與 `Error Rate` (錯誤率)。相關配置結果由 **Logger Agent (99)** 於開發日誌中紀錄存檔。
+- **[ ] Lighthouse 效能解讀**：當 QA (07) 回報 `lighthouse-audit.md` 中定義的 `[LH_PERF_FAIL]`，你必須主責分析 LCP、CLS、INP、bundle、圖片、快取與渲染阻塞來源，並提出優化方案。
 
 ## 3. 介入時機與執行流 (Intervention Workflow)
 
 1. **觸發條件**：
    - **被動觸發**：當 QA Agent (07) 執行的 k6 壓力測試回報 `[FAIL]`（如 p95 超出 500ms，或高併發下 Error Rate 飆高）時，由 PM (01) 強制發派給你進行診斷。
+   - **Lighthouse 觸發**：當 QA Agent (07) 執行 `docs/agent-skills/strategies/lighthouse-audit.md` 後，結果被分類為 `[LH_PERF_FAIL]` 時，由 PM (01) 指派給你進行前端效能與載入瓶頸分析。
    - **主動介入**：在 DevOps (06) 準備封裝部署前，審查 IaC (Infrastructure as Code) 的資源分配合理性。
 2. **診斷與開藥**：
    - 分析效能瓶頸（是 DB 卡鎖、CPU 滿載，還是 Memory Leak？）。

@@ -12,6 +12,7 @@
 - **策略掛載**：
     - **UI/E2E 測試**：必須掛載並遵守 `docs/agent-skills/strategies/qa-playwright.md`。
     - **效能/壓測**：必須掛載並遵守 `docs/agent-skills/strategies/qa-k6.md`。
+    - **前端非功能性檢查**：若交接單要求前端頁面品質驗證，必須掛載並遵守 `docs/agent-skills/strategies/lighthouse-audit.md`。
 - **邊界清單**：必須列出包含「非法參數」、「權限越位」、「併發競爭」等異常情境。
 
 ### Step 2.2: API 整合測試 (API Integration Testing)
@@ -34,6 +35,14 @@
 - **併發衝突驗證**：模擬多個用戶同時修改同一筆資料，驗證資料庫的 **`version` (樂觀併發)** 欄位是否正確阻斷衝突。
 - **⚠️ 效能警報 (SRE Trigger)**：若 k6 壓測未能達到上述指標門檻，你必須在測試報告中打上 `[FAIL]` 與 `[🚨 SRE_TRIGGER]` 標籤，強制要求 PM (01) 呼叫 **11-SRE Agent** 進行瓶頸診斷。
 
+### Step 2.5: Lighthouse 前端非功能性稽核 (Lighthouse Audit)
+- **策略掛載**：當任務涉及前端頁面、關鍵 route、轉換頁或 Accessibility / SEO / Performance 驗證時，必須掛載 `docs/agent-skills/strategies/lighthouse-audit.md`。
+- **主執行責任**：你是 Lighthouse 的主執行者，負責產出報告、比對門檻並標記結果摘要。
+- **失敗路由**：
+  - `[LH_PERF_FAIL]`：交回 `01` 轉 `11-SRE`
+  - `[LH_A11Y_FAIL]` / `[LH_BP_FAIL]` / `[LH_SEO_FAIL]`：交回 `01` 轉 `04-Frontend`
+  - `[LH_ENV_UNSTABLE]`：交回 `01` 轉 `10-Troubleshoot`
+
 ## 3. 被監控協議 (Audited by Watcher)
 - **測試合規稽核**：你產出的測試腳本必須接受 **Watcher (90)** 稽核。
 - **禁止硬編碼**：Watcher 會檢查腳本中是否包含敏感資訊或硬編碼的 API URL。
@@ -46,3 +55,7 @@
     - **測試結果**：[PASS / FAIL / SRE_TRIGGER]
     - **指標達成率**：包含 Response Time 分布與錯誤率統計。
     - **異常存檔**：若為 FAIL，必須提供 `trace.zip` (Playwright) 或錯誤 Payload 截圖。
+3. **Lighthouse 報告（若本次有執行）**：
+    - JSON / HTML 報告路徑
+    - 四大分數摘要（Performance / Accessibility / Best Practices / SEO）
+    - 失敗分類（依 `lighthouse-audit.md`）

@@ -94,8 +94,8 @@
 
 ### 🏷️ [QA Agent] 品質保證工程師 (07)
 - **觸發時機**：Watcher 與 Security 靜態稽核皆取得 `[PASS]` 標記後。
-- **需掛載規則**：`docs/agent-skills/07-qa-agent.md` 及其對應工具策略（Playwright / k6）。
-- **任務目標**：撰寫並執行 E2E 自動化測試與壓力測試，驗證功能行為與邊界保護無誤。
+- **需掛載規則**：`docs/agent-skills/07-qa-agent.md` 及其對應工具策略（Playwright / k6 / Lighthouse，依任務性質選用）。
+- **任務目標**：撰寫並執行 E2E 自動化測試、壓力測試與必要的前端非功能性驗證（如 Lighthouse），驗證功能行為、邊界保護與頁面品質無誤。
 
 ### 🏷️ [Security Agent] 安全與合規審查員 (08)
 - **觸發時機**：與 Watcher 同步執行，或在 Watcher 通過後立即執行。
@@ -111,12 +111,12 @@
 - **觸發時機**：系統出現功能異常、行為偏差或環境問題時，由使用者或 PM 指派進行即時排查。
 - **需掛載規則**：`docs/agent-skills/10-troubleshoot-agent.md`
 - **任務目標**：全棧根因分析 (Root Cause Analysis)，產出診斷報告與修復建議單，明確指出問題關鍵點、建議接手角色與建議處置路由。
-- **特殊邊界**：`10` 不再直接對 04/05/06/11 發正式交接單；所有正式派發、門禁串接與結案控制，仍由 `01` 統一接手。
+- **特殊邊界**：`10` 不負責 Lighthouse 的初始執行；只有在 Lighthouse 結果出現環境差異、不可重現或退化來源不明時才介入診斷。所有正式派發、門禁串接與結案控制，仍由 `01` 統一接手。
 
 ### 🏷️ [SRE Agent] 效能與可靠性工程師 (11)
-- **觸發時機**：QA 壓力測試未達標，或系統上線後出現效能瓶頸時。
+- **觸發時機**：QA 壓力測試未達標、Lighthouse 被判定為 `[LH_PERF_FAIL]`，或系統上線後出現效能瓶頸時。
 - **需掛載規則**：`docs/agent-skills/11-sre-agent.md`
-- **任務目標**：分析慢查詢、前端 Bundle 過大或記憶體洩漏問題，並提出重構優化方案。
+- **任務目標**：分析慢查詢、前端 Bundle 過大、Core Web Vitals 退化或記憶體洩漏問題，並提出重構優化方案。
 
 ### 🏷️ [Watcher Agent] 專案監控員 (90)
 - **觸發時機**：任一實作 Agent 產出檔案後。
@@ -154,6 +154,7 @@
    - UI 規格路徑：[例如：docs/design/auth_UI_v1.0.md]
    - 設計資產路徑：[例如：docs/design/auth_tokens_v1.0.json、docs/design/auth_screens_v1.0.json、docs/design/auth_prototype_v1.0.html]
    - Analytics 規格路徑：[例如：docs/architecture/auth_Analytics_v1.0.md]
+   - Lighthouse 報告路徑：[例如：workspace/history/lighthouse/auth_home_mobile_lighthouse_20260420-103000.json]
    - Figma 同步結果路徑：[例如：docs/design/auth_figma-sync_v1.0.md]
 ```
 ### 4.2 品質門禁與異常處置 (Quality Gates)
@@ -173,10 +174,12 @@
         * **若為 `[NEEDS_DATA]`**：你必須暫停派發，向使用者或相關系統索取缺失證據，待補件後再重新啟動診斷。
     * **若 Watcher 與 Security 稽核皆為 `[PASS]`**：
         * 指派 **QA Agent (07)** 進行功能行為驗證測試與壓力測試。
+        * 若本次任務涉及前端頁面、關鍵 route、轉換頁、Accessibility、SEO 或前端效能門檻，指派 **QA Agent (07)** 依 `strategies/lighthouse-audit.md` 執行 Lighthouse。
+        * 若 Lighthouse 結果為 `[LH_PERF_FAIL]`，轉派 **11 SRE**；若為 `[LH_A11Y_FAIL]` / `[LH_BP_FAIL]` / `[LH_SEO_FAIL]`，回派 **04 Frontend**；若為 `[LH_ENV_UNSTABLE]`，轉派 **10 Troubleshoot**。
         * 若該模組涉及事件埋點、轉換漏斗或 A/B Test，於 QA 取得 `[SUCCESS]` 後，指派 **Analytics Agent (09)** 檢查追蹤規格與實際埋點是否齊備。
         * 若交接單標記 `design_output_mode: assets_plus_figma`，則在 UI 設計資產通過 Watcher 檢查後，指派 **Figma Sync Agent (12)** 執行同步，並將同步結果納入結案上下文。
-        * 若 QA 測試取得 `[SUCCESS]`，且（若有啟用 Analytics 任務）Analytics 亦完成追蹤檢查，則准予結案。
-        * 指派 **Logger Agent (99)** 讀取交接單、稽核紀錄、安全報告、測試結果、Analytics 檢查結果與 Figma 同步結果（若有），先確認 Trace Log 完整，再更新開發日誌與 `CHANGELOG.md`。
+        * 若 QA 測試取得 `[SUCCESS]`，且（若有啟用 Lighthouse / Analytics 任務）相關檢查亦完成並達標，則准予結案。
+        * 指派 **Logger Agent (99)** 讀取交接單、稽核紀錄、安全報告、測試結果、Lighthouse 報告、Analytics 檢查結果與 Figma 同步結果（若有），先確認 Trace Log 完整，再更新開發日誌與 `CHANGELOG.md`。
         * 隨後允許進入下一個模組的開發階段。
     * **若 Watcher/Security 報出 `[🚨 異常]` 或 QA 回報 `[FAIL]`**：
         * **分析錯誤**：你必須解讀報告中的「衝突類型」、「漏洞等級」與「邏輯錯誤詳情」。

@@ -43,6 +43,7 @@ docs/agent-skills/
     ├── backend-dotnet.md        (.NET 特化規範)
     ├── qa-playwright.md         (Playwright E2E 策略)
     ├── qa-k6.md                 (k6 壓測策略)
+    ├── lighthouse-audit.md      (Lighthouse 前端非功能性驗證策略)
     ├── unit-test-frontend.md    (前端單元測試策略)
     └── unit-test-backend.md     (後端單元測試策略)
 ```
@@ -59,7 +60,7 @@ docs/agent-skills/
   → [09 Analytics] KPI + 埋點規格
   → [04 Frontend] / [05 Backend] 實作 + Unit Test
   → [90 Watcher] + [08 Security] 同步稽核
-  → [07 QA] 功能驗證 + 壓力測試
+  → [07 QA] 功能驗證 + 壓力測試 + Lighthouse（如適用）
   → (若未達標) [10 Troubleshoot] 根因診斷與修復建議
   → (若屬效能 / 可靠性瓶頸) [11 SRE] 深入優化
   → [06 DevOps] 容器化 + CI/CD 部署

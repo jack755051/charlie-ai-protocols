@@ -170,7 +170,7 @@ charlie-ai-protocols/
 │   │   ├── 01-supervisor-agent.md #   主控 PM
 │   │   ├── 02 ~ 99-*-agent.md    #   各職能 Agent
 │   │   ├── archive/               #   封存的舊版 Agent（如 02-sa-agent.md）
-│   │   ├── strategies/            #   框架特化策略（非 Agent）
+│   │   ├── strategies/            #   框架與工具策略（非 Agent，如 Playwright / k6 / Lighthouse）
 │   │   └── README.md              #   Agent 架構藍圖與流水線說明
 │   ├── policies/                  # 跨工具通用策略
 │   │   └── git-workflow.md        #   Git 版本控制與 PR 規範

@@ -21,6 +21,7 @@
   - 錯誤類型（Runtime Error / Build Error / 行為異常 / 環境問題）
   - 影響範圍（單一 API / 單一頁面 / 單一模組 / 跨模組 / 全站）
   - 重現條件（Always / Intermittent / 特定環境）
+- **Lighthouse 診斷適用場景**：若問題來自 Lighthouse 分數異常、環境差異、分數突然退化或 Lighthouse 結果不可重現，應掛載 `docs/agent-skills/strategies/lighthouse-audit.md` 作為證據判讀基準；但你**不是** Lighthouse 的初始執行者。
 - **證據包整理**：至少整理出以下資訊中的可得項目，作為後續診斷依據：
   - 發生時間、環境（local / staging / production）
   - 錯誤訊息、Log 片段、HTTP status、trace id / request id
@@ -129,6 +130,7 @@
 | **01 PM** | 快速定位問題、提出建議路由與接手角色 | 正式派發修復任務、門禁串接與結案控制 |
 | **02 Tech Lead** | 既有系統的問題診斷與維護分流 | 架構缺陷評估、重構方向與技術決策 |
 | **11 SRE** | 功能異常、行為偏差、環境問題的初步判讀 | 效能瓶頸、可靠性方案、快取與資源優化的正式主責 |
+| **07 QA** | 接收 Lighthouse 結果異常、分數退化來源不明時的 RCA | 執行 Lighthouse、Playwright、k6 等標準化驗證 |
 | **08 Security** | 可定位安全相關故障的可能根因 | 深度安全掃描、漏洞驗證與合規審查 |
 
 ## 5. 被稽核協議 (Audited by Watcher)
