@@ -25,23 +25,26 @@ Available agent skills in `.agents/skills/` (symlinked from `docs/agent-skills/`
 
 Each agent has two symlinks — a full name for CrewAI (`*-agent.md`) and a short alias for `$` invocation:
 
-| `$` Prefix | Full Name | Role |
-|---|---|---|
-| `$supervisor` | `01-supervisor-agent.md` | Orchestrator & PM |
-| `$techlead` | `02-techlead-agent.md` | Technical Lead & Supervisor |
-| `$ba` | `02a-ba-agent.md` | Business Analyst |
-| `$dba` | `02b-dba-api-agent.md` | Database & API Architect |
-| `$ui` | `03-ui-agent.md` | UI/UX Designer |
-| `$figma` | `12-figma-agent.md` | Figma Sync & Import |
-| `$frontend` | `04-frontend-agent.md` | Frontend Engineer |
-| `$backend` | `05-backend-agent.md` | Backend Engineer |
-| `$devops` | `06-devops-agent.md` | DevOps & CI/CD |
-| `$qa` | `07-qa-agent.md` | QA Engineer |
-| `$security` | `08-security-agent.md` | Security Auditor |
-| `$analytics` | `09-analytics-agent.md` | Product Analytics & Experimentation |
-| `$sre` | `11-sre-agent.md` | SRE & Performance |
-| `$watcher` | `90-watcher-agent.md` | Quality Watcher |
-| `$logger` | `99-logger-agent.md` | Technical Writer |
+Agent numbers are stable IDs, not a strict execution order. Read the table below by `Typical Position`, not by filename prefix.
+
+| `$` Prefix | Stable ID | Full Name | Typical Position | Role |
+|---|---|---|---|---|
+| `$supervisor` | `01` | `01-supervisor-agent.md` | Entry / orchestration | Orchestrator & PM |
+| `$techlead` | `02` | `02-techlead-agent.md` | 1 | Technical Lead & Supervisor |
+| `$ba` | `02a` | `02a-ba-agent.md` | 2 | Business Analyst |
+| `$dba` | `02b` | `02b-dba-api-agent.md` | 3 | Database & API Architect |
+| `$ui` | `03` | `03-ui-agent.md` | 4 | UI/UX Designer |
+| `$figma` | `12` | `12-figma-agent.md` | 5 | Figma Sync & Import |
+| `$analytics` | `09` | `09-analytics-agent.md` | 6 | Product Analytics & Experimentation |
+| `$frontend` | `04` | `04-frontend-agent.md` | 7 | Frontend Engineer |
+| `$backend` | `05` | `05-backend-agent.md` | 8 | Backend Engineer |
+| `$watcher` | `90` | `90-watcher-agent.md` | 9 | Quality Watcher |
+| `$security` | `08` | `08-security-agent.md` | 10 | Security Auditor |
+| `$qa` | `07` | `07-qa-agent.md` | 11 | QA Engineer |
+| `$troubleshoot` | `10` | `10-troubleshoot-agent.md` | 12 | Troubleshooting & routing suggestion |
+| `$sre` | `11` | `11-sre-agent.md` | 13 | SRE & Performance |
+| `$devops` | `06` | `06-devops-agent.md` | 14 | DevOps & CI/CD |
+| `$logger` | `99` | `99-logger-agent.md` | Final archive | Technical Writer |
 
 ### Invoking a skill
 

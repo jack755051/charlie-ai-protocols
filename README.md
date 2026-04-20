@@ -9,24 +9,26 @@
 
 ## 🤖 Agent 一覽
 
-| 分組 | Agent | `$` 前綴 | 職責 |
-|---|---|---|---|
-| **管理組** | 01 Supervisor | `$supervisor` | 需求拆解、任務調度、品質門禁 |
-| | 90 Watcher | `$watcher` | 橫向稽核、規格交叉驗證 |
-| | 99 Logger | `$logger` | 開發日誌、Changelog 紀錄 |
-| **開發組** | 02 Tech Lead | `$techlead` | 技術評估、架構細化、派發建議 |
-| | 02a BA | `$ba` | 業務流程分析、邏輯邊界定義 |
-| | 02b DBA/API | `$dba` | DB Schema SSOT、API 介面契約 |
-| | 03 UI | `$ui` | 設計系統、第一層設計資產 |
-| | 12 Figma Sync | `$figma` | 同步設計資產到 Figma |
-| | 04 Frontend | `$frontend` | Angular / Next.js / Nuxt 實作 |
-| | 05 Backend | `$backend` | .NET / NestJS 實作 |
-| **維運組** | 06 DevOps | `$devops` | Docker、CI/CD |
-| | 07 QA | `$qa` | E2E 測試、壓力測試 |
-| | 08 Security | `$security` | 資安審查、Shift-Left |
-| | 09 Analytics | `$analytics` | KPI、埋點、A/B Test |
-| | 10 Troubleshoot | `$troubleshoot` | 全棧故障排查、根因診斷、修復分流 |
-| | 11 SRE | `$sre` | 效能診斷、可靠性優化 |
+> Agent 編號是穩定識別 ID，不完全等於流水線先後順序。實際接手關係請以本節的「典型位置」理解，尤其是 `03 UI → 12 Figma → 09 Analytics → 04 Frontend / 05 Backend`。
+
+| 類型 | 典型位置 | 穩定 ID | `$` 前綴 | 職責 |
+|---|---|---|---|---|
+| **治理** | 全流程入口 | 01 Supervisor | `$supervisor` | 需求拆解、任務調度、品質門禁 |
+| **交付** | 1 | 02 Tech Lead | `$techlead` | 技術評估、架構細化、派發建議 |
+| | 2 | 02a BA | `$ba` | 業務流程分析、邏輯邊界定義 |
+| | 3 | 02b DBA/API | `$dba` | DB Schema SSOT、API 介面契約 |
+| | 4 | 03 UI | `$ui` | 設計系統、第一層設計資產 |
+| | 5 | 12 Figma Sync | `$figma` | 同步設計資產到 Figma |
+| | 6 | 09 Analytics | `$analytics` | KPI、埋點、A/B Test |
+| | 7 | 04 Frontend | `$frontend` | Angular / Next.js / Nuxt 實作 |
+| | 8 | 05 Backend | `$backend` | .NET / NestJS 實作 |
+| **門禁 / 維運** | 9 | 90 Watcher | `$watcher` | 橫向稽核、規格交叉驗證 |
+| | 10 | 08 Security | `$security` | 資安審查、Shift-Left |
+| | 11 | 07 QA | `$qa` | E2E 測試、壓力測試 |
+| | 12 | 10 Troubleshoot | `$troubleshoot` | 全棧故障排查、根因診斷、修復建議 |
+| | 13 | 11 SRE | `$sre` | 效能診斷、可靠性優化 |
+| | 14 | 06 DevOps | `$devops` | Docker、CI/CD |
+| **收尾** | 歸檔 | 99 Logger | `$logger` | 開發日誌、Changelog 紀錄 |
 
 ---
 
