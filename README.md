@@ -25,7 +25,7 @@
 | | 07 QA | `$qa` | E2E 測試、壓力測試 |
 | | 08 Security | `$security` | 資安審查、Shift-Left |
 | | 09 Analytics | `$analytics` | KPI、埋點、A/B Test |
-| | 10 Troubleshoot | `$troubleshoot` | 全棧故障排查、修復調度 |
+| | 10 Troubleshoot | `$troubleshoot` | 全棧故障排查、根因診斷、修復分流 |
 | | 11 SRE | `$sre` | 效能診斷、可靠性優化 |
 
 ---
@@ -107,6 +107,14 @@ $security 請掃描目前檔案有沒有 SQL Injection 的風險。
 請先使用 $ui 產出 UI Spec、tokens.json、screens.json 與 prototype.html。
 完成後切換為 $figma，同步到指定 Figma 檔案或頁面。
 ```
+
+若要快速做維護診斷，可直接先叫出 Troubleshoot：
+
+```
+$troubleshoot 根據這段 error log 幫我找出問題關鍵點，輸出故障診斷報告，並說明接下來應交由哪個角色處理。
+```
+
+> `10 Troubleshoot` 專注在「快速找出根因與建議路由」；正式的修復派發與品質門禁仍由 `01 Supervisor` 接手。
 
 > 短名 alias（`qa.md`、`security.md` 等）由 `cap sync` 自動產生，與長名 `*-agent.md` 指向同一個 SSOT。
 
