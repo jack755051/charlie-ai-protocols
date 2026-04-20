@@ -18,6 +18,11 @@ help: ## 列出所有可用指令
 	@echo "  cap update              # 同步 GitHub 最新規則"
 	@echo "  cap run                 # 以預設 nextjs 啟動"
 	@echo "  cap run FRAMEWORK=nuxt  # 指定框架啟動"
+	@echo ""
+	@echo "Wrapper 範例："
+	@echo "  cap codex               # 透過 wrapper 啟動 Codex 並自動記錄 session trace"
+	@echo "  cap claude              # 透過 wrapper 啟動 Claude 並自動記錄 session trace"
+	@echo "  cap agent frontend \"幫我檢查 auth module\""
 
 setup: $(VENV)/bin/activate ## 建立 venv 並安裝依賴（首次執行）
 	@echo "✅ 虛擬環境就緒：$(VENV)"
@@ -30,7 +35,7 @@ $(VENV)/bin/activate: engine/requirements.txt
 sync: ## 重建本地 Agent Skills symlink（不支援時自動 fallback 為 copy）
 	@bash scripts/mapper.sh
 
-install: sync ## 全域安裝 Agent 技能至 ~/.agents/skills/、~/.claude/ 並註冊 cap 指令
+install: sync ## 全域安裝 Agent 技能並註冊 cap / codex / claude shell wrapper
 	@bash scripts/mapper.sh --global
 	@bash scripts/manage-cap-alias.sh install "$(CURDIR)"
 
@@ -38,7 +43,7 @@ update: ## 從 GitHub 拉取最新規則並重新安裝
 	@git pull --ff-only
 	@$(MAKE) install
 
-uninstall: ## 移除全域安裝與 cap 指令
+uninstall: ## 移除全域安裝與 CAP shell wrapper
 	@bash scripts/mapper.sh --uninstall
 	@bash scripts/manage-cap-alias.sh uninstall
 

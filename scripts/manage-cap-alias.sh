@@ -5,6 +5,9 @@ set -euo pipefail
 MODE="${1:-}"
 CAP_ROOT="${2:-}"
 CAP_TAG="# CAP - Charlie AI Protocols"
+CAP_BLOCK_START="# CAP - Charlie AI Protocols [start]"
+CAP_BLOCK_END="# CAP - Charlie AI Protocols [end]"
+WRAP_NATIVE_CLI="${CAP_WRAP_NATIVE_CLI:-1}"
 
 detect_shell_rc() {
   if [ -n "${CAP_SHELL_RC:-}" ]; then
@@ -50,9 +53,14 @@ rewrite_rc_without_cap_alias() {
   tmp_file="$(mktemp "${TMPDIR:-/tmp}/cap-rc.XXXXXX")"
 
   if [ -f "${rc_file}" ]; then
-    awk -v cap_tag="${CAP_TAG}" '
+    awk -v cap_tag="${CAP_TAG}" -v block_start="${CAP_BLOCK_START}" -v block_end="${CAP_BLOCK_END}" '
+      $0 == block_start { skip=1; next }
+      $0 == block_end { skip=0; next }
+      skip { next }
       $0 == cap_tag { next }
       $0 ~ /^alias cap=/ { next }
+      $0 ~ /^alias codex=/ { next }
+      $0 ~ /^alias claude=/ { next }
       { print }
     ' "${rc_file}" > "${tmp_file}"
   fi
@@ -71,11 +79,29 @@ install_alias() {
   rewrite_rc_without_cap_alias "${rc_file}"
   {
     echo ""
-    echo "${CAP_TAG}"
-    printf "alias cap='make -C \"%s\"'\n" "${CAP_ROOT}"
+    echo "${CAP_BLOCK_START}"
+    cat <<EOF
+cap() {
+  bash "${CAP_ROOT}/scripts/cap-entry.sh" "\$@"
+}
+EOF
+    if [ "${WRAP_NATIVE_CLI}" = "1" ]; then
+      cat <<EOF
+codex() {
+  bash "${CAP_ROOT}/scripts/cap-entry.sh" codex "\$@"
+}
+claude() {
+  bash "${CAP_ROOT}/scripts/cap-entry.sh" claude "\$@"
+}
+EOF
+    fi
+    echo "${CAP_BLOCK_END}"
   } >> "${rc_file}"
 
-  echo "✅ 已註冊 cap alias → ${rc_file}"
+  echo "✅ 已註冊 CAP shell wrapper → ${rc_file}"
+  if [ "${WRAP_NATIVE_CLI}" = "1" ]; then
+    echo "   ✓ codex / claude 將透過 CAP wrapper 啟動並自動記錄 session trace"
+  fi
   echo "👉 請執行 source ${rc_file} 或開新終端機生效"
 }
 
@@ -84,8 +110,8 @@ uninstall_alias() {
 
   rewrite_rc_without_cap_alias "${rc_file}"
 
-  echo "✅ 已從 ${rc_file} 移除 cap alias"
-  echo "👉 當前終端仍有殘留，請執行 unalias cap 或開新終端機。"
+  echo "✅ 已從 ${rc_file} 移除 CAP shell wrapper"
+  echo "👉 當前終端仍有殘留，請開新終端機或重新 source ${rc_file}。"
 }
 
 case "${MODE}" in
