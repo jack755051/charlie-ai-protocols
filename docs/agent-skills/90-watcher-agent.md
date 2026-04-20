@@ -29,8 +29,15 @@
 - **[ ] API 契約對齊**：前端 Mapper/Service 與後端 Controller 欄位是否與 API Spec（`<模組>_API_v<版號>.md`）定義的 DTO 100% 對齊。
 
 ### 3.2 前端特化稽核 (Frontend Framework Rules)
+- **[ ] Thin Page / Facade 邊界**：檢查 Route Entry / Page Shell 是否保持輕薄，且遠端資料存取、狀態聚合與副作用是否封裝在 Service / Facade / Composable / Store Adapter，而非散落在頁面或葉節點元件。
+- **[ ] Raw DTO 禁令**：檢查 UI / Section / Component 是否直接消費 Raw DTO 或在模板中解析 API 原始結構；若前端跳過 Mapper / Service 解包直接吃 `data` 包裹，判定為 **FAIL**。
+- **[ ] ApiResponse 解包合規**：檢查 Service / Facade 是否正確處理 `statusCode / message / data / meta`，且列表資料有依 API Spec 對齊分頁 `meta`。
 - **[ ] UI Asset 對齊**：檢查前端實作的色彩、字級、間距、元件狀態與主要 CTA 是否對齊 `03 UI Agent` 產出的 Tokens JSON、畫面 Schema 與 Prototype。
 - **[ ] Prototype 偏差說明**：若實作與 Prototype 存在合理差異，必須有明確註記或交接原因；若無說明且差異影響 UX，判定為 **FAIL**。
+- **[ ] 非同步四態齊備**：檢查關鍵讀取與提交流程是否具備 `loading / empty / error / success` 或 UI Spec 定義的等價狀態；若缺任一必要狀態，判定為 **FAIL**。
+- **[ ] 錯誤映射分層**：檢查全域錯誤（如 401/403/網路錯誤）與區域錯誤（欄位驗證、區塊載入失敗、提交衝突）是否被合理分流，而非一律粗暴全域 Toast。
+- **[ ] 可測試性與 a11y**：檢查主要 CTA、表單欄位、Loading / Empty / Error 區塊是否具備 `data-testid`、語意化結構與必要的 `aria-*` 標記。
+- **[ ] Analytics 契約對齊**：若交接單附帶 Analytics 規格，檢查事件名稱、屬性、`experiment_id` / `variant_id` 等識別是否與 Analytics Spec 一致，且未擅自發明欄位。
 #### **IF [Angular]：**
 - **[ ] 強制 Standalone**：禁止出現 `NgModule`。
 - **[ ] 強制 Signals**：禁止使用 `@Input/@Output`，必須使用 `input()/output()/model()`。

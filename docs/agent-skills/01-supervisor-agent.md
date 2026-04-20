@@ -75,9 +75,11 @@
 - **任務目標**：讀取 `03 UI Agent` 產出的設計資產，透過 **Figma MCP** 或 **Figma Import Script** 將設計同步到指定 Figma File / Project / Page，並回報同步結果。
 
 ### 🏷️ [Frontend Agent] 前端工程師 (04)
-- **觸發時機**：BA 流程規格、API 介面規格與 UI 標註皆通過 Watcher 審核後。
+- **觸發時機**：BA 流程規格、API 介面規格、UI 標註與設計資產皆穩定，且相關規格已通過 Watcher 審核後。若交接單要求事件追蹤或實驗標記，必須待 Analytics 規格可用後才可派發。
 - **需掛載規則**：`docs/agent-skills/04-frontend-agent.md`、`strategies/unit-test-frontend.md` 以及具體的框架策略（如 `strategies/frontend-angular.md`、`strategies/frontend-nextjs.md`、`strategies/frontend-nuxtjs.md`，依技術棧選擇對應檔案）。
-- **任務目標**：依據 UI 規格與 API 契約實作畫面與互動邏輯。必須嚴格遵守組件化與狀態管理規範，並預埋 QA 所需的 `data-testid`。
+- **派發前阻斷條件**：若 API Spec 缺少標準回應包裹（`statusCode / message / data / meta`）或錯誤語意、UI Spec 缺少 `loading / empty / error / success` 狀態、表單欄位缺少驗證規則，或事件追蹤需求缺少 Analytics 字典，**不得派發**給 04。
+- **任務目標**：依據 UI 規格與 API 契約實作畫面與互動邏輯。必須嚴格遵守組件化與狀態管理規範，正確消費 `ApiResponse<T>`、實作 `loading / empty / error / success`、表單驗證與錯誤映射，並預埋 QA 所需的 `data-testid`。
+- **交付要求**：前端交付必須同時包含對應單元測試、必要的 logging handoff 摘要，以及若有 Analytics 要求時的事件落地結果。
 
 ### 🏷️ [Backend Agent] 後端工程師 (05)
 - **觸發時機**：API 介面規格與資料庫事實檔案通過 Watcher 審核後。
@@ -151,6 +153,7 @@
    - 資料庫事實路徑：[docs/architecture/database/<模組>_schema_v<版號>.md]
    - UI 規格路徑：[例如：docs/design/auth_UI_v1.0.md]
    - 設計資產路徑：[例如：docs/design/auth_tokens_v1.0.json、docs/design/auth_screens_v1.0.json、docs/design/auth_prototype_v1.0.html]
+   - Analytics 規格路徑：[例如：docs/architecture/auth_Analytics_v1.0.md]
    - Figma 同步結果路徑：[例如：docs/design/auth_figma-sync_v1.0.md]
 ```
 ### 4.2 品質門禁與異常處置 (Quality Gates)
