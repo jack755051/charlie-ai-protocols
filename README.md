@@ -57,7 +57,7 @@ source <你的 shell 設定檔>
 | `cap help` | 列出所有可用指令 |
 | `cap list` | 列出所有 Agent Skills（編號、檔名、`$` 前綴、角色） |
 | `cap setup` | 建立 Python venv 並安裝 CrewAI 依賴（首次執行） |
-| `cap sync` | 更新 Agent 定義後，重建本地 `.agents/skills/` agent 映射 |
+| `cap sync` | 更新 Agent 定義後，重建本地 `.agents/skills/` symlink；若環境不支援則自動 fallback 為 copy |
 | `cap install` | 全域安裝至 `~/.claude/`、`~/.agents/`、`~/.codex/` 並註冊 `cap` alias |
 | `cap update` | 從 GitHub 拉取最新規則並重新安裝 |
 | `cap uninstall` | 移除全域安裝與 `cap` alias |
@@ -119,12 +119,15 @@ $security 請掃描目前檔案有沒有 SQL Injection 的風險。
 | 工具 | 部署位置 | 作用 |
 |---|---|---|
 | **Claude Code** | `~/.claude/CLAUDE.md` | 使用 `@` 匯入核心憲法 + Git 工作流 |
-| | `~/.claude/rules/` | 所有 `*-agent.md` agent 映射，優先 symlink，不支援時自動 fallback 為 copy |
+| | `~/.claude/rules/` | 所有 `*-agent.md` 同步入口，預設 symlink，不支援時自動 fallback 為 copy |
 | **OpenAI Codex** | `~/.codex/AGENTS.md` | 全域指令檔 |
-| | `~/.agents/skills/` | 長名 + 短名 agent 映射（優先 symlink，不支援時自動 fallback 為 copy） |
+| | `~/.agents/skills/` | 長名 + 短名同步入口，預設 symlink，不支援時自動 fallback 為 copy |
 | **Shell** | 自動偵測 `~/.zshrc` / `~/.bash_profile` / `~/.bashrc` / `~/.profile` | `cap` alias → `make -C <CAP路徑>` |
 
 > 開發者建議直接從開發 repo 執行 `make install`；`install.sh` 是給只需消費 protocols 的團隊成員使用。
+>
+> 補充：Codex 的 `~/.agents/skills/` 與 Claude 的 `~/.claude/rules/` 兩邊都採同一策略，都是「預設 symlink，失敗才 fallback 為 copy」。
+> 若要強制要求 symlink，可用 `CAP_LINK_MODE=symlink bash scripts/mapper.sh --global`。
 
 ---
 
@@ -153,12 +156,12 @@ charlie-ai-protocols/
 │   ├── history/                   #   開發日誌 (devlog)
 │   └── src/                       #   Agent 產出的原始碼
 ├── .agents/                       # AI CLI 工具統一入口
-│   └── skills/                    #   長名(*-agent.md) + 短名(qa.md) agent 映射
+│   └── skills/                    #   長名(*-agent.md) + 短名(qa.md) 同步入口，預設 symlink
 ├── .claude/                       # Claude Code 規則
 │   └── rules/                     #   路徑限定規則 (agent-skills, engine)
 ├── scripts/                       # Shell 腳本
 │   ├── init-ai.sh                 #   技術策略初始化
-│   └── mapper.sh                  #   Agent Skills agent 映射建立
+│   └── mapper.sh                  #   Agent Skills 同步入口建立（預設 symlink）
 ├── install.sh                     # 一鍵安裝腳本（curl | bash）
 ├── CLAUDE.md                      # Claude Code 專案指令
 ├── AGENTS.md                      # OpenAI Codex / 通用 AI CLI 指令

@@ -4,9 +4,6 @@ VENV      := .venv
 PIP       := $(VENV)/bin/pip
 PYTHON    := $(VENV)/bin/python
 FRAMEWORK ?= nextjs
-SHELL_RC  := $(HOME)/.zshrc
-CAP_TAG   := \# CAP - Charlie AI Protocols
-CAP_ALIAS := alias cap='make -C $(CURDIR)'
 
 help: ## 列出所有可用指令
 	@echo "Charlie's AI Protocols (CAP) - 可用指令:"
@@ -15,7 +12,7 @@ help: ## 列出所有可用指令
 	@echo ""
 	@echo "範例："
 	@echo "  cap setup               # 首次環境初始化"
-	@echo "  cap sync                # 更新 Agent 定義後重建本地 symlink"
+	@echo "  cap sync                # 更新 Agent 定義後重建本地 symlink（不支援時自動 fallback 為 copy）"
 	@echo "  cap install             # 全域安裝（跨 Repo 共用）"
 	@echo "  cap uninstall           # 移除全域安裝"
 	@echo "  cap update              # 同步 GitHub 最新規則"
@@ -30,17 +27,12 @@ $(VENV)/bin/activate: engine/requirements.txt
 	$(PIP) install -r engine/requirements.txt
 	@touch $@
 
-sync: ## 重建本地 Agent Skills symlink（更新大腦後執行）
+sync: ## 重建本地 Agent Skills symlink（不支援時自動 fallback 為 copy）
 	@bash scripts/mapper.sh
 
 install: sync ## 全域安裝 Agent 技能至 ~/.agents/skills/、~/.claude/ 並註冊 cap 指令
 	@bash scripts/mapper.sh --global
-	@sed -i '' '/$(CAP_TAG)/d' "$(SHELL_RC)" 2>/dev/null || true
-	@sed -i '' '/^alias cap=/d' "$(SHELL_RC)" 2>/dev/null || true
-	@echo '' >> "$(SHELL_RC)"
-	@echo '$(CAP_TAG)' >> "$(SHELL_RC)"
-	@printf "alias cap='make -C %s'\n" "$(CURDIR)" >> "$(SHELL_RC)"
-	@echo "✅ 已註冊 cap alias → 請執行 source ~/.zshrc 或開新終端機生效"
+	@bash scripts/manage-cap-alias.sh install "$(CURDIR)"
 
 update: ## 從 GitHub 拉取最新規則並重新安裝
 	@git pull --ff-only
@@ -48,11 +40,7 @@ update: ## 從 GitHub 拉取最新規則並重新安裝
 
 uninstall: ## 移除全域安裝與 cap 指令
 	@bash scripts/mapper.sh --uninstall
-	@sed -i '' '/$(CAP_TAG)/d' "$(SHELL_RC)" 2>/dev/null || true
-	@sed -i '' '/^alias cap=/d' "$(SHELL_RC)" 2>/dev/null || true
-	@echo "✅ 已從 $(SHELL_RC) 移除 cap alias"
-	@echo ""
-	@echo "👉 當前終端仍有殘留，請執行 unalias cap 或開新終端機。"
+	@bash scripts/manage-cap-alias.sh uninstall
 
 list: ## 列出所有可用的 Agent Skills
 	@echo "Agent Skills (docs/agent-skills/):"

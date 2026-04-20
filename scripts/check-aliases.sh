@@ -25,21 +25,29 @@ resolve_expected_alias() {
 }
 
 assert_symlink_points_to_source() {
-  local link_path="$1"
+  local entry_path="$1"
   local expected_source="$2"
-
-  if [ ! -L "${link_path}" ]; then
-    echo "FAIL: missing symlink ${link_path}" >&2
-    exit 1
-  fi
 
   local resolved_link
   local resolved_source
-  resolved_link="$(cd "$(dirname "${link_path}")" && realpath "$(readlink "${link_path}")")"
-  resolved_source="$(realpath "${expected_source}")"
+  if [ ! -e "${entry_path}" ] && [ ! -L "${entry_path}" ]; then
+    echo "FAIL: missing entry ${entry_path}" >&2
+    exit 1
+  fi
 
-  if [ "${resolved_link}" != "${resolved_source}" ]; then
-    echo "FAIL: ${link_path} -> ${resolved_link}, expected ${resolved_source}" >&2
+  if [ -L "${entry_path}" ]; then
+    resolved_link="$(cd "$(dirname "${entry_path}")" && realpath "$(readlink "${entry_path}")")"
+    resolved_source="$(realpath "${expected_source}")"
+
+    if [ "${resolved_link}" != "${resolved_source}" ]; then
+      echo "FAIL: ${entry_path} -> ${resolved_link}, expected ${resolved_source}" >&2
+      exit 1
+    fi
+    return
+  fi
+
+  if ! cmp -s "${entry_path}" "${expected_source}"; then
+    echo "FAIL: ${entry_path} content does not match ${expected_source}" >&2
     exit 1
   fi
 }
@@ -71,7 +79,7 @@ for legacy_alias in 02a-ba.md 02b-dba-api.md; do
   fi
 done
 
-actual_alias_count="$(find "${TARGET_DIR}" -maxdepth 1 -type l ! -name '*-agent.md' | wc -l | tr -d ' ')"
+actual_alias_count="$(find "${TARGET_DIR}" -maxdepth 1 \( -type f -o -type l \) ! -name '*-agent.md' ! -name '.cap-managed' ! -name '.gitkeep' | wc -l | tr -d ' ')"
 if [ "${actual_alias_count}" != "${alias_count}" ]; then
   echo "FAIL: alias count mismatch in ${TARGET_DIR} (expected ${alias_count}, got ${actual_alias_count})" >&2
   exit 1
