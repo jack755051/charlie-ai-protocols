@@ -19,6 +19,9 @@ docs/agent-skills/
 ├── 04-frontend-agent.md         (💻 前端工程師：Angular/Next/Nuxt 開發)
 ├── 05-backend-agent.md          (⚙️ 後端工程師：.NET/NestJS 開發)
 │
+│   --- 維護與排查階段 ---
+├── 10-troubleshoot-agent.md     (🔧 故障排查：全棧根因分析、修復調度)
+│
 │   --- 品質門禁階段 ---
 ├── 90-watcher-agent.md          (🔍 監控員：橫向稽核，確保各 Agent 產出一致)
 ├── 08-security-agent.md         (🛡️ 安全審查：與 Watcher 同步執行安全掃描)

@@ -105,6 +105,12 @@
 - **需掛載規則**：`docs/agent-skills/09-analytics-agent.md`
 - **任務目標**：產出事件追蹤規格、漏斗定義、Guardrail Metrics 與 A/B Test 方案，並在版本上線後回讀真實數據，供 PM / BA / UI / Frontend / Backend 做下一輪優化。
 
+### 🏷️ [Troubleshoot Agent] 系統故障排查與維護專家 (10)
+- **觸發時機**：系統出現功能異常、行為偏差或環境問題時，由使用者或 PM 指派進行即時排查。
+- **需掛載規則**：`docs/agent-skills/10-troubleshoot-agent.md`
+- **任務目標**：全棧根因分析 (Root Cause Analysis)，產出診斷報告與修復交接單。具備有限調度權，可直接對 04/05/06 發出修復任務，無需走完整 PRD 流程（僅限 bug fix 與維護）。
+- **特殊權限**：融合 02 Tech Lead 的全棧診斷能力與 01 PM 的有限調度權。若根因涉及架構層級問題或需新增功能，必須退回 01 PM 走正式流程。
+
 ### 🏷️ [SRE Agent] 效能與可靠性工程師 (11)
 - **觸發時機**：QA 壓力測試未達標，或系統上線後出現效能瓶頸時。
 - **需掛載規則**：`docs/agent-skills/11-sre-agent.md`

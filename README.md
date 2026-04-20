@@ -25,6 +25,7 @@
 | | 07 QA | `$qa` | E2E 測試、壓力測試 |
 | | 08 Security | `$security` | 資安審查、Shift-Left |
 | | 09 Analytics | `$analytics` | KPI、埋點、A/B Test |
+| | 10 Troubleshoot | `$troubleshoot` | 全棧故障排查、修復調度 |
 | | 11 SRE | `$sre` | 效能診斷、可靠性優化 |
 
 ---
@@ -38,8 +39,10 @@ curl -fsSL https://raw.githubusercontent.com/jack755051/charlie-ai-protocols/mai
 安裝完成後，依提示執行：
 
 ```bash
-source ~/.zshrc
+source <你的 shell 設定檔>
 ```
+
+例如 macOS `zsh` 多半是 `source ~/.zshrc`，而 Bash / Git Bash 常見為 `source ~/.bash_profile` 或 `source ~/.bashrc`。
 
 從此在終端機的**任何目錄**都能使用 `cap` 指令。
 
@@ -54,7 +57,7 @@ source ~/.zshrc
 | `cap help` | 列出所有可用指令 |
 | `cap list` | 列出所有 Agent Skills（編號、檔名、`$` 前綴、角色） |
 | `cap setup` | 建立 Python venv 並安裝 CrewAI 依賴（首次執行） |
-| `cap sync` | 更新 Agent 定義後，重建本地 `.agents/skills/` symlink |
+| `cap sync` | 更新 Agent 定義後，重建本地 `.agents/skills/` agent 映射 |
 | `cap install` | 全域安裝至 `~/.claude/`、`~/.agents/`、`~/.codex/` 並註冊 `cap` alias |
 | `cap update` | 從 GitHub 拉取最新規則並重新安裝 |
 | `cap uninstall` | 移除全域安裝與 `cap` alias |
@@ -116,10 +119,10 @@ $security 請掃描目前檔案有沒有 SQL Injection 的風險。
 | 工具 | 部署位置 | 作用 |
 |---|---|---|
 | **Claude Code** | `~/.claude/CLAUDE.md` | 使用 `@` 匯入核心憲法 + Git 工作流 |
-| | `~/.claude/rules/` | 所有 `*-agent.md` symlink，作為背景知識 |
+| | `~/.claude/rules/` | 所有 `*-agent.md` agent 映射，優先 symlink，不支援時自動 fallback 為 copy |
 | **OpenAI Codex** | `~/.codex/AGENTS.md` | 全域指令檔 |
-| | `~/.agents/skills/` | 長名 + 短名 symlink（對應所有 Agent） |
-| **Shell** | `~/.zshrc` | `cap` alias → `make -C <CAP路徑>` |
+| | `~/.agents/skills/` | 長名 + 短名 agent 映射（優先 symlink，不支援時自動 fallback 為 copy） |
+| **Shell** | 自動偵測 `~/.zshrc` / `~/.bash_profile` / `~/.bashrc` / `~/.profile` | `cap` alias → `make -C <CAP路徑>` |
 
 > 開發者建議直接從開發 repo 執行 `make install`；`install.sh` 是給只需消費 protocols 的團隊成員使用。
 
@@ -150,12 +153,12 @@ charlie-ai-protocols/
 │   ├── history/                   #   開發日誌 (devlog)
 │   └── src/                       #   Agent 產出的原始碼
 ├── .agents/                       # AI CLI 工具統一入口
-│   └── skills/                    #   長名(*-agent.md) + 短名(qa.md) symlink
+│   └── skills/                    #   長名(*-agent.md) + 短名(qa.md) agent 映射
 ├── .claude/                       # Claude Code 規則
 │   └── rules/                     #   路徑限定規則 (agent-skills, engine)
 ├── scripts/                       # Shell 腳本
 │   ├── init-ai.sh                 #   技術策略初始化
-│   └── mapper.sh                  #   Agent Skills symlink 建立
+│   └── mapper.sh                  #   Agent Skills agent 映射建立
 ├── install.sh                     # 一鍵安裝腳本（curl | bash）
 ├── CLAUDE.md                      # Claude Code 專案指令
 ├── AGENTS.md                      # OpenAI Codex / 通用 AI CLI 指令
