@@ -17,12 +17,17 @@
 
 ## 2. 檔案策略
 
-### 2.1 推薦配置
-- 小型 repo 或快速導入：
-  - 允許僅使用 `README.md` 開頭的 YAML front matter。
-- 中大型 repo、長期維護或多 repo 排程：
-  - 必須新增 `repo.manifest.yaml`
-  - README 只保留摘要與導讀內容
+### 2.1 檔案策略（強制路由）
+
+> ⚠️ 以下為強制路由規則，`101-readme-agent` 必須依據 repo 現況判定情境後嚴格執行對應策略，不可無條件 fallback。
+
+- **README 缺失或極度鬆散（< 30 行）**：
+  - 允許使用單檔 `README.md`，頂部帶完整 YAML front matter。
+- **README 已有基本內容（30–80 行）**：
+  - 允許在 README 頂部補精簡 front matter（僅摘要級欄位），完整結構化資料建議另建 `repo.manifest.yaml`。
+- **README 已完整（> 80 行，含 3+ 固定章節）**：
+  - **必須**新增 `repo.manifest.yaml` 作為機器 SSOT。
+  - **README 不加 front matter**，僅保留人類導讀內容。
 
 ### 2.2 Parser 讀取順序
 自動化工具應依下列順序讀取：

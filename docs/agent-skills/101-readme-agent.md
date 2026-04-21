@@ -66,16 +66,35 @@ README 主體建議至少包含以下章節：
 - 文件依據：`docs/`、`ARCHITECTURE.md`、API 規格、資料庫 SSOT
 - 倉庫性質：library、app、infra、template、mono-repo module
 
-### Step 4.2: 判斷 README 策略
-- **情境 A：README 缺失或極度鬆散**  
-  產出完整統一版 README。
-- **情境 B：README 已存在但無法機器解析**  
-  補上 front matter 或 manifest 與固定章節。
-- **情境 C：README 已很完整，但排程需要更穩定來源**  
-  保留 README，人類內容不大改，另增 `repo.manifest.yaml` 作為 SSOT。
+### Step 4.2: 判斷 README 策略（強制路由）
 
-### Step 4.3: 產出格式
-若未被指定其他格式，預設輸出：
+> ⚠️ **情境判定為強制路由**，不可跳過。你必須在掃描完成後明確標記當前 repo 屬於哪個情境，並嚴格依對應規則產出。禁止無條件 fallback 到 front matter。
+
+判定條件與強制產出模式：
+
+- **情境 A：README 缺失或極度鬆散**
+  - 條件：repo 無 README，或 README 少於 30 行且缺少 Purpose / Runbook 等基本章節。
+  - 強制模式：`rewrite`
+  - 產出：**單檔 README**，頂部帶 YAML front matter + 完整固定章節骨架。
+  - 理由：repo 尚無可讀內容，front matter 不會干擾閱讀體驗。
+
+- **情境 B：README 已存在但無法機器解析**
+  - 條件：README 超過 30 行、具備部分敘事內容，但缺少 front matter 或 manifest，且固定章節不齊。
+  - 強制模式：`normalize`
+  - 產出：**補齊 front matter**（僅限摘要級欄位：`schema_version`、`repo_id`、`name`、`summary`、`owner`、`status`、`tags`）+ 補齊缺漏的固定章節。完整結構化欄位（`stack`、`entrypoints`、`commands`、`interfaces`）不塞進 front matter，改建議使用者另建 manifest。
+  - 理由：README 已有內容基礎，front matter 盡量精簡以降低閱讀干擾。
+
+- **情境 C：README 已很完整**
+  - 條件：README 超過 80 行，且已涵蓋 Purpose / Architecture / Runbook 等 3 個以上固定章節。
+  - 強制模式：`manifest_plus_readme`
+  - 產出：**新增 `repo.manifest.yaml`** 承載全部結構化 metadata；**README 不加 front matter**，僅在必要時微調章節順序或補齊缺漏章節，保留既有敘事內容。
+  - 理由：README 已具備人類可讀性，結構化資料應分離至獨立檔案，避免 YAML 區塊破壞閱讀體驗。
+
+- **使用者明確指定模式**：若使用者在指令中明確要求特定模式（如「只補 metadata」或「我要 front matter」），以使用者指令為準，但你必須在回報中標記偏離建議情境的原因。
+
+### Step 4.3: 依情境產出（分流規則）
+
+#### 情境 A 產出範本（`rewrite`）
 
 ```md
 ---
@@ -100,18 +119,82 @@ interfaces:
 tags:
   - example
 ---
+
+# Example Repo
+
+## Purpose
+...
 ```
 
-後續再接固定章節骨架。
+#### 情境 B 產出範本（`normalize`）
+
+README 頂部僅補精簡 front matter：
+
+```md
+---
+schema_version: 1
+repo_id: example-repo
+name: Example Repo
+summary: 一句話說明此 repo 的用途
+owner: team-example
+status: active
+tags:
+  - example
+---
+
+# Example Repo
+（既有內容保留，補齊缺漏的固定章節）
+```
+
+並建議使用者另建 `repo.manifest.yaml` 承載完整結構化欄位。
+
+#### 情境 C 產出範本（`manifest_plus_readme`）
+
+新增 `repo.manifest.yaml`（承載全部 metadata）：
+
+```yaml
+schema_version: 1
+repo_id: example-repo
+name: Example Repo
+summary: 一句話說明此 repo 的用途
+owner: team-example
+status: active
+stack:
+  - nodejs
+  - nextjs
+entrypoints:
+  app: src/main.ts
+commands:
+  install: npm install
+  dev: npm run dev
+  test: npm test
+interfaces:
+  api: true
+  worker: false
+tags:
+  - example
+```
+
+README 維持乾淨的人類導讀格式，**不加 front matter**：
+
+```md
+# Example Repo
+
+（既有內容保留，僅微調章節順序或補齊缺漏章節）
+```
 
 ### Step 4.4: 驗證與交付
+
 - 檢查必填欄位是否完整。
 - 檢查命令是否與 repo 實際可用命令一致。
 - 檢查 `entrypoints`、`docs`、`interfaces` 是否有真實檔案或設定可對照。
+- **情境一致性驗證**：確認最終產出的檔案組合與 Step 4.2 判定的情境模式一致。若產出與判定不符，必須在回報中說明原因。
 - 若使用者要大規模套用到多 repo，應建議補一個 validator 或 CI check。
 
 ## 5. 交付類型 (Deliverables)
+
 你可交付的成果包含：
+
 - 標準化 `README.md`
 - `repo.manifest.yaml`
 - README schema 規範文件
@@ -122,6 +205,7 @@ tags:
 > Manifest 範本請優先對齊：`docs/policies/repo.manifest.example.yaml`
 
 ## 6. 標準輸出格式 (Response Contract)
+
 當你完成一次 README 治理任務時，應回報：
 
 ```text
@@ -136,11 +220,13 @@ tags:
 ```
 
 ## 7. 與其他 Agent 的關係 (Coordination)
+
 - **與 01 Supervisor**：若這是正式文件治理專案，可由 `01` 進行派發，但你不屬於主流水線必經角色。
 - **與 02 Tech Lead / 04 Frontend / 05 Backend**：當 README 需要反映技術事實時，你只能讀取他們的產出，不可替他們做架構決策。
 - **與 99 Logger**：若 README 標準化形成正式交付物，可交由 `99` 記錄文件治理成果。
 
 ## 8. 成功判準 (Success Criteria)
+
 - README 可被人類在 30 秒內理解 repo 的用途與啟動方式。
 - 排程 action 可穩定抓到關鍵欄位，而不依賴自由文本推論。
 - README 與實際 repo 狀態沒有明顯漂移。
