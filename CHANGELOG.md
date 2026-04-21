@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.4.1] - 2026-04-21
+
+### Fixed
+
+- 修正 shell wrapper 安裝行為：在寫入 `cap` / `codex` / `claude` function 前先 `unalias`，避免 zsh 在 `cap update` 後 `source ~/.zshrc` 出現 alias 衝突與 parse error
+
 ## [v0.4.0] - 2026-04-21
 
 ### Added
@@ -14,7 +20,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 - 新增 `readme-governance.md` README 治理規範與 `repo.manifest.example.yaml` Manifest 範本
 - 整合 Lighthouse audit 策略至 QA / SRE / Troubleshoot / Supervisor 流水線
 - `cap help` 正式化，雙寫 trace（plain text + JSONL）
-- CAP runtime storage（`~/.cap/`）、registry 與 release 機制
+- 新增 CAP runtime storage（`~/.cap/projects/<project_id>/`）
+- 新增 tag-aware release 機制：`cap version`、`cap update [target]`、`cap rollback <tag>`
+- 新增 promote 流程：`cap promote list`、`cap promote <src> <dst>`
+- 新增 agent registry：`.cap.agents.json`
+
+### Changed
+
+- 預設 trace / report 輸出從 repo 內 `workspace/history` 轉為本機 CAP storage
+- 更新 install 與 CLI 文件，對齊 runtime storage、registry 與 release control
 
 ### Fixed
 
@@ -46,6 +60,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 - Supervisor (01) 整合 Troubleshoot 診斷報告的接收與分流路由規則
 - 統一 Supervisor / Tech Lead / BA / DBA / SRE / Logger 交接摘要欄位與紀錄模式
 - Logger (99) 升級為分級紀錄機制（`trace_only` / `full_log`）
+- 釐清 troubleshoot 必須回交 supervisor，而不是直接形成正式派單
 
 ### Fixed
 
@@ -83,6 +98,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 - 修正多段 Agent prefix（02a / 02b）的短名 alias 解析
 - 修正全部 shell 腳本 CRLF → LF
 - 修正 CLAUDE.md / AGENTS.md / rules 中的過時檔名引用
+- 修正舊 SA / schema 參照與 agent-skills 文件對齊問題
 
 ## [v0.0.2] - 2026-04-17
 
@@ -105,6 +121,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 - `docs/policies/git-workflow.md` 版本控制與 PR 規範
 - `docs/ARCHITECTURE.md` 架構設計文件
 
+### Changed
+
+- Makefile help 輸出改為顯示 `cap` 前綴，而不是 `make`
+
 ### Fixed
 
 - 修正 `ln -sf` 防止重複安裝時的 `File exists` 錯誤
@@ -116,10 +136,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 - 統一所有 Agent 檔案命名為 `*-agent.md`，供 `factory.py` glob 自動發現
 - CrewAI 引擎升級至 v1.14，修正 agent filtering 邏輯
 - 移除冗餘 IDE 靜態 prompt 檔案，精簡 repo 結構
-
-### Added
-
-- `workspace/` 目錄結構定型（via `.gitkeep`）
+- 保留 legacy `workspace/` 目錄結構（via `.gitkeep`）
 
 ## [v0.0.0-beta] - 2026-04-13
 
