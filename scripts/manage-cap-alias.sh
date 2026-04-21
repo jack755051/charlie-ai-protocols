@@ -81,6 +81,9 @@ install_alias() {
     echo ""
     echo "${CAP_BLOCK_START}"
     cat <<EOF
+unalias cap 2>/dev/null || true
+unalias codex 2>/dev/null || true
+unalias claude 2>/dev/null || true
 cap() {
   bash "${CAP_ROOT}/scripts/cap-entry.sh" "\$@"
 }
