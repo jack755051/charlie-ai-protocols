@@ -29,6 +29,7 @@
 | | 13 | 11 SRE | `$sre` | 效能診斷、可靠性優化 |
 | | 14 | 06 DevOps | `$devops` | Docker、CI/CD |
 | **收尾** | 歸檔 | 99 Logger | `$logger` | 開發日誌、Changelog 紀錄 |
+| **選配 / 輔助** | 非主流水線 | 101 README | `$readme` | README 標準化、Repo Intake、文件結構化 |
 
 ---
 
@@ -122,6 +123,12 @@ $security 請掃描目前檔案有沒有 SQL Injection 的風險。
 $troubleshoot 根據這段 error log 幫我找出問題關鍵點，輸出故障診斷報告，並說明接下來應交由哪個角色處理。
 ```
 
+若要統一 README 供排程自動讀取，可直接呼叫：
+
+```
+$readme 請幫我把這個 repo 的 README 正規化成可機器解析格式。
+```
+
 > `10 Troubleshoot` 專注在「快速找出根因與建議路由」；正式的修復派發與品質門禁仍由 `01 Supervisor` 接手。
 
 > 短名 alias（`qa.md`、`security.md` 等）由 `cap sync` 自動產生，與長名 `*-agent.md` 指向同一個 SSOT。
@@ -168,12 +175,15 @@ charlie-ai-protocols/
 │   ├── agent-skills/              # Agent System Prompts (SSOT)
 │   │   ├── 00-core-protocol.md    #   全域憲法（非 Agent）
 │   │   ├── 01-supervisor-agent.md #   主控 PM
-│   │   ├── 02 ~ 99-*-agent.md    #   各職能 Agent
+│   │   ├── 02 ~ 99-*-agent.md    #   核心職能 Agent
+│   │   ├── 101-*-agent.md        #   選配 / 輔助 Agent
 │   │   ├── archive/               #   封存的舊版 Agent（如 02-sa-agent.md）
 │   │   ├── strategies/            #   框架與工具策略（非 Agent，如 Playwright / k6 / Lighthouse）
 │   │   └── README.md              #   Agent 架構藍圖與流水線說明
 │   ├── policies/                  # 跨工具通用策略
-│   │   └── git-workflow.md        #   Git 版本控制與 PR 規範
+│   │   ├── git-workflow.md        #   Git 版本控制與 PR 規範
+│   │   ├── readme-governance.md   #   README / repo.manifest.yaml 治理規範
+│   │   └── repo.manifest.example.yaml #   Manifest 範本
 │   └── ARCHITECTURE.md            # 架構設計與設計理念
 ├── engine/                        # CrewAI 執行引擎
 │   ├── factory.py

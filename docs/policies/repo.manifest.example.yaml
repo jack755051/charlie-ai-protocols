@@ -1,0 +1,38 @@
+schema_version: 1
+repo_id: example-repo
+name: Example Repo
+summary: 一句話說明此 repo 的用途
+owner: team-example
+status: active
+visibility: internal
+domain: example-domain
+stack:
+  - nodejs
+  - nextjs
+  - postgres
+entrypoints:
+  app: src/main.ts
+  docs: docs/ARCHITECTURE.md
+commands:
+  install: npm install
+  dev: npm run dev
+  test: npm test
+  lint: npm run lint
+interfaces:
+  api: true
+  worker: false
+  cron: false
+docs:
+  architecture: docs/ARCHITECTURE.md
+  readme: README.md
+integrations:
+  - github-actions
+  - vercel
+tags:
+  - example
+  - template
+deploy:
+  runtime: vercel
+  environment: production
+notes:
+  - 若無 lint 指令，可移除 `commands.lint`
