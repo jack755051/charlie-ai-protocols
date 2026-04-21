@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TRACE_LOG="${SCRIPT_DIR}/trace-log.sh"
 SESSION_WRAPPER="${SCRIPT_DIR}/cap-session.sh"
 DEFAULT_CLI="${CAP_DEFAULT_AGENT_CLI:-codex}"
+REGISTRY_HELPER="${SCRIPT_DIR}/cap-registry.sh"
 
 usage() {
   echo "Usage: bash scripts/cap-agent.sh [--cli codex|claude] <agent> [prompt...]" >&2
@@ -18,28 +19,13 @@ normalize_agent() {
   printf '%s\n' "${raw_agent}" | tr '[:upper:]' '[:lower:]'
 }
 
-resolve_agent_file() {
-  case "$1" in
-    supervisor) printf '%s\n' '01-supervisor-agent.md' ;;
-    techlead) printf '%s\n' '02-techlead-agent.md' ;;
-    ba) printf '%s\n' '02a-ba-agent.md' ;;
-    dba) printf '%s\n' '02b-dba-api-agent.md' ;;
-    ui) printf '%s\n' '03-ui-agent.md' ;;
-    frontend) printf '%s\n' '04-frontend-agent.md' ;;
-    backend) printf '%s\n' '05-backend-agent.md' ;;
-    devops) printf '%s\n' '06-devops-agent.md' ;;
-    qa) printf '%s\n' '07-qa-agent.md' ;;
-    security) printf '%s\n' '08-security-agent.md' ;;
-    analytics) printf '%s\n' '09-analytics-agent.md' ;;
-    troubleshoot) printf '%s\n' '10-troubleshoot-agent.md' ;;
-    sre) printf '%s\n' '11-sre-agent.md' ;;
-    figma) printf '%s\n' '12-figma-agent.md' ;;
-    watcher) printf '%s\n' '90-watcher-agent.md' ;;
-    logger) printf '%s\n' '99-logger-agent.md' ;;
-    *)
-      return 1
-      ;;
-  esac
+resolve_agent_meta() {
+  local alias_name="$1"
+  if meta_json="$(bash "${REGISTRY_HELPER}" get "${alias_name}" 2>/dev/null)"; then
+    printf '%s\n' "${meta_json}"
+    return
+  fi
+  return 1
 }
 
 build_prompt() {
@@ -98,10 +84,23 @@ case "${CLI_NAME}" in
     ;;
 esac
 
-AGENT_FILE="$(resolve_agent_file "${AGENT_ALIAS}")" || {
+AGENT_META="$(resolve_agent_meta "${AGENT_ALIAS}")" || {
   echo "不支援的 agent：${AGENT_ALIAS}" >&2
   exit 1
 }
+
+AGENT_FILE="$(printf '%s' "${AGENT_META}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["prompt_file"])')"
+AGENT_PROVIDER="$(printf '%s' "${AGENT_META}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["provider"])')"
+AGENT_DEFAULT_CLI="$(printf '%s' "${AGENT_META}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["cli"])')"
+
+if [ -z "${CLI_NAME}" ] || [ "${CLI_NAME}" = "${DEFAULT_CLI}" ]; then
+  CLI_NAME="${AGENT_DEFAULT_CLI}"
+fi
+
+if [ "${AGENT_PROVIDER}" != "builtin" ]; then
+  echo "目前僅支援 builtin provider，尚未支援：${AGENT_PROVIDER}" >&2
+  exit 1
+fi
 
 PROMPT="$(build_prompt "${AGENT_ALIAS}" "${AGENT_FILE}" "${USER_PROMPT}")"
 bash "${TRACE_LOG}" append "CLI-Agent" "agent:${AGENT_ALIAS} 透過 ${CLI_NAME} 啟動" "成功" >/dev/null

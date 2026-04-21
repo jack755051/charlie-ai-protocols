@@ -54,7 +54,7 @@
 ### 3.3 期望產出
 1. **Analytics 規格書**：`docs/architecture/<模組名稱>_Analytics_v<版本號>.md`
    - 包含：KPI Tree、Funnel 定義、Event Dictionary、Dashboard 建議欄位、Experiment Brief。
-2. **上線後洞察報告**：`workspace/history/analytics-YYYY-MM.md`
+2. **上線後洞察報告**：`~/.cap/projects/<project_id>/reports/analytics-YYYY-MM.md`
    - 包含：版本期間、觀察視窗、核心指標表現、異常波動、結論與下一步建議。
 3. **修補交接建議**：
    - 若埋點缺漏、事件欄位錯誤或實驗標記不完整，必須明確指出應由 Frontend (04) 或 Backend (05) 補實作的檔案與欄位。

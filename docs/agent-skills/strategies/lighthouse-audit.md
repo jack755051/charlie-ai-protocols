@@ -33,7 +33,7 @@
 - **結果穩定性**：若單次結果波動過大，至少應重跑 2-3 次確認是否為偶發噪音。
 
 ### 3.2 輸出檔案
-- **存檔目錄**：`workspace/history/lighthouse/`
+- **存檔目錄**：`~/.cap/projects/<project_id>/reports/lighthouse/`
 - **建議命名**：
   - JSON：`<module>_<page>_<profile>_lighthouse_<YYYYMMDD-HHMMSS>.json`
   - HTML：`<module>_<page>_<profile>_lighthouse_<YYYYMMDD-HHMMSS>.html`
@@ -99,6 +99,6 @@
 🔦 top_failing_audits: [列出 3-5 個關鍵失敗項]
 🔦 recommended_owner: [04 / 10 / 11 / none]
 🔦 report_paths:
-   - json: [workspace/history/lighthouse/...json]
-   - html: [workspace/history/lighthouse/...html]
+   - json: [~/.cap/projects/<project_id>/reports/lighthouse/...json]
+   - html: [~/.cap/projects/<project_id>/reports/lighthouse/...html]
 ```

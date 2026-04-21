@@ -1,4 +1,4 @@
-.PHONY: help setup sync run install uninstall update list check-aliases
+.PHONY: help setup sync run install uninstall update version rollback list check-aliases
 
 VENV      := .venv
 PIP       := $(VENV)/bin/pip
@@ -15,7 +15,13 @@ help: ## 列出所有可用指令
 	@echo "  cap sync                # 更新 Agent 定義後重建本地 symlink（不支援時自動 fallback 為 copy）"
 	@echo "  cap install             # 全域安裝（跨 Repo 共用）"
 	@echo "  cap uninstall           # 移除全域安裝"
-	@echo "  cap update              # 同步 GitHub 最新規則"
+	@echo "  cap version             # 顯示目前安裝版本與最新 release tag"
+	@echo "  cap update              # 更新到最新 release tag"
+	@echo "  cap update main         # 切到 main 並同步最新 HEAD"
+	@echo "  cap rollback v0.3.0     # 回退到指定 release tag"
+	@echo "  cap paths               # 顯示目前專案對應的本機儲存路徑"
+	@echo "  cap registry            # 顯示 agent registry"
+	@echo "  cap promote list        # 列出本機 drafts / reports"
 	@echo "  cap run                 # 以預設 nextjs 啟動"
 	@echo "  cap run FRAMEWORK=nuxt  # 指定框架啟動"
 	@echo ""
@@ -39,9 +45,15 @@ install: sync ## 全域安裝 Agent 技能並註冊 cap / codex / claude shell w
 	@bash scripts/mapper.sh --global
 	@bash scripts/manage-cap-alias.sh install "$(CURDIR)"
 
-update: ## 從 GitHub 拉取最新規則並重新安裝
-	@git pull --ff-only
-	@$(MAKE) install
+version: ## 顯示目前安裝版本與最新 release tag
+	@bash scripts/cap-release.sh version
+
+update: ## 更新到最新 release tag；可用 cap update <target>
+	@bash scripts/cap-release.sh update latest
+
+rollback: ## 回退到指定 release tag；請改用 cap rollback <tag>
+	@echo "請使用：cap rollback <tag>"
+	@exit 1
 
 uninstall: ## 移除全域安裝與 CAP shell wrapper
 	@bash scripts/mapper.sh --uninstall

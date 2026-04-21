@@ -154,7 +154,7 @@
    - UI 規格路徑：[例如：docs/design/auth_UI_v1.0.md]
    - 設計資產路徑：[例如：docs/design/auth_tokens_v1.0.json、docs/design/auth_screens_v1.0.json、docs/design/auth_prototype_v1.0.html]
    - Analytics 規格路徑：[例如：docs/architecture/auth_Analytics_v1.0.md]
-   - Lighthouse 報告路徑：[例如：workspace/history/lighthouse/auth_home_mobile_lighthouse_20260420-103000.json]
+   - Lighthouse 報告路徑：[例如：~/.cap/projects/<project_id>/reports/lighthouse/auth_home_mobile_lighthouse_20260420-103000.json]
    - Figma 同步結果路徑：[例如：docs/design/auth_figma-sync_v1.0.md]
 ```
 ### 4.2 品質門禁與異常處置 (Quality Gates)
