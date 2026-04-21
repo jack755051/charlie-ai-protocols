@@ -38,9 +38,9 @@ def main():
         2. 從你的 Sub-Agents Registry 中，找出正確的 Agent，並發派【任務交接單】給他們 (通常由 SA 開始)。
         3. 強制執行 4.2 品質門禁：當實作完成後，必須交由 WATCHER 與 SECURITY 審查，並由 QA 測試。
         4. 如果有錯誤，產生新的交接單退回重練。
-        5. 所有代碼、文件與日誌，請指示 Agent 寫入 `../workspace/` 對應的目錄中。
+        5. 正式文件請寫入 `../docs/` 對應目錄；執行期 log、trace、草稿與報告請優先寫入 CAP 本機儲存區（例如 `~/.cap/projects/<project_id>/`）。
         """,
-        expected_output="完成整個流水線開發，確保 workspace 目錄中包含 SA Spec、schema.md、原始碼與最終日誌。",
+        expected_output="完成整個流水線開發，確保 docs 中有正式規格，且 CAP 本機儲存區保留必要的 trace 與報告。",
         agent=pm_agent
     )
 

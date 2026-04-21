@@ -39,6 +39,12 @@
 curl -fsSL https://raw.githubusercontent.com/jack755051/charlie-ai-protocols/main/install.sh | bash
 ```
 
+若要指定版本安裝：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jack755051/charlie-ai-protocols/main/install.sh | CAP_VERSION=v0.4.0 bash
+```
+
 安裝完成後，依提示執行：
 
 ```bash
@@ -49,8 +55,8 @@ source <你的 shell 設定檔>
 
 從此在終端機的**任何目錄**都能使用 `cap` 指令。
 
-若採用預設安裝設定，`codex` 與 `claude` 也會被註冊成 CAP shell wrapper，保留原本的啟動習慣，同時自動寫入 `workspace/history/trace-YYYY-MM.log`。
-同時也會同步寫入結構化的 `workspace/history/trace-YYYY-MM.jsonl`，方便後續統計與分析。
+若採用預設安裝設定，`codex` 與 `claude` 也會被註冊成 CAP shell wrapper，保留原本的啟動習慣，同時自動寫入本機 CAP 儲存區 `~/.cap/projects/<project_id>/traces/trace-YYYY-MM.log`。
+同時也會同步寫入結構化的 `~/.cap/projects/<project_id>/traces/trace-YYYY-MM.jsonl`，方便後續統計與分析。
 
 ---
 
@@ -65,8 +71,14 @@ source <你的 shell 設定檔>
 | `cap setup` | 建立 Python venv 並安裝 CrewAI 依賴（首次執行） |
 | `cap sync` | 更新 Agent 定義後，重建本地 `.agents/skills/` symlink；若環境不支援則自動 fallback 為 copy |
 | `cap install` | 全域安裝至 `~/.claude/`、`~/.agents/`、`~/.codex/` 並註冊 CAP shell wrapper |
-| `cap update` | 從 GitHub 拉取最新規則並重新安裝 |
+| `cap version` | 顯示目前安裝版本、ref 與最新 release tag |
+| `cap update [target]` | 更新到 `latest` / `main` / 指定 tag 或 branch |
+| `cap rollback <tag>` | 回退到指定 release tag |
 | `cap uninstall` | 移除全域安裝與 CAP shell wrapper |
+| `cap paths` | 顯示目前專案對應的 CAP 本機儲存路徑 |
+| `cap registry` | 顯示目前 agent registry 設定 |
+| `cap promote list` | 列出本機 drafts / reports |
+| `cap promote <src> <dst>` | 將本機產物升級到 repo 正式路徑 |
 | `cap run` | 以預設 Next.js 啟動 CrewAI 引擎 |
 | `cap run FRAMEWORK=nuxt` | 指定框架啟動（`nextjs` / `angular` / `nuxt`） |
 | `cap codex [ARGS...]` | 透過 wrapper 啟動 Codex，並自動寫入 session trace |
@@ -107,7 +119,7 @@ $security 請掃描目前檔案有沒有 SQL Injection 的風險。
 
 ```
 請使用 $security 檢查登入模組。
-完成後切換為 $logger，將稽核結果寫入 workspace/history/audit-log.md。
+完成後切換為 $logger，將稽核結果寫入 `~/.cap/projects/<project_id>/reports/audit-log.md`。
 ```
 
 若要把第一層設計資產同步到 Figma：
@@ -142,8 +154,15 @@ cap agent troubleshoot "根據這段 log 找 root cause"
 ```
 
 目前 trace 會雙寫為：
-- `workspace/history/trace-YYYY-MM.log`：人類可直接閱讀的單行紀錄
-- `workspace/history/trace-YYYY-MM.jsonl`：供後續統計、Dashboard 或其他自動化流程消費的結構化紀錄
+- `~/.cap/projects/<project_id>/traces/trace-YYYY-MM.log`：人類可直接閱讀的單行紀錄
+- `~/.cap/projects/<project_id>/traces/trace-YYYY-MM.jsonl`：供後續統計、Dashboard 或其他自動化流程消費的結構化紀錄
+
+正式交付若要從本機 storage 升級進 repo，可使用：
+
+```bash
+cap promote list
+cap promote reports/audit-log.md docs/reports/audit-log.md
+```
 
 ---
 
@@ -157,6 +176,7 @@ cap agent troubleshoot "根據這段 log 找 root cause"
 | | `~/.claude/rules/` | 所有 `*-agent.md` 同步入口，預設 symlink，不支援時自動 fallback 為 copy |
 | **OpenAI Codex** | `~/.codex/AGENTS.md` | 全域指令檔 |
 | | `~/.agents/skills/` | 長名 + 短名同步入口，預設 symlink，不支援時自動 fallback 為 copy |
+| **CAP Runtime Storage** | `~/.cap/projects/<project_id>/` | 本機 traces、logs、drafts、reports、sessions |
 | **Shell** | 自動偵測 `~/.zshrc` / `~/.bash_profile` / `~/.bashrc` / `~/.profile` | `cap` / `codex` / `claude` shell wrapper → CAP scripts |
 
 > 開發者建議直接從開發 repo 執行 `make install`；`install.sh` 是給只需消費 protocols 的團隊成員使用。
@@ -164,6 +184,7 @@ cap agent troubleshoot "根據這段 log 找 root cause"
 > 補充：Codex 的 `~/.agents/skills/` 與 Claude 的 `~/.claude/rules/` 兩邊都採同一策略，都是「預設 symlink，失敗才 fallback 為 copy」。
 > 若要強制要求 symlink，可用 `CAP_LINK_MODE=symlink bash scripts/mapper.sh --global`。
 > 若不想包住原生 `codex` / `claude` 指令，可在安裝時設定 `CAP_WRAP_NATIVE_CLI=0`。
+> 版本策略上，`cap update` 預設更新到最新 release tag；若要追 `main`，請明確使用 `cap update main`。
 
 ---
 
@@ -182,6 +203,8 @@ charlie-ai-protocols/
 │   │   └── README.md              #   Agent 架構藍圖與流水線說明
 │   ├── policies/                  # 跨工具通用策略
 │   │   ├── git-workflow.md        #   Git 版本控制與 PR 規範
+│   │   ├── cap-storage.md         #   CAP 本機儲存架構與三層儲存模型
+│   │   ├── agent-registry.md      #   Agent registry 與 backend 替換入口
 │   │   ├── readme-governance.md   #   README / repo.manifest.yaml 治理規範
 │   │   └── repo.manifest.example.yaml #   Manifest 範本
 │   └── ARCHITECTURE.md            # 架構設計與設計理念
@@ -189,7 +212,7 @@ charlie-ai-protocols/
 │   ├── factory.py
 │   ├── main.py
 │   └── requirements.txt
-├── workspace/                     # Agent 執行期產出 (gitignored)
+├── workspace/                     # 舊版 single-user sandbox（legacy）
 │   ├── architecture/              #   BA/API 規格書與 Schema
 │   ├── design/                    #   UI 視覺規範
 │   ├── history/                   #   開發日誌 (devlog)
@@ -204,6 +227,8 @@ charlie-ai-protocols/
 ├── install.sh                     # 一鍵安裝腳本（curl | bash）
 ├── CLAUDE.md                      # Claude Code 專案指令
 ├── AGENTS.md                      # OpenAI Codex / 通用 AI CLI 指令
+├── .cap.project.yaml              # 專案識別設定（決定 project_id 與本機 storage 對應）
+├── .cap.agents.json               # Agent registry（alias -> provider / prompt / cli）
 ├── Makefile                       # 操作入口（cap help）
 ├── .env.example                   # 環境變數範本
 └── .gitignore

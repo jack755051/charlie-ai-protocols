@@ -151,4 +151,4 @@
   - `result: [成功 / 需補資料 / 已轉交01 / 失敗]`
 - **升級規則**：
   - 若僅為一次性診斷、問題無法重現或尚在補件中，預設為 `trace_only`。
-  - 若診斷報告或修復建議單被保存為正式維護紀錄（如寫入 `docs/` 或 `workspace/history/`），可升級為 `full_log`。
+  - 若診斷報告或修復建議單被保存為正式維護紀錄（如寫入 `docs/` 或 `~/.cap/projects/<project_id>/reports/`），可升級為 `full_log`。

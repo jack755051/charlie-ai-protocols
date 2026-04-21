@@ -3,8 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CAP_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-TRACE_DIR="${CAP_ROOT}/workspace/history"
+PATH_HELPER="${SCRIPT_DIR}/cap-paths.sh"
 
 usage() {
   echo "Usage: bash scripts/trace-log.sh append <source> <summary> <result>" >&2
@@ -27,16 +26,20 @@ append_trace() {
   local source="$1"
   local summary="$2"
   local result="$3"
+  local trace_dir
   local trace_file
   local trace_jsonl_file
   local timestamp
   local source_clean
   local summary_clean
   local result_clean
+  local project_id
 
-  mkdir -p "${TRACE_DIR}"
-  trace_file="${TRACE_DIR}/trace-$(date '+%Y-%m').log"
-  trace_jsonl_file="${TRACE_DIR}/trace-$(date '+%Y-%m').jsonl"
+  bash "${PATH_HELPER}" ensure >/dev/null
+  trace_dir="$(bash "${PATH_HELPER}" get trace_dir)"
+  project_id="$(bash "${PATH_HELPER}" get project_id)"
+  trace_file="${trace_dir}/trace-$(date '+%Y-%m').log"
+  trace_jsonl_file="${trace_dir}/trace-$(date '+%Y-%m').jsonl"
   timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
   source_clean="$(sanitize_text "${source}")"
   summary_clean="$(sanitize_text "${summary}")"
@@ -50,6 +53,7 @@ append_trace() {
 
   printf '{%s,%s,%s,%s}\n' \
     "\"timestamp\":$(json_escape "${timestamp}")" \
+    "\"project_id\":$(json_escape "${project_id}")" \
     "\"source\":$(json_escape "${source_clean}")" \
     "\"summary\":$(json_escape "${summary_clean}")" \
     "\"result\":$(json_escape "${result_clean}")" >> "${trace_jsonl_file}"

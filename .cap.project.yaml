@@ -1,0 +1,2 @@
+project_id: charlie-ai-protocols
+agent_registry: .cap.agents.json
