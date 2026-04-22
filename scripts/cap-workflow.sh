@@ -262,9 +262,10 @@ from pathlib import Path
 import json
 import sys
 
+base_dir = Path(sys.argv[1])
+sys.path.insert(0, str(base_dir))
 from engine.workflow_loader import WorkflowLoader
 
-base_dir = Path(sys.argv[1])
 workflow_ref = sys.argv[2]
 status_file = Path(sys.argv[3])
 loader = WorkflowLoader(base_dir=base_dir)
@@ -311,9 +312,10 @@ PY
 from pathlib import Path
 import sys
 
+base_dir = Path(sys.argv[1])
+sys.path.insert(0, str(base_dir))
 from engine.workflow_loader import WorkflowLoader
 
-base_dir = Path(sys.argv[1])
 workflow_ref = sys.argv[2]
 loader = WorkflowLoader(base_dir=base_dir)
 plan = loader.build_execution_phases(workflow_ref)
@@ -350,9 +352,10 @@ from pathlib import Path
 import json
 import sys
 
+base_dir = Path(sys.argv[1])
+sys.path.insert(0, str(base_dir))
 from engine.workflow_loader import WorkflowLoader
 
-base_dir = Path(sys.argv[1])
 workflow_ref = sys.argv[2]
 loader = WorkflowLoader(base_dir=base_dir)
 workflow = loader.load_workflow(workflow_ref)
