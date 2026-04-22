@@ -22,10 +22,10 @@ COMMAND                            DESCRIPTION
   cap update [target]              更新到 latest / main / 指定 tag 或 branch
   cap rollback <tag>               回退到指定 release tag
 
-[Agent & Registry]
-  cap list                         列出所有 Agent Skills
-  cap registry                     顯示 agent registry
-  cap check-aliases                驗證 alias 映射是否正確
+[Skill & Registry]
+  cap skill list                   列出所有 Agent Skills
+  cap skill registry               顯示 agent registry
+  cap skill check-aliases          驗證 alias 映射是否正確
   cap paths                        顯示 CAP 本機儲存路徑
 
 [Workflow]
@@ -64,6 +64,29 @@ case "${COMMAND}" in
     ;;
   version|update|rollback)
     exec bash "${SCRIPT_DIR}/cap-release.sh" "$@"
+    ;;
+  skill)
+    shift || true
+    SUB="${1:-list}"
+    case "${SUB}" in
+      list)
+        shift || true
+        exec make -C "${CAP_ROOT}" list "$@"
+        ;;
+      registry)
+        shift || true
+        exec bash "${SCRIPT_DIR}/cap-registry.sh" show "$@"
+        ;;
+      check-aliases)
+        shift || true
+        exec make -C "${CAP_ROOT}" check-aliases "$@"
+        ;;
+      *)
+        echo "未知的 skill 子指令: ${SUB}" >&2
+        echo "可用指令: cap skill list | registry | check-aliases" >&2
+        exit 1
+        ;;
+    esac
     ;;
   registry)
     shift || true
