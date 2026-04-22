@@ -14,7 +14,6 @@ Usage:
   bash scripts/cap-release.sh version
   bash scripts/cap-release.sh prepare [latest|main|<tag>|<branch>]
   bash scripts/cap-release.sh update [latest|main|<tag>|<branch>]
-  bash scripts/cap-release.sh rollback <tag>
 EOF
   exit 1
 }
@@ -241,19 +240,9 @@ case "${1:-}" in
     print_update_summary "${prev_ref}" "${new_ref}"
     ;;
   rollback)
+    # Hidden alias — delegates to update for backward compatibility
     [ "$#" -eq 2 ] || usage
-    if ! is_tag "$2"; then
-      fetch_remote
-    fi
-    if ! is_tag "$2"; then
-      echo "rollback 只接受既有 tag，例如 v0.4.0。" >&2
-      exit 1
-    fi
-    ensure_git_repo
-    prev_ref="$(run_git describe --tags --exact-match 2>/dev/null || run_git rev-parse --short HEAD)"
-    prepare_target "$2" >/dev/null
-    perform_install >/dev/null 2>&1
-    print_update_summary "${prev_ref}" "$2"
+    exec "$0" update "$2"
     ;;
   *)
     usage

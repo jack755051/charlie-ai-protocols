@@ -20,7 +20,6 @@ COMMAND                            DESCRIPTION
   cap uninstall                    移除全域安裝與 shell wrapper
   cap version                      顯示版本、ref 與最新 release tag
   cap update [target]              更新到 latest / main / 指定 tag 或 branch
-  cap rollback <tag>               回退到指定 release tag
 
 [Skill & Registry]
   cap skill list                   列出所有 Agent Skills
