@@ -1,0 +1,46 @@
+workflow_id: workflow-smoke-test
+version: 1
+name: Workflow Smoke Test
+summary: 驗證 workflow list/show/plan/run、phase 拆分與 capability binding 是否正常。
+owner: supervisor
+triggers:
+  - manual
+  - test
+  - smoke-test
+
+artifacts:
+  repo_summary: 測試用 repo 摘要
+  commit_message: 測試用 commit 訊息
+  commit_result: 測試執行結果
+
+steps:
+  - id: normalize_repo
+    name: Normalize Repo Metadata
+    capability: readme_normalization
+    outputs:
+      - repo_summary
+    done_when:
+      - 已完成第一階段 capability 解析
+      - 已產生測試用 repo summary
+    on_fail: halt
+    notes:
+      - 本流程用於 smoke test，不代表正式交付流程
+
+  - id: commit_changes
+    name: Commit Changes
+    capability: version_control_commit
+    needs:
+      - normalize_repo
+    inputs:
+      - repo_summary
+      - repo_changes
+      - commit_scope
+      - project_context
+    outputs:
+      - commit_message
+      - commit_result
+    done_when:
+      - 已完成第二階段 capability 綁定與 phase 驗證
+    on_fail: halt
+    notes:
+      - 此步驟可用來驗證 readme -> devops 的串接是否正常

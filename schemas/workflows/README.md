@@ -88,6 +88,14 @@ workflow 不負責決定最終 agent，只負責宣告：
 - 主要步驟：
   - `version_control_commit`
 
+### `workflow-smoke-test.yaml`
+
+- 用途：測試 `cap workflow` 工具鏈是否正常
+- 適用情境：驗證 list / show / plan / run、phase 拆分與 capability binding
+- 主要步驟：
+  - `readme_normalization`
+  - `version_control_commit`
+
 ## 7. 使用建議
 
 - 如果你是逐步手動操作：直接用 `$skill` 呼叫單一 agent
