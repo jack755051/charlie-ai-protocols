@@ -120,39 +120,23 @@ prepare_target() {
 }
 
 show_version() {
-  local exact_tag
-  local branch
-  local commit
-  local latest_tag
-  local ref_kind
-  local ref_value
-
   ensure_git_repo
 
-  exact_tag="$(run_git describe --tags --exact-match 2>/dev/null || true)"
-  branch="$(run_git branch --show-current)"
+  local commit latest_tag current
+
   commit="$(run_git rev-parse --short HEAD)"
   latest_tag="$(latest_release_tag)"
+  current="$(run_git describe --tags --exact-match 2>/dev/null || true)"
 
-  if [ -n "${exact_tag}" ]; then
-    ref_kind="tag"
-    ref_value="${exact_tag}"
-  elif [ -n "${branch}" ]; then
-    ref_kind="branch"
-    ref_value="${branch}"
+  if [ -n "${current}" ]; then
+    if [ "${current}" = "${latest_tag}" ]; then
+      echo "CAP ${current} (${commit}) — up to date"
+    else
+      echo "CAP ${current} (${commit}) — latest: ${latest_tag}"
+    fi
   else
-    ref_kind="commit"
-    ref_value="${commit}"
+    echo "CAP ${latest_tag}+dev (${commit}) — on $(run_git branch --show-current || echo 'detached')"
   fi
-
-  cat <<EOF
-cap_root=${CAP_ROOT}
-current_kind=${ref_kind}
-current_ref=${ref_value}
-current_commit=${commit}
-default_branch=${DEFAULT_BRANCH}
-latest_release_tag=${latest_tag}
-EOF
 }
 
 perform_install() {
