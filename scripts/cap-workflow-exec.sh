@@ -181,13 +181,30 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   step_prompt="$(build_step_prompt "${step_id}" "${capability}" "${agent_alias}" "${prompt_file}" "${inputs}" "${USER_PROMPT}")"
 
   START_STEP="$(date '+%s')"
-  printf "  ${DIM}Running ${step_id}...${RESET}\n"
+  STEP_TMP="$(mktemp)"
+  trap "rm -f '${STEP_TMP}'" EXIT
+
+  # Run step in background, show spinner with elapsed time
+  run_step "${step_prompt}" > "${STEP_TMP}" 2>&1 &
+  STEP_PID=$!
+
+  SPIN='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+  SPIN_IDX=0
+  while kill -0 "${STEP_PID}" 2>/dev/null; do
+    ELAPSED="$(( $(date '+%s') - START_STEP ))"
+    printf "\r  ${YELLOW}%s${RESET} ${DIM}Running ${step_id}... (%ss)${RESET}  " "${SPIN:SPIN_IDX:1}" "${ELAPSED}"
+    SPIN_IDX=$(( (SPIN_IDX + 1) % ${#SPIN} ))
+    sleep 0.15
+  done
+  printf "\r\033[K"
 
   set +e
-  output="$(run_step "${step_prompt}")"
+  wait "${STEP_PID}"
   exit_code=$?
   set -e
 
+  output="$(cat "${STEP_TMP}")"
+  rm -f "${STEP_TMP}"
   DURATION="$(( $(date '+%s') - START_STEP ))"
 
   if [ "${exit_code}" -eq 0 ]; then
