@@ -156,7 +156,55 @@ EOF
 }
 
 perform_install() {
-  make -C "${CAP_ROOT}" install
+  make -C "${CAP_ROOT}" install "$@"
+}
+
+count_agents() {
+  local dir="${CAP_ROOT}/docs/agent-skills"
+  find "${dir}" -maxdepth 1 -name '*-agent.md' | wc -l | tr -d ' '
+}
+
+count_strategies() {
+  local dir="${CAP_ROOT}/docs/agent-skills/strategies"
+  [ -d "${dir}" ] && find "${dir}" -name '*.md' | wc -l | tr -d ' ' || echo "0"
+}
+
+count_workflows() {
+  local dir="${CAP_ROOT}/schemas/workflows"
+  find "${dir}" -maxdepth 1 -name '*.yaml' -o -name '*.yml' 2>/dev/null | wc -l | tr -d ' '
+}
+
+print_update_summary() {
+  local prev_ref="$1"
+  local new_ref="$2"
+
+  local agents strategies workflows
+  agents="$(count_agents)"
+  strategies="$(count_strategies)"
+  workflows="$(count_workflows)"
+
+  echo ""
+  echo "CAP updated → ${new_ref}"
+  echo ""
+  printf "  %-14s %s\n" "Agents:" "${agents}"
+  printf "  %-14s %s\n" "Strategies:" "${strategies}"
+  printf "  %-14s %s\n" "Workflows:" "${workflows}"
+  echo ""
+
+  # Show changelog since previous version
+  if [ -n "${prev_ref}" ] && [ "${prev_ref}" != "${new_ref}" ]; then
+    local log
+    log="$(run_git log --oneline "${prev_ref}..${new_ref}" 2>/dev/null || true)"
+    if [ -n "${log}" ]; then
+      echo "  Changes since ${prev_ref}:"
+      echo "${log}" | while IFS= read -r line; do
+        echo "    ${line}"
+      done
+      echo ""
+    fi
+  fi
+
+  echo "  Run 'source ~/.zshrc' or open a new terminal to apply."
 }
 
 case "${1:-}" in
@@ -170,8 +218,12 @@ case "${1:-}" in
     ;;
   update)
     [ "$#" -le 2 ] || usage
+    ensure_git_repo
+    prev_ref="$(run_git describe --tags --exact-match 2>/dev/null || run_git rev-parse --short HEAD)"
     prepare_target "${2:-latest}" >/dev/null
-    perform_install
+    new_ref="$(run_git describe --tags --exact-match 2>/dev/null || run_git rev-parse --short HEAD)"
+    perform_install >/dev/null 2>&1
+    print_update_summary "${prev_ref}" "${new_ref}"
     ;;
   rollback)
     [ "$#" -eq 2 ] || usage
@@ -182,8 +234,11 @@ case "${1:-}" in
       echo "rollback 只接受既有 tag，例如 v0.4.0。" >&2
       exit 1
     fi
+    ensure_git_repo
+    prev_ref="$(run_git describe --tags --exact-match 2>/dev/null || run_git rev-parse --short HEAD)"
     prepare_target "$2" >/dev/null
-    perform_install
+    perform_install >/dev/null 2>&1
+    print_update_summary "${prev_ref}" "$2"
     ;;
   *)
     usage
