@@ -61,7 +61,9 @@ commands:
   uninstall: cap uninstall
   help: cap help
   workflow_list: cap workflow list
+  workflow_ps: cap workflow ps
   workflow_show: cap workflow show <id>
+  workflow_inspect: cap workflow inspect <run-id>
   workflow_plan: cap workflow plan <id>
   workflow_run: cap workflow run <id> [prompt]
 

@@ -19,6 +19,7 @@ PROTOCOL_FILE="${SKILLS_DIR}/00-core-protocol.md"
 CLI_NAME="${CAP_DEFAULT_AGENT_CLI:-claude}"
 PLAN_JSON=""
 USER_PROMPT=""
+RUN_ID=""
 
 # ── Parse args ──
 
@@ -26,6 +27,10 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --cli)
       CLI_NAME="$2"
+      shift 2
+      ;;
+    --run-id)
+      RUN_ID="$2"
       shift 2
       ;;
     *)
@@ -317,3 +322,19 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 printf "  Done in %ss  |  ✓ %s  ✗ %s  ⊘ %s\n" "${TOTAL_DURATION}" "${COMPLETED}" "${FAILED}" "${SKIPPED}"
 echo ""
+
+FINAL_STATE="completed"
+FINAL_RESULT="success"
+EXIT_CODE=0
+
+if [ "${FAILED}" -gt 0 ]; then
+  FINAL_STATE="failed"
+  FINAL_RESULT="step_failed"
+  EXIT_CODE=1
+fi
+
+if [ -n "${RUN_ID}" ]; then
+  bash "${SCRIPT_DIR}/cap-workflow.sh" update-run-status "${RUN_ID}" "${FINAL_STATE}" "${FINAL_RESULT}" >/dev/null 2>&1 || true
+fi
+
+exit "${EXIT_CODE}"
