@@ -246,10 +246,50 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   else
     step_status "fail" "${step_id}" "${DURATION}"
     FAILED=$((FAILED + 1))
-    bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} capability:${capability} agent:${agent_alias}" "失敗" >/dev/null 2>&1 || true
 
+    # ── Error classification ──
+    ERROR_TYPE="unknown"
+    ERROR_HINT=""
+    output_lower="$(echo "${output}" | tr '[:upper:]' '[:lower:]')"
+
+    # Auth / login errors
+    if echo "${output_lower}" | grep -qE 'not logged in|not authenticated|unauthorized|authentication required|login required|sign in|no api key|invalid.*api.?key|ANTHROPIC_API_KEY|OPENAI_API_KEY'; then
+      ERROR_TYPE="auth"
+      case "${CLI_NAME}" in
+        claude) ERROR_HINT="  請先登入：執行 'claude' 啟動互動 session 完成認證。" ;;
+        codex)  ERROR_HINT="  請先設定 API Key：export OPENAI_API_KEY=<your-key>" ;;
+      esac
+    # Rate limit / quota
+    elif echo "${output_lower}" | grep -qE 'rate.?limit|too many requests|429|quota.*exceeded|billing|usage.?limit|credit|overloaded|capacity'; then
+      ERROR_TYPE="rate_limit"
+      ERROR_HINT="  API 額度不足或請求過於頻繁。建議：
+    - 稍等幾分鐘後重試
+    - 檢查帳戶用量與額度限制
+    - 若持續發生，考慮升級方案或切換 CLI：cap workflow run --cli codex ..."
+    # Network errors
+    elif echo "${output_lower}" | grep -qE 'network|connection.*refused|timeout|dns|econnreset|enotfound|fetch failed'; then
+      ERROR_TYPE="network"
+      ERROR_HINT="  網路連線異常。請確認：
+    - 網路是否正常
+    - 是否需要 proxy 設定
+    - API 服務是否正常（查看 status page）"
+    # Trusted directory (codex)
+    elif echo "${output_lower}" | grep -qE 'trusted directory|skip-git-repo-check'; then
+      ERROR_TYPE="trust"
+      ERROR_HINT="  Codex 不信任目前目錄。請先在專案目錄內執行 'codex' 並允許信任。"
+    fi
+
+    bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} capability:${capability}" "失敗" >/dev/null 2>&1 || true
+
+    # Show classified error
     if [ -n "${output}" ]; then
-      printf "  ${RED}%s${RESET}\n" "${output}" | head -5
+      echo "${output}" | head -3 | while IFS= read -r line; do
+        printf "  ${RED}│ %s${RESET}\n" "${line}"
+      done
+    fi
+    if [ -n "${ERROR_HINT}" ]; then
+      printf "\n${YELLOW}  [%s]${RESET}\n" "${ERROR_TYPE}"
+      echo "${ERROR_HINT}"
     fi
 
     if [ "${optional}" != "True" ]; then
