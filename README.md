@@ -133,6 +133,10 @@ source <你的 shell 設定檔>
 | `cap uninstall` | 移除全域安裝與 CAP shell wrapper |
 | `cap paths` | 顯示目前專案對應的 CAP 本機儲存路徑 |
 | `cap registry` | 顯示目前 agent registry 設定 |
+| `cap workflow list` | 列出所有 workflow |
+| `cap workflow show <id>` | 顯示 workflow 摘要 |
+| `cap workflow plan <id>` | 顯示 workflow phase 與 agent 綁定 |
+| `cap workflow run <id> [prompt]` | 建立 workflow plan，並可交由 supervisor 執行 |
 | `cap promote list` | 列出本機 drafts / reports |
 | `cap promote <src> <dst>` | 將本機產物升級到 repo 正式路徑 |
 | `cap run` | 以預設 Next.js 啟動 CrewAI 引擎 |

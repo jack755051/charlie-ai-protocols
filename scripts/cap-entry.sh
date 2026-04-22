@@ -21,6 +21,10 @@ Charlie's AI Protocols (CAP) - 可用指令:
   cap check-aliases                驗證本地 Agent alias 映射是否正確
   cap paths                        顯示目前專案的 CAP 本機儲存路徑
   cap registry                     顯示目前 agent registry
+  cap workflow list                列出所有 workflow
+  cap workflow show <id>           顯示 workflow 摘要
+  cap workflow plan <id>           顯示 workflow phase 與 agent 綁定
+  cap workflow run <id> [prompt]   建立 workflow plan，並可交由 supervisor 執行
   cap promote list                 列出本機可升級的 drafts / reports
   cap promote <src> <dst>          將本機產物升級到 repo 正式路徑
   cap run                          初始化策略並啟動 CrewAI 引擎（FRAMEWORK=nextjs|angular|nuxt）
@@ -37,6 +41,10 @@ Charlie's AI Protocols (CAP) - 可用指令:
   cap update v0.4.0
   cap rollback v0.3.0
   cap registry
+  cap workflow list
+  cap workflow show version-control-private
+  cap workflow plan version-control-private
+  cap workflow run version-control-private "請針對目前變更建立 commit"
   cap promote reports/audit-log.md docs/reports/audit-log.md
   cap codex
   cap claude --agent reviewer
@@ -70,6 +78,10 @@ case "${COMMAND}" in
   registry)
     shift || true
     exec bash "${SCRIPT_DIR}/cap-registry.sh" show "$@"
+    ;;
+  workflow)
+    shift || true
+    exec bash "${SCRIPT_DIR}/cap-workflow.sh" "$@"
     ;;
   promote)
     shift || true

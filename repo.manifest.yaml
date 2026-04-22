@@ -60,6 +60,10 @@ commands:
   update: cap update
   uninstall: cap uninstall
   help: cap help
+  workflow_list: cap workflow list
+  workflow_show: cap workflow show <id>
+  workflow_plan: cap workflow plan <id>
+  workflow_run: cap workflow run <id> [prompt]
 
 interfaces:
   cli: true
