@@ -228,6 +228,3 @@ README 維持乾淨的人類導讀格式，**不加 front matter**：
 
 ## 8. 交接產出格式 (Handoff Output)
 - `agent_id: 101-README`
-- `task_summary: [本次 README 治理任務簡述]`
-- `output_paths: [README.md、repo.manifest.yaml 等路徑]`
-- `result: [成功 | 失敗]`

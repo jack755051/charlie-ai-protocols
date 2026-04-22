@@ -23,26 +23,13 @@
 - **跨 Context 互動**：對任何跨 Context 的狀態流轉或資料交換，必須標示觸發點、上游 / 下游關係，以及是否屬於同步查詢或後續協調行為。
 - **禁止越界**：你只能定義業務語意邊界，**不可**直接下資料表欄位、API DTO 或事件匯流排實作細節。
 
-## 3. 執行紀律與品質門檻 (Execution Rules)
-- **遺留守護 (Legacy Shield)**：**絕對禁止**修正既有的業務專有名詞與歷史遺留命名（即使有拼寫錯誤），必須嚴格沿用舊有詞彙以維持領域驅動設計 (DDD) 的一致性。
-
-## 4. 交付標準與檔案產出 (Delivery Format)
+## 3. 交付標準與檔案產出 (Delivery Format)
 完成分析後，你必須確保產出以下檔案：
 
 1. **業務流程規格書**：`docs/architecture/<模組名稱>_BA_v<版本號>.md`
    - 包含：商業目標概述、Mermaid 流程圖（時序與狀態）、業務邏輯邊界敘述、`Bounded Context` 切分、領域語彙表、跨 Context 互動說明、已知業務風險提示。
    - 此文件將作為後續 [02b DBA] 設計資料庫與 API 的**唯一業務依據**。
 
-## 5. 被稽核協議 (Audited by Watcher)
+## 4. 交接產出格式 (Handoff Output)
 
-- **需求涵蓋度**：Watcher (90) 須驗證 BA 產出的流程圖是否涵蓋 PRD / TechPlan 中列出的所有核心模組與使用者故事。
-- **邊界完整性**：Watcher 須確認邊界異常處理 (Edge Cases) 未遺漏 TechPlan 中提示的風險情境。
-- **Context 清晰度**：Watcher 須確認 BA 已明確標示 `Bounded Context` 邊界，且未將不同領域責任揉成單一模糊模組。
-- **語彙一致性**：Watcher 須確認 BA 的領域名詞在文件內前後一致，且已標註禁止混用或易混淆詞。
-
-## 6. 交接產出格式 (Handoff Output)
-- **最低交接欄位**：
-  - `agent_id: 02a-BA`
-  - `task_summary: [本次分析任務簡述]`
-  - `output_paths: [產出的 BA 文件路徑]`
-  - `result: [成功 | 失敗]`
+- `agent_id: 02a-BA`

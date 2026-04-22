@@ -47,8 +47,5 @@
 
 ## 4. 交接產出格式 (Handoff Output)
 - `agent_id: 12-Figma`
-- `task_summary: [本次 Figma 同步任務簡述]`
-- `output_paths: [figma-sync.md 與相關結果路徑]`
 - `figma_sync_mode: [mcp | import_script]`
 - `figma_target: [file_key | project_name | page_name]`
-- `result: [成功 | 失敗]`

@@ -59,6 +59,3 @@
 
 ## 5. 交接產出格式 (Handoff Output)
 - `agent_id: 03-UI`
-- `task_summary: [本次 UI / 設計資產任務簡述]`
-- `output_paths: [UI Spec、tokens.json、screens.json、prototype.html 等路徑]`
-- `result: [成功 | 失敗]`

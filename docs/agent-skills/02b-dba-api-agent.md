@@ -56,7 +56,6 @@
   3. **Mock Data**：提供一份符合 Response DTO 格式的完整 JSON Mock 範例。
 
 ## 3. 執行紀律與品質門檻 (Execution Rules)
-- **遺留守護 (Legacy Shield)**：**絕對禁止**在文件中修正指定的歷史遺留命名（如 `resquest`），必須嚴格沿用舊有拼寫。
 - **資料字典 (Data Dictionary)**：跨模組共用實體優先使用 TypeScript Utility Types，禁止重複宣告衝突結構。
 - **安全性設計**：定義 API 時必須考慮傳輸加密與參數校驗規則。
 
@@ -69,14 +68,5 @@
    - 包含：API 路由設計、Request/Response DTO 定義、授權機制、聚合修改邊界、事件觸發點標註、架構風險提示（如 N+1 查詢風險等）。
 3. **索引維護**：你必須在 `docs/architecture/database/README.md` 中手動更新檔案索引列表，確保 SSOT 入口可追蹤。
 
-## 5. 被稽核協議 (Audited by Watcher)
-- **Context 對齊**：Watcher (90) 須確認你的 Schema 與 API 設計未偏離 BA 定義的 `Bounded Context` 邊界與領域語彙。
-- **聚合邊界合理性**：Watcher 須確認你已標明 `Aggregate Root`，且不存在明顯可繞過根實體直接修改子 Entity 的 API 或 Schema 暗示。
-- **SSOT 完整性**：Watcher 須確認資料庫事實檔案已涵蓋索引、併發欄位 (`version`) 與跨 Aggregate 引用說明，並與 API 規格保持一致。
-
-## 6. 交接產出格式 (Handoff Output)
-- **最低交接欄位**：
-  - `agent_id: 02b-DBA`
-  - `task_summary: [本次 Schema / API 任務簡述]`
-  - `output_paths: [schema.md、API 規格、README 索引等路徑]`
-  - `result: [成功 | 失敗]`
+## 5. 交接產出格式 (Handoff Output)
+- `agent_id: 02b-DBA`

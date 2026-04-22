@@ -43,16 +43,5 @@
   - **健康探針**：必須實作 `/api/health` 端點，供 DevOps 配置 Liveness/Readiness 探針。
   - **效能指標**：必須暴露 `/metrics` 端點 (如 Prometheus 格式)，提供 API 延遲與錯誤率數據供 SRE 監控。
 
-## 5. 被監控與遺留協議 (Audited by Watcher)
-- **Thin Controller**：Controller 必須保持極薄，嚴禁包含業務運算、權限判定或資料轉換邏輯。
-- **一致性守門**：欄位命名必須與交接單中指定的 API 介面規格書（路徑格式：`docs/architecture/<模組>_API_v<版號>.md`）定義的 DTO 100% 吻合。
-- **DDD 邊界守門**：Watcher 將檢查是否由 `Aggregate Root` 封裝狀態變更、`Value Object` 是否維持不可變與不變式、跨 Aggregate / 模組協調是否以 `Domain Event` 或明確的 Application 編排表達。
-- **歷史拼寫守護**：**絕對禁止**修正 `resquest` 等指定的歷史遺留目錄或欄位拼字。
-- **Schema 絕對服從**：你撰寫的實體類 (Entity) 與遷移檔 (Migration) 必須嚴格參照交接單中指定的資料庫事實檔案（路徑格式：`docs/architecture/database/<模組>_schema_v<版號>.md`）。若發現規格有誤，應回報規格有誤並停止實作，嚴禁自行變更資料庫結構。
-
-## 6. 交接產出格式 (Handoff Output)
-- **最低交接欄位**：
-  - `agent_id: 05-Backend`
-  - `task_summary: [本次後端實作任務簡述]`
-  - `output_paths: [Entity、Service、Controller、Migration、Test 等路徑]`
-  - `result: [成功 | 失敗]`
+## 5. 交接產出格式 (Handoff Output)
+- `agent_id: 05-Backend`

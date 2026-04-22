@@ -36,12 +36,5 @@
    - 產出具體的修正方案：例如「新增一組 Migration 補上缺少的複合索引」或「引入 Redis 來緩存高頻讀取的字典表」。
 3. **SSOT 反向同步**：若你的優化方案修改了資料庫結構，你必須將異動更新回對應模組的資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`），維持單一事實來源的絕對正確性。
 
-## 4. 被稽核協議 (Audited by Watcher)
-- **破壞性檢查**：你的優化方案必須接受 **Watcher** 稽核，確保你加的快取或索引不會破壞原本 BA/API 規格書定義的業務邏輯行為。
-- **安全防護**：你的 `/metrics` 監控端點或健康探針必須接受 **Security** 稽核，確保不會對外洩漏系統內部敏感數據。
-
-## 5. 交接產出格式 (Handoff Output)
+## 4. 交接產出格式 (Handoff Output)
 - `agent_id: 11-SRE`
-- `task_summary: [本次效能 / 可靠性任務簡述]`
-- `output_paths: [探針設定、索引腳本、重構建議或相關文件路徑]`
-- `result: [成功 | 失敗]`

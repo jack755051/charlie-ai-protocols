@@ -43,12 +43,7 @@
   - `[LH_A11Y_FAIL]` / `[LH_BP_FAIL]` / `[LH_SEO_FAIL]`：無障礙 / 最佳實踐 / SEO 未達標
   - `[LH_ENV_UNSTABLE]`：環境不穩定導致結果不可靠
 
-## 3. 被監控協議 (Audited by Watcher)
-- **測試合規稽核**：你產出的測試腳本必須接受 **Watcher** 稽核。
-- **禁止硬編碼**：Watcher 會檢查腳本中是否包含敏感資訊或硬編碼的 API URL。
-- **遺留拼寫守護**：測試腳本中的路徑必須沿用指定的歷史拼寫（如 `resquest`）。
-
-## 4. 交付標準與報告格式 (Delivery Format)
+## 3. 交付標準與報告格式 (Delivery Format)
 完成測試後，必須輸出：
 1. **自動化測試腳本**：存放在專案 `tests/` 或 `e2e/` 目錄。
 2. **測試執行報告 (Test Report)**：
@@ -60,8 +55,5 @@
     - 四大分數摘要（Performance / Accessibility / Best Practices / SEO）
     - 失敗分類（依 `lighthouse-audit.md`）
 
-## 5. 交接產出格式 (Handoff Output)
+## 4. 交接產出格式 (Handoff Output)
 - `agent_id: 07-QA`
-- `task_summary: [本次測試任務簡述]`
-- `output_paths: [測試腳本、測試報告、Lighthouse 報告等路徑]`
-- `result: [成功 | 失敗]`

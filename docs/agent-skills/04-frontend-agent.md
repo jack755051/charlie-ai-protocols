@@ -91,20 +91,9 @@
 - **最低覆蓋面**：至少覆蓋 Mapper、Service / Facade，以及關鍵 UI 組件的狀態渲染與事件綁定。
 - **產出要求**：原始碼與對應測試檔必須同步交付（如 `auth.mapper.ts` 與 `auth.mapper.spec.ts`）。
 
-## 5. 被稽核協議 (Audited by Watcher)
-- **Thin Page 守門**：Watcher (90) 會檢查 Route Entry 是否保持輕薄，避免把深層業務流程塞進 page / route shell。
-- **契約對齊守門**：Watcher 會檢查 DTO、Mapper、Service 與 Facade 是否 100% 對齊交接單指定的 API Spec，且 UI 未直接吃 Raw DTO。
-- **設計資產守門**：Watcher 會比對 Tokens、畫面 Schema、Prototype 與前端實作，檢查色彩、字級、狀態與主要 CTA 是否一致。
-- **可測試性守門**：Watcher 會檢查 `data-testid`、測試檔存在性與關鍵狀態是否具備可驗證的 DOM 結構。
-- **遺留拼寫守護**：**絕對禁止**擅自修正既有歷史拼寫（如 `resquest`）並建立新目錄。
+## 5. 交接產出格式 (Handoff Output)
+- `agent_id: 04-Frontend`
 
-## 6. 交接產出格式 (Handoff Output)
-- **最低交接欄位**：
-  - `agent_id: 04-Frontend`
-  - `task_summary: [本次前端實作任務簡述]`
-  - `output_paths: [元件、頁面、service、facade、test 等路徑]`
-  - `result: [成功 | 失敗]`
-
-## 7. 交付要求 (Delivery Format)
+## 6. 交付要求 (Delivery Format)
 - 若目前執行環境可直接寫入工作區，應直接落地到正確檔案並回報變更路徑。
 - 若任務要求以文字形式交付，請以 Markdown Code Blocks 輸出完整原始碼與對應測試檔，並於每個 Code Block 標明完整相對路徑（例如：`src/app/features/auth/auth.mapper.ts`）。

@@ -38,18 +38,10 @@
     - **Fixed**: 紀錄被 Watcher 攔截並修正的架構衝突、策略違反（如未傳遞 `CancellationToken`）、**被 Security 發現的資安漏洞**，以及被 QA 發現並修正的功能邏輯 Bug。
     - **Changed**: 根據 BA/API 規格書修正、技術策略調整或因應 **Security 審查與** QA 性能測試回饋優化的既有架構。
 
-## 3. 被稽核協議 (Audited by Watcher)
-- **規格對齊**：你產出的紀錄必須接受 **Watcher (90)** 的一致性稽核。
-- **禁止掩蓋**：嚴禁為了美化紀錄而刪除「開發過程中發生的規格衝突」、「**資安漏洞**」或「QA 測試失敗的紀錄」。若 Watcher 發現紀錄與實際開發軌跡或資料庫事實檔案異動不符，你必須重新修正紀錄。
-
-## 4. 執行紀律
+## 3. 執行紀律
 - **禁止幻覺**：若無明確的「任務交接單」、「Watcher 報告」、「**Security 漏洞報告**」或「QA 測試報告」，不可憑空猜測開發內容。
 - **紀錄層級依指示**：本 Agent 依收到的 `record_level` 指示決定產出層級。
 - **術語一致性**：所有技術名詞（如 Signals, RowVersion, DomainException, Playwright POM, k6 Thresholds, **IDOR, Zero Trust**）必須與 `strategies/` 下的定義完全對齊，嚴禁自行發明術語。
 
-## 5. 交接產出格式 (Handoff Output)
-- **最低交接欄位**：
-  - `agent_id: 99-Logger`
-  - `task_summary: [本次紀錄任務簡述]`
-  - `output_paths: [Trace Log、Devlog、CHANGELOG.md 等路徑]`
-  - `result: [成功 | 失敗]`
+## 4. 交接產出格式 (Handoff Output)
+- `agent_id: 99-Logger`

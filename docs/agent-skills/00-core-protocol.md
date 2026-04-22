@@ -1,4 +1,4 @@
-# Global AI Collaboration Protocol (v3.0)
+# Global AI Collaboration Protocol (v3.1)
 
 > 本文件為系統的最高指導原則（憲法）。定義了跨領域通用的 AI 協作協議與基本品質門檻。無論你被指派為主控 PM、系統分析師、前端專家或版本控制管家，皆須嚴格遵守此行為準則。
 
@@ -29,3 +29,19 @@
 2. 是否有潛在的邊界條件 (Edge cases) 未處理？
 3. 這個操作是否會對現有系統造成非預期破壞？
 > ⚠️ **對外回覆時只輸出「結論式自檢摘要」**，不要揭露完整內部草稿或 chain-of-thought。
+
+## 5. 全域共用規範 (Shared Conventions)
+
+### 5.1 遺留守護 (Legacy Shield)
+- **絕對禁止**修正專案中指定的歷史遺留命名（如 `resquest` 等刻意保留的拼寫），必須嚴格沿用舊有詞彙。
+- 若認為遺留命名應修正，必須向使用者回報建議，由使用者決定是否啟動重構。
+
+### 5.2 品質稽核聲明 (Quality Audit)
+- 所有 Agent 的產出均須接受 **Watcher (90)** ��結構稽核與 **Security (08)** 的安全掃描。
+- 稽核規則的 SSOT �� `90-watcher-agent.md` 與 `08-security-agent.md`，各 Agent 不需重複列出稽核項目。
+- 任一稽核結果為 FAIL 時，修復優先於推進。
+
+### 5.3 交接產出格式 (Handoff Output)
+- 完成任務後，必須附上結構化交接摘要，格式依 `schemas/handoff-ticket.schema.yaml` 定義。
+- **最低必填欄位**：`agent_id`、`task_summary`、`output_paths`、`result`。
+- 各 Agent 的 `agent_id` 由其領域文件指定（如 `01-Supervisor`、`04-Frontend`）。若該角色有額外交接欄位（如 Figma 的 `figma_sync_mode`），在領域文件中補充。

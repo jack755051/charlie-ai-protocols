@@ -54,6 +54,3 @@
 
 ## 7. 交接產出格式 (Handoff Output)
 - `agent_id: 08-Security`
-- `task_summary: [本次安全稽核任務簡述]`
-- `output_paths: [安全稽核報告路徑]`
-- `result: [成功 | 失敗]`

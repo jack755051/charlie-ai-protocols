@@ -103,11 +103,5 @@
 > - **參考規範**：[引用對應的 .md 檔案或策略章節]
 > - **修復建議**：[給出具體修改建議]
 
-## 5. 交接產出格式 (Handoff Output Schema)
-
-稽核完成後，必須附上以下結構化摘要：
-
+## 5. 交接產出格式 (Handoff Output)
 - `agent_id: 90-Watcher`
-- `task_summary: [本次稽核任務簡述]`
-- `output_paths: [品質異常報告或 PASS 報告路徑]`
-- `result: [PASS | FAIL]`
