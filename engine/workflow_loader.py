@@ -5,10 +5,11 @@ import yaml
 
 
 class WorkflowLoader:
-    def __init__(self, base_dir=None):
+    def __init__(self, base_dir: Path | None = None):
         self.base_dir = Path(base_dir) if base_dir else Path(__file__).resolve().parents[1]
         self.workflows_dir = self.base_dir / "schemas" / "workflows"
-        self.registry_path = self.base_dir / ".cap.agents.json"
+        self.capabilities_path = self.base_dir / "schemas" / "capabilities.yaml"
+        self.agents_path = self.base_dir / ".cap.agents.json"
 
     def load_workflow(self, workflow_ref):
         workflow_path = Path(workflow_ref)
@@ -35,19 +36,29 @@ class WorkflowLoader:
         data["_source_path"] = str(workflow_path)
         return data
 
-    def load_registry(self):
-        if not self.registry_path.exists():
-            raise FileNotFoundError(f"找不到 agent registry: {self.registry_path}")
-        return json.loads(self.registry_path.read_text(encoding="utf-8"))
+    def load_capabilities(self) -> dict:
+        """從 schemas/capabilities.yaml 讀取 capability 契約。"""
+        if not self.capabilities_path.exists():
+            raise FileNotFoundError(f"找不到 capability 契約: {self.capabilities_path}")
+        raw = self.capabilities_path.read_text(encoding="utf-8")
+        data = yaml.safe_load(raw)
+        return data.get("capabilities", {})
 
-    def resolve_step_agent(self, step, registry):
+    def load_agents(self) -> dict:
+        """從 .cap.agents.json 讀取 agent binding（alias → prompt/provider/cli）。"""
+        if not self.agents_path.exists():
+            raise FileNotFoundError(f"找不到 agent registry: {self.agents_path}")
+        data = json.loads(self.agents_path.read_text(encoding="utf-8"))
+        return data.get("agents", {})
+
+    def resolve_step_agent(self, step: dict, capabilities: dict, agents: dict) -> dict:
         capability = step["capability"]
-        capability_entry = registry.get("capabilities", {}).get(capability)
+        capability_entry = capabilities.get(capability)
         if not capability_entry:
-            raise KeyError(f"capability 尚未在 registry 註冊: {capability}")
+            raise KeyError(f"capability 尚未在 capabilities.yaml 註冊: {capability}")
 
         agent_alias = capability_entry["default_agent"]
-        agent_entry = registry.get("agents", {}).get(agent_alias)
+        agent_entry = agents.get(agent_alias)
         if not agent_entry:
             raise KeyError(f"找不到 capability 對應的 agent alias: {agent_alias}")
 
@@ -58,13 +69,14 @@ class WorkflowLoader:
             "cli": agent_entry.get("cli"),
         }
 
-    def build_execution_plan(self, workflow_ref):
+    def build_execution_plan(self, workflow_ref: str) -> dict:
         workflow = self.load_workflow(workflow_ref)
-        registry = self.load_registry()
+        capabilities = self.load_capabilities()
+        agents = self.load_agents()
 
         plan = []
         for step in workflow["steps"]:
-            agent = self.resolve_step_agent(step, registry)
+            agent = self.resolve_step_agent(step, capabilities, agents)
             plan.append(
                 {
                     "step_id": step["id"],

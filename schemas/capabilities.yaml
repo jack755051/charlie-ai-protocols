@@ -1,11 +1,18 @@
-# Capability Contracts (v1)
+# Capability Contracts (v2)
 #
-# 本檔案定義所有 workflow 可引用的 capability 與其最小契約。
+# 本檔案是 capability 的唯一定義來源（SSOT），包含：
+#   - 語意描述、預設 agent、允許 agent
+#   - 輸入/輸出契約、完成條件
+#
 # capability 是流程語意，不是 agent 檔名。
-# workflow 只引用 capability name，實際綁定由 .cap.agents.json 決定。
+# workflow 只引用 capability name；engine 在 runtime 從本檔案解析 capability → agent alias，
+# 再從 .cap.agents.json 查找 agent binding（prompt_file / provider / cli）。
 #
-# SSOT 權威鏈：
-#   schemas/capabilities.yaml  →  schemas/workflows/*.yaml  →  .cap.agents.json  →  docs/agent-skills/
+# 職責分工：
+#   schemas/capabilities.yaml   — capability 契約（做什麼、誰來做、需要什麼、怎樣算完）
+#   .cap.agents.json            — agent binding（alias → prompt_file / provider / cli）
+#   schemas/workflows/*.yaml    — 流程編排（step 順序、依賴、失敗路由）
+#   docs/agent-skills/          — agent 定義 SSOT（完整 system prompt）
 
 schema_version: 1
 
