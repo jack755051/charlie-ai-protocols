@@ -16,6 +16,7 @@ See `docs/policies/git-workflow.md` for Conventional Commits, branching strategy
 - `docs/agent-skills/00-core-protocol.md` — Global constitution (NOT an agent), injected as shared preamble.
 - `docs/agent-skills/strategies/` — Framework-specific tactics (NOT agents).
 - `docs/policies/` — Cross-tool policies, readable by any AI CLI.
+- `schemas/` — Machine-readable contracts (workflows, capabilities, handoff schema).
 - `engine/` — Python 3.10+ CrewAI >= 1.14 execution engine.
 - `workspace/` — Gitignored agent output sandbox.
 

@@ -1,0 +1,109 @@
+# Handoff Ticket Schema (v1)
+#
+# 定義任務交接單的標準欄位。
+# 此格式供 workflow orchestrator 產生交接單時使用。
+# Agent prompt 不再內嵌此模板；需要時引用本檔。
+
+schema_version: 1
+
+fields:
+
+  # ── 必填欄位 ──
+
+  target_capability:
+    type: string
+    required: true
+    description: 此任務所需的 capability 名稱（對應 capabilities.yaml）
+
+  task_objective:
+    type: string
+    required: true
+    description: 精確描述任務範圍
+
+  rules_to_load:
+    type: string[]
+    required: true
+    description: 應掛載的 agent-skills 與 strategy 路徑清單
+
+  # ── 技術約束 ──
+
+  tech_constraints:
+    type: string
+    required: false
+    description: 技術約束與遺留守護（例如：必須沿用 resquest 拼寫）
+
+  # ── 紀錄模式（由 workflow 決定，非 agent 自行判斷）──
+
+  record_mode:
+    type: object
+    required: false
+    fields:
+      run_mode:
+        type: string
+        enum: [orchestration, standalone]
+        description: 編排模式或獨立呼叫
+      task_scope:
+        type: string
+        enum: [module, adhoc]
+        description: 模組任務或臨時任務
+      record_level:
+        type: string
+        enum: [trace_only, full_log]
+        description: 紀錄層級
+
+  # ── 設計交付模式 ──
+
+  design_delivery:
+    type: object
+    required: false
+    fields:
+      design_output_mode:
+        type: string
+        enum: [assets_only, assets_plus_figma]
+      figma_sync_mode:
+        type: string
+        enum: [none, mcp, import_script]
+      figma_target:
+        type: string
+        description: file_key / project_name / page_name
+
+  # ── 交接 Context（上游產物路徑）──
+
+  context_payload:
+    type: object
+    required: false
+    fields:
+      ba_spec_path:
+        type: string
+      api_spec_path:
+        type: string
+      schema_ssot_path:
+        type: string
+      ui_spec_path:
+        type: string
+      design_assets_paths:
+        type: string[]
+      analytics_spec_path:
+        type: string
+      lighthouse_report_path:
+        type: string
+      figma_sync_report_path:
+        type: string
+
+  # ── Agent 交接產出（由完成任務的 agent 填寫）──
+
+  handoff_output:
+    type: object
+    required: false
+    description: Agent 完成任務後應填寫的交接摘要
+    fields:
+      agent_id:
+        type: string
+        description: "例如：04-Frontend"
+      task_summary:
+        type: string
+      output_paths:
+        type: string[]
+      result:
+        type: string
+        enum: [success, failure, needs_data]

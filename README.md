@@ -264,6 +264,10 @@ charlie-ai-protocols/
 │   │   ├── readme-governance.md   #   README / repo.manifest.yaml 治理規範
 │   │   └── repo.manifest.example.yaml #   Manifest 範本
 │   └── ARCHITECTURE.md            # 架構設計與設計理念
+├── schemas/                       # 機器可讀契約
+│   ├── workflows/                 #   Workflow 模板（步驟、依賴、產物定義）
+│   ├── capabilities.yaml          #   Capability contract 定義
+│   └── handoff-ticket.schema.yaml #   任務交接單結構化 schema
 ├── engine/                        # CrewAI 執行引擎
 │   ├── factory.py
 │   ├── main.py

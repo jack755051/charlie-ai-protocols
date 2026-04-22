@@ -1,31 +1,85 @@
 {
   "default_cli": "codex",
   "capabilities": {
-    "readme_normalization": {
-      "default_agent": "readme",
-      "allowed_agents": [
-        "readme"
-      ]
+    "prd_generation": {
+      "default_agent": "supervisor",
+      "allowed_agents": ["supervisor"]
+    },
+    "workflow_orchestration": {
+      "default_agent": "supervisor",
+      "allowed_agents": ["supervisor"]
+    },
+    "technical_planning": {
+      "default_agent": "techlead",
+      "allowed_agents": ["techlead"]
     },
     "technical_review": {
       "default_agent": "techlead",
-      "allowed_agents": [
-        "techlead",
-        "supervisor"
-      ]
+      "allowed_agents": ["techlead", "supervisor"]
+    },
+    "business_analysis": {
+      "default_agent": "ba",
+      "allowed_agents": ["ba"]
+    },
+    "database_api_design": {
+      "default_agent": "dba",
+      "allowed_agents": ["dba"]
+    },
+    "ui_design": {
+      "default_agent": "ui",
+      "allowed_agents": ["ui"]
+    },
+    "figma_sync": {
+      "default_agent": "figma",
+      "allowed_agents": ["figma"]
+    },
+    "analytics_specification": {
+      "default_agent": "analytics",
+      "allowed_agents": ["analytics"]
+    },
+    "analytics_post_launch": {
+      "default_agent": "analytics",
+      "allowed_agents": ["analytics"]
+    },
+    "frontend_implementation": {
+      "default_agent": "frontend",
+      "allowed_agents": ["frontend"]
+    },
+    "backend_implementation": {
+      "default_agent": "backend",
+      "allowed_agents": ["backend"]
+    },
+    "code_structure_audit": {
+      "default_agent": "watcher",
+      "allowed_agents": ["watcher"]
+    },
+    "security_audit": {
+      "default_agent": "security",
+      "allowed_agents": ["security"]
+    },
+    "qa_testing": {
+      "default_agent": "qa",
+      "allowed_agents": ["qa"]
+    },
+    "troubleshooting": {
+      "default_agent": "troubleshoot",
+      "allowed_agents": ["troubleshoot"]
+    },
+    "sre_optimization": {
+      "default_agent": "sre",
+      "allowed_agents": ["sre"]
     },
     "devops_delivery": {
       "default_agent": "devops",
-      "allowed_agents": [
-        "devops",
-        "sre"
-      ]
+      "allowed_agents": ["devops", "sre"]
     },
     "technical_logging": {
       "default_agent": "logger",
-      "allowed_agents": [
-        "logger"
-      ]
+      "allowed_agents": ["logger"]
+    },
+    "readme_normalization": {
+      "default_agent": "readme",
+      "allowed_agents": ["readme"]
     }
   },
   "agents": {

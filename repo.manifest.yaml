@@ -146,6 +146,11 @@ strategies:
   audit:
     - lighthouse
 
+schemas:
+  workflows: schemas/workflows/
+  capabilities: schemas/capabilities.yaml
+  handoff_schema: schemas/handoff-ticket.schema.yaml
+
 features:
   - 17 位專職 AI Agent，涵蓋 PM / Tech Lead / BA / DBA / UI / Frontend / Backend / DevOps / QA / Security / SRE / Analytics / Troubleshoot / Figma Sync / Logger / Watcher / README
   - 全域憲法 (00-core-protocol.md) 統一所有 Agent 的行為準則與溝通語言

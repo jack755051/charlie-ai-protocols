@@ -1,0 +1,306 @@
+# Capability Contracts (v1)
+#
+# 本檔案定義所有 workflow 可引用的 capability 與其最小契約。
+# capability 是流程語意，不是 agent 檔名。
+# workflow 只引用 capability name，實際綁定由 .cap.agents.json 決定。
+#
+# SSOT 權威鏈：
+#   schemas/capabilities.yaml  →  schemas/workflows/*.yaml  →  .cap.agents.json  →  docs/agent-skills/
+
+schema_version: 1
+
+capabilities:
+
+  # ── 管理與編排 ──
+
+  prd_generation:
+    description: 需求拆解與 PRD 產出
+    default_agent: supervisor
+    allowed_agents: [supervisor]
+    inputs:
+      - user_requirement
+    outputs:
+      - prd_document
+    done_when:
+      - PRD 摘要已產出並獲使用者確認
+
+  workflow_orchestration:
+    description: 工作流程編排、品質門禁控制與異常路由
+    default_agent: supervisor
+    allowed_agents: [supervisor]
+    inputs:
+      - workflow_definition
+      - agent_outputs
+    outputs:
+      - handoff_tickets
+      - gate_decisions
+    done_when:
+      - 所有 step 已依 workflow 定義執行或正確路由
+
+  # ── 分析與設計 ──
+
+  technical_planning:
+    description: 模組層級技術可行性評估與架構細化
+    default_agent: techlead
+    allowed_agents: [techlead]
+    inputs:
+      - prd_document
+    outputs:
+      - tech_plan
+    done_when:
+      - TechPlan 已產出，含技術選型、風險評估與下游建議
+
+  business_analysis:
+    description: 業務流程分析、Bounded Context 識別與領域語彙鎖定
+    default_agent: ba
+    allowed_agents: [ba]
+    inputs:
+      - prd_document
+      - tech_plan
+    outputs:
+      - ba_spec
+    done_when:
+      - BA 規格書已產出，含流程圖、狀態機、Bounded Context 與語彙表
+
+  database_api_design:
+    description: 資料庫 SSOT 建模與 API 介面合約設計
+    default_agent: dba
+    allowed_agents: [dba]
+    inputs:
+      - ba_spec
+      - tech_plan
+    outputs:
+      - schema_ssot
+      - api_spec
+    done_when:
+      - Schema SSOT 與 API 規格書已產出
+      - DTO 欄位與 Schema 100% 對齊
+
+  ui_design:
+    description: 設計系統、Design Tokens 與設計資產產出
+    default_agent: ui
+    allowed_agents: [ui]
+    inputs:
+      - ba_spec
+      - api_spec
+    outputs:
+      - ui_spec
+      - tokens_json
+      - screens_json
+      - prototype_html
+    done_when:
+      - UI 規格書與四項設計資產已產出
+      - 資產間命名、色彩、字級一致
+
+  figma_sync:
+    description: 設計資產同步到 Figma
+    default_agent: figma
+    allowed_agents: [figma]
+    inputs:
+      - ui_spec
+      - tokens_json
+      - screens_json
+      - prototype_html
+    outputs:
+      - figma_sync_report
+    done_when:
+      - 同步報告已產出，標示成功/失敗範圍
+
+  analytics_specification:
+    description: KPI 樹、事件追蹤字典、漏斗定義與實驗設計
+    default_agent: analytics
+    allowed_agents: [analytics]
+    inputs:
+      - ba_spec
+      - api_spec
+      - ui_spec
+    outputs:
+      - analytics_spec
+    done_when:
+      - Analytics 規格書已產出，含 KPI Tree、Event Dictionary、Funnel
+
+  analytics_post_launch:
+    description: 上線後數據回讀與洞察報告
+    default_agent: analytics
+    allowed_agents: [analytics]
+    inputs:
+      - live_data
+      - analytics_spec
+    outputs:
+      - insight_report
+    done_when:
+      - 洞察報告已產出，含觀察區間、指標表現與建議
+
+  # ── 實作 ──
+
+  frontend_implementation:
+    description: 前端實作與單元測試
+    default_agent: frontend
+    allowed_agents: [frontend]
+    inputs:
+      - ba_spec
+      - api_spec
+      - ui_spec
+      - tokens_json
+      - screens_json
+      - prototype_html
+      - analytics_spec
+    outputs:
+      - frontend_code
+      - frontend_unit_tests
+      - frontend_handoff_summary
+    done_when:
+      - 程式碼與測試已交付
+      - data-testid 已預埋
+      - 四態齊備 (loading/empty/error/success)
+
+  backend_implementation:
+    description: 後端實作與單元測試
+    default_agent: backend
+    allowed_agents: [backend]
+    inputs:
+      - api_spec
+      - schema_ssot
+    outputs:
+      - backend_code
+      - backend_unit_tests
+      - backend_handoff_summary
+    done_when:
+      - 程式碼與測試已交付
+      - Entity 與 Migration 對齊 Schema SSOT
+      - 健康探針與指標端點已實作
+
+  # ── 品質門禁 ──
+
+  code_structure_audit:
+    description: 交叉比對稽核：規格 vs 代碼 vs 設計資產
+    default_agent: watcher
+    allowed_agents: [watcher]
+    inputs:
+      - ba_spec
+      - api_spec
+      - ui_spec
+      - schema_ssot
+      - frontend_code
+      - backend_code
+    outputs:
+      - audit_report
+    done_when:
+      - 稽核清單全數通過，或異常報告已產出
+
+  security_audit:
+    description: 左移安全掃描：SQL 注入、IDOR、機敏洩漏、Auth 漏洞
+    default_agent: security
+    allowed_agents: [security]
+    inputs:
+      - frontend_code
+      - backend_code
+    outputs:
+      - security_report
+    done_when:
+      - 安全掃描完成，無 CRITICAL/HIGH 未修復項目
+
+  qa_testing:
+    description: E2E 測試、壓力測試與 Lighthouse 稽核
+    default_agent: qa
+    allowed_agents: [qa]
+    inputs:
+      - ba_spec
+      - api_spec
+      - frontend_code
+      - backend_code
+    outputs:
+      - test_report
+      - lighthouse_report
+    done_when:
+      - E2E 測試通過
+      - k6 壓測 p95 < 500ms、Error Rate < 1%
+      - Lighthouse 四大分數達標（若適用）
+
+  # ── 維運與診斷 ──
+
+  troubleshooting:
+    description: 全棧根因分析與修復建議
+    default_agent: troubleshoot
+    allowed_agents: [troubleshoot]
+    inputs:
+      - error_evidence
+    outputs:
+      - diagnostic_report
+      - fix_recommendation
+    done_when:
+      - 診斷報告已產出，含根因分類與建議處置路由
+
+  sre_optimization:
+    description: 效能瓶頸診斷、快取策略與可觀測性優化
+    default_agent: sre
+    allowed_agents: [sre]
+    inputs:
+      - test_report
+      - frontend_code
+      - backend_code
+      - schema_ssot
+    outputs:
+      - optimization_plan
+    done_when:
+      - 優化方案已產出
+      - 若修改 Schema 已同步回 SSOT
+
+  devops_delivery:
+    description: 容器化、CI/CD 與部署配置
+    default_agent: devops
+    allowed_agents: [devops, sre]
+    inputs:
+      - frontend_code
+      - backend_code
+      - test_report
+    outputs:
+      - ci_config
+      - deploy_spec
+    done_when:
+      - CI/CD 或部署基線已建立
+      - 資源配額與健康探針已配置
+
+  # ── 紀錄 ──
+
+  technical_logging:
+    description: Trace Log、Devlog 與 Changelog 維護
+    default_agent: logger
+    allowed_agents: [logger]
+    inputs:
+      - handoff_summaries
+      - audit_reports
+      - test_reports
+    outputs:
+      - trace_log
+      - devlog
+      - changelog
+    done_when:
+      - 紀錄已依指定 record_level 寫入
+
+  # ── 輔助 ──
+
+  readme_normalization:
+    description: README 治理與 Repo Intake
+    default_agent: readme
+    allowed_agents: [readme]
+    inputs:
+      - repo_files
+    outputs:
+      - repo_manifest
+      - repo_summary
+    done_when:
+      - README 或 manifest 已依治理規則補齊
+      - 命令與入口點可在 repo 中找到證據
+
+  technical_review:
+    description: 技術交付物審閱與完整度確認
+    default_agent: techlead
+    allowed_agents: [techlead, supervisor]
+    inputs:
+      - delivery_artifacts
+    outputs:
+      - review_note
+    done_when:
+      - 已確認交付資訊完整度
+      - 已指出缺漏與風險

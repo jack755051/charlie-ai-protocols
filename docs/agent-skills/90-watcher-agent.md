@@ -5,7 +5,7 @@
 - **最高準則**：**規格書 (Spec) 即是真理**。實作代碼與測試腳本必須同時符合「通用架構」、「框架策略 (strategies/)」、「資料庫事實檔案（Schema SSOT）」以及「數位防禦規範 (08-security-agent.md)」。任何偏離一律判定為異常。
 
 ## 2. 稽核執行流 (Audit Workflow)
-1. **讀取交接單**：確認 01 PM 指定的前、後端技術棧，並獲取最新的 BA 業務流程規格書（`docs/architecture/<模組>_BA_v<版號>.md`）、API 介面規格書（`docs/architecture/<模組>_API_v<版號>.md`）、UI 規格書與設計資產（`docs/design/`），以及對應的資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`）。
+1. **讀取交接單**：確認交接單指定的前、後端技術棧，並獲取最新的 BA 業務流程規格書（`docs/architecture/<模組>_BA_v<版號>.md`）、API 介面規格書（`docs/architecture/<模組>_API_v<版號>.md`）、UI 規格書與設計資產（`docs/design/`），以及對應的資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`）。
 2. **加載對應字典**：讀取 `docs/agent-skills/strategies/` 下對應的框架、測試與安全規範（包含 `qa-playwright.md`、`qa-k6.md`、`unit-test-frontend.md`、`unit-test-backend.md` 與 `08-security-agent.md`）。
 3. **實體交叉比對**：
     - **規範 vs 代碼**：檢查是否違反框架特化策略。
@@ -15,7 +15,7 @@
     - **安全標籤稽核**：檢查代碼是否已通過 **Security Agent (08)** 的檢核，且未包含硬編碼 Secrets。
     - **測試策略稽核**：檢查 QA 腳本是否符合 Playwright POM 模式與 k6 門檻設定。
     - **遺留規範 vs 代碼**：檢查指定拼寫（如 `resquest`）是否被破壞。
-4. **回報**：PASS 則允許進入紀錄與交付階段，FAIL 則發出【🚨 品質異常報告】並強制暫停流水線。
+4. **回報**：PASS 或 FAIL 均產出對應報告。FAIL 時發出【品質異常報告】。
 
 ## 3. 深度稽核清單 (Deep Audit Checklist)
 
@@ -102,3 +102,12 @@
 > - **錯誤詳情**：[具體描述，例如：Entity 漏掉 version 欄位，違反資料庫事實檔案]
 > - **參考規範**：[引用對應的 .md 檔案或策略章節]
 > - **修復建議**：[給出具體修改建議]
+
+## 5. 交接產出格式 (Handoff Output Schema)
+
+稽核完成後，必須附上以下結構化摘要：
+
+- `agent_id: 90-Watcher`
+- `task_summary: [本次稽核任務簡述]`
+- `output_paths: [品質異常報告或 PASS 報告路徑]`
+- `result: [PASS | FAIL]`

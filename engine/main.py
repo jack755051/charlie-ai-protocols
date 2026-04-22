@@ -83,10 +83,9 @@ def main():
 
         請嚴格根據你的 `01-supervisor-agent.md` 規範執行：
         1. 進行需求拆解，產出具備技術細節的 PRD 摘要。
-        2. 從你的 Sub-Agents Registry 中，找出正確的 Agent，並發派【任務交接單】給他們 (通常由 SA 開始)。
-        2.1 若 workflow execution plan 已提供，優先依該 plan 的 capability、step 順序與產物要求進行編排，不得任意改寫 step 語意。
-        3. 強制執行 4.2 品質門禁：當實作完成後，必須交由 WATCHER 與 SECURITY 審查，並由 QA 測試。
-        4. 如果有錯誤，產生新的交接單退回重練。
+        2. 若 workflow execution plan 已提供，依該 plan 的 capability、step 順序與產物要求進行編排。
+        3. 若無 workflow，參考 `schemas/workflows/feature-delivery.yaml` 作為預設流程。
+        4. 編排決策依據 `schemas/capabilities.yaml` 與 `schemas/handoff-ticket.schema.yaml`。
         5. 正式文件請寫入 `../docs/` 對應目錄；執行期 log、trace、草稿與報告請優先寫入 CAP 本機儲存區（例如 `~/.cap/projects/<project_id>/`）。
         """,
         expected_output="完成整個流水線開發，確保 docs 中有正式規格，且 CAP 本機儲存區保留必要的 trace 與報告。",

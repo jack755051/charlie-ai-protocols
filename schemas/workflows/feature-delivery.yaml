@@ -1,0 +1,320 @@
+workflow_id: feature-delivery
+version: 2
+name: Feature Delivery Pipeline
+summary: 完整功能開發流水線：PRD → 技術評估 → 分析設計 → 實作 → 品質門禁 → 部署歸檔。
+owner: supervisor
+triggers:
+  - manual
+  - feature-request
+
+artifacts:
+  prd_document: 產品需求文件
+  tech_plan: 技術執行計畫書
+  ba_spec: 業務流程規格書
+  schema_ssot: 資料庫事實檔案
+  api_spec: API 介面規格書
+  ui_spec: UI 規格書
+  tokens_json: Design Tokens JSON
+  screens_json: 畫面 Schema JSON
+  prototype_html: 靜態 Prototype
+  analytics_spec: Analytics 規格書
+  frontend_code: 前端程式碼與測試
+  backend_code: 後端程式碼與測試
+  audit_report: 結構稽核報告
+  security_report: 安全審查報告
+  test_report: 測試執行報告
+  lighthouse_report: Lighthouse 報告
+  ci_config: CI/CD 設定
+  deploy_spec: 部署規格
+  figma_sync_report: Figma 同步報告
+
+steps:
+
+  # ── 需求與規劃 ──
+
+  - id: prd
+    name: PRD Generation
+    capability: prd_generation
+    outputs:
+      - prd_document
+    done_when:
+      - PRD 摘要已產出並獲使用者確認
+    on_fail: halt
+
+  - id: tech_plan
+    name: Technical Planning
+    capability: technical_planning
+    needs: [prd]
+    inputs:
+      - prd_document
+    outputs:
+      - tech_plan
+    done_when:
+      - TechPlan 已產出，含選型與下游建議
+    on_fail: halt
+    record_level: full_log
+
+  # ── 分析與設計 ──
+
+  - id: ba
+    name: Business Analysis
+    capability: business_analysis
+    needs: [tech_plan]
+    inputs:
+      - prd_document
+      - tech_plan
+    outputs:
+      - ba_spec
+    done_when:
+      - BA 規格書已產出
+      - Bounded Context 與語彙表已定義
+    on_fail: halt
+    record_level: full_log
+
+  - id: dba_api
+    name: Database & API Design
+    capability: database_api_design
+    needs: [ba]
+    inputs:
+      - ba_spec
+      - tech_plan
+    outputs:
+      - schema_ssot
+      - api_spec
+    done_when:
+      - Schema SSOT 與 API 規格已產出
+      - DTO 欄位與 Schema 100% 對齊
+    on_fail: halt
+    record_level: full_log
+
+  - id: ui
+    name: UI/UX Design
+    capability: ui_design
+    needs: [ba, dba_api]
+    inputs:
+      - ba_spec
+      - api_spec
+    outputs:
+      - ui_spec
+      - tokens_json
+      - screens_json
+      - prototype_html
+    done_when:
+      - 四項設計資產已產出且互相一致
+    on_fail: halt
+    record_level: full_log
+
+  - id: figma
+    name: Figma Sync
+    capability: figma_sync
+    needs: [ui]
+    inputs:
+      - ui_spec
+      - tokens_json
+      - screens_json
+      - prototype_html
+    outputs:
+      - figma_sync_report
+    done_when:
+      - 同步報告已產出
+    optional: true
+    on_fail: reroute
+    notes:
+      - 僅在 design_output_mode 為 assets_plus_figma 時啟用
+
+  - id: analytics_spec
+    name: Analytics Specification
+    capability: analytics_specification
+    needs: [ba, dba_api]
+    inputs:
+      - ba_spec
+      - api_spec
+      - ui_spec
+    outputs:
+      - analytics_spec
+    done_when:
+      - Analytics 規格書已產出
+    optional: true
+    on_fail: reroute
+    notes:
+      - 僅在需求涉及事件追蹤或實驗時啟用
+
+  # ── 實作 ──
+
+  - id: frontend
+    name: Frontend Implementation
+    capability: frontend_implementation
+    needs: [dba_api, ui]
+    inputs:
+      - ba_spec
+      - api_spec
+      - ui_spec
+      - tokens_json
+      - screens_json
+      - prototype_html
+      - analytics_spec
+    outputs:
+      - frontend_code
+    done_when:
+      - 程式碼、測試與 handoff summary 已交付
+    on_fail: halt
+    record_level: full_log
+
+  - id: backend
+    name: Backend Implementation
+    capability: backend_implementation
+    needs: [dba_api]
+    inputs:
+      - api_spec
+      - schema_ssot
+    outputs:
+      - backend_code
+    done_when:
+      - 程式碼、測試與 handoff summary 已交付
+    on_fail: halt
+    record_level: full_log
+    parallel_with: [frontend]
+
+  # ── 品質門禁 ──
+
+  - id: structure_audit
+    name: Code Structure Audit
+    capability: code_structure_audit
+    needs: [frontend, backend]
+    inputs:
+      - ba_spec
+      - api_spec
+      - ui_spec
+      - schema_ssot
+      - frontend_code
+      - backend_code
+    outputs:
+      - audit_report
+    done_when:
+      - 稽核清單全數通過，或異常報告已產出
+    on_fail: reroute
+    parallel_with: [security_audit]
+    gate:
+      type: all_pass
+      partner: security_audit
+
+  - id: security_audit
+    name: Security Audit
+    capability: security_audit
+    needs: [frontend, backend]
+    inputs:
+      - frontend_code
+      - backend_code
+    outputs:
+      - security_report
+    done_when:
+      - 安全掃描完成，無 CRITICAL/HIGH 未修復
+    on_fail: reroute
+    parallel_with: [structure_audit]
+    gate:
+      type: all_pass
+      partner: structure_audit
+
+  - id: qa
+    name: QA Testing
+    capability: qa_testing
+    needs: [structure_audit, security_audit]
+    inputs:
+      - ba_spec
+      - api_spec
+      - frontend_code
+      - backend_code
+    outputs:
+      - test_report
+      - lighthouse_report
+    done_when:
+      - E2E 與壓力測試通過
+      - Lighthouse 達標（若適用）
+    on_fail: reroute
+    on_fail_route:
+      - condition: SRE_TRIGGER
+        route_to: sre
+      - condition: LH_PERF_FAIL
+        route_to: sre
+      - condition: LH_A11Y_FAIL
+        route_to: frontend
+      - condition: LH_BP_FAIL
+        route_to: frontend
+      - condition: LH_SEO_FAIL
+        route_to: frontend
+      - condition: LH_ENV_UNSTABLE
+        route_to: troubleshoot
+    record_level: full_log
+
+  # ── 維運（條件觸發）──
+
+  - id: troubleshoot
+    name: Troubleshooting
+    capability: troubleshooting
+    inputs:
+      - error_evidence
+    outputs:
+      - diagnostic_report
+      - fix_recommendation
+    done_when:
+      - 診斷報告已產出
+    optional: true
+    on_fail: halt
+    notes:
+      - 僅在 QA/Lighthouse 回報環境問題或不可重現異常時觸發
+
+  - id: sre
+    name: SRE Optimization
+    capability: sre_optimization
+    inputs:
+      - test_report
+      - frontend_code
+      - backend_code
+      - schema_ssot
+    outputs:
+      - optimization_plan
+    done_when:
+      - 優化方案已產出
+    optional: true
+    on_fail: halt
+    notes:
+      - 僅在 QA 壓測未達標或 Lighthouse 效能不及格時觸發
+
+  # ── 交付 ──
+
+  - id: devops
+    name: DevOps Delivery
+    capability: devops_delivery
+    needs: [qa]
+    inputs:
+      - frontend_code
+      - backend_code
+      - test_report
+    outputs:
+      - ci_config
+      - deploy_spec
+    done_when:
+      - CI/CD 或部署基線已建立
+    on_fail: halt
+    record_level: full_log
+
+  # ── 歸檔 ──
+
+  - id: archive
+    name: Archive Result
+    capability: technical_logging
+    needs: [devops]
+    inputs:
+      - handoff_summaries
+      - audit_report
+      - security_report
+      - test_report
+    outputs:
+      - trace_log
+      - devlog
+      - changelog
+    done_when:
+      - 紀錄已依 record_level 寫入
+    optional: true
+    on_fail: halt
+    record_level: full_log

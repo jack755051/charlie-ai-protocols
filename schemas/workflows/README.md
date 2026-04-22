@@ -6,7 +6,8 @@
 
 - `docs/agent-skills/`：角色能力與邊界的單一事實來源
 - `docs/agent-skills/strategies/`：框架或工具層的戰術規範
-- `docs/workflows/`：跨 agent 的流程模板與 handoff 契約
+- `schemas/workflows/`：跨 agent 的流程模板與 handoff 契約
+- `schemas/capabilities.yaml`：capability contract 定義
 
 workflow 的目的，是把固定順序的工作流從 agent prompt 中抽離，避免：
 

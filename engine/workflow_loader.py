@@ -7,7 +7,7 @@ import yaml
 class WorkflowLoader:
     def __init__(self, base_dir=None):
         self.base_dir = Path(base_dir) if base_dir else Path(__file__).resolve().parents[1]
-        self.workflows_dir = self.base_dir / "docs" / "workflows"
+        self.workflows_dir = self.base_dir / "schemas" / "workflows"
         self.registry_path = self.base_dir / ".cap.agents.json"
 
     def load_workflow(self, workflow_ref):

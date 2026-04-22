@@ -16,6 +16,7 @@ AI multi-agent collaboration system with 13 specialized agents, powered by CrewA
 - `docs/agent-skills/00-core-protocol.md` — Global constitution (NOT an agent), injected as shared preamble.
 - `docs/agent-skills/strategies/` — Framework-specific tactics (NOT agents).
 - `docs/policies/` — Cross-tool policies, readable by any AI CLI.
+- `schemas/` — Machine-readable contracts (workflows, capabilities, handoff schema).
 - `engine/` — Python 3.10+ CrewAI >= 1.14 execution engine (no LangChain).
 - `workspace/` — Gitignored agent output sandbox (gitkeep-preserved, do not modify structure).
 

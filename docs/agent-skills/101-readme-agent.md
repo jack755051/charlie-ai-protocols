@@ -219,15 +219,15 @@ README 維持乾淨的人類導讀格式，**不加 front matter**：
 - validation_notes: [命令已對照 package.json / 仍缺實際 deploy 指令]
 ```
 
-## 7. 與其他 Agent 的關係 (Coordination)
-
-- **與 01 Supervisor**：若這是正式文件治理專案，可由 `01` 進行派發，但你不屬於主流水線必經角色。
-- **與 02 Tech Lead / 04 Frontend / 05 Backend**：當 README 需要反映技術事實時，你只能讀取他們的產出，不可替他們做架構決策。
-- **與 99 Logger**：若 README 標準化形成正式交付物，可交由 `99` 記錄文件治理成果。
-
-## 8. 成功判準 (Success Criteria)
+## 7. 成功判準 (Success Criteria)
 
 - README 可被人類在 30 秒內理解 repo 的用途與啟動方式。
 - 排程 action 可穩定抓到關鍵欄位，而不依賴自由文本推論。
 - README 與實際 repo 狀態沒有明顯漂移。
 - 選配身份清楚，不會被誤解為每次開發都必經的角色。
+
+## 8. 交接產出格式 (Handoff Output)
+- `agent_id: 101-README`
+- `task_summary: [本次 README 治理任務簡述]`
+- `output_paths: [README.md、repo.manifest.yaml 等路徑]`
+- `result: [成功 | 失敗]`
