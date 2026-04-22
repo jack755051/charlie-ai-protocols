@@ -1,5 +1,33 @@
 {
   "default_cli": "codex",
+  "capabilities": {
+    "readme_normalization": {
+      "default_agent": "readme",
+      "allowed_agents": [
+        "readme"
+      ]
+    },
+    "technical_review": {
+      "default_agent": "techlead",
+      "allowed_agents": [
+        "techlead",
+        "supervisor"
+      ]
+    },
+    "devops_delivery": {
+      "default_agent": "devops",
+      "allowed_agents": [
+        "devops",
+        "sre"
+      ]
+    },
+    "technical_logging": {
+      "default_agent": "logger",
+      "allowed_agents": [
+        "logger"
+      ]
+    }
+  },
   "agents": {
     "supervisor": {
       "provider": "builtin",

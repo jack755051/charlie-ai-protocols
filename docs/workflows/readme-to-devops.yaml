@@ -1,0 +1,81 @@
+workflow_id: readme-to-devops
+version: 1
+name: README To DevOps Delivery
+summary: 先完成 repo intake 與 README 治理，再交由 DevOps 建立交付基線。
+owner: supervisor
+triggers:
+  - manual
+  - repo-intake
+  - onboarding
+artifacts:
+  repo_manifest: 機器可解析的 repo metadata
+  repo_summary: 人類可讀的 repo 導讀摘要
+  ci_config: CI/CD 初始設定
+  deploy_spec: 部署規格摘要
+steps:
+  - id: normalize_repo
+    name: Normalize README And Repo Metadata
+    capability: readme_normalization
+    outputs:
+      - repo_manifest
+      - repo_summary
+    done_when:
+      - README.md 或 repo.manifest.yaml 已依治理規範補齊
+      - repo 啟動與測試命令已與實際檔案對照
+    on_fail: halt
+    notes:
+      - 預設由 101-readme-agent 執行，但 workflow 不綁死 agent 檔名
+
+  - id: review_delivery_inputs
+    name: Review Delivery Inputs
+    capability: technical_review
+    needs:
+      - normalize_repo
+    inputs:
+      - repo_manifest
+      - repo_summary
+    outputs:
+      - delivery_ready_note
+    done_when:
+      - 已確認交付所需資訊足夠給後續 DevOps 使用
+    optional: true
+    on_fail: reroute
+    notes:
+      - 可由 Tech Lead 或 Supervisor 角色承接
+
+  - id: setup_delivery
+    name: Prepare Delivery Baseline
+    capability: devops_delivery
+    needs:
+      - normalize_repo
+    inputs:
+      - repo_manifest
+      - repo_summary
+      - delivery_ready_note
+    outputs:
+      - ci_config
+      - deploy_spec
+    done_when:
+      - 已產出最小 CI/CD 或交付基線建議
+      - 已標示尚未解決的 deployment blockers
+    on_fail: reroute
+    notes:
+      - 預設由 06-devops-agent 執行
+
+  - id: archive_result
+    name: Archive Workflow Output
+    capability: technical_logging
+    needs:
+      - setup_delivery
+    inputs:
+      - repo_manifest
+      - ci_config
+      - deploy_spec
+    outputs:
+      - workflow_report
+    done_when:
+      - 已將本次流程摘要寫入報告或 changelog 類產物
+    optional: true
+    on_fail: halt
+    notes:
+      - 可由 99-logger-agent 或其他記錄角色承接

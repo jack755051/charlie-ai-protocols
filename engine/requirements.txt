@@ -3,3 +3,6 @@ crewai>=1.14,<2
 
 # 環境變數與機敏金鑰管理
 python-dotenv>=1,<2
+
+# Workflow 定義解析
+PyYAML>=6,<7
