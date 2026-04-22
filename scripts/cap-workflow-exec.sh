@@ -46,6 +46,38 @@ done
   exit 1
 }
 
+# ── CLI availability check ──
+
+check_cli() {
+  local cli="$1"
+  if command -v "${cli}" >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "" >&2
+  echo "找不到 ${cli} CLI。workflow 前景執行需要至少一套 AI CLI 工具。" >&2
+  echo "" >&2
+  case "${cli}" in
+    claude)
+      echo "  安裝 Claude Code:" >&2
+      echo "    npm install -g @anthropic-ai/claude-code" >&2
+      echo "" >&2
+      echo "  或改用 Codex:" >&2
+      echo "    cap workflow run --cli codex <workflow> \"<prompt>\"" >&2
+      ;;
+    codex)
+      echo "  安裝 Codex:" >&2
+      echo "    npm install -g @openai/codex" >&2
+      echo "" >&2
+      echo "  或改用 Claude:" >&2
+      echo "    cap workflow run --cli claude <workflow> \"<prompt>\"" >&2
+      ;;
+  esac
+  echo "" >&2
+  return 1
+}
+
+check_cli "${CLI_NAME}" || exit 1
+
 # ── CLI command builder ──
 
 run_step_claude() {

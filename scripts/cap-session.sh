@@ -39,7 +39,14 @@ resolve_real_bin() {
     return
   fi
 
-  echo "找不到 ${cli_name} 可執行檔。若你已安裝，請設定 ${override_var}。" >&2
+  echo "" >&2
+  echo "找不到 ${cli_name} CLI。" >&2
+  case "${cli_name}" in
+    claude) echo "  安裝：npm install -g @anthropic-ai/claude-code" >&2 ;;
+    codex)  echo "  安裝：npm install -g @openai/codex" >&2 ;;
+  esac
+  echo "  若已安裝在非標準路徑，請設定 ${override_var}。" >&2
+  echo "" >&2
   exit 1
 }
 
