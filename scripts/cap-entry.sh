@@ -87,9 +87,9 @@ case "${COMMAND}" in
         ;;
     esac
     ;;
-  registry)
-    shift || true
-    exec bash "${SCRIPT_DIR}/cap-registry.sh" show "$@"
+  list|check-aliases|registry)
+    # Backward compat — redirect to cap skill <sub>
+    exec "$0" skill "${COMMAND}" "$@"
     ;;
   workflow)
     shift || true
