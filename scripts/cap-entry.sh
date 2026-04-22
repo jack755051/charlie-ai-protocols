@@ -31,7 +31,8 @@ COMMAND                            DESCRIPTION
   cap workflow list                列出所有 workflow
   cap workflow show <id>           顯示 workflow 摘要
   cap workflow plan <id>           顯示 phase 與 agent 綁定
-  cap workflow run <id> [prompt]   建立 plan 並交由 supervisor 執行
+  cap workflow run <id> <prompt>   前景執行，attach 到 supervisor
+  cap workflow run -d <id> <prompt>  背景執行（planned）
 
 [Execution]
   cap run                          啟動 CrewAI 引擎 (FRAMEWORK=nextjs|angular|nuxt)

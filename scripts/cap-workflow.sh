@@ -340,13 +340,28 @@ if plan["standby_steps"]:
 PY
     ;;
   run)
-    [ "$#" -ge 2 ] || usage
-    WORKFLOW_REF="$(resolve_workflow_ref "$2")" || {
-      echo "找不到 workflow：$2" >&2
+    shift || true
+
+    # Parse -d flag
+    DETACH=0
+    if [ "${1:-}" = "-d" ]; then
+      DETACH=1
+      shift
+    fi
+
+    [ "$#" -ge 1 ] || {
+      echo "Usage: cap workflow run [-d] <workflow> [prompt...]" >&2
       exit 1
     }
-    shift 2
+
+    WORKFLOW_REF="$(resolve_workflow_ref "$1")" || {
+      echo "找不到 workflow：$1" >&2
+      exit 1
+    }
+    shift
     USER_PROMPT="$*"
+
+    # Build execution phases
     WORKFLOW_META="$("${PYTHON_BIN}" - <<'PY' "${CAP_ROOT}" "${WORKFLOW_REF}"
 from pathlib import Path
 import json
@@ -358,52 +373,86 @@ from engine.workflow_loader import WorkflowLoader
 
 workflow_ref = sys.argv[2]
 loader = WorkflowLoader(base_dir=base_dir)
-workflow = loader.load_workflow(workflow_ref)
-plan = loader.build_execution_phases(workflow_ref)
+result = loader.build_execution_phases(workflow_ref)
+
+phases_display = []
+for phase in result["phases"]:
+    steps = phase["steps"]
+    ids = [s["step_id"] for s in steps]
+    agents = list(dict.fromkeys(s["agent_alias"] for s in steps))
+    gate = phase.get("gate", {}).get("type", "")
+    phases_display.append({
+        "phase": phase["phase"],
+        "steps": ids,
+        "agents": agents,
+        "gate": gate,
+    })
+
+standby = [s["step_id"] for s in result["standby_steps"]]
+
 print(json.dumps({
-    "workflow_id": workflow["workflow_id"],
-    "name": workflow["name"],
-    "summary": workflow["summary"],
-    "source": workflow["_source_path"],
-    "phase_count": len(plan["phases"]),
+    "workflow_id": result["workflow_id"],
+    "name": result["name"],
+    "summary": result["summary"],
+    "source": result["source_path"],
+    "phases": phases_display,
+    "standby": standby,
+    "optional": result["optional_steps"],
 }, ensure_ascii=False))
 PY
 )"
+
     WORKFLOW_ID="$(printf '%s' "${WORKFLOW_META}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["workflow_id"])')"
     WORKFLOW_NAME="$(printf '%s' "${WORKFLOW_META}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["name"])')"
     WORKFLOW_SUMMARY="$(printf '%s' "${WORKFLOW_META}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["summary"])')"
     WORKFLOW_SOURCE="$(printf '%s' "${WORKFLOW_META}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["source"])')"
-    PHASE_COUNT="$(printf '%s' "${WORKFLOW_META}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["phase_count"])')"
 
     record_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "running" "started"
     bash "${SCRIPT_DIR}/trace-log.sh" append "Workflow" "workflow:${WORKFLOW_ID} 啟動 (${WORKFLOW_NAME})" "成功" >/dev/null 2>&1 || true
 
-    cat <<EOF
-WORKFLOW RUN
-ID:          ${WORKFLOW_ID}
-NAME:        ${WORKFLOW_NAME}
-SOURCE:      ${WORKFLOW_SOURCE}
-SUMMARY:     ${WORKFLOW_SUMMARY}
-PHASE COUNT: ${PHASE_COUNT}
-STATUS:      running
-EOF
+    # Display phase plan
+    echo ""
+    echo "WORKFLOW RUN — ${WORKFLOW_NAME}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
 
-    if [ -n "${USER_PROMPT}" ]; then
-      record_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "invoked" "delegated_to_supervisor"
-      exec bash "${AGENT_HELPER}" supervisor "請依照 ${WORKFLOW_SOURCE} 執行此 workflow。Workflow ID: ${WORKFLOW_ID}。Summary: ${WORKFLOW_SUMMARY}。使用者補充需求：${USER_PROMPT}"
+    "${PYTHON_BIN}" - <<'PY' "${WORKFLOW_META}"
+import json, sys
+meta = json.loads(sys.argv[1])
+for p in meta["phases"]:
+    steps_str = " + ".join(p["steps"])
+    agents_str = ", ".join(p["agents"])
+    suffix = ""
+    if len(p["steps"]) > 1:
+        suffix = "  (parallel)"
+    if p["gate"]:
+        suffix = f"  gate:{p['gate']}"
+    print(f"  Phase {p['phase']:>2}   {steps_str:<40} -> {agents_str}{suffix}")
+if meta["standby"]:
+    print(f"\n  Standby: {', '.join(meta['standby'])}")
+PY
+
+    echo ""
+
+    if [ "${DETACH}" -eq 1 ]; then
+      # Background mode — record and exit
+      record_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "detached" "background_start"
+      echo "  Background mode is not yet implemented."
+      echo "  Use foreground: cap workflow run ${WORKFLOW_ID} \"<prompt>\""
+      echo ""
+      exit 0
     fi
 
-    record_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "planned" "execution_plan_built"
-    cat <<'EOF'
+    if [ -z "${USER_PROMPT}" ]; then
+      echo "  Usage: cap workflow run <workflow> \"<prompt>\""
+      echo ""
+      exit 0
+    fi
 
-目前這是第一版 run：
-- 已建立 execution plan
-- 已寫入 workflow 狀態到 CAP cache
-- 若要真正執行，請在指令後附加需求文字，系統會交給 supervisor
-
-範例：
-  cap workflow run version-control-private "請針對目前變更建立 commit"
-EOF
+    echo "  Attaching to supervisor..."
+    echo ""
+    record_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "invoked" "delegated_to_supervisor"
+    exec bash "${AGENT_HELPER}" supervisor "請依照 ${WORKFLOW_SOURCE} 執行此 workflow。Workflow ID: ${WORKFLOW_ID}。Summary: ${WORKFLOW_SUMMARY}。使用者補充需求：${USER_PROMPT}"
     ;;
   *)
     usage
