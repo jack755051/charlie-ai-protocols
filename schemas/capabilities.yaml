@@ -268,6 +268,21 @@ capabilities:
       - CI/CD 或部署基線已建立
       - 資源配額與健康探針已配置
 
+  version_control_commit:
+    description: 版本控制提交、commit 訊息整理與最小 Git 交付
+    default_agent: devops
+    allowed_agents: [devops]
+    inputs:
+      - repo_changes
+      - commit_scope
+      - project_context
+    outputs:
+      - commit_result
+      - commit_message
+    done_when:
+      - 已整理 commit 範圍與訊息
+      - 已完成最小版本控制提交或明確回報阻塞原因
+
   # ── 紀錄 ──
 
   technical_logging:

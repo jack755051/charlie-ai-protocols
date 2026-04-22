@@ -1,0 +1,31 @@
+workflow_id: version-control-company
+version: 1
+name: Company Project Version Control
+summary: 公司專案直接執行版本控制提交，不額外插入 README 治理步驟。
+owner: supervisor
+triggers:
+  - manual
+  - version-control
+  - company-project
+
+artifacts:
+  commit_message: 版本控制提交訊息
+  commit_result: 版本控制提交結果
+
+steps:
+  - id: commit_changes
+    name: Commit Changes
+    capability: version_control_commit
+    inputs:
+      - repo_changes
+      - commit_scope
+      - project_context
+    outputs:
+      - commit_message
+      - commit_result
+    done_when:
+      - 已完成 commit 或明確回報阻塞原因
+      - commit 訊息符合版本控制規範
+    on_fail: halt
+    notes:
+      - 適用於公司既有 repo 流程，避免在版本控制前額外更動 README 治理

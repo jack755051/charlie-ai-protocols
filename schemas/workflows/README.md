@@ -24,6 +24,8 @@ workflow 的目的，是把固定順序的工作流從 agent prompt 中抽離，
 
 ## 3. 檔案結構
 
+- `README.md`
+  - 給人類閱讀的 workflow 入口、使用方式與清單
 - `workflow-schema.md`
   - 定義 workflow YAML 的最小欄位與語意
 - `*.yaml`
@@ -48,3 +50,52 @@ workflow 不負責決定最終 agent，只負責宣告：
 - 會產出哪些 artifact
 
 實際綁定關係應由 capability registry 或 runtime 設定提供。
+
+## 6. Workflow List
+
+### `readme-to-devops.yaml`
+
+- 用途：先完成 repo intake / README 治理，再交由 DevOps 建立交付基線
+- 適用情境：新 repo onboarding、README 治理、交付前基線整理
+- 主要步驟：
+  - `readme_normalization`
+  - `technical_review`（可選）
+  - `devops_delivery`
+  - `technical_logging`（可選）
+
+### `feature-delivery.yaml`
+
+- 用途：完整功能開發流水線
+- 適用情境：從需求、分析設計、實作、品質門禁到部署歸檔的一般開發流程
+- 主要步驟：
+  - PRD / Tech Plan / BA / DBA-API / UI / Analytics
+  - Frontend / Backend
+  - Watcher + Security gate
+  - QA / Troubleshoot / SRE / DevOps / Logger
+
+### `version-control-private.yaml`
+
+- 用途：私人專案的版本控制流程
+- 適用情境：個人 repo、side project、portfolio repo
+- 主要步驟：
+  - `readme_normalization`
+  - `version_control_commit`
+
+### `version-control-company.yaml`
+
+- 用途：公司專案的最小版本控制流程
+- 適用情境：公司既有 repo、只需整理 commit 的場景
+- 主要步驟：
+  - `version_control_commit`
+
+## 7. 使用建議
+
+- 如果你是逐步手動操作：直接用 `$skill` 呼叫單一 agent
+- 如果你要固定順序、可重複交付：選擇對應 workflow
+- 如果目前 schema 尚未支援條件分支，優先拆成兩條明確 workflow，而不是在單一檔案裡混入情境判斷
+
+## 8. 對應檔案
+
+- workflow schema：`schemas/workflows/workflow-schema.md`
+- capability 契約：`schemas/capabilities.yaml`
+- agent binding：`.cap.agents.json`

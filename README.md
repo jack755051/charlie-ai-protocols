@@ -222,6 +222,23 @@ cap promote reports/audit-log.md docs/reports/audit-log.md
 
 ---
 
+## 🧭 Workflow 模式 — 固定流程的結構化編排
+
+當任務不是單一 skill，而是有固定步驟、依賴與交接產物時，應優先使用 `schemas/workflows/*.yaml`：
+
+- `$skill`：手動模式，適合單點任務、臨時處理、人工主導流程
+- `workflow`：標準化模式，適合可重複的多步驟流程與品質門禁
+
+目前 workflow 不會透過 `.agents/skills/` 或 `.claude/rules/` 產生別名入口；它們是由 repo 內的 `schemas/` 提供給 engine、Supervisor 與 AI CLI 參考的結構化定義。
+
+常用入口：
+
+- workflow 清單：[schemas/workflows/README.md](schemas/workflows/README.md)
+- workflow schema：[schemas/workflows/workflow-schema.md](schemas/workflows/workflow-schema.md)
+- capability 契約：[schemas/capabilities.yaml](schemas/capabilities.yaml)
+
+---
+
 ## 🔧 全域安裝細節
 
 `cap install` 一次部署三個 AI 工具的全域設定：
@@ -319,8 +336,9 @@ charlie-ai-protocols/
 
 ## Notes
 
-- **版本**：目前最新 release 為 `v0.4.1`。使用 `cap version` 查看、`cap update` 更新。
+- **版本**：目前最新 release 為 `v0.5.0`。使用 `cap version` 查看、`cap update` 更新。
 - **三消費者架構**：同一份 `docs/agent-skills/` 是唯一 SSOT，CrewAI 的 `factory.py`、Claude Code 的 `@import`、Codex 的 `$prefix` 三端共用，避免多份口徑。
+- **Workflow 讀取方式**：workflow 定義位於 `schemas/workflows/`，由 engine 與 Supervisor 讀取；它不會像 agent skills 一樣被同步成 `.agents/skills/` alias。
 - **Trace 雙寫**：所有 session 同時寫入 `.log`（人類閱讀）與 `.jsonl`（機器消費），存放於 `~/.cap/projects/<project_id>/traces/`。
 - **Symlink 策略**：`cap sync` / `cap install` 預設建立 symlink；若環境不支援則自動 fallback 為 copy。
 - **歷史遺留命名**：各 Agent 文件中如有 `resquest` 等刻意保留的歷史拼寫，請沿用不得擅自修正。
