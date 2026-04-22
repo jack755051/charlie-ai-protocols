@@ -132,4 +132,4 @@ workflow 只需引用 capability 名稱，避免重複定義。
 
 ## 7. 與 agent registry 的關係
 
-workflow schema 不處理 `capability -> agent` 的最終綁定。該映射保留在 `.cap.agents.json` 的 `capabilities` 欄位中。
+workflow schema 不處理 `capability -> agent` 的最終綁定。`schemas/capabilities.yaml` 定義每個 capability 的 `default_agent`，`.cap.agents.json` 提供 agent binding（alias → prompt_file / provider / cli）。

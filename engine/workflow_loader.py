@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import json
+from collections import defaultdict, deque
 from pathlib import Path
 
 import yaml
@@ -99,6 +102,141 @@ class WorkflowLoader:
             "source_path": workflow["_source_path"],
             "steps": plan,
         }
+
+    # ── Orchestration ──
+
+    def build_execution_phases(self, workflow_ref: str) -> dict:
+        """建構分階段執行計畫，包含並行分���、門禁與失敗路由。"""
+        workflow = self.load_workflow(workflow_ref)
+        capabilities = self.load_capabilities()
+        agents = self.load_agents()
+
+        steps_by_id: dict[str, dict] = {}
+        for step in workflow["steps"]:
+            agent = self.resolve_step_agent(step, capabilities, agents)
+            steps_by_id[step["id"]] = {
+                "step_id": step["id"],
+                "step_name": step["name"],
+                "capability": step["capability"],
+                "agent_alias": agent["alias"],
+                "prompt_file": agent["prompt_file"],
+                "needs": step.get("needs", []),
+                "inputs": step.get("inputs", []),
+                "outputs": step.get("outputs", []),
+                "optional": step.get("optional", False),
+                "on_fail": step.get("on_fail", "halt"),
+                "parallel_with": step.get("parallel_with", []),
+                "gate": step.get("gate"),
+                "on_fail_route": step.get("on_fail_route", []),
+                "record_level": step.get("record_level"),
+            }
+
+        fail_routes = self._collect_fail_routes(steps_by_id)
+
+        # Steps referenced only as on_fail_route targets (and optional)
+        # are standby — exclude from main phase ordering.
+        route_targets: set[str] = set()
+        for routes in fail_routes.values():
+            for r in routes:
+                route_targets.add(r["route_to"])
+
+        standby_ids = {
+            sid for sid in route_targets
+            if sid in steps_by_id
+            and steps_by_id[sid]["optional"]
+            and not steps_by_id[sid]["needs"]
+        }
+
+        main_steps = {
+            sid: s for sid, s in steps_by_id.items() if sid not in standby_ids
+        }
+        standby_steps = [steps_by_id[sid] for sid in sorted(standby_ids)]
+
+        phases = self._compute_phases(main_steps)
+        optional_steps = [
+            sid for sid, s in steps_by_id.items() if s["optional"]
+        ]
+
+        return {
+            "workflow_id": workflow["workflow_id"],
+            "version": workflow["version"],
+            "name": workflow["name"],
+            "summary": workflow["summary"],
+            "source_path": workflow["_source_path"],
+            "phases": phases,
+            "standby_steps": standby_steps,
+            "fail_routes": fail_routes,
+            "optional_steps": optional_steps,
+        }
+
+    def _compute_phases(self, steps_by_id: dict[str, dict]) -> list[dict]:
+        """依 needs 拓撲排序，將可同時執行的 step 歸入同一 phase。"""
+        in_degree: dict[str, int] = {sid: 0 for sid in steps_by_id}
+        dependents: dict[str, list[str]] = defaultdict(list)
+
+        for sid, step in steps_by_id.items():
+            for dep in step["needs"]:
+                if dep in steps_by_id:
+                    in_degree[sid] += 1
+                    dependents[dep].append(sid)
+
+        # Kahn's algorithm — group by depth level
+        queue = deque(sid for sid, deg in in_degree.items() if deg == 0)
+        phases: list[dict] = []
+
+        while queue:
+            batch = sorted(queue)  # deterministic ordering
+            queue.clear()
+
+            phase_steps = [steps_by_id[sid] for sid in batch]
+
+            # Detect gate within this phase
+            gate = None
+            for s in phase_steps:
+                if s.get("gate"):
+                    gate = s["gate"]
+                    break
+
+            phase: dict = {
+                "phase": len(phases) + 1,
+                "steps": phase_steps,
+            }
+            if gate:
+                phase["gate"] = gate
+
+            phases.append(phase)
+
+            for sid in batch:
+                for child in dependents[sid]:
+                    in_degree[child] -= 1
+                    if in_degree[child] == 0:
+                        queue.append(child)
+
+        # Detect cycle
+        resolved = sum(len(p["steps"]) for p in phases)
+        if resolved < len(steps_by_id):
+            unresolved = [sid for sid, deg in in_degree.items() if deg > 0]
+            raise ValueError(f"workflow 存在循環依賴: {unresolved}")
+
+        return phases
+
+    @staticmethod
+    def _collect_fail_routes(steps_by_id: dict[str, dict]) -> dict[str, list[dict]]:
+        """收集所有 step 的條件式失敗路由。"""
+        routes: dict[str, list[dict]] = {}
+        for sid, step in steps_by_id.items():
+            if step["on_fail_route"]:
+                routes[sid] = step["on_fail_route"]
+        return routes
+
+    def get_fail_route(
+        self, fail_routes: dict[str, list[dict]], step_id: str, condition: str
+    ) -> str | None:
+        """查詢��定 step + condition 的失敗路由目標。"""
+        for route in fail_routes.get(step_id, []):
+            if route["condition"] == condition:
+                return route["route_to"]
+        return None
 
     def _validate_workflow(self, workflow, workflow_path):
         required_top_level = ["workflow_id", "version", "name", "summary", "steps"]
