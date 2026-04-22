@@ -22,9 +22,11 @@ help: ## 列出所有可用指令
 	@echo "  cap paths               # 顯示目前專案對應的本機儲存路徑"
 	@echo "  cap registry            # 顯示 agent registry"
 	@echo "  cap workflow list       # 列出所有 workflow"
+	@echo "  cap workflow ps         # 列出已啟動過的 workflow 狀態"
 	@echo "  cap workflow show <id>  # 顯示 workflow 摘要"
 	@echo "  cap workflow plan <id>  # 顯示 workflow phase 與 agent 綁定"
-	@echo "  cap workflow run <id>   # 建立 workflow plan，並可交由 supervisor 執行"
+	@echo "  cap workflow run <id>   # 前景執行；無 prompt 時會先詢問或只顯示 plan"
+	@echo "  cap workflow run --dry-run <id>  # 只顯示執行計畫，不真的執行"
 	@echo "  cap promote list        # 列出本機 drafts / reports"
 	@echo "  cap run                 # 以預設 nextjs 啟動"
 	@echo "  cap run FRAMEWORK=nuxt  # 指定框架啟動"
@@ -34,8 +36,10 @@ help: ## 列出所有可用指令
 	@echo "  cap claude              # 透過 wrapper 啟動 Claude 並自動記錄 session trace"
 	@echo "  cap agent frontend \"幫我檢查 auth module\""
 	@echo "  cap workflow list"
+	@echo "  cap workflow ps"
 	@echo "  cap workflow show version-control-private"
 	@echo "  cap workflow plan version-control-private"
+	@echo "  cap workflow run --dry-run version-control-private"
 	@echo "  cap workflow run version-control-private \"請針對目前變更建立 commit\""
 
 setup: $(VENV)/bin/activate ## 建立 venv 並安裝依賴（首次執行）
@@ -95,6 +99,8 @@ run: setup sync ## 初始化策略並啟動 CrewAI 引擎（FRAMEWORK=nextjs|ang
 workflow: ## 顯示 workflow 子指令用法（請改用 cap workflow <subcommand>）
 	@echo "請使用："
 	@echo "  cap workflow list"
+	@echo "  cap workflow ps"
 	@echo "  cap workflow show <workflow_id>"
 	@echo "  cap workflow plan <workflow_id>"
+	@echo "  cap workflow run --dry-run <workflow_id> [prompt]"
 	@echo "  cap workflow run <workflow_id> [prompt]"

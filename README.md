@@ -56,8 +56,10 @@ cap sync
 cap help
 cap list
 cap workflow list
+cap workflow ps
 cap workflow show version-control-private
 cap workflow plan version-control-private
+cap workflow run --dry-run workflow-smoke-test "test"
 cap workflow run version-control-private "請針對目前變更建立 commit"
 ```
 
@@ -85,17 +87,21 @@ cap agent troubleshoot "根據這段 log 找 root cause"
 
 ```bash
 cap workflow list
+cap workflow ps
 cap workflow wf_a4cfb7ad
 cap workflow plan version-control-private
+cap workflow run --dry-run workflow-smoke-test "test"
 cap workflow run version-control-private "請針對目前變更建立 commit"
 ```
 
 目前 `cap workflow` 支援：
 
 - `list`：表格式列出 workflow、狀態、執行次數與摘要
+- `ps`：列出已啟動過的 workflow 狀態摘要
 - `show`：inspect 風格檢視單一 workflow
 - `plan`：顯示 phase、capability 與 agent 綁定
-- `run`：建立 execution plan；若附加 prompt，會交由 supervisor 啟動流程
+- `run`：有 prompt 時進入前景執行；沒有 prompt 時會先詢問或只顯示 plan
+- `run --dry-run`：只顯示執行計畫，不真的執行 step
 
 Workflow 清單請看 [schemas/workflows/README.md](schemas/workflows/README.md)。
 
@@ -126,6 +132,7 @@ Workflow 與 Agent Skills 是並存的兩種使用方式：
 - `readme-to-devops.yaml`：README 治理到 DevOps 基線
 - `version-control-private.yaml`：私人專案版本控制流程
 - `version-control-company.yaml`：公司專案最小版本控制流程
+- `workflow-smoke-test.yaml`：workflow CLI 與 capability binding 的煙霧測試
 
 相關入口：
 

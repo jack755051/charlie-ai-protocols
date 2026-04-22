@@ -13,6 +13,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CAP_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TRACE_LOG="${SCRIPT_DIR}/trace-log.sh"
+PATH_HELPER="${SCRIPT_DIR}/cap-paths.sh"
 SKILLS_DIR="${CAP_ROOT}/docs/agent-skills"
 PROTOCOL_FILE="${SKILLS_DIR}/00-core-protocol.md"
 
@@ -44,6 +45,64 @@ done
 [ -n "${PLAN_JSON}" ] || {
   echo "Usage: bash cap-workflow-exec.sh <plan_json> <user_prompt> [--cli codex|claude]" >&2
   exit 1
+}
+
+get_status_store() {
+  local cache_dir
+  local preferred
+  local fallback
+  cache_dir="$(bash "${PATH_HELPER}" get cache_dir)"
+  preferred="${cache_dir}/workflow-runs.json"
+  fallback="${CAP_ROOT}/workspace/history/workflow-runs.json"
+
+  mkdir -p "$(dirname "${fallback}")" >/dev/null 2>&1 || true
+
+  if [ -f "${fallback}" ]; then
+    printf '%s\n' "${fallback}"
+    return
+  fi
+
+  if { [ -f "${preferred}" ] && [ -w "${preferred}" ]; } || { [ ! -f "${preferred}" ] && [ -d "${cache_dir}" ] && [ -w "${cache_dir}" ]; }; then
+    printf '%s\n' "${preferred}"
+    return
+  fi
+
+  printf '%s\n' "${fallback}"
+}
+
+update_workflow_status() {
+  local workflow_id="$1"
+  local workflow_name="$2"
+  local state="$3"
+  local result="$4"
+  local status_file
+  status_file="$(get_status_store)"
+  python3 - <<'PY' "${status_file}" "${workflow_id}" "${workflow_name}" "${state}" "${result}"
+from pathlib import Path
+import json
+import sys
+from datetime import datetime
+
+status_file = Path(sys.argv[1])
+workflow_id = sys.argv[2]
+workflow_name = sys.argv[3]
+state = sys.argv[4]
+result = sys.argv[5]
+
+data = {}
+if status_file.exists():
+    data = json.loads(status_file.read_text(encoding="utf-8"))
+
+entry = data.get(workflow_id, {})
+entry["workflow_name"] = workflow_name
+entry["state"] = state
+entry["last_result"] = result
+entry["last_run_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+entry["run_count"] = int(entry.get("run_count", 0))
+data[workflow_id] = entry
+
+status_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+PY
 }
 
 # ── CLI availability check ──
@@ -161,6 +220,16 @@ EOF
 WORKFLOW_NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["name"])' "${PLAN_JSON}")"
 WORKFLOW_ID="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["workflow_id"])' "${PLAN_JSON}")"
 TOTAL_PHASES="$(python3 -c 'import json,sys; print(len(json.loads(sys.argv[1])["phases"]))' "${PLAN_JSON}")"
+
+on_exit() {
+  if [ "${FAILED}" -gt 0 ]; then
+    update_workflow_status "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "failed" "foreground_failed"
+  else
+    update_workflow_status "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "completed" "foreground_completed"
+  fi
+}
+
+trap on_exit EXIT
 
 echo ""
 printf "${BOLD}WORKFLOW RUN — ${WORKFLOW_NAME}${RESET}\n"

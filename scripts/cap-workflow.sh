@@ -13,10 +13,11 @@ usage() {
   cat <<'EOF' >&2
 Usage:
   bash scripts/cap-workflow.sh list
+  bash scripts/cap-workflow.sh ps
   bash scripts/cap-workflow.sh <workflow_id|short_id|file>
   bash scripts/cap-workflow.sh show <workflow_id|file>
   bash scripts/cap-workflow.sh plan <workflow_id|file>
-  bash scripts/cap-workflow.sh run <workflow_id|file> [prompt...]
+  bash scripts/cap-workflow.sh run [--dry-run] [-d] [--cli codex|claude] <workflow_id|file> [prompt...]
 EOF
   exit 1
 }
@@ -116,9 +117,10 @@ record_workflow_run() {
   local workflow_name="$2"
   local state="$3"
   local result="$4"
+  local increment="${5:-0}"
   local status_file
   status_file="$(get_status_store)"
-  "${PYTHON_BIN}" - <<'PY' "${status_file}" "${workflow_id}" "${workflow_name}" "${state}" "${result}"
+  "${PYTHON_BIN}" - <<'PY' "${status_file}" "${workflow_id}" "${workflow_name}" "${state}" "${result}" "${increment}"
 from pathlib import Path
 import json
 import sys
@@ -129,6 +131,7 @@ workflow_id = sys.argv[2]
 workflow_name = sys.argv[3]
 state = sys.argv[4]
 result = sys.argv[5]
+increment = sys.argv[6] == "1"
 
 data = {}
 if status_file.exists():
@@ -139,7 +142,7 @@ entry["workflow_name"] = workflow_name
 entry["state"] = state
 entry["last_result"] = result
 entry["last_run_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-entry["run_count"] = int(entry.get("run_count", 0)) + 1
+entry["run_count"] = int(entry.get("run_count", 0)) + (1 if increment else 0)
 data[workflow_id] = entry
 
 status_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -176,7 +179,7 @@ PYTHON_BIN="$(resolve_python)"
 ensure_status_store
 
 COMMAND="${1:-}"
-if [ -n "${COMMAND}" ] && [[ "${COMMAND}" != "list" && "${COMMAND}" != "show" && "${COMMAND}" != "plan" && "${COMMAND}" != "run" ]]; then
+if [ -n "${COMMAND}" ] && [[ "${COMMAND}" != "list" && "${COMMAND}" != "ps" && "${COMMAND}" != "show" && "${COMMAND}" != "plan" && "${COMMAND}" != "run" ]]; then
   set -- show "$@"
 fi
 
@@ -221,6 +224,87 @@ def clip(value, width):
     return value if len(value) <= width else value[: width - 3] + "..."
 
 print("WORKFLOW LIST")
+print(
+    f"{headers[0]:<{widths[0]}}  "
+    f"{headers[1]:<{widths[1]}}  "
+    f"{headers[2]:<{widths[2]}}  "
+    f"{headers[3]:<{widths[3]}}  "
+    f"{headers[4]:>{widths[4]}}  "
+    f"{headers[5]:<{widths[5]}}  "
+    f"{headers[6]:<{widths[6]}}"
+)
+print(
+    f"{'-' * widths[0]}  "
+    f"{'-' * widths[1]}  "
+    f"{'-' * widths[2]}  "
+    f"{'-' * widths[3]}  "
+    f"{'-' * widths[4]}  "
+    f"{'-' * widths[5]}  "
+    f"{'-' * widths[6]}"
+)
+for row in rows:
+    print(
+        f"{clip(row[0], widths[0]):<{widths[0]}}  "
+        f"{clip(row[1], widths[1]):<{widths[1]}}  "
+        f"{clip(row[2], widths[2]):<{widths[2]}}  "
+        f"{clip(row[3], widths[3]):<{widths[3]}}  "
+        f"{clip(row[4], widths[4]):>{widths[4]}}  "
+        f"{clip(row[5], widths[5]):<{widths[5]}}  "
+        f"{clip(row[6], widths[6]):<{widths[6]}}"
+    )
+PY
+    ;;
+  ps)
+    [ "$#" -eq 1 ] || usage
+    "${PYTHON_BIN}" - <<'PY' "${WORKFLOWS_DIR}" "$(get_status_store)"
+from pathlib import Path
+import hashlib
+import json
+import sys
+import yaml
+
+workflows_dir = Path(sys.argv[1])
+status_file = Path(sys.argv[2])
+files = sorted(p for p in workflows_dir.iterdir() if p.is_file() and p.suffix in {".yaml", ".yml", ".json"})
+status_data = {}
+if status_file.exists():
+    status_data = json.loads(status_file.read_text(encoding="utf-8"))
+
+rows = []
+for path in files:
+    raw = path.read_text(encoding="utf-8")
+    data = yaml.safe_load(raw) if path.suffix in {".yaml", ".yml"} else {}
+    workflow_id = data.get("workflow_id", path.stem)
+    state = status_data.get(workflow_id, {}).get("state")
+    run_count = status_data.get(workflow_id, {}).get("run_count", 0)
+    if not state and run_count == 0:
+        continue
+    short_id = "wf_" + hashlib.sha1(workflow_id.encode("utf-8")).hexdigest()[:8]
+    rows.append((
+        short_id,
+        workflow_id,
+        data.get("name", path.stem),
+        state or "ready",
+        run_count,
+        status_data.get(workflow_id, {}).get("last_run_at", "-"),
+        status_data.get(workflow_id, {}).get("last_result", "-"),
+    ))
+
+headers = ("ID", "WORKFLOW", "NAME", "STATUS", "RUNS", "LAST RUN", "RESULT")
+widths = [len(h) for h in headers]
+for row in rows:
+    for i, value in enumerate(row):
+        widths[i] = min(max(widths[i], len(str(value))), 60)
+
+def clip(value, width):
+    value = str(value)
+    return value if len(value) <= width else value[: width - 3] + "..."
+
+print("WORKFLOW PS")
+if not rows:
+    print("No workflow runs found.")
+    sys.exit(0)
+
 print(
     f"{headers[0]:<{widths[0]}}  "
     f"{headers[1]:<{widths[1]}}  "
@@ -344,17 +428,19 @@ PY
 
     # Parse flags
     DETACH=0
+    DRY_RUN=0
     RUN_CLI="${CAP_DEFAULT_AGENT_CLI:-claude}"
     while [ "$#" -gt 0 ]; do
       case "$1" in
         -d)       DETACH=1; shift ;;
+        --dry-run) DRY_RUN=1; shift ;;
         --cli)    RUN_CLI="$2"; shift 2 ;;
         *)        break ;;
       esac
     done
 
     [ "$#" -ge 1 ] || {
-      echo "Usage: cap workflow run [-d] [--cli codex|claude] <workflow> [prompt...]" >&2
+      echo "Usage: cap workflow run [--dry-run] [-d] [--cli codex|claude] <workflow> [prompt...]" >&2
       exit 1
     }
 
@@ -385,20 +471,26 @@ PY
     WORKFLOW_ID="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["workflow_id"])')"
     WORKFLOW_NAME="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["name"])')"
 
-    record_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "running" "started"
-    bash "${SCRIPT_DIR}/trace-log.sh" append "Workflow" "workflow:${WORKFLOW_ID} 啟動 (${WORKFLOW_NAME})" "成功" >/dev/null 2>&1 || true
-
-    if [ "${DETACH}" -eq 1 ]; then
-      record_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "detached" "background_start"
-      echo "Background mode is not yet implemented."
-      echo "Use foreground: cap workflow run ${WORKFLOW_ID} \"<prompt>\""
-      exit 0
+    if [ -z "${USER_PROMPT}" ]; then
+      if [ -t 0 ]; then
+        printf '請輸入 workflow 任務說明（直接 Enter 僅顯示 plan）: ' >&2
+        read -r USER_PROMPT || true
+      fi
     fi
 
-    if [ -z "${USER_PROMPT}" ]; then
-      # No prompt — just show plan (like docker compose config)
+    if [ -z "${USER_PROMPT}" ] || [ "${DRY_RUN}" -eq 1 ]; then
+      if [ "${DRY_RUN}" -eq 1 ]; then
+        record_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "dry-run" "execution_plan_preview" 1
+      else
+        record_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "planned" "execution_plan_built" 1
+      fi
+
       echo ""
-      echo "WORKFLOW PLAN — ${WORKFLOW_NAME}"
+      if [ "${DRY_RUN}" -eq 1 ]; then
+        echo "WORKFLOW DRY RUN — ${WORKFLOW_NAME}"
+      else
+        echo "WORKFLOW PLAN — ${WORKFLOW_NAME}"
+      fi
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       echo ""
       "${PYTHON_BIN}" - <<'PY' "${PLAN_JSON}"
@@ -420,8 +512,22 @@ if plan["standby_steps"]:
     print(f"\n  Standby: {', '.join(s['step_id'] for s in plan['standby_steps'])}")
 PY
       echo ""
-      echo "  To execute: cap workflow run ${WORKFLOW_ID} \"<prompt>\""
+      if [ "${DRY_RUN}" -eq 1 ]; then
+        echo "  Dry run only — no step was executed."
+      else
+        echo "  To execute: cap workflow run ${WORKFLOW_ID} \"<prompt>\""
+      fi
       echo ""
+      exit 0
+    fi
+
+    record_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "running" "started" 1
+    bash "${SCRIPT_DIR}/trace-log.sh" append "Workflow" "workflow:${WORKFLOW_ID} 啟動 (${WORKFLOW_NAME})" "成功" >/dev/null 2>&1 || true
+
+    if [ "${DETACH}" -eq 1 ]; then
+      record_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "detached" "background_start"
+      echo "Background mode is not yet implemented."
+      echo "Use foreground: cap workflow run ${WORKFLOW_ID} \"<prompt>\""
       exit 0
     fi
 
