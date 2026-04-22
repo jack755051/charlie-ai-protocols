@@ -121,13 +121,14 @@ prepare_target() {
 
 show_version() {
   ensure_git_repo
+  fetch_remote 2>/dev/null
 
   local commit latest_tag current
-
   commit="$(run_git rev-parse --short HEAD)"
   latest_tag="$(latest_release_tag)"
   current="$(run_git describe --tags --exact-match 2>/dev/null || true)"
 
+  # Current version
   if [ -n "${current}" ]; then
     if [ "${current}" = "${latest_tag}" ]; then
       echo "CAP ${current} (${commit}) — up to date"
@@ -137,6 +138,36 @@ show_version() {
   else
     echo "CAP ${latest_tag}+dev (${commit}) — on $(run_git branch --show-current || echo 'detached')"
   fi
+
+  # Recent releases
+  local tags
+  tags="$(run_git tag --list 'v*' --sort=-version:refname | head -n 5)"
+  if [ -z "${tags}" ]; then
+    return
+  fi
+
+  echo ""
+  printf "  %-12s %-12s %s\n" "VERSION" "DATE" "CHANGES"
+  printf "  %-12s %-12s %s\n" "───────────" "──────────" "──────────────────────────────────────────"
+
+  echo "${tags}" | while IFS= read -r tag; do
+    local date summary marker
+    date="$(run_git log -1 --format='%cs' "${tag}" 2>/dev/null)"
+    summary="$(run_git tag -l --format='%(contents:subject)' "${tag}" 2>/dev/null)"
+    # If no annotated tag message, use the commit message
+    if [ -z "${summary}" ]; then
+      summary="$(run_git log -1 --format='%s' "${tag}" 2>/dev/null)"
+    fi
+    # Mark current version
+    marker=""
+    if [ "${tag}" = "${current}" ]; then
+      marker=" ←"
+    fi
+    printf "  %-12s %-12s %s%s\n" "${tag}" "${date}" "${summary}" "${marker}"
+  done
+
+  echo ""
+  echo "  Usage: cap update <version>"
 }
 
 perform_install() {
