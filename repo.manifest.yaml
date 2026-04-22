@@ -1,0 +1,203 @@
+schema_version: 1
+repo_id: charlie-ai-protocols
+name: "Charlie's AI Protocols (CAP)"
+display_name: AI 多代理協作系統
+summary: >
+  工業級 AI 多代理協作框架與 CLI 工具。定義 17 位專職 AI Agent 的角色邊界、交接協議與品質門禁，
+  搭配 CrewAI 執行引擎、Shell CLI（cap）與雙寫 Trace 機制，讓 AI 與工程團隊在同一套契約下穩定協作。
+owner: jack755051
+maintainers:
+  - jack755051
+status: active
+visibility: public
+repository_url: https://github.com/jack755051/charlie-ai-protocols
+default_branch: main
+
+category: ai-tooling
+project_type: framework
+role: Author & Maintainer
+period:
+  start: 2026-04
+  end: ongoing
+
+stack:
+  - python
+  - crewai
+  - shell
+  - makefile
+  - markdown
+
+languages:
+  - python
+  - shell
+  - markdown
+  - yaml
+
+frameworks:
+  engine: crewai>=1.14
+  cli: shell (cap)
+  consumers:
+    - claude-code
+    - openai-codex
+    - crewai
+
+entrypoints:
+  cli: Makefile
+  engine: engine/main.py
+  factory: engine/factory.py
+  installer: install.sh
+  constitution: docs/agent-skills/00-core-protocol.md
+  agent_registry: .cap.agents.json
+  project_config: .cap.project.yaml
+
+commands:
+  install: curl -fsSL https://raw.githubusercontent.com/jack755051/charlie-ai-protocols/main/install.sh | bash
+  setup: cap setup
+  sync: cap sync
+  run: cap run
+  list: cap list
+  version: cap version
+  update: cap update
+  uninstall: cap uninstall
+  help: cap help
+
+interfaces:
+  cli: true
+  api: false
+  web_ui: false
+  worker: false
+
+runtime:
+  python: ">=3.10"
+  shell: bash / zsh
+
+agents:
+  count: 17
+  governance:
+    - id: "01"
+      name: Supervisor
+      prefix: $supervisor
+  delivery:
+    - id: "02"
+      name: Tech Lead
+      prefix: $techlead
+    - id: 02a
+      name: BA
+      prefix: $ba
+    - id: 02b
+      name: DBA/API
+      prefix: $dba
+    - id: "03"
+      name: UI
+      prefix: $ui
+    - id: "12"
+      name: Figma Sync
+      prefix: $figma
+    - id: "09"
+      name: Analytics
+      prefix: $analytics
+    - id: "04"
+      name: Frontend
+      prefix: $frontend
+    - id: "05"
+      name: Backend
+      prefix: $backend
+  gates:
+    - id: "90"
+      name: Watcher
+      prefix: $watcher
+    - id: "08"
+      name: Security
+      prefix: $security
+    - id: "07"
+      name: QA
+      prefix: $qa
+    - id: "10"
+      name: Troubleshoot
+      prefix: $troubleshoot
+    - id: "11"
+      name: SRE
+      prefix: $sre
+    - id: "06"
+      name: DevOps
+      prefix: $devops
+  closing:
+    - id: "99"
+      name: Logger
+      prefix: $logger
+  optional:
+    - id: "101"
+      name: README
+      prefix: $readme
+
+strategies:
+  frontend:
+    - angular
+    - nextjs
+    - nuxtjs
+  backend:
+    - dotnet
+    - nestjs
+  testing:
+    - playwright
+    - k6
+    - unit-test-frontend
+    - unit-test-backend
+  audit:
+    - lighthouse
+
+features:
+  - 17 位專職 AI Agent，涵蓋 PM / Tech Lead / BA / DBA / UI / Frontend / Backend / DevOps / QA / Security / SRE / Analytics / Troubleshoot / Figma Sync / Logger / Watcher / README
+  - 全域憲法 (00-core-protocol.md) 統一所有 Agent 的行為準則與溝通語言
+  - 三消費者架構：同一份 SSOT 同時供 CrewAI、Claude Code (@import)、Codex ($prefix) 使用
+  - CLI 工具 (cap)：一鍵安裝、版本管理、Agent 調用、session tracing
+  - BYOCLI 模式：在任何 AI CLI 中以 $prefix 臨時調用單一 Agent
+  - 雙寫 Trace 機制：純文字 (.log) + 結構化 (.jsonl) 同步寫入
+  - Release 管理：cap update / rollback 支援 tag 與 branch 切換
+  - 10 套框架與工具策略 (Angular / Next.js / Nuxt.js / .NET / NestJS / Playwright / k6 / Lighthouse / Unit Test)
+  - README 治理系統：情境式路由自動判定 rewrite / normalize / manifest_plus_readme
+  - Promote 工作流：本機產物升級至 repo 正式路徑
+
+architecture:
+  pattern: Multi-agent orchestration with shared constitution
+  consumers:
+    - name: CrewAI
+      entry: engine/factory.py
+      method: Glob *-agent.md, prepend 00-core-protocol.md as backstory
+    - name: Claude Code
+      entry: CLAUDE.md
+      method: "@import agent-skills via ~/.claude/rules/"
+    - name: OpenAI Codex
+      entry: AGENTS.md
+      method: "$prefix invocation via ~/.agents/skills/"
+  storage:
+    global: "~/.cap/"
+    project: "~/.cap/projects/<project_id>/"
+    layers:
+      - traces (session logs)
+      - drafts (work in progress)
+      - reports (finalized output)
+
+tags:
+  - ai-agents
+  - multi-agent
+  - crewai
+  - cli-tool
+  - developer-tools
+  - software-engineering
+  - quality-gates
+  - portfolio
+  - python
+  - shell
+
+portfolio:
+  featured: true
+  priority: 2
+  card_title: "Charlie's AI Protocols"
+  card_subtitle: 工業級 AI 多代理協作框架
+  highlights:
+    - 17 位專職 AI Agent 涵蓋完整軟體開發流水線
+    - CLI 工具 (cap) 一鍵安裝、版本管理與 session tracing
+    - 三消費者架構：CrewAI / Claude Code / Codex 共用同一份 SSOT
+    - BYOCLI 模式：$prefix 臨時調用任意 Agent
+    - 10 套框架策略 + README 治理系統

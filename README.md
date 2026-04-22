@@ -1,11 +1,67 @@
 # Charlie's AI Protocols (CAP)
 
-> AI 多代理協作系統與開發規則中控台。
-> 透過標準化多位 AI Agent 的職能人設，結合 CrewAI 執行引擎，實現工業級的軟體開發流水線。
+> 工業級 AI 多代理協作框架與 CLI 工具。
+> 定義 17 位專職 AI Agent 的角色邊界、交接協議與品質門禁，搭配 CrewAI 執行引擎、Shell CLI（`cap`）與雙寫 Trace 機制，讓 AI 與工程團隊在同一套契約下穩定協作。
+
+![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)
+![CrewAI](https://img.shields.io/badge/CrewAI-1.14+-000000)
+![Shell](https://img.shields.io/badge/Shell-Bash%2FZsh-4EAA25?logo=gnubash&logoColor=white)
+![Agents](https://img.shields.io/badge/Agents-17-blueviolet)
+![Status](https://img.shields.io/badge/status-active-22c55e)
+
+---
+
+## Purpose
+
+CAP 解決的核心問題：**當多位 AI Agent 同時參與軟體開發流水線時，如何確保角色分工清晰、交接不掉鏈、品質門禁不被繞過。**
+
+- 為 PM / Tech Lead / BA / DBA / UI / Frontend / Backend / DevOps / QA / Security / SRE / Analytics 等角色定義標準化系統提示與交付格式。
+- 提供 CLI 工具（`cap`）實現一鍵安裝、Agent 調用、session tracing 與版本管理。
+- 作為個人作品集的代表作之一，展示 AI 協作工程化的整體設計能力。
+
+## Scope
+
+涵蓋：
+
+- 17 位 Agent 的 System Prompt（`docs/agent-skills/*-agent.md`）。
+- 全域憲法與跨工具策略（`docs/agent-skills/00-core-protocol.md`、`docs/policies/`）。
+- 10 套框架與工具策略（Angular / Next.js / Nuxt.js / .NET / NestJS / Playwright / k6 / Lighthouse / Unit Test）。
+- CrewAI 執行引擎（`engine/`）。
+- Shell CLI 工具鏈（`scripts/`、`Makefile`、`install.sh`）。
+- 三消費者架構：同一份 SSOT 同時供 CrewAI、Claude Code（`@import`）、OpenAI Codex（`$prefix`）使用。
+
+不涵蓋：
+
+- 具體業務專案的原始碼（由各專案 repo 承載）。
+- Agent 執行期間的本機 runtime storage（`~/.cap/`，不納入版控）。
+
+## Architecture
 
 架構設計與設計理念詳見 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
----
+```
+┌──────────────────────────────────────────────┐
+│  SSOT: docs/agent-skills/*-agent.md          │
+│         + 00-core-protocol.md (constitution) │
+│         + strategies/ (framework tactics)     │
+└───────┬──────────┬──────────┬────────────────┘
+        │          │          │
+        ▼          ▼          ▼
+   ┌─────────┐ ┌────────┐ ┌────────┐
+   │ CrewAI  │ │ Claude │ │ Codex  │
+   │ factory │ │  Code  │ │ $prefix│
+   │  .py    │ │ @import│ │ invoke │
+   └─────────┘ └────────┘ └────────┘
+        │          │          │
+        └──────────┴──────────┘
+                   │
+                   ▼
+        ┌─────────────────┐
+        │  ~/.cap/         │
+        │  traces / drafts │
+        │  / reports       │
+        └─────────────────┘
+```
 
 ## 🤖 Agent 一覽
 
@@ -231,5 +287,44 @@ charlie-ai-protocols/
 ├── .cap.agents.json               # Agent registry（alias -> provider / prompt / cli）
 ├── Makefile                       # 操作入口（cap help）
 ├── .env.example                   # 環境變數範本
+├── repo.manifest.yaml             # 機器可解析的專案 metadata
 └── .gitignore
 ```
+
+## Dependencies
+
+**Runtime**
+
+- Python `>= 3.10`
+- CrewAI `>= 1.14`（無 LangChain 依賴）
+- `python-dotenv`
+- Bash / Zsh（CLI 工具鏈）
+- GNU Make（`cap` 指令入口）
+
+**消費端（選用）**
+
+- [Claude Code](https://claude.com/claude-code)：透過 `@import` 掛載 Agent Skills
+- [OpenAI Codex](https://openai.com/codex)：透過 `$prefix` 調用 Agent Skills
+
+**支援的目標框架（由 `strategies/` 定義）**
+
+- Frontend：Angular / Next.js / Nuxt.js
+- Backend：C# .NET / NestJS
+- Testing：Playwright / k6 / Lighthouse
+- Unit Test：Frontend / Backend 各一套策略
+
+## Notes
+
+- **版本**：目前最新 release 為 `v0.4.1`。使用 `cap version` 查看、`cap update` 更新。
+- **三消費者架構**：同一份 `docs/agent-skills/` 是唯一 SSOT，CrewAI 的 `factory.py`、Claude Code 的 `@import`、Codex 的 `$prefix` 三端共用，避免多份口徑。
+- **Trace 雙寫**：所有 session 同時寫入 `.log`（人類閱讀）與 `.jsonl`（機器消費），存放於 `~/.cap/projects/<project_id>/traces/`。
+- **Symlink 策略**：`cap sync` / `cap install` 預設建立 symlink；若環境不支援則自動 fallback 為 copy。
+- **歷史遺留命名**：各 Agent 文件中如有 `resquest` 等刻意保留的歷史拼寫，請沿用不得擅自修正。
+
+## License
+
+UNLICENSED — Portfolio 專用，保留一切權利。
+
+## Links
+
+- Portfolio: <https://jack755051.github.io/charlie_portfolio_frontend/portfolio>
