@@ -147,6 +147,7 @@ skills:
     compatible_workflow_versions: [1, 2]
     provided_capabilities:
       - code_structure_audit
+      - tool_spec_audit
     fallback_roles:
       - reviewer
 

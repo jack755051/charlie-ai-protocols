@@ -5,12 +5,13 @@
 #   - 輸入/輸出契約、完成條件
 #
 # capability 是流程語意，不是 agent 檔名。
-# workflow 只引用 capability name；engine 在 runtime 從本檔案解析 capability → agent alias，
-# 再從 .cap.agents.json 查找 agent binding（prompt_file / provider / cli）。
+# workflow 只引用 capability name；RuntimeBinder 在執行前從 skill registry 或 legacy adapter
+# 解析 capability → skill / agent_alias / prompt_file / cli。
 #
 # 職責分工：
 #   schemas/capabilities.yaml   — capability 契約（做什麼、誰來做、需要什麼、怎樣算完）
-#   .cap.agents.json            — agent binding（alias → prompt_file / provider / cli）
+#   .cap.skills.yaml            — workflow binding 優先輸入（capability → skill / cli / fallback）
+#   .cap.agents.json            — agent binding 相容層（alias → prompt_file / provider / cli）
 #   schemas/workflows/*.yaml    — 流程編排（step 順序、依賴、失敗路由）
 #   docs/agent-skills/          — agent 定義 SSOT（完整 system prompt）
 
@@ -194,6 +195,24 @@ capabilities:
       - audit_report
     done_when:
       - 稽核清單全數通過，或異常報告已產出
+
+  tool_spec_audit:
+    description: 小工具規劃交付前的一致性稽核：PRD、TechPlan、BA、API/資料契約與 UI 規格是否互相對齊
+    default_agent: watcher
+    allowed_agents: [watcher, techlead]
+    inputs:
+      - prd_document
+      - tech_plan
+      - ba_spec
+      - schema_ssot
+      - api_spec
+      - ui_spec
+    outputs:
+      - spec_audit_report
+    done_when:
+      - 已確認規格間沒有明顯互相矛盾
+      - 已列出進入實作前必須補齊的缺口
+      - 已標示是否可進入 frontend/backend/devops/qa 後續流程
 
   security_audit:
     description: 左移安全掃描：SQL 注入、IDOR、機敏洩漏、Auth 漏洞

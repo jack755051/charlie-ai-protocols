@@ -77,6 +77,19 @@ workflow 不負責決定最終 agent，只負責宣告：
   - Watcher + Security gate
   - QA / Troubleshoot / SRE / DevOps / Logger
 
+### `small-tool-planning.yaml`
+
+- 用途：非正式小工具開發前置流程，先產出可交接規格，不直接進入實作
+- 適用情境：side project、小工具、技術方向未定、想先整理需求與規格再決定是否開發
+- 主要步驟：
+  - PRD / Tech Plan / BA / DBA-API / UI
+  - Watcher 規格一致性 gate
+  - Logger 歸檔
+- 刻意不包含：
+  - Frontend implementation (`04`)
+  - DevOps delivery (`06`)
+  - QA execution (`07`)
+
 ### `version-control-private.yaml`
 
 - 用途：私人專案的版本控制流程

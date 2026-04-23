@@ -150,4 +150,10 @@ workflow 只需引用 capability 名稱，避免重複定義。
 
 ## 7. 與 agent registry 的關係
 
-workflow schema 不處理 `capability -> agent` 的最終綁定。`schemas/capabilities.yaml` 定義每個 capability 的 `default_agent`，`.cap.agents.json` 提供 agent binding（alias → prompt_file / provider / cli）。
+workflow schema 不處理 `capability -> agent` 的最終綁定。
+
+目前正式 runtime 由 `RuntimeBinder` 負責：
+
+- 優先讀取 `.cap.skills.yaml`，解析 `capability -> skill / agent_alias / prompt_file / cli`
+- 若 `.cap.skills.yaml` 缺席，透過 `.cap.agents.json` legacy adapter 維持相容
+- `schemas/capabilities.yaml` 的 `default_agent` 是預設偏好，不是 workflow 對 agent 檔案的直接依賴

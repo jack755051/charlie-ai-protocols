@@ -65,9 +65,16 @@ class RuntimeBinder:
         for step in semantic_plan["steps"]:
             capability = step["capability"]
             optional = step["optional"]
+            capability_contract = step.get("capability_contract") or {}
+            preferred_agent_alias = capability_contract.get("default_agent")
             binding_mode = self._get_binding_mode(step, defaults)
             missing_policy = self._get_missing_policy(step, defaults)
-            candidates = self._find_candidates(registry, capability, semantic_plan["version"])
+            candidates = self._find_candidates(
+                registry,
+                capability,
+                semantic_plan["version"],
+                preferred_agent_alias=preferred_agent_alias,
+            )
 
             selected = candidates[0] if candidates else None
             fallback = self._find_fallback(registry, capability) if binding_mode == "fallback_allowed" else None
@@ -367,7 +374,12 @@ class RuntimeBinder:
         )
 
     @staticmethod
-    def _find_candidates(registry: dict, capability: str, workflow_version: int) -> list[dict]:
+    def _find_candidates(
+        registry: dict,
+        capability: str,
+        workflow_version: int,
+        preferred_agent_alias: str | None = None,
+    ) -> list[dict]:
         candidates = []
         for skill in registry.get("skills", []):
             if not skill.get("enabled", True):
@@ -381,7 +393,14 @@ class RuntimeBinder:
 
             candidates.append(skill)
 
-        return sorted(candidates, key=lambda item: item.get("priority", 100), reverse=True)
+        return sorted(
+            candidates,
+            key=lambda item: (
+                item.get("agent_alias") == preferred_agent_alias,
+                item.get("priority", 100),
+            ),
+            reverse=True,
+        )
 
     def _find_fallback(self, registry: dict, capability: str) -> dict | None:
         capability_family = self._infer_fallback_role(capability)

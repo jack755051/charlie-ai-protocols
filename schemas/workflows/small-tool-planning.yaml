@@ -1,0 +1,164 @@
+workflow_id: small-tool-planning
+version: 2
+name: Small Tool Planning Workflow
+summary: 非正式小工具開發前置流程：先完成需求、技術、業務/API/UI 規劃，再由 Watcher 稽核、Logger 歸檔。
+owner: supervisor
+triggers:
+  - manual
+  - small-tool
+  - lightweight-planning
+
+artifacts:
+  prd_document: 小工具需求摘要與目標邊界
+  tech_plan: 技術執行計畫與風險清單
+  ba_spec: 使用流程、狀態與邊界條件
+  schema_ssot: 最小資料模型或狀態資料定義
+  api_spec: API、CLI、檔案介面或事件契約
+  ui_spec: UI/UX 規格或操作介面規劃
+  tokens_json: Design Tokens JSON（若有 UI）
+  screens_json: 畫面 Schema JSON（若有 UI）
+  prototype_html: 靜態 Prototype（若有 UI）
+  spec_audit_report: 規格一致性稽核報告
+  devlog: 小工具規劃歸檔紀錄
+
+governance:
+  watcher_mode: milestone_gate
+  logger_mode: milestone_log
+  watcher_checkpoints:
+    - spec_audit
+  logger_checkpoints:
+    - prd
+    - tech_plan
+    - spec_audit
+    - archive
+  halt_on_missing_handoff: false
+
+steps:
+  - id: prd
+    name: Lightweight PRD
+    capability: prd_generation
+    outputs:
+      - prd_document
+    done_when:
+      - 小工具用途、使用者、成功條件與非目標已明確
+      - 已標示本次是否只是規劃，或準備進入實作
+    on_fail: halt
+    record_level: trace_only
+    notes:
+      - 此流程刻意保持輕量，不要求正式產品級 PRD。
+
+  - id: tech_plan
+    name: Lightweight Technical Plan
+    capability: technical_planning
+    needs:
+      - prd
+    inputs:
+      - prd_document
+    outputs:
+      - tech_plan
+    done_when:
+      - 已提出最小可行技術方案
+      - 已標示未知技術領域、風險與是否需要 discovery/spike
+      - 已判斷是否需要後續 frontend/backend/devops/qa workflow
+    on_fail: halt
+    record_level: full_log
+
+  - id: ba
+    name: Lightweight Business Flow
+    capability: business_analysis
+    needs:
+      - tech_plan
+    inputs:
+      - prd_document
+      - tech_plan
+    outputs:
+      - ba_spec
+    done_when:
+      - 已描述主要使用流程、例外流程與狀態變化
+      - 已列出必要欄位、角色或外部系統互動
+    on_fail: halt
+    record_level: trace_only
+
+  - id: dba_api
+    name: Minimal Data And Interface Contract
+    capability: database_api_design
+    needs:
+      - ba
+    inputs:
+      - ba_spec
+      - tech_plan
+    outputs:
+      - schema_ssot
+      - api_spec
+    done_when:
+      - 已定義最小資料模型、API/CLI/檔案介面或事件契約
+      - 若小工具不需要資料庫，已明確標示 no-db 並說明狀態儲存方式
+    on_fail: halt
+    record_level: full_log
+
+  - id: ui
+    name: Lightweight UI Or Interaction Spec
+    capability: ui_design
+    needs:
+      - ba
+      - dba_api
+    inputs:
+      - ba_spec
+      - api_spec
+    outputs:
+      - ui_spec
+      - tokens_json
+      - screens_json
+      - prototype_html
+    done_when:
+      - 已定義小工具操作介面、主要狀態與錯誤呈現
+      - 若小工具沒有 UI，已明確標示 no-ui 並改以 CLI/API 互動規格交付
+    on_fail: halt
+    record_level: trace_only
+
+  - id: spec_audit
+    name: Planning Consistency Audit
+    capability: tool_spec_audit
+    needs:
+      - tech_plan
+      - ba
+      - dba_api
+      - ui
+    inputs:
+      - prd_document
+      - tech_plan
+      - ba_spec
+      - schema_ssot
+      - api_spec
+      - ui_spec
+    outputs:
+      - spec_audit_report
+    done_when:
+      - PRD、TechPlan、BA、API/資料契約與 UI/互動規格已完成一致性檢查
+      - 已列出進入實作前的阻塞項、風險與建議下一條 workflow
+    on_fail: reroute
+    record_level: full_log
+    notes:
+      - 這是本流程的主要 gate；未通過時不建議直接進入實作。
+
+  - id: archive
+    name: Planning Archive
+    capability: technical_logging
+    needs:
+      - spec_audit
+    inputs:
+      - prd_document
+      - tech_plan
+      - ba_spec
+      - schema_ssot
+      - api_spec
+      - ui_spec
+      - spec_audit_report
+    outputs:
+      - devlog
+      - trace_log
+    done_when:
+      - 已歸檔本次小工具規劃結果
+      - 已標示下一步是人工實作、接完整交付 workflow，或先做技術 discovery
+    on_fail: halt
+    record_level: full_log

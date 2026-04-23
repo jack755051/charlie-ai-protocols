@@ -138,6 +138,7 @@ Workflow 與 Agent Skills 是並存的兩種使用方式：
 目前內建 workflow 包含：
 
 - `feature-delivery.yaml`：完整功能交付流程
+- `small-tool-planning.yaml`：非正式小工具開發前置規劃流程
 - `readme-to-devops.yaml`：README 治理到 DevOps 基線
 - `version-control-private.yaml`：私人專案版本控制流程
 - `version-control-company.yaml`：公司專案最小版本控制流程
