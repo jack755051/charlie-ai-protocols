@@ -138,6 +138,9 @@ class WorkflowLoader:
                 "gate": step.get("gate"),
                 "on_fail_route": step.get("on_fail_route", []),
                 "record_level": step.get("record_level"),
+                "timeout_seconds": step.get("timeout_seconds"),
+                "stall_seconds": step.get("stall_seconds"),
+                "stall_action": step.get("stall_action"),
             }
 
         phases = self._compute_phases(steps_by_id)
@@ -187,6 +190,9 @@ class WorkflowLoader:
                 "gate": step.get("gate"),
                 "on_fail_route": step.get("on_fail_route", []),
                 "record_level": step.get("record_level"),
+                "timeout_seconds": step.get("timeout_seconds"),
+                "stall_seconds": step.get("stall_seconds"),
+                "stall_action": step.get("stall_action"),
             }
 
         fail_routes = self._collect_fail_routes(steps_by_id)

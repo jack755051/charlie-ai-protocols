@@ -67,6 +67,9 @@ workflow schema 用來描述：
 | `on_fail_route[].condition` | string | no | 失敗條件標籤（如 `LH_PERF_FAIL`, `SRE_TRIGGER`） |
 | `on_fail_route[].route_to` | string | no | 目標 step id |
 | `record_level` | string | no | 此步驟的紀錄層級：`trace_only` 或 `full_log` |
+| `timeout_seconds` | integer | no | 此 step 的硬性執行上限；未設定時由 executor 預設值決定 |
+| `stall_seconds` | integer | no | 此 step 的靜默上限；若輸出檔連續 N 秒無新增內容，executor 可視為卡住並中止 |
+| `stall_action` | string | no | 靜默達上限時的處置：`warn` 或 `kill`；預設 `warn`，避免誤殺正常但暫無串流輸出的 AI CLI |
 
 ## 4. 範例
 

@@ -21,6 +21,10 @@ CLI_NAME="${CAP_DEFAULT_AGENT_CLI:-}"
 PLAN_JSON=""
 USER_PROMPT=""
 RUN_ID=""
+DEFAULT_STEP_TIMEOUT_SECONDS="${CAP_WORKFLOW_STEP_TIMEOUT_SECONDS:-600}"
+DEFAULT_STEP_STALL_SECONDS="${CAP_WORKFLOW_STEP_STALL_SECONDS:-120}"
+DEFAULT_STEP_STALL_ACTION="${CAP_WORKFLOW_STALL_ACTION:-warn}"
+PREVIEW_CHARS="${CAP_WORKFLOW_PREVIEW_CHARS:-80}"
 
 # ── Parse args ──
 
@@ -217,6 +221,44 @@ step_status() {
     ok)   printf "  ${GREEN}✓${RESET} %s ${DIM}(%ss)${RESET}\n" "${step_id}" "${duration}" ;;
     fail) printf "  ${RED}✗${RESET} %s ${DIM}(%ss)${RESET}\n" "${step_id}" "${duration}" ;;
     skip) printf "  ${YELLOW}⊘${RESET} %s ${DIM}(skipped)${RESET}\n" "${step_id}" ;;
+    stop) printf "  ${RED}■${RESET} %s ${DIM}(%ss)${RESET}\n" "${step_id}" "${duration}" ;;
+  esac
+}
+
+latest_preview() {
+  local file="$1"
+  local chars="$2"
+  if [ ! -s "${file}" ]; then
+    printf '%s' "waiting for first output..."
+    return
+  fi
+  tail -n 1 "${file}" 2>/dev/null | tr '\r\t' '  ' | cut -c "1-${chars}"
+}
+
+terminate_step() {
+  local pid="$1"
+  kill "${pid}" 2>/dev/null || true
+  sleep 1
+  if kill -0 "${pid}" 2>/dev/null; then
+    kill -9 "${pid}" 2>/dev/null || true
+  fi
+}
+
+positive_int_or_default() {
+  local value="$1"
+  local fallback="$2"
+  case "${value}" in
+    ''|*[!0-9]*) printf '%s\n' "${fallback}" ;;
+    *)           printf '%s\n' "${value}" ;;
+  esac
+}
+
+stall_action_or_default() {
+  local value="$1"
+  local fallback="$2"
+  case "${value}" in
+    warn|kill) printf '%s\n' "${value}" ;;
+    *)         printf '%s\n' "${fallback}" ;;
   esac
 }
 
@@ -273,7 +315,7 @@ SKIPPED=0
 START_TOTAL="$(date '+%s')"
 
 # Flatten phases into step lines:
-# phase_num|total|step_ids|agents|step_id|capability|agent_alias|prompt_file|step_cli|inputs|optional|resolution_status
+# phase_num|total|step_ids|agents|step_id|capability|agent_alias|prompt_file|step_cli|inputs|optional|resolution_status|timeout_seconds|stall_seconds|stall_action
 STEP_LINES="$(python3 - "${PLAN_JSON}" <<'PYEOF'
 import json, sys
 plan = json.loads(sys.argv[1])
@@ -288,17 +330,21 @@ for phase in plan["phases"]:
         inputs = ",".join(step.get("inputs", []))
         opt = str(step.get("optional", False))
         resolution_status = step.get("resolution_status", "resolved")
+        timeout_seconds = str(step.get("timeout_seconds") or "")
+        stall_seconds = str(step.get("stall_seconds") or "")
+        stall_action = str(step.get("stall_action") or "")
         print("|".join([
             str(pnum), str(total), ids_joined, agents_joined,
             step["step_id"], step["capability"], step.get("agent_alias") or "",
             step.get("prompt_file") or "", step.get("cli") or "", inputs, opt, resolution_status,
+            timeout_seconds, stall_seconds, stall_action,
         ]))
 PYEOF
 )"
 
 PREV_PHASE=""
 
-while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id capability agent_alias prompt_file step_cli inputs optional resolution_status <&3; do
+while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id capability agent_alias prompt_file step_cli inputs optional resolution_status timeout_seconds stall_seconds stall_action <&3; do
 
   # Show phase header once per phase
   if [ "${phase_num}" != "${PREV_PHASE}" ]; then
@@ -345,16 +391,56 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   START_STEP="$(date '+%s')"
   STEP_TMP="$(mktemp)"
   trap "rm -f '${STEP_TMP}'" EXIT
+  effective_timeout="$(positive_int_or_default "${timeout_seconds}" "${DEFAULT_STEP_TIMEOUT_SECONDS}")"
+  effective_stall="$(positive_int_or_default "${stall_seconds}" "${DEFAULT_STEP_STALL_SECONDS}")"
+  effective_stall_action="$(stall_action_or_default "${stall_action}" "${DEFAULT_STEP_STALL_ACTION}")"
+  LAST_SIZE=0
+  LAST_CHANGE="${START_STEP}"
+  STOP_REASON=""
+  STALL_WARNED=0
 
-  # Run step in background, show spinner with elapsed time
+  # Run step in background, show spinner with elapsed time, output preview, and watchdog state.
   run_step "${effective_cli}" "${step_prompt}" > "${STEP_TMP}" 2>&1 &
   STEP_PID=$!
 
   SPIN='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
   SPIN_IDX=0
   while kill -0 "${STEP_PID}" 2>/dev/null; do
-    ELAPSED="$(( $(date '+%s') - START_STEP ))"
-    printf "\r  ${YELLOW}%s${RESET} ${DIM}Running ${step_id}... (%ss)${RESET}  " "${SPIN:SPIN_IDX:1}" "${ELAPSED}"
+    NOW="$(date '+%s')"
+    ELAPSED="$(( NOW - START_STEP ))"
+    CURRENT_SIZE="$(wc -c < "${STEP_TMP}" 2>/dev/null | tr -d ' ')"
+    if [ -z "${CURRENT_SIZE}" ]; then
+      CURRENT_SIZE=0
+    fi
+    if [ "${CURRENT_SIZE}" != "${LAST_SIZE}" ]; then
+      LAST_SIZE="${CURRENT_SIZE}"
+      LAST_CHANGE="${NOW}"
+    fi
+    SILENT_DURATION="$(( NOW - LAST_CHANGE ))"
+    PREVIEW="$(latest_preview "${STEP_TMP}" "${PREVIEW_CHARS}")"
+    STATUS_NOTE=""
+    if [ "${effective_stall}" -gt 0 ] && [ "${SILENT_DURATION}" -ge "${effective_stall}" ]; then
+      STATUS_NOTE=" │ stall:${effective_stall_action}"
+    fi
+    printf "\r  ${YELLOW}%s${RESET} ${DIM}Running %s... %ss │ silent=%ss │ timeout=%ss%s${RESET} │ %s" \
+      "${SPIN:SPIN_IDX:1}" "${step_id}" "${ELAPSED}" "${SILENT_DURATION}" "${effective_timeout}" "${STATUS_NOTE}" "${PREVIEW}"
+
+    if [ "${effective_timeout}" -gt 0 ] && [ "${ELAPSED}" -ge "${effective_timeout}" ]; then
+      STOP_REASON="TIMEOUT"
+      terminate_step "${STEP_PID}"
+      break
+    fi
+    if [ "${effective_stall}" -gt 0 ] && [ "${SILENT_DURATION}" -ge "${effective_stall}" ]; then
+      if [ "${effective_stall_action}" = "kill" ]; then
+        STOP_REASON="STALL"
+        terminate_step "${STEP_PID}"
+        break
+      elif [ "${STALL_WARNED}" -eq 0 ]; then
+        bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} warning:stall silent:${SILENT_DURATION}s capability:${capability} cli:${effective_cli}" "警告" >/dev/null 2>&1 || true
+        STALL_WARNED=1
+      fi
+    fi
+
     SPIN_IDX=$(( (SPIN_IDX + 1) % ${#SPIN} ))
     sleep 0.15
   done
@@ -369,7 +455,28 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   rm -f "${STEP_TMP}"
   DURATION="$(( $(date '+%s') - START_STEP ))"
 
-  if [ "${exit_code}" -eq 0 ]; then
+  if [ -n "${STOP_REASON}" ]; then
+    step_status "stop" "${step_id}" "${DURATION}"
+    FAILED=$((FAILED + 1))
+    case "${STOP_REASON}" in
+      TIMEOUT)
+        ERROR_TYPE="timeout"
+        ERROR_HINT="  step 超過硬性執行上限 ${effective_timeout}s，executor 已自動中止。可在 workflow step 設定 timeout_seconds，或用 CAP_WORKFLOW_STEP_TIMEOUT_SECONDS 覆寫預設值。"
+        ;;
+      STALL)
+        ERROR_TYPE="stall"
+        ERROR_HINT="  step 連續 ${effective_stall}s 沒有新增輸出，且 stall_action=kill，executor 已自動中止。可在 workflow step 設定 stall_seconds/stall_action，或用 CAP_WORKFLOW_STEP_STALL_SECONDS、CAP_WORKFLOW_STALL_ACTION 覆寫預設值。"
+        ;;
+    esac
+    bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} capability:${capability} cli:${effective_cli}" "失敗" >/dev/null 2>&1 || true
+    if [ -n "${output}" ]; then
+      echo "${output}" | tail -3 | while IFS= read -r line; do
+        printf "  ${RED}│ %s${RESET}\n" "${line}"
+      done
+    fi
+    printf "%s\n" "${ERROR_HINT}"
+    break
+  elif [ "${exit_code}" -eq 0 ]; then
     step_status "ok" "${step_id}" "${DURATION}"
     COMPLETED=$((COMPLETED + 1))
     bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} capability:${capability} agent:${agent_alias} cli:${effective_cli}" "成功" >/dev/null 2>&1 || true
