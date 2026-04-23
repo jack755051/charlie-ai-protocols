@@ -17,6 +17,7 @@ Usage:
   bash scripts/cap-workflow.sh show <workflow_id|file>
   bash scripts/cap-workflow.sh inspect <run_id>
   bash scripts/cap-workflow.sh plan <workflow_id|file>
+  bash scripts/cap-workflow.sh bind <workflow_id|file> [registry]
   bash scripts/cap-workflow.sh run [--dry-run] [-d] [--cli codex|claude] <workflow_id|file> [prompt...]
 EOF
   exit 1
@@ -334,7 +335,7 @@ PYTHON_BIN="$(resolve_python)"
 ensure_status_store
 
 COMMAND="${1:-}"
-if [ -n "${COMMAND}" ] && [[ "${COMMAND}" != "list" && "${COMMAND}" != "ps" && "${COMMAND}" != "show" && "${COMMAND}" != "inspect" && "${COMMAND}" != "plan" && "${COMMAND}" != "run" && "${COMMAND}" != "update-run-status" ]]; then
+if [ -n "${COMMAND}" ] && [[ "${COMMAND}" != "list" && "${COMMAND}" != "ps" && "${COMMAND}" != "show" && "${COMMAND}" != "inspect" && "${COMMAND}" != "plan" && "${COMMAND}" != "bind" && "${COMMAND}" != "run" && "${COMMAND}" != "update-run-status" ]]; then
   set -- show "$@"
 fi
 
@@ -641,16 +642,30 @@ import sys
 base_dir = Path(sys.argv[1])
 sys.path.insert(0, str(base_dir))
 from engine.workflow_loader import WorkflowLoader
+from engine.runtime_binder import RuntimeBinder
 
 workflow_ref = sys.argv[2]
 loader = WorkflowLoader(base_dir=base_dir)
+binder = RuntimeBinder(base_dir=base_dir)
+semantic = loader.build_semantic_plan(workflow_ref)
 plan = loader.build_execution_phases(workflow_ref)
+binding = binder.bind_capabilities(workflow_ref)
 
 print(f"workflow_id: {plan['workflow_id']}")
 print(f"name: {plan['name']}")
 print(f"version: {plan['version']}")
 print(f"summary: {plan['summary']}")
 print(f"source: {plan['source_path']}")
+print(f"binding_status: {binding['binding_status']}")
+print(f"registry_missing: {binding['registry_missing']}")
+print("semantic_phases:")
+for phase in semantic["phases"]:
+    print(f"  Phase {phase['phase']}:")
+    for step in phase["steps"]:
+        print(
+            f"    - {step['step_id']} => capability={step['capability']} / "
+            f"needs={step['needs']} / optional={step['optional']}"
+        )
 print("phases:")
 for phase in plan["phases"]:
     print(f"  Phase {phase['phase']}:")
@@ -663,6 +678,61 @@ if plan["standby_steps"]:
     print("standby_steps:")
     for step in plan["standby_steps"]:
         print(f"  - {step['step_id']}")
+print("binding_steps:")
+for step in binding["steps"]:
+    print(
+        f"  - {step['step_id']} => status={step['resolution_status']} / "
+        f"skill={step['selected_skill_id'] or '-'} / policy={step['missing_policy']}"
+    )
+PY
+    ;;
+  bind)
+    [ "$#" -ge 2 ] && [ "$#" -le 3 ] || usage
+    WORKFLOW_REF="$(resolve_workflow_ref "$2")" || {
+      echo "找不到 workflow：$2" >&2
+      exit 1
+    }
+    REGISTRY_REF="${3:-}"
+    "${PYTHON_BIN}" - <<'PY' "${CAP_ROOT}" "${WORKFLOW_REF}" "${REGISTRY_REF}"
+from pathlib import Path
+import sys
+
+base_dir = Path(sys.argv[1])
+sys.path.insert(0, str(base_dir))
+from engine.runtime_binder import RuntimeBinder
+
+workflow_ref = sys.argv[2]
+registry_ref = sys.argv[3] or None
+binder = RuntimeBinder(base_dir=base_dir)
+report = binder.bind_capabilities(workflow_ref, registry_ref)
+
+print("WORKFLOW BINDING REPORT")
+print(f"workflow_id: {report['workflow_id']}")
+print(f"workflow_version: {report['workflow_version']}")
+print(f"binding_status: {report['binding_status']}")
+print(f"registry_source: {report['registry_source_path']}")
+print(f"registry_missing: {report['registry_missing']}")
+print(
+    "summary: "
+    f"total={report['summary']['total_steps']}, "
+    f"resolved={report['summary']['resolved_steps']}, "
+    f"fallback={report['summary']['fallback_steps']}, "
+    f"required_unresolved={report['summary']['unresolved_required_steps']}, "
+    f"optional_unresolved={report['summary']['unresolved_optional_steps']}"
+)
+if report["contract_missing_steps"]:
+    print(f"contract_missing_steps: {', '.join(report['contract_missing_steps'])}")
+print("steps:")
+for step in report["steps"]:
+    print(
+        f"  - {step['step_id']} (phase {step['phase']}) => "
+        f"{step['resolution_status']} / capability={step['capability']} / "
+        f"skill={step['selected_skill_id'] or '-'} / provider={step['selected_provider'] or '-'}"
+    )
+    print(
+        f"    binding_mode={step['binding_mode']} / missing_policy={step['missing_policy']} / "
+        f"reason={step['reason']}"
+    )
 PY
     ;;
   run)

@@ -1,0 +1,239 @@
+schema_version: 1
+
+default_provider: builtin
+
+binding_defaults:
+  binding_mode: fallback_allowed
+  missing_policy: manual
+
+skills:
+  - skill_id: builtin-supervisor
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 100
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities:
+      - prd_generation
+      - workflow_orchestration
+    fallback_roles:
+      - supervisor
+
+  - skill_id: builtin-techlead
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 100
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities:
+      - technical_planning
+      - technical_review
+    fallback_roles:
+      - reviewer
+
+  - skill_id: builtin-ba
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 100
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities:
+      - business_analysis
+    fallback_roles:
+      - reviewer
+
+  - skill_id: builtin-dba
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 100
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities:
+      - database_api_design
+    fallback_roles:
+      - implementer
+
+  - skill_id: builtin-ui
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 100
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities:
+      - ui_design
+    fallback_roles:
+      - implementer
+
+  - skill_id: builtin-figma
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 100
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities:
+      - figma_sync
+    fallback_roles:
+      - implementer
+
+  - skill_id: builtin-analytics
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 100
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities:
+      - analytics_specification
+      - analytics_post_launch
+    fallback_roles:
+      - reviewer
+
+  - skill_id: builtin-frontend
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 100
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities:
+      - frontend_implementation
+    fallback_roles:
+      - implementer
+
+  - skill_id: builtin-backend
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 100
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities:
+      - backend_implementation
+    fallback_roles:
+      - implementer
+
+  - skill_id: builtin-watcher
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 100
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities:
+      - code_structure_audit
+    fallback_roles:
+      - reviewer
+
+  - skill_id: builtin-security
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 100
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities:
+      - security_audit
+    fallback_roles:
+      - reviewer
+
+  - skill_id: builtin-qa
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 100
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities:
+      - qa_testing
+    fallback_roles:
+      - reviewer
+
+  - skill_id: builtin-troubleshoot
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 100
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities:
+      - troubleshooting
+    fallback_roles:
+      - reviewer
+
+  - skill_id: builtin-sre
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 100
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities:
+      - sre_optimization
+    fallback_roles:
+      - reviewer
+
+  - skill_id: builtin-devops
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 100
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities:
+      - devops_delivery
+      - version_control_commit
+    fallback_roles:
+      - implementer
+
+  - skill_id: builtin-logger
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 100
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities:
+      - technical_logging
+    fallback_roles:
+      - logger
+
+  - skill_id: builtin-readme
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 100
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities:
+      - readme_normalization
+    fallback_roles:
+      - implementer
+
+  - skill_id: generic-supervisor
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 10
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities: []
+    fallback_roles:
+      - supervisor
+
+  - skill_id: generic-reviewer
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 10
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities: []
+    fallback_roles:
+      - reviewer
+
+  - skill_id: generic-logger
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 10
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities: []
+    fallback_roles:
+      - logger
+
+  - skill_id: generic-implementer
+    manifest_ref: schemas/skill-manifest.schema.yaml
+    provider: builtin
+    enabled: true
+    priority: 10
+    compatible_workflow_versions: [1, 2]
+    provided_capabilities: []
+    fallback_roles:
+      - implementer

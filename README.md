@@ -33,6 +33,8 @@ CAP 解決的核心問題是：當多位 AI Agent 共同參與軟體開發流程
 | Runtime Storage | `~/.cap/projects/<project_id>/` | traces、drafts、reports、sessions |
 
 架構細節請看 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+Skill marketplace 與 runtime binding 草案請看 [docs/SKILL-MARKETPLACE-RUNTIME-DRAFT.md](docs/SKILL-MARKETPLACE-RUNTIME-DRAFT.md)。
+可選的本地 skill registry 範例請看 [.cap.skills.example.yaml](.cap.skills.example.yaml)。
 
 ## Quick Start
 
