@@ -405,6 +405,109 @@ materialize_step_output() {
   printf '%s\n' "${source}"
 }
 
+build_handoff_summary_content() {
+  local artifact_path="$1"
+  python3 - <<'PY' "${artifact_path}"
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8") if path.exists() else ""
+
+match = re.search(r"^##\s*交接摘要\s*$", text, flags=re.M)
+if match:
+    tail = text[match.start():].strip()
+    print(tail)
+    raise SystemExit(0)
+
+lines = [line.rstrip() for line in text.splitlines() if line.strip()]
+snippet = "\n".join(lines[:40]).strip()
+print(snippet)
+PY
+}
+
+materialize_handoff_summary() {
+  local artifact_path="$1"
+  local handoff_path="$2"
+  local summary
+  summary="$(build_handoff_summary_content "${artifact_path}")"
+  if [ -z "${summary}" ]; then
+    summary="## 交接摘要
+
+> 無可用摘要，請回看完整 artifact。"
+  fi
+  write_file_or_fail "${handoff_path}" "${summary}"
+}
+
+resolve_step_input_context() {
+  local plan_json="$1"
+  local current_step_id="$2"
+  local input_mode="$3"
+  local output_dir="$4"
+
+  python3 - <<'PY' "${plan_json}" "${current_step_id}" "${input_mode}" "${output_dir}"
+from pathlib import Path
+import json
+import sys
+
+plan = json.loads(sys.argv[1])
+current_step_id = sys.argv[2]
+input_mode = sys.argv[3]
+output_dir = Path(sys.argv[4])
+
+artifact_producers = {}
+for phase in plan.get("phases", []):
+    pnum = phase["phase"]
+    for step in phase.get("steps", []):
+        for artifact in step.get("outputs", []):
+            artifact_producers[artifact] = {
+                "phase": pnum,
+                "step_id": step["step_id"],
+                "capability": step.get("capability"),
+            }
+
+target = None
+for phase in plan.get("phases", []):
+    for step in phase.get("steps", []):
+        if step["step_id"] == current_step_id:
+            target = step
+            break
+    if target:
+        break
+
+if target is None:
+    print("- 無法解析當前 step 輸入")
+    raise SystemExit(0)
+
+inputs = target.get("inputs", [])
+if not inputs:
+    print("- 無上游輸入")
+    raise SystemExit(0)
+
+lines = []
+for artifact in inputs:
+    producer = artifact_producers.get(artifact)
+    if not producer:
+        lines.append(f"- {artifact}: unresolved")
+        continue
+    base = output_dir / f"{producer['phase']}-{producer['step_id']}"
+    artifact_path = base.with_suffix(".md")
+    handoff_path = output_dir / f"{producer['phase']}-{producer['step_id']}.handoff.md"
+    if input_mode == "full":
+        selected = artifact_path
+        mode = "full_artifact"
+    else:
+        selected = handoff_path if handoff_path.exists() else artifact_path
+        mode = "handoff_summary" if handoff_path.exists() else "artifact_fallback"
+    lines.append(
+        f"- {artifact}: step={producer['step_id']} mode={mode} path={selected}"
+    )
+
+print("\n".join(lines))
+PY
+}
+
 # ── Build step prompt ──
 
 build_step_prompt() {
@@ -417,6 +520,8 @@ build_step_prompt() {
   local output_path="$7"
   local artifact_index="$8"
   local project_docs_dir="$9"
+  local input_mode="${10}"
+  local continue_reason="${11}"
   local structured_sections
   structured_sections="$(structured_sections_for_capability "${capability}")"
 
@@ -427,6 +532,9 @@ build_step_prompt() {
 ${user_req}
 
 本步驟的輸入上下文：${inputs}
+
+本步驟的輸入模式：
+${input_mode}
 
 可用的上游產物索引：
 ${artifact_index}
@@ -440,9 +548,13 @@ ${project_docs_dir}
 請嚴格依照 ${SKILLS_DIR}/${prompt_file} 中定義的角色規範執行。
 你必須完成以下事項：
 1. 讀取可用的上游產物索引，若索引內有上游輸出檔，必須把它們視為本步驟輸入，而不是重新猜測。
-2. 將本步驟的完整交付內容直接輸出到 stdout；workflow executor 會負責把 stdout 可靠寫入「本步驟的強制輸出檔」。
-3. 不要因為無法直接寫入「本步驟的強制輸出檔」而請求權限、暫停、或把結果標記為待確認；stdout 就是本步驟的主要交付通道。
-4. 若本步驟產出可長期追蹤的正式/半正式規格，且你確定環境允許寫入，才可額外同步寫入專案文件目錄下合適的 Markdown 檔；若不能寫入，請在 stdout 的交接摘要中列出建議路徑即可。
+2. 若本步驟的輸入模式為 summary，你必須只以交接摘要與必要 metadata 為主要依據，不得要求完整上游全文。
+3. 將本步驟的完整交付內容直接輸出到 stdout；workflow executor 會負責把 stdout 可靠寫入「本步驟的強制輸出檔」。
+4. 不要因為無法直接寫入「本步驟的強制輸出檔」而請求權限、暫停、或把結果標記為待確認；stdout 就是本步驟的主要交付通道。
+5. 若本步驟產出可長期追蹤的正式/半正式規格，且你確定環境允許寫入，才可額外同步寫入專案文件目錄下合適的 Markdown 檔；若不能寫入，請在 stdout 的交接摘要中列出建議路徑即可。
+
+本步驟繼續執行的理由：
+${continue_reason}
 
 ${structured_sections}
 
@@ -532,7 +644,7 @@ EOF
 echo "  Output dir: ${WORKFLOW_OUTPUT_DIR}"
 
 # Flatten phases into step lines:
-# phase_num|total|step_ids|agents|step_id|capability|agent_alias|prompt_file|step_cli|inputs|optional|resolution_status|timeout_seconds|stall_seconds|stall_action
+# phase_num|total|step_ids|agents|step_id|capability|agent_alias|prompt_file|step_cli|inputs|optional|resolution_status|timeout_seconds|stall_seconds|stall_action|input_mode|output_tier|continue_reason
 STEP_LINES="$(python3 - "${PLAN_JSON}" <<'PYEOF'
 import json, sys
 plan = json.loads(sys.argv[1])
@@ -550,18 +662,21 @@ for phase in plan["phases"]:
         timeout_seconds = str(step.get("timeout_seconds") or "")
         stall_seconds = str(step.get("stall_seconds") or "")
         stall_action = str(step.get("stall_action") or "")
+        input_mode = str(step.get("input_mode") or "")
+        output_tier = str(step.get("output_tier") or "")
+        continue_reason = str(step.get("continue_reason") or "").replace("|", "/")
         print("|".join([
             str(pnum), str(total), ids_joined, agents_joined,
             step["step_id"], step["capability"], step.get("agent_alias") or "",
             step.get("prompt_file") or "", step.get("cli") or "", inputs, opt, resolution_status,
-            timeout_seconds, stall_seconds, stall_action,
+            timeout_seconds, stall_seconds, stall_action, input_mode, output_tier, continue_reason,
         ]))
 PYEOF
 )"
 
 PREV_PHASE=""
 
-while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id capability agent_alias prompt_file step_cli inputs optional resolution_status timeout_seconds stall_seconds stall_action <&3; do
+while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id capability agent_alias prompt_file step_cli inputs optional resolution_status timeout_seconds stall_seconds stall_action input_mode output_tier continue_reason <&3; do
 
   # Show phase header once per phase
   if [ "${phase_num}" != "${PREV_PHASE}" ]; then
@@ -603,9 +718,11 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   }
 
   STEP_OUTPUT_PATH="${WORKFLOW_OUTPUT_DIR}/${phase_num}-${step_id}.md"
+  STEP_HANDOFF_PATH="${WORKFLOW_OUTPUT_DIR}/${phase_num}-${step_id}.handoff.md"
   STEP_STATUS="running"
   AGENT_SKILL="${agent_alias}:${prompt_file}"
   append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "phase:${phase_num} step:${step_id} capability:${capability} cli:${effective_cli} action:start" "running"
+  RESOLVED_INPUT_CONTEXT="$(resolve_step_input_context "${PLAN_JSON}" "${step_id}" "${input_mode:-summary}" "${WORKFLOW_OUTPUT_DIR}")"
 
   # Build and execute step
   step_prompt="$(
@@ -614,11 +731,13 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
       "${capability}" \
       "${agent_alias}" \
       "${prompt_file}" \
-      "${inputs}" \
+      "${RESOLVED_INPUT_CONTEXT}" \
       "${USER_PROMPT}" \
       "${STEP_OUTPUT_PATH}" \
       "${ARTIFACT_INDEX}" \
-      "${PROJECT_DOCS_DIR}"
+      "${PROJECT_DOCS_DIR}" \
+      "${input_mode:-summary}" \
+      "${continue_reason:-required by workflow}"
   )"
 
   START_STEP="$(date '+%s')"
@@ -724,6 +843,12 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     SHOULD_HALT=1
   fi
 
+  if [ "${SHOULD_HALT}" -eq 0 ]; then
+    materialize_handoff_summary "${STEP_OUTPUT_PATH}" "${STEP_HANDOFF_PATH}" || {
+      append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} handoff:${STEP_HANDOFF_PATH} error:write_failed" "失敗"
+    }
+  fi
+
   if [ "${SHOULD_HALT}" -eq 1 ]; then
     :
   elif [ -n "${STOP_REASON}" ]; then
@@ -821,7 +946,10 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     printf -- '- status: %s\n' "${STEP_STATUS}"
     printf -- '- duration_seconds: %s\n' "${DURATION}"
     printf -- '- output: %s\n' "${STEP_OUTPUT_PATH}"
+    printf -- '- handoff: %s\n' "${STEP_HANDOFF_PATH}"
     printf -- '- output_source: %s\n' "${OUTPUT_SOURCE:-unknown}"
+    printf -- '- input_mode: %s\n' "${input_mode:-summary}"
+    printf -- '- output_tier: %s\n' "${output_tier:-planning_artifact}"
   } >> "${ARTIFACT_INDEX}"
 
   {
@@ -829,7 +957,10 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     printf -- '- status: %s\n' "${STEP_STATUS}"
     printf -- '- duration_seconds: %s\n' "${DURATION}"
     printf -- '- output: %s\n' "${STEP_OUTPUT_PATH}"
+    printf -- '- handoff: %s\n' "${STEP_HANDOFF_PATH}"
     printf -- '- output_source: %s\n' "${OUTPUT_SOURCE:-unknown}"
+    printf -- '- input_mode: %s\n' "${input_mode:-summary}"
+    printf -- '- output_tier: %s\n' "${output_tier:-planning_artifact}"
   } >> "${RUN_SUMMARY}"
 
   if [ "${SHOULD_HALT}" -eq 1 ]; then
