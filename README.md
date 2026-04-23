@@ -36,6 +36,12 @@ CAP 解決的核心問題是：當多位 AI Agent 共同參與軟體開發流程
 Skill marketplace 與 runtime binding 草案請看 [docs/SKILL-MARKETPLACE-RUNTIME-DRAFT.md](docs/SKILL-MARKETPLACE-RUNTIME-DRAFT.md)。
 可選的本地 skill registry 範例請看 [.cap.skills.example.yaml](.cap.skills.example.yaml)。
 
+目前狀態：
+
+- `cap workflow plan / bind / run` 已共用 `RuntimeBinder`
+- `.cap.skills.yaml` 是 workflow binding 的優先輸入；若缺席，會自動 fallback 到 `.cap.agents.json` legacy adapter
+- skill marketplace schema 與遠端 provider 仍屬 draft / 下一階段設計
+
 ## Quick Start
 
 安裝：

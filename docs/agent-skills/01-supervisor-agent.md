@@ -52,7 +52,7 @@
 - **流程定義**：`schemas/workflows/` — 定義功能交付、修復、診斷等端到端流程的步驟與門禁條件。
 - **交接單格式**：`schemas/handoff-ticket.schema.yaml` — 定義任務交接單的必填欄位、選填欄位與驗證規則。
 - **能力合約**：`schemas/capabilities.yaml` — 定義系統中所有可用能力的輸入、輸出與觸發條件。
-- **能力綁定**：`.cap.agents.json` — 定義 capability 到具體 agent 檔案的對應關係。
+- **能力綁定**：`RuntimeBinder` / `.cap.skills.yaml` — 將 capability 綁定到可執行 skill；若 `.cap.skills.yaml` 缺席，runtime 會透過 `.cap.agents.json` legacy adapter 維持相容。
 
 執行編排時，你必須讀取上述定義檔作為決策依據，而非依賴本文件中的硬編碼規則。
 
