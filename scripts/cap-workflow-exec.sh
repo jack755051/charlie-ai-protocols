@@ -273,19 +273,9 @@ detected_section_count() {
   printf "%s" "${count}"
 }
 
-print_live_output_chunk() {
+latest_section_heading() {
   local output_file="$1"
-  local from_byte="$2"
-  local to_byte="$3"
-  local count=$((to_byte - from_byte))
-
-  if [ "${count}" -le 0 ]; then
-    return 0
-  fi
-
-  printf "  ${DIM}│ "
-  dd if="${output_file}" bs=1 skip="${from_byte}" count="${count}" 2>/dev/null || true
-  printf "${RESET}\n"
+  grep -E '^##[[:space:]]+' "${output_file}" 2>/dev/null | tail -n 1 | tr '\r\t' '  '
 }
 
 format_activity_status() {
@@ -377,6 +367,16 @@ write_file_or_fail() {
 output_has_executor_fallback_marker() {
   local path="$1"
   [ -f "${path}" ] && grep -q 'Executor fallback: agent did not write the required output file' "${path}" 2>/dev/null
+}
+
+append_workflow_log() {
+  local log_path="$1"
+  local agent_skill="$2"
+  local detail="$3"
+  local result="$4"
+  local ts
+  ts="$(date '+%Y-%m-%d %H:%M:%S')"
+  printf '[%s][%s][%s][%s]\n' "${ts}" "${agent_skill}" "${detail}" "${result}" >> "${log_path}" 2>/dev/null || true
 }
 
 materialize_step_output() {
@@ -487,6 +487,7 @@ WORKFLOW_OUTPUT_DIR="${REPORT_DIR}/workflows/${WORKFLOW_ID}/${RUN_LABEL}"
 PROJECT_DOCS_DIR="${PROJECT_ROOT}/docs"
 ARTIFACT_INDEX="${WORKFLOW_OUTPUT_DIR}/artifact-index.md"
 RUN_SUMMARY="${WORKFLOW_OUTPUT_DIR}/run-summary.md"
+WORKFLOW_LOG="${WORKFLOW_OUTPUT_DIR}/workflow.log"
 ensure_dir_or_fail "${WORKFLOW_OUTPUT_DIR}" "workflow output directory" || exit 1
 ensure_dir_or_fail "${PROJECT_DOCS_DIR}" "project docs directory" || true
 
@@ -498,6 +499,7 @@ write_file_or_fail "${ARTIFACT_INDEX}" "$(cat <<EOF
 - run_id: ${RUN_LABEL}
 - project_root: ${PROJECT_ROOT}
 - output_dir: ${WORKFLOW_OUTPUT_DIR}
+- workflow_log: ${WORKFLOW_LOG}
 
 ## Step Outputs
 EOF
@@ -512,12 +514,18 @@ write_file_or_fail "${RUN_SUMMARY}" "$(cat <<EOF
 - started_at: $(date '+%Y-%m-%d %H:%M:%S')
 - project_root: ${PROJECT_ROOT}
 - output_dir: ${WORKFLOW_OUTPUT_DIR}
+- workflow_log: ${WORKFLOW_LOG}
 
 ## User Prompt
 
 ${USER_PROMPT}
 
 ## Steps
+EOF
+)" || exit 1
+
+write_file_or_fail "${WORKFLOW_LOG}" "$(cat <<EOF
+[$(date '+%Y-%m-%d %H:%M:%S')][workflow][workflow:${WORKFLOW_ID} run:${RUN_LABEL} output_dir:${WORKFLOW_OUTPUT_DIR}][started]
 EOF
 )" || exit 1
 
@@ -595,8 +603,9 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   }
 
   STEP_OUTPUT_PATH="${WORKFLOW_OUTPUT_DIR}/${phase_num}-${step_id}.md"
-  STEP_RAW_PATH="${WORKFLOW_OUTPUT_DIR}/${phase_num}-${step_id}.raw.log"
   STEP_STATUS="running"
+  AGENT_SKILL="${agent_alias}:${prompt_file}"
+  append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "phase:${phase_num} step:${step_id} capability:${capability} cli:${effective_cli} action:start" "running"
 
   # Build and execute step
   step_prompt="$(
@@ -622,9 +631,10 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   STOP_REASON=""
   STALL_WARNED=0
   SECTION_TOTAL="$(section_total_for_capability "${capability}")"
+  LAST_SECTION_DONE=0
 
   printf "  ${BOLD}%s${RESET} ${DIM}(%s / %s via %s)${RESET}\n" "${step_id}" "${agent_alias}" "${capability}" "${effective_cli}"
-  printf "  ${DIM}live output tail:${RESET}\n"
+  printf "  ${DIM}live signal: 完整內容會寫入 step artifact，終端只顯示章節進度${RESET}\n"
 
   # Run step in background, show live output chunks plus watchdog state.
   run_step "${effective_cli}" "${step_prompt}" > "${STEP_TMP}" 2>&1 &
@@ -640,8 +650,6 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
       CURRENT_SIZE=0
     fi
     if [ "${CURRENT_SIZE}" -gt "${LAST_SIZE}" ]; then
-      printf "\r\033[K"
-      print_live_output_chunk "${STEP_TMP}" "${LAST_SIZE}" "${CURRENT_SIZE}"
       LAST_SIZE="${CURRENT_SIZE}"
       LAST_CHANGE="${NOW}"
     fi
@@ -651,6 +659,10 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
       STATUS_NOTE=" │ stall:${effective_stall_action}"
     fi
     SECTION_DONE="$(detected_section_count "${STEP_TMP}" "${SECTION_TOTAL}")"
+    if [ "${SECTION_DONE}" -gt "${LAST_SECTION_DONE}" ]; then
+      printf "\r\033[K  ${DIM}│ %s${RESET}\n" "$(latest_section_heading "${STEP_TMP}")"
+      LAST_SECTION_DONE="${SECTION_DONE}"
+    fi
     format_activity_status \
       "${step_id}" \
       "${ELAPSED}" \
@@ -690,16 +702,10 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
 
   if [ -f "${STEP_TMP}" ]; then
     CURRENT_SIZE="$(wc -c < "${STEP_TMP}" 2>/dev/null | tr -d ' ')"
-    if [ -n "${CURRENT_SIZE}" ] && [ "${CURRENT_SIZE}" -gt "${LAST_SIZE}" ]; then
-      print_live_output_chunk "${STEP_TMP}" "${LAST_SIZE}" "${CURRENT_SIZE}"
-    fi
-    if ! cp "${STEP_TMP}" "${STEP_RAW_PATH}" 2>/dev/null; then
-      printf "${YELLOW}  │ warning: 無法寫入 raw output：%s${RESET}\n" "${STEP_RAW_PATH}"
-    fi
     output="$(cat "${STEP_TMP}" 2>/dev/null || true)"
   else
     output=""
-    write_file_or_fail "${STEP_RAW_PATH}" "[executor] step temp output disappeared before capture: ${STEP_TMP}" || true
+    append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} temp_output_missing:${STEP_TMP}" "失敗"
   fi
   rm -f "${STEP_TMP}"
   DURATION="$(( $(date '+%s') - START_STEP ))"
@@ -712,6 +718,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     FAILED=$((FAILED + 1))
     ERROR_TYPE="write_permission"
     ERROR_HINT="  executor 無法寫入強制輸出檔：${STEP_OUTPUT_PATH}。請檢查目錄是否存在、owner/group、以及目前使用者是否有寫入權限。"
+    append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} output:${STEP_OUTPUT_PATH} error:${ERROR_TYPE}" "失敗"
     bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} output:${STEP_OUTPUT_PATH}" "失敗" >/dev/null 2>&1 || true
     printf "%s\n" "${ERROR_HINT}"
     SHOULD_HALT=1
@@ -734,6 +741,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
         ;;
     esac
     bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} capability:${capability} cli:${effective_cli}" "失敗" >/dev/null 2>&1 || true
+    append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s stop_reason:${STOP_REASON}" "失敗"
     if [ -n "${output}" ]; then
       echo "${output}" | tail -3 | while IFS= read -r line; do
         printf "  ${RED}│ %s${RESET}\n" "${line}"
@@ -746,6 +754,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     step_status "ok" "${step_id}" "${DURATION}"
     COMPLETED=$((COMPLETED + 1))
     bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} capability:${capability} agent:${agent_alias} cli:${effective_cli}" "成功" >/dev/null 2>&1 || true
+    append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s output:${STEP_OUTPUT_PATH} source:${OUTPUT_SOURCE}" "成功"
   else
     STEP_STATUS="failed"
     step_status "fail" "${step_id}" "${DURATION}"
@@ -784,6 +793,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     fi
 
     bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} capability:${capability} cli:${effective_cli}" "失敗" >/dev/null 2>&1 || true
+    append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s error:${ERROR_TYPE}" "失敗"
 
     # Show classified error
     if [ -n "${output}" ]; then
@@ -812,7 +822,6 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     printf -- '- duration_seconds: %s\n' "${DURATION}"
     printf -- '- output: %s\n' "${STEP_OUTPUT_PATH}"
     printf -- '- output_source: %s\n' "${OUTPUT_SOURCE:-unknown}"
-    printf -- '- raw_output: %s\n' "${STEP_RAW_PATH}"
   } >> "${ARTIFACT_INDEX}"
 
   {
@@ -836,16 +845,8 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 printf "  Done in %ss  |  ✓ %s  ✗ %s  ⊘ %s\n" "${TOTAL_DURATION}" "${COMPLETED}" "${FAILED}" "${SKIPPED}"
 printf "  Artifacts: %s\n" "${WORKFLOW_OUTPUT_DIR}"
 printf "  Index: %s\n" "${ARTIFACT_INDEX}"
+printf "  Log: %s\n" "${WORKFLOW_LOG}"
 echo ""
-
-{
-  printf '\n## Finished\n\n'
-  printf -- '- finished_at: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
-  printf -- '- total_duration_seconds: %s\n' "${TOTAL_DURATION}"
-  printf -- '- completed: %s\n' "${COMPLETED}"
-  printf -- '- failed: %s\n' "${FAILED}"
-  printf -- '- skipped: %s\n' "${SKIPPED}"
-} >> "${RUN_SUMMARY}"
 
 FINAL_STATE="completed"
 FINAL_RESULT="success"
@@ -856,6 +857,17 @@ if [ "${FAILED}" -gt 0 ]; then
   FINAL_RESULT="step_failed"
   EXIT_CODE=1
 fi
+
+append_workflow_log "${WORKFLOW_LOG}" "workflow" "workflow:${WORKFLOW_ID} duration:${TOTAL_DURATION}s completed:${COMPLETED} failed:${FAILED} skipped:${SKIPPED}" "${FINAL_RESULT}"
+
+{
+  printf '\n## Finished\n\n'
+  printf -- '- finished_at: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+  printf -- '- total_duration_seconds: %s\n' "${TOTAL_DURATION}"
+  printf -- '- completed: %s\n' "${COMPLETED}"
+  printf -- '- failed: %s\n' "${FAILED}"
+  printf -- '- skipped: %s\n' "${SKIPPED}"
+} >> "${RUN_SUMMARY}"
 
 if [ -n "${RUN_ID}" ]; then
   bash "${SCRIPT_DIR}/cap-workflow.sh" update-run-status "${RUN_ID}" "${FINAL_STATE}" "${FINAL_RESULT}" >/dev/null 2>&1 || true
