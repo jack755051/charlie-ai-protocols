@@ -1,0 +1,42 @@
+# Skill Registry Schema (draft v1)
+#
+# 定義目前 runtime 可用的 agent-skill 清單。
+
+schema_version: 1
+
+fields:
+  default_provider:
+    type: string
+    required: false
+
+  binding_defaults:
+    type: object
+    required: false
+    fields:
+      binding_mode:
+        type: string
+        enum: [strict, preferred, fallback_allowed]
+      missing_policy:
+        type: string
+        enum: [halt, substitute, manual]
+
+  skills:
+    type: object[]
+    required: true
+    item_fields:
+      skill_id:
+        type: string
+      manifest_ref:
+        type: string
+      provider:
+        type: string
+      enabled:
+        type: boolean
+      priority:
+        type: integer
+      compatible_workflow_versions:
+        type: integer[]
+      provided_capabilities:
+        type: string[]
+      fallback_roles:
+        type: string[]

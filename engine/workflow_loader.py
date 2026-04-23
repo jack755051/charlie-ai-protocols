@@ -104,6 +104,63 @@ class WorkflowLoader:
             "steps": plan,
         }
 
+    def build_semantic_plan(self, workflow_ref: str) -> dict:
+        """
+        建立只依賴 workflow + capability 的 semantic plan。
+
+        這個 plan 不做 agent / skill 綁定，讓 workflow 在 skill 缺失時仍可被載入與審核。
+        """
+        workflow = self.load_workflow(workflow_ref)
+        capabilities = self.load_capabilities()
+
+        steps_by_id: dict[str, dict] = {}
+        contract_missing_steps: list[str] = []
+        for step in workflow["steps"]:
+            capability_name = step["capability"]
+            capability_contract = capabilities.get(capability_name)
+            if capability_contract is None:
+                contract_missing_steps.append(step["id"])
+
+            steps_by_id[step["id"]] = {
+                "step_id": step["id"],
+                "step_name": step["name"],
+                "phase": None,
+                "capability": capability_name,
+                "capability_contract_found": capability_contract is not None,
+                "capability_contract": capability_contract,
+                "needs": step.get("needs", []),
+                "inputs": step.get("inputs", []),
+                "outputs": step.get("outputs", []),
+                "done_when": step.get("done_when", []),
+                "optional": step.get("optional", False),
+                "on_fail": step.get("on_fail", "halt"),
+                "parallel_with": step.get("parallel_with", []),
+                "gate": step.get("gate"),
+                "on_fail_route": step.get("on_fail_route", []),
+                "record_level": step.get("record_level"),
+            }
+
+        phases = self._compute_phases(steps_by_id)
+        for phase in phases:
+            for step in phase["steps"]:
+                step["phase"] = phase["phase"]
+
+        semantic_steps: list[dict] = []
+        for phase in phases:
+            semantic_steps.extend(phase["steps"])
+
+        return {
+            "workflow_id": workflow["workflow_id"],
+            "version": workflow["version"],
+            "name": workflow["name"],
+            "summary": workflow["summary"],
+            "source_path": workflow["_source_path"],
+            "governance": workflow.get("governance", {}),
+            "contract_missing_steps": contract_missing_steps,
+            "phases": phases,
+            "steps": semantic_steps,
+        }
+
     # ── Orchestration ──
 
     def build_execution_phases(self, workflow_ref: str) -> dict:
@@ -169,6 +226,131 @@ class WorkflowLoader:
             "standby_steps": standby_steps,
             "fail_routes": fail_routes,
             "optional_steps": optional_steps,
+        }
+
+    def build_step_index(self, workflow_ref: str) -> dict[str, dict]:
+        """建立 step 查詢索引，供 handoff / orchestration 驗證使用。"""
+        workflow = self.load_workflow(workflow_ref)
+        phases_plan = self.build_execution_phases(workflow_ref)
+        phase_by_step: dict[str, int] = {}
+        for phase in phases_plan["phases"]:
+            for step in phase["steps"]:
+                phase_by_step[step["step_id"]] = phase["phase"]
+
+        step_index: dict[str, dict] = {}
+        governance = workflow.get("governance", {})
+        watcher_checkpoints = set(governance.get("watcher_checkpoints", []))
+        logger_checkpoints = set(governance.get("logger_checkpoints", []))
+
+        for step in workflow["steps"]:
+            step_id = step["id"]
+            step_index[step_id] = {
+                "step_id": step_id,
+                "step_name": step["name"],
+                "phase": phase_by_step.get(step_id),
+                "capability": step["capability"],
+                "needs": step.get("needs", []),
+                "done_when": step.get("done_when", []),
+                "on_fail": step.get("on_fail", "halt"),
+                "on_fail_route": step.get("on_fail_route", []),
+                "gate": step.get("gate"),
+                "optional": step.get("optional", False),
+                "watcher_required": step_id in watcher_checkpoints,
+                "logger_required": step_id in logger_checkpoints,
+            }
+
+        return step_index
+
+    def validate_handoff_ticket(self, workflow_ref: str, ticket: dict) -> dict:
+        """
+        驗證 handoff ticket 不得覆寫 workflow 核心約束。
+
+        規則：
+        - workflow_id / step_id / phase 必須對齊 workflow
+        - target_capability 不得偏離 step capability
+        - acceptance_criteria 至少覆蓋 step.done_when
+        - handoff 不得弱化 workflow 要求的 watcher/logger checkpoint
+        - route_back_to 必須指向 workflow 內存在的 step
+        """
+        workflow = self.load_workflow(workflow_ref)
+        step_index = self.build_step_index(workflow_ref)
+        governance = workflow.get("governance", {})
+        errors: list[str] = []
+
+        workflow_context = ticket.get("workflow_context", {})
+        step_id = workflow_context.get("step_id")
+        if not step_id:
+            errors.append("handoff 缺少 workflow_context.step_id")
+            return {"ok": False, "errors": errors}
+
+        step_contract = step_index.get(step_id)
+        if not step_contract:
+            errors.append(f"handoff.step_id 不存在於 workflow: {step_id}")
+            return {"ok": False, "errors": errors}
+
+        workflow_id = workflow_context.get("workflow_id")
+        if workflow_id and workflow_id != workflow["workflow_id"]:
+            errors.append(
+                f"handoff.workflow_id 與 workflow 不一致: {workflow_id} != {workflow['workflow_id']}"
+            )
+
+        phase = workflow_context.get("phase")
+        expected_phase = step_contract["phase"]
+        if phase is not None and phase != expected_phase:
+            errors.append(
+                f"handoff.phase 與 workflow step phase 不一致: {phase} != {expected_phase}"
+            )
+
+        target_capability = ticket.get("target_capability")
+        if target_capability and target_capability != step_contract["capability"]:
+            errors.append(
+                "handoff.target_capability 不得覆寫 workflow step capability: "
+                f"{target_capability} != {step_contract['capability']}"
+            )
+
+        acceptance_criteria = ticket.get("acceptance_criteria", [])
+        missing_done_when = [
+            item for item in step_contract["done_when"] if item not in acceptance_criteria
+        ]
+        if step_contract["done_when"] and missing_done_when:
+            errors.append(
+                "handoff.acceptance_criteria 未完整覆蓋 workflow.done_when: "
+                f"{missing_done_when}"
+            )
+
+        route_back_to = workflow_context.get("route_back_to")
+        if route_back_to and route_back_to not in step_index:
+            errors.append(
+                f"handoff.route_back_to 必須指向 workflow 內存在的 step: {route_back_to}"
+            )
+
+        governance_hint = ticket.get("governance", {})
+        watcher_required = governance_hint.get("watcher_required")
+        logger_required = governance_hint.get("logger_required")
+        if step_contract["watcher_required"] and watcher_required is False:
+            errors.append(
+                f"handoff 不得關閉 workflow 指定的 watcher checkpoint: {step_id}"
+            )
+        if step_contract["logger_required"] and logger_required is False:
+            errors.append(
+                f"handoff 不得關閉 workflow 指定的 logger checkpoint: {step_id}"
+            )
+
+        record_mode_hint = governance_hint.get("record_mode_hint")
+        logger_mode = governance.get("logger_mode")
+        if logger_mode == "full_log" and record_mode_hint in {"milestone_log", "final_only"}:
+            errors.append(
+                "handoff.record_mode_hint 不得弱化 workflow.logger_mode=full_log"
+            )
+        if logger_mode == "milestone_log" and record_mode_hint == "final_only":
+            errors.append(
+                "handoff.record_mode_hint 不得弱化 workflow.logger_mode=milestone_log"
+            )
+
+        return {
+            "ok": not errors,
+            "errors": errors,
+            "step_contract": step_contract,
         }
 
     def _compute_phases(self, steps_by_id: dict[str, dict]) -> list[dict]:

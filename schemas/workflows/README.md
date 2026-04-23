@@ -43,6 +43,7 @@ workflow 的目的，是把固定順序的工作流從 agent prompt 中抽離，
 4. 驗證產物是否符合 capability contract
 5. 失敗時安排 reroute、重試或退回前一步
 6. 依 `governance` 設定安排 Watcher / Logger 的 checkpoint 介入
+7. 若有正式 handoff ticket，應在派發前以 orchestration 層驗證其不得覆寫 workflow 的 step / capability / phase / checkpoint
 
 ## 5. 與 registry 的關係
 
