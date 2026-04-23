@@ -97,8 +97,9 @@ cap workflow run version-control-private "請針對目前變更建立 commit"
 目前 `cap workflow` 支援：
 
 - `list`：表格式列出 workflow、狀態、執行次數與摘要
-- `ps`：列出已啟動過的 workflow 狀態摘要
+- `ps`：列出每次 workflow run instance 的狀態摘要
 - `show`：inspect 風格檢視單一 workflow
+- `inspect`：檢視單一 `run_id` 的執行狀態
 - `plan`：顯示 phase、capability 與 agent 綁定
 - `run`：有 prompt 時進入前景執行；沒有 prompt 時會先詢問或只顯示 plan
 - `run --dry-run`：只顯示執行計畫，不真的執行 step

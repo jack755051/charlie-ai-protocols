@@ -29,8 +29,9 @@ COMMAND                            DESCRIPTION
 
 [Workflow]
   cap workflow list                列出所有 workflow
-  cap workflow ps                  列出已啟動過的 workflow 狀態
+  cap workflow ps                  列出 workflow run instance 狀態
   cap workflow show <id>           顯示 workflow 摘要
+  cap workflow inspect <run-id>    顯示單次 workflow run 詳情
   cap workflow plan <id>           顯示 phase 與 agent 綁定
   cap workflow run <id> [prompt]   前景執行；無 prompt 時會先詢問或只顯示 plan
   cap workflow run --dry-run <id> [prompt]  只顯示執行計畫，不真的執行

@@ -24,6 +24,8 @@ build/
 .aider*
 .continue/
 .copilot/
+.codex
+.codex/
 
 # ===========================
 # IDE / 編輯器
