@@ -28,12 +28,18 @@ fields:
         type: string
       manifest_ref:
         type: string
+      agent_alias:
+        type: string
       provider:
         type: string
       enabled:
         type: boolean
       priority:
         type: integer
+      prompt_file:
+        type: string
+      cli:
+        type: string
       compatible_workflow_versions:
         type: integer[]
       provided_capabilities:

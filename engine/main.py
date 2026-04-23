@@ -4,7 +4,7 @@ from crewai import Crew, Process, Task
 from dotenv import load_dotenv
 
 from factory import AgentFactory
-from workflow_loader import WorkflowLoader
+from runtime_binder import RuntimeBinder
 
 load_dotenv()
 
@@ -17,6 +17,7 @@ def print_workflow_plan(plan):
     print(f"Source: {plan['source_path']}")
     print(f"Summary: {plan['summary']}")
     governance = plan.get("governance", {})
+    binding = plan.get("binding", {})
     if governance:
         print("\nGovernance:")
         print(f"- watcher_mode: {governance.get('watcher_mode', 'n/a')}")
@@ -25,6 +26,11 @@ def print_workflow_plan(plan):
             print(f"- watcher_checkpoints: {', '.join(governance['watcher_checkpoints'])}")
         if governance.get("logger_checkpoints"):
             print(f"- logger_checkpoints: {', '.join(governance['logger_checkpoints'])}")
+    if binding:
+        print("\nBinding:")
+        print(f"- binding_status: {binding.get('binding_status', 'n/a')}")
+        print(f"- registry_missing: {binding.get('registry_missing', False)}")
+        print(f"- adapter_from_legacy: {binding.get('adapter_from_legacy', False)}")
 
     print("\nPhases:")
     for phase in plan["phases"]:
@@ -32,7 +38,7 @@ def print_workflow_plan(plan):
         for step in phase["steps"]:
             print(
                 f"   - [{step['step_id']}] {step['step_name']} "
-                f"=> capability={step['capability']} / agent={step['agent_alias']}"
+                f"=> capability={step['capability']} / agent={step['agent_alias'] or '-'}"
             )
             if step["needs"]:
                 print(f"     needs: {', '.join(step['needs'])}")
@@ -77,9 +83,12 @@ def main():
 
     workflow_plan = None
     if workflow_ref:
-        loader = WorkflowLoader()
-        workflow_plan = loader.build_execution_phases(workflow_ref)
+        binder = RuntimeBinder()
+        workflow_plan = binder.build_bound_execution_phases(workflow_ref)
         print_workflow_plan(workflow_plan)
+        if workflow_plan.get("binding", {}).get("binding_status") == "blocked":
+            print("\n❌ Workflow preflight blocked，請先補齊 skill registry 或調整 binding policy。")
+            return
 
     workflow_context = ""
     if workflow_plan:
@@ -89,6 +98,7 @@ def main():
             f"- workflow_id: {workflow_plan['workflow_id']}",
             f"- summary: {workflow_plan['summary']}",
             f"- governance: {workflow_plan.get('governance', {})}",
+            f"- binding: {workflow_plan.get('binding', {})}",
             "- phase plan:",
         ]
         for phase in workflow_plan["phases"]:
