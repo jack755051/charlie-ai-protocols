@@ -648,8 +648,8 @@ workflow_ref = sys.argv[2]
 loader = WorkflowLoader(base_dir=base_dir)
 binder = RuntimeBinder(base_dir=base_dir)
 semantic = loader.build_semantic_plan(workflow_ref)
-plan = loader.build_execution_phases(workflow_ref)
-binding = binder.bind_capabilities(workflow_ref)
+plan = binder.build_bound_execution_phases(workflow_ref)
+binding = plan["binding"]
 
 print(f"workflow_id: {plan['workflow_id']}")
 print(f"name: {plan['name']}")
@@ -658,6 +658,7 @@ print(f"summary: {plan['summary']}")
 print(f"source: {plan['source_path']}")
 print(f"binding_status: {binding['binding_status']}")
 print(f"registry_missing: {binding['registry_missing']}")
+print(f"adapter_from_legacy: {binding['adapter_from_legacy']}")
 print("semantic_phases:")
 for phase in semantic["phases"]:
     print(f"  Phase {phase['phase']}:")
@@ -672,7 +673,7 @@ for phase in plan["phases"]:
     for step in phase["steps"]:
         print(
             f"    - {step['step_id']} => capability={step['capability']} / "
-            f"agent={step['agent_alias']} / needs={step['needs']}"
+            f"agent={step['agent_alias'] or '-'} / needs={step['needs']}"
         )
 if plan["standby_steps"]:
     print("standby_steps:")
@@ -712,6 +713,7 @@ print(f"workflow_version: {report['workflow_version']}")
 print(f"binding_status: {report['binding_status']}")
 print(f"registry_source: {report['registry_source_path']}")
 print(f"registry_missing: {report['registry_missing']}")
+print(f"adapter_from_legacy: {report['adapter_from_legacy']}")
 print(
     "summary: "
     f"total={report['summary']['total_steps']}, "
@@ -740,12 +742,13 @@ PY
 
     DETACH=0
     DRY_RUN=0
-    RUN_CLI="${CAP_DEFAULT_AGENT_CLI:-claude}"
+    RUN_CLI="${CAP_DEFAULT_AGENT_CLI:-auto}"
+    CLI_OVERRIDE=0
     while [ "$#" -gt 0 ]; do
       case "$1" in
         -d)       DETACH=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
-        --cli)    RUN_CLI="$2"; shift 2 ;;
+        --cli)    RUN_CLI="$2"; CLI_OVERRIDE=1; shift 2 ;;
         *)        break ;;
       esac
     done
@@ -769,17 +772,19 @@ import sys
 
 base_dir = Path(sys.argv[1])
 sys.path.insert(0, str(base_dir))
-from engine.workflow_loader import WorkflowLoader
+from engine.runtime_binder import RuntimeBinder
 
 workflow_ref = sys.argv[2]
-loader = WorkflowLoader(base_dir=base_dir)
-result = loader.build_execution_phases(workflow_ref)
+loader = RuntimeBinder(base_dir=base_dir)
+result = loader.build_bound_execution_phases(workflow_ref)
 print(json.dumps(result, ensure_ascii=False))
 PY
 )"
 
     WORKFLOW_ID="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["workflow_id"])')"
     WORKFLOW_NAME="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["name"])')"
+    BINDING_JSON="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["binding"], ensure_ascii=False))')"
+    BINDING_STATUS="$(printf '%s' "${BINDING_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["binding_status"])')"
 
     if [ -z "${USER_PROMPT}" ]; then
       if [ -t 0 ]; then
@@ -806,7 +811,7 @@ total = len(plan["phases"])
 for p in plan["phases"]:
     steps = p["steps"]
     ids = " + ".join(s["step_id"] for s in steps)
-    agents = ", ".join(dict.fromkeys(s["agent_alias"] for s in steps))
+    agents = ", ".join(dict.fromkeys((s["agent_alias"] or s["skill_id"] or "-") for s in steps))
     suffix = ""
     if len(steps) > 1:
         suffix = "  (parallel)"
@@ -818,6 +823,16 @@ if plan["standby_steps"]:
     print(f"\n  Standby: {', '.join(s['step_id'] for s in plan['standby_steps'])}")
 PY
       echo ""
+      "${PYTHON_BIN}" - <<'PY' "${BINDING_JSON}"
+import json
+import sys
+
+binding = json.loads(sys.argv[1])
+print(f"  Binding: {binding['binding_status']}  |  registry_missing={binding['registry_missing']}  |  adapter_from_legacy={binding['adapter_from_legacy']}")
+for step in binding["steps"]:
+    print(f"    - {step['step_id']}: {step['resolution_status']} -> {step['selected_skill_id'] or '-'}")
+PY
+      echo ""
       if [ "${DRY_RUN}" -eq 1 ]; then
         echo "  Dry run only — no step was executed."
       else
@@ -825,6 +840,51 @@ PY
       fi
       echo ""
       exit 0
+    fi
+
+    if [ "${BINDING_STATUS}" = "blocked" ]; then
+      echo ""
+      echo "WORKFLOW PREFLIGHT BLOCKED — ${WORKFLOW_NAME}"
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      "${PYTHON_BIN}" - <<'PY' "${BINDING_JSON}"
+import json
+import sys
+
+binding = json.loads(sys.argv[1])
+print(f"binding_status: {binding['binding_status']}")
+print(f"registry_source: {binding['registry_source_path']}")
+print(f"registry_missing: {binding['registry_missing']}")
+print(f"adapter_from_legacy: {binding['adapter_from_legacy']}")
+print("unresolved steps:")
+for step in binding["steps"]:
+    if step["resolution_status"] in {"required_unresolved", "incompatible"}:
+        print(f"  - {step['step_id']} => {step['resolution_status']} / capability={step['capability']} / reason={step['reason']}")
+PY
+      echo ""
+      echo "Workflow 已停止，請先補齊 skill registry 或調整 binding policy。"
+      exit 2
+    fi
+
+    if [ "${BINDING_STATUS}" = "degraded" ]; then
+      echo ""
+      echo "WORKFLOW PREFLIGHT DEGRADED — ${WORKFLOW_NAME}"
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      "${PYTHON_BIN}" - <<'PY' "${BINDING_JSON}"
+import json
+import sys
+
+binding = json.loads(sys.argv[1])
+print(f"binding_status: {binding['binding_status']}")
+print(f"registry_source: {binding['registry_source_path']}")
+print(f"registry_missing: {binding['registry_missing']}")
+print(f"adapter_from_legacy: {binding['adapter_from_legacy']}")
+print("degraded steps:")
+for step in binding["steps"]:
+    if step["resolution_status"] in {"fallback_available", "optional_unresolved"}:
+        print(f"  - {step['step_id']} => {step['resolution_status']} / capability={step['capability']} / selected={step['selected_skill_id'] or '-'}")
+PY
+      echo ""
+      echo "將以 degraded 模式繼續執行。"
     fi
 
     if [ "${DETACH}" -eq 1 ]; then
@@ -838,7 +898,10 @@ PY
 
     RUN_ID="$(create_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "executing" "foreground_start" "foreground" "${RUN_CLI}" "${USER_PROMPT}")"
     bash "${SCRIPT_DIR}/trace-log.sh" append "Workflow" "workflow:${WORKFLOW_ID} run:${RUN_ID} 啟動 (${WORKFLOW_NAME})" "成功" >/dev/null 2>&1 || true
-    exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --cli "${RUN_CLI}" --run-id "${RUN_ID}"
+    if [ "${CLI_OVERRIDE}" -eq 1 ]; then
+      exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --cli "${RUN_CLI}" --run-id "${RUN_ID}"
+    fi
+    exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --run-id "${RUN_ID}"
     ;;
   update-run-status)
     [ "$#" -eq 4 ] || usage

@@ -5,7 +5,7 @@
 # Usage:
 #   bash cap-workflow-exec.sh <plan_json> <user_prompt> [--cli codex|claude]
 #
-# plan_json: build_execution_phases() 的 JSON 輸出
+# plan_json: RuntimeBinder.build_bound_execution_phases() 的 JSON 輸出
 # 執行每個 phase/step，顯示進度，輸出串流到終端。
 
 set -euo pipefail
@@ -17,7 +17,7 @@ PATH_HELPER="${SCRIPT_DIR}/cap-paths.sh"
 SKILLS_DIR="${CAP_ROOT}/docs/agent-skills"
 PROTOCOL_FILE="${SKILLS_DIR}/00-core-protocol.md"
 
-CLI_NAME="${CAP_DEFAULT_AGENT_CLI:-claude}"
+CLI_NAME="${CAP_DEFAULT_AGENT_CLI:-}"
 PLAN_JSON=""
 USER_PROMPT=""
 RUN_ID=""
@@ -153,8 +153,6 @@ check_cli() {
   return 1
 }
 
-check_cli "${CLI_NAME}" || exit 1
-
 # ── CLI command builder ──
 
 run_step_claude() {
@@ -168,15 +166,29 @@ run_step_codex() {
 }
 
 run_step() {
-  local prompt="$1"
-  case "${CLI_NAME}" in
+  local cli="$1"
+  local prompt="$2"
+  case "${cli}" in
     claude) run_step_claude "${prompt}" ;;
     codex)  run_step_codex "${prompt}" ;;
     *)
-      echo "不支援的 CLI：${CLI_NAME}" >&2
+      echo "不支援的 CLI：${cli}" >&2
       return 1
       ;;
   esac
+}
+
+resolve_step_cli() {
+  local step_cli="$1"
+  if [ -n "${CLI_NAME}" ]; then
+    printf '%s\n' "${CLI_NAME}"
+    return
+  fi
+  if [ -n "${step_cli}" ]; then
+    printf '%s\n' "${step_cli}"
+    return
+  fi
+  printf '%s\n' "claude"
 }
 
 # ── Progress display ──
@@ -218,8 +230,6 @@ build_step_prompt() {
   local inputs="$5"
   local user_req="$6"
 
-  local agent_path="${SKILLS_DIR}/${prompt_file}"
-
   cat <<EOF
 你現在是 ${agent_alias} agent，正在執行 workflow step: ${step_id} (capability: ${capability})。
 
@@ -255,14 +265,15 @@ trap on_exit EXIT
 echo ""
 printf "${BOLD}WORKFLOW RUN — ${WORKFLOW_NAME}${RESET}\n"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-printf "  CLI: ${CLI_NAME}  |  Phases: ${TOTAL_PHASES}  |  ID: ${WORKFLOW_ID}\n"
+printf "  CLI: %s  |  Phases: %s  |  ID: %s\n" "${CLI_NAME:-auto}" "${TOTAL_PHASES}" "${WORKFLOW_ID}"
 
 FAILED=0
 COMPLETED=0
 SKIPPED=0
 START_TOTAL="$(date '+%s')"
 
-# Flatten phases into step lines: phase_num|total|step_ids|agents|step_id|capability|agent_alias|prompt_file|inputs|optional
+# Flatten phases into step lines:
+# phase_num|total|step_ids|agents|step_id|capability|agent_alias|prompt_file|step_cli|inputs|optional|resolution_status
 STEP_LINES="$(python3 - "${PLAN_JSON}" <<'PYEOF'
 import json, sys
 plan = json.loads(sys.argv[1])
@@ -270,26 +281,43 @@ total = len(plan["phases"])
 for phase in plan["phases"]:
     pnum = phase["phase"]
     ids_joined = " + ".join(s["step_id"] for s in phase["steps"])
-    agents_joined = ", ".join(dict.fromkeys(s["agent_alias"] for s in phase["steps"]))
+    agents_joined = ", ".join(
+        dict.fromkeys((s.get("agent_alias") or s.get("skill_id") or "-") for s in phase["steps"])
+    )
     for step in phase["steps"]:
         inputs = ",".join(step.get("inputs", []))
         opt = str(step.get("optional", False))
+        resolution_status = step.get("resolution_status", "resolved")
         print("|".join([
             str(pnum), str(total), ids_joined, agents_joined,
-            step["step_id"], step["capability"], step["agent_alias"],
-            step["prompt_file"], inputs, opt,
+            step["step_id"], step["capability"], step.get("agent_alias") or "",
+            step.get("prompt_file") or "", step.get("cli") or "", inputs, opt, resolution_status,
         ]))
 PYEOF
 )"
 
 PREV_PHASE=""
 
-while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id capability agent_alias prompt_file inputs optional <&3; do
+while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id capability agent_alias prompt_file step_cli inputs optional resolution_status <&3; do
 
   # Show phase header once per phase
   if [ "${phase_num}" != "${PREV_PHASE}" ]; then
     phase_header "${phase_num}" "${total}" "${step_ids_in_phase}" "${agents_in_phase}"
     PREV_PHASE="${phase_num}"
+  fi
+
+  # Skip optional steps that were intentionally left unresolved in degraded mode.
+  if [ "${resolution_status}" = "optional_unresolved" ]; then
+    step_status "skip" "${step_id}" "0"
+    SKIPPED=$((SKIPPED + 1))
+    continue
+  fi
+
+  # Guard against malformed preflight state leaking into execution.
+  if [ "${resolution_status}" = "required_unresolved" ] || [ "${resolution_status}" = "incompatible" ]; then
+    echo "  ${RED}│ step ${step_id} 無法執行：binding 狀態為 ${resolution_status}${RESET}"
+    FAILED=$((FAILED + 1))
+    break
   fi
 
   # Skip optional steps without inputs
@@ -299,6 +327,18 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     continue
   fi
 
+  if [ -z "${agent_alias}" ] || [ -z "${prompt_file}" ]; then
+    echo "  ${RED}│ step ${step_id} 缺少 agent_alias 或 prompt_file，無法執行${RESET}"
+    FAILED=$((FAILED + 1))
+    break
+  fi
+
+  effective_cli="$(resolve_step_cli "${step_cli}")"
+  check_cli "${effective_cli}" || {
+    FAILED=$((FAILED + 1))
+    break
+  }
+
   # Build and execute step
   step_prompt="$(build_step_prompt "${step_id}" "${capability}" "${agent_alias}" "${prompt_file}" "${inputs}" "${USER_PROMPT}")"
 
@@ -307,7 +347,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   trap "rm -f '${STEP_TMP}'" EXIT
 
   # Run step in background, show spinner with elapsed time
-  run_step "${step_prompt}" > "${STEP_TMP}" 2>&1 &
+  run_step "${effective_cli}" "${step_prompt}" > "${STEP_TMP}" 2>&1 &
   STEP_PID=$!
 
   SPIN='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
@@ -332,7 +372,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   if [ "${exit_code}" -eq 0 ]; then
     step_status "ok" "${step_id}" "${DURATION}"
     COMPLETED=$((COMPLETED + 1))
-    bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} capability:${capability} agent:${agent_alias}" "成功" >/dev/null 2>&1 || true
+    bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} capability:${capability} agent:${agent_alias} cli:${effective_cli}" "成功" >/dev/null 2>&1 || true
   else
     step_status "fail" "${step_id}" "${DURATION}"
     FAILED=$((FAILED + 1))
@@ -345,7 +385,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     # Auth / login errors
     if echo "${output_lower}" | grep -qE 'not logged in|not authenticated|unauthorized|authentication required|login required|sign in|no api key|invalid.*api.?key|ANTHROPIC_API_KEY|OPENAI_API_KEY'; then
       ERROR_TYPE="auth"
-      case "${CLI_NAME}" in
+      case "${effective_cli}" in
         claude) ERROR_HINT="  請先登入：執行 'claude' 啟動互動 session 完成認證。" ;;
         codex)  ERROR_HINT="  請先設定 API Key：export OPENAI_API_KEY=<your-key>" ;;
       esac
@@ -369,7 +409,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
       ERROR_HINT="  Codex 不信任目前目錄。請先在專案目錄內執行 'codex' 並允許信任。"
     fi
 
-    bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} capability:${capability}" "失敗" >/dev/null 2>&1 || true
+    bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} capability:${capability} cli:${effective_cli}" "失敗" >/dev/null 2>&1 || true
 
     # Show classified error
     if [ -n "${output}" ]; then
