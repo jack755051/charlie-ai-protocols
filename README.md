@@ -112,7 +112,7 @@ cap workflow run version-control-private "請針對目前變更建立 commit"
 - `run`：有 prompt 時進入前景執行；沒有 prompt 時會先詢問或只顯示 plan
 - `run --dry-run`：只顯示執行計畫，不真的執行 step
 
-Workflow 清單請看 [schemas/workflows/README.md](schemas/workflows/README.md)。
+Workflow 清單請看 [docs/workflows/README.md](docs/workflows/README.md)。
 
 ## Agent System
 
@@ -146,8 +146,8 @@ Workflow 與 Agent Skills 是並存的兩種使用方式：
 
 相關入口：
 
-- [schemas/workflows/README.md](schemas/workflows/README.md)
-- [schemas/workflows/workflow-schema.md](schemas/workflows/workflow-schema.md)
+- [docs/workflows/README.md](docs/workflows/README.md)
+- [docs/workflows/workflow-schema.md](docs/workflows/workflow-schema.md)
 - [schemas/capabilities.yaml](schemas/capabilities.yaml)
 
 ## Project Structure
@@ -197,7 +197,7 @@ charlie-ai-protocols/
 
 - 架構文件：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Agent 清單：[AGENTS.md](AGENTS.md)
-- Workflow 清單：[schemas/workflows/README.md](schemas/workflows/README.md)
+- Workflow 清單：[docs/workflows/README.md](docs/workflows/README.md)
 - Portfolio: <https://jack755051.github.io/charlie_portfolio_frontend/portfolio>
 
 ## License

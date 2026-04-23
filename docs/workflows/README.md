@@ -30,7 +30,7 @@ workflow 的目的，是把固定順序的工作流從 agent prompt 中抽離，
   - 給人類閱讀的 workflow 入口、使用方式與清單
 - `workflow-schema.md`
   - 定義 workflow YAML 的最小欄位與語意
-- `*.yaml`
+- `../../schemas/workflows/*.yaml`
   - 各具體 workflow 模板
 
 ## 4. 執行模型
@@ -125,6 +125,7 @@ workflow 不負責決定最終 agent，只負責宣告：
 
 ## 8. 對應檔案
 
-- workflow schema：`schemas/workflows/workflow-schema.md`
+- workflow schema：`docs/workflows/workflow-schema.md`
+- workflow templates：`schemas/workflows/*.yaml`
 - capability 契約：`schemas/capabilities.yaml`
 - agent binding：`.cap.agents.json`

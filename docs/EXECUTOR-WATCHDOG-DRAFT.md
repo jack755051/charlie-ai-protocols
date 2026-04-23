@@ -125,7 +125,7 @@ steps:
     stall_action: warn      # warn 或 kill；預設 warn
 ```
 
-`workflow-schema.md` 需新增對應欄位定義。
+`docs/workflows/workflow-schema.md` 需新增對應欄位定義。
 
 實作狀態：已實作。
 
@@ -154,5 +154,5 @@ Watcher 是**事後稽核者**，不適合做即時 watchdog：
 ## 相關檔案
 
 - `scripts/cap-workflow-exec.sh`：executor 主體，spinner 迴圈在此
-- `schemas/workflows/workflow-schema.md`：step 欄位定義
+- `docs/workflows/workflow-schema.md`：step 欄位定義
 - `docs/agent-skills/90-watcher-agent.md`：Watcher 職責邊界（不變）

@@ -14,8 +14,8 @@
   - runtime 負責把 workflow step 綁定到實際 agent
 
 - [x] 新增 workflow 規格目錄
-  - 建立 `schemas/workflows/README.md`
-  - 建立 `schemas/workflows/workflow-schema.md`
+  - 建立 `docs/workflows/README.md`
+  - 建立 `docs/workflows/workflow-schema.md`
   - 明確定義 `workflow_id`、`version`、`steps`、`capability`、`needs`、`outputs`、`optional`
 
 - [x] 設計 capability contract
@@ -58,15 +58,15 @@
 
 ## 近期建議順序
 
-1. ~~先出 `workflow-schema.md`~~ (done: `schemas/workflows/workflow-schema.md`)
+1. ~~先出 `workflow-schema.md`~~ (done: `docs/workflows/workflow-schema.md`)
 2. ~~再出 `readme-to-devops.yaml`~~ (done: `schemas/workflows/readme-to-devops.yaml`)
 3. ~~再補 capability registry~~ (done: `schemas/capabilities.yaml`)
 4. 最後才改 engine 讓 supervisor 能讀 workflow
 
 ## 已完成
 
-- [x] 新增 `schemas/workflows/README.md`（原 `docs/workflows/README.md`，已搬移）
-- [x] 新增 `schemas/workflows/workflow-schema.md`（原 `docs/workflows/workflow-schema.md`，已搬移）
+- [x] 新增 `docs/workflows/README.md`
+- [x] 新增 `docs/workflows/workflow-schema.md`
 - [x] 新增 `schemas/workflows/readme-to-devops.yaml`（原 `docs/workflows/readme-to-devops.yaml`，已搬移）
 - [x] 新增 `schemas/capabilities.yaml`（取代舊版 `docs/policies/capability-contracts.md`）
 - [x] 新增 `schemas/handoff-ticket.schema.yaml`
