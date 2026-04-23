@@ -24,7 +24,6 @@ RUN_ID=""
 DEFAULT_STEP_TIMEOUT_SECONDS="${CAP_WORKFLOW_STEP_TIMEOUT_SECONDS:-600}"
 DEFAULT_STEP_STALL_SECONDS="${CAP_WORKFLOW_STEP_STALL_SECONDS:-120}"
 DEFAULT_STEP_STALL_ACTION="${CAP_WORKFLOW_STALL_ACTION:-warn}"
-PREVIEW_CHARS="${CAP_WORKFLOW_PREVIEW_CHARS:-80}"
 
 # ── Parse args ──
 
@@ -209,8 +208,104 @@ phase_header() {
   local total="$2"
   local step_ids="$3"
   local agents="$4"
-  printf "\n${BOLD}▶ Phase %s/%s${RESET}  %s → %s\n" "${phase_num}" "${total}" "${step_ids}" "${agents}"
+  local bar
+  bar="$(phase_bar "${phase_num}" "${total}")"
+  printf "\n${BOLD}▶ Phase %s/%s${RESET}  ${GREEN}%s${RESET}\n" "${phase_num}" "${total}" "${bar}"
+  printf "  ${DIM}%s → %s${RESET}\n" "${step_ids}" "${agents}"
   printf "${DIM}──────────────────────────────────────────────────${RESET}\n"
+}
+
+phase_bar() {
+  local phase_num="$1"
+  local total="$2"
+  local width=14
+  local filled=$(( (phase_num * width + total - 1) / total ))
+  local empty=$(( width - filled ))
+  local bar=""
+
+  for ((i = 0; i < filled; i++)); do bar="${bar}■"; done
+  for ((i = 0; i < empty; i++)); do bar="${bar}□"; done
+  printf "%s" "${bar}"
+}
+
+section_total_for_capability() {
+  local capability="$1"
+  case "${capability}" in
+    prd_generation) printf "6" ;;
+    *)              printf "4" ;;
+  esac
+}
+
+structured_sections_for_capability() {
+  local capability="$1"
+  case "${capability}" in
+    prd_generation)
+      cat <<'EOF'
+請使用以下固定章節標題依序輸出，讓 workflow 可以從串流標題推斷段內進度：
+## 專案目標
+## 核心價值與受眾
+## 技術堆疊與架構定案
+## 預期功能清單
+## 下一步調度建議
+## 設計交付模式
+EOF
+      ;;
+    *)
+      cat <<'EOF'
+請使用以下固定章節標題依序輸出，讓 workflow 可以從串流標題推斷段內進度：
+## 任務理解
+## 執行重點
+## 產出內容
+## 交接摘要
+EOF
+      ;;
+  esac
+}
+
+detected_section_count() {
+  local output_file="$1"
+  local total="$2"
+  local count
+  count="$(grep -cE '^##[[:space:]]+' "${output_file}" 2>/dev/null || true)"
+  if [ "${count}" -gt "${total}" ]; then
+    count="${total}"
+  fi
+  printf "%s" "${count}"
+}
+
+print_live_output_chunk() {
+  local output_file="$1"
+  local from_byte="$2"
+  local to_byte="$3"
+  local count=$((to_byte - from_byte))
+
+  if [ "${count}" -le 0 ]; then
+    return 0
+  fi
+
+  printf "  ${DIM}│ "
+  dd if="${output_file}" bs=1 skip="${from_byte}" count="${count}" 2>/dev/null || true
+  printf "${RESET}\n"
+}
+
+format_activity_status() {
+  local step_id="$1"
+  local elapsed="$2"
+  local silent="$3"
+  local timeout="$4"
+  local bytes="$5"
+  local spin="$6"
+  local section_done="$7"
+  local section_total="$8"
+  local stall_note="$9"
+  local signal="waiting for first output"
+
+  if [ "${bytes}" -gt 0 ]; then
+    signal="receiving output (${bytes}B)"
+  fi
+
+  printf "\r\033[K  ${YELLOW}%s${RESET} ${DIM}%s │ section=%s/%s │ %ss │ silent=%ss │ timeout=%ss%s │ %s${RESET}" \
+    "${spin}" "${step_id}" "${section_done}" "${section_total}" "${elapsed}" "${silent}" "${timeout}" "${stall_note}" "${signal}"
 }
 
 step_status() {
@@ -223,16 +318,6 @@ step_status() {
     skip) printf "  ${YELLOW}⊘${RESET} %s ${DIM}(skipped)${RESET}\n" "${step_id}" ;;
     stop) printf "  ${RED}■${RESET} %s ${DIM}(%ss)${RESET}\n" "${step_id}" "${duration}" ;;
   esac
-}
-
-latest_preview() {
-  local file="$1"
-  local chars="$2"
-  if [ ! -s "${file}" ]; then
-    printf '%s' "waiting for first output..."
-    return
-  fi
-  tail -n 1 "${file}" 2>/dev/null | tr '\r\t' '  ' | cut -c "1-${chars}"
 }
 
 terminate_step() {
@@ -274,6 +359,8 @@ build_step_prompt() {
   local output_path="$7"
   local artifact_index="$8"
   local project_docs_dir="$9"
+  local structured_sections
+  structured_sections="$(structured_sections_for_capability "${capability}")"
 
   cat <<EOF
 你現在是 ${agent_alias} agent，正在執行 workflow step: ${step_id} (capability: ${capability})。
@@ -297,7 +384,10 @@ ${project_docs_dir}
 1. 讀取可用的上游產物索引，若索引內有上游輸出檔，必須把它們視為本步驟輸入，而不是重新猜測。
 2. 將本步驟的完整交付內容寫入「本步驟的強制輸出檔」。
 3. 若本步驟產出可長期追蹤的正式/半正式規格，請建立必要目錄，並同步寫入專案文件目錄下合適的 Markdown 檔。
-4. 完成後，請輸出交接摘要（agent_id, task_summary, output_paths, result）。
+
+${structured_sections}
+
+完成後，請輸出交接摘要（agent_id, task_summary, output_paths, result）。
 EOF
 }
 
@@ -469,8 +559,12 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   LAST_CHANGE="${START_STEP}"
   STOP_REASON=""
   STALL_WARNED=0
+  SECTION_TOTAL="$(section_total_for_capability "${capability}")"
 
-  # Run step in background, show spinner with elapsed time, output preview, and watchdog state.
+  printf "  ${BOLD}%s${RESET} ${DIM}(%s / %s via %s)${RESET}\n" "${step_id}" "${agent_alias}" "${capability}" "${effective_cli}"
+  printf "  ${DIM}live output tail:${RESET}\n"
+
+  # Run step in background, show live output chunks plus watchdog state.
   run_step "${effective_cli}" "${step_prompt}" > "${STEP_TMP}" 2>&1 &
   STEP_PID=$!
 
@@ -483,18 +577,28 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     if [ -z "${CURRENT_SIZE}" ]; then
       CURRENT_SIZE=0
     fi
-    if [ "${CURRENT_SIZE}" != "${LAST_SIZE}" ]; then
+    if [ "${CURRENT_SIZE}" -gt "${LAST_SIZE}" ]; then
+      printf "\r\033[K"
+      print_live_output_chunk "${STEP_TMP}" "${LAST_SIZE}" "${CURRENT_SIZE}"
       LAST_SIZE="${CURRENT_SIZE}"
       LAST_CHANGE="${NOW}"
     fi
     SILENT_DURATION="$(( NOW - LAST_CHANGE ))"
-    PREVIEW="$(latest_preview "${STEP_TMP}" "${PREVIEW_CHARS}")"
     STATUS_NOTE=""
     if [ "${effective_stall}" -gt 0 ] && [ "${SILENT_DURATION}" -ge "${effective_stall}" ]; then
       STATUS_NOTE=" │ stall:${effective_stall_action}"
     fi
-    printf "\r  ${YELLOW}%s${RESET} ${DIM}Running %s... %ss │ silent=%ss │ timeout=%ss%s${RESET} │ %s" \
-      "${SPIN:SPIN_IDX:1}" "${step_id}" "${ELAPSED}" "${SILENT_DURATION}" "${effective_timeout}" "${STATUS_NOTE}" "${PREVIEW}"
+    SECTION_DONE="$(detected_section_count "${STEP_TMP}" "${SECTION_TOTAL}")"
+    format_activity_status \
+      "${step_id}" \
+      "${ELAPSED}" \
+      "${SILENT_DURATION}" \
+      "${effective_timeout}" \
+      "${CURRENT_SIZE}" \
+      "${SPIN:SPIN_IDX:1}" \
+      "${SECTION_DONE}" \
+      "${SECTION_TOTAL}" \
+      "${STATUS_NOTE}"
 
     if [ "${effective_timeout}" -gt 0 ] && [ "${ELAPSED}" -ge "${effective_timeout}" ]; then
       STOP_REASON="TIMEOUT"
@@ -523,6 +627,10 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   set -e
 
   if [ -f "${STEP_TMP}" ]; then
+    CURRENT_SIZE="$(wc -c < "${STEP_TMP}" 2>/dev/null | tr -d ' ')"
+    if [ -n "${CURRENT_SIZE}" ] && [ "${CURRENT_SIZE}" -gt "${LAST_SIZE}" ]; then
+      print_live_output_chunk "${STEP_TMP}" "${LAST_SIZE}" "${CURRENT_SIZE}"
+    fi
     cp "${STEP_TMP}" "${STEP_RAW_PATH}" 2>/dev/null || true
     output="$(cat "${STEP_TMP}" 2>/dev/null || true)"
   else
@@ -622,17 +730,6 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     if [ "${optional}" != "True" ]; then
       printf "\n${RED}✗ Workflow halted at step: ${step_id}${RESET}\n"
       SHOULD_HALT=1
-    fi
-  fi
-
-  # Show condensed output
-  if [ -n "${output}" ] && [ "${exit_code}" -eq 0 ]; then
-    echo "${output}" | head -3 | while IFS= read -r line; do
-      printf "  ${DIM}│ %s${RESET}\n" "${line}"
-    done
-    total_lines="$(echo "${output}" | wc -l | tr -d ' ')"
-    if [ "${total_lines}" -gt 3 ]; then
-      printf "  ${DIM}│ ... (%s lines total)${RESET}\n" "${total_lines}"
     fi
   fi
 
