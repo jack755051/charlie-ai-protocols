@@ -271,6 +271,9 @@ build_step_prompt() {
   local prompt_file="$4"
   local inputs="$5"
   local user_req="$6"
+  local output_path="$7"
+  local artifact_index="$8"
+  local project_docs_dir="$9"
 
   cat <<EOF
 你現在是 ${agent_alias} agent，正在執行 workflow step: ${step_id} (capability: ${capability})。
@@ -280,8 +283,21 @@ ${user_req}
 
 本步驟的輸入上下文：${inputs}
 
-請嚴格依照 docs/agent-skills/${prompt_file} 中定義的角色規範執行。
-完成後，請輸出你的交接摘要（agent_id, task_summary, output_paths, result）。
+可用的上游產物索引：
+${artifact_index}
+
+本步驟的強制輸出檔：
+${output_path}
+
+專案文件目錄：
+${project_docs_dir}
+
+請嚴格依照 ${SKILLS_DIR}/${prompt_file} 中定義的角色規範執行。
+你必須完成以下事項：
+1. 讀取可用的上游產物索引，若索引內有上游輸出檔，必須把它們視為本步驟輸入，而不是重新猜測。
+2. 將本步驟的完整交付內容寫入「本步驟的強制輸出檔」。
+3. 若本步驟產出可長期追蹤的正式/半正式規格，請建立必要目錄，並同步寫入專案文件目錄下合適的 Markdown 檔。
+4. 完成後，請輸出交接摘要（agent_id, task_summary, output_paths, result）。
 EOF
 }
 
@@ -313,6 +329,47 @@ FAILED=0
 COMPLETED=0
 SKIPPED=0
 START_TOTAL="$(date '+%s')"
+RUN_LABEL="${RUN_ID:-manual-$(date '+%Y%m%d-%H%M%S')-$$}"
+
+bash "${PATH_HELPER}" ensure >/dev/null 2>&1 || true
+PROJECT_ROOT="$(bash "${PATH_HELPER}" get project_root)"
+REPORT_DIR="$(bash "${PATH_HELPER}" get report_dir)"
+WORKFLOW_OUTPUT_DIR="${REPORT_DIR}/workflows/${WORKFLOW_ID}/${RUN_LABEL}"
+PROJECT_DOCS_DIR="${PROJECT_ROOT}/docs"
+ARTIFACT_INDEX="${WORKFLOW_OUTPUT_DIR}/artifact-index.md"
+RUN_SUMMARY="${WORKFLOW_OUTPUT_DIR}/run-summary.md"
+mkdir -p "${WORKFLOW_OUTPUT_DIR}" "${PROJECT_DOCS_DIR}" >/dev/null 2>&1 || true
+
+cat > "${ARTIFACT_INDEX}" <<EOF
+# Workflow Artifact Index
+
+- workflow_id: ${WORKFLOW_ID}
+- workflow_name: ${WORKFLOW_NAME}
+- run_id: ${RUN_LABEL}
+- project_root: ${PROJECT_ROOT}
+- output_dir: ${WORKFLOW_OUTPUT_DIR}
+
+## Step Outputs
+EOF
+
+cat > "${RUN_SUMMARY}" <<EOF
+# Workflow Run Summary
+
+- workflow_id: ${WORKFLOW_ID}
+- workflow_name: ${WORKFLOW_NAME}
+- run_id: ${RUN_LABEL}
+- started_at: $(date '+%Y-%m-%d %H:%M:%S')
+- project_root: ${PROJECT_ROOT}
+- output_dir: ${WORKFLOW_OUTPUT_DIR}
+
+## User Prompt
+
+${USER_PROMPT}
+
+## Steps
+EOF
+
+echo "  Output dir: ${WORKFLOW_OUTPUT_DIR}"
 
 # Flatten phases into step lines:
 # phase_num|total|step_ids|agents|step_id|capability|agent_alias|prompt_file|step_cli|inputs|optional|resolution_status|timeout_seconds|stall_seconds|stall_action
@@ -385,12 +442,26 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     break
   }
 
+  STEP_OUTPUT_PATH="${WORKFLOW_OUTPUT_DIR}/${phase_num}-${step_id}.md"
+  STEP_RAW_PATH="${WORKFLOW_OUTPUT_DIR}/${phase_num}-${step_id}.raw.log"
+  STEP_STATUS="running"
+
   # Build and execute step
-  step_prompt="$(build_step_prompt "${step_id}" "${capability}" "${agent_alias}" "${prompt_file}" "${inputs}" "${USER_PROMPT}")"
+  step_prompt="$(
+    build_step_prompt \
+      "${step_id}" \
+      "${capability}" \
+      "${agent_alias}" \
+      "${prompt_file}" \
+      "${inputs}" \
+      "${USER_PROMPT}" \
+      "${STEP_OUTPUT_PATH}" \
+      "${ARTIFACT_INDEX}" \
+      "${PROJECT_DOCS_DIR}"
+  )"
 
   START_STEP="$(date '+%s')"
   STEP_TMP="$(mktemp)"
-  trap "rm -f '${STEP_TMP}'" EXIT
   effective_timeout="$(positive_int_or_default "${timeout_seconds}" "${DEFAULT_STEP_TIMEOUT_SECONDS}")"
   effective_stall="$(positive_int_or_default "${stall_seconds}" "${DEFAULT_STEP_STALL_SECONDS}")"
   effective_stall_action="$(stall_action_or_default "${stall_action}" "${DEFAULT_STEP_STALL_ACTION}")"
@@ -451,11 +522,28 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   exit_code=$?
   set -e
 
-  output="$(cat "${STEP_TMP}")"
+  if [ -f "${STEP_TMP}" ]; then
+    cp "${STEP_TMP}" "${STEP_RAW_PATH}" 2>/dev/null || true
+    output="$(cat "${STEP_TMP}" 2>/dev/null || true)"
+  else
+    output=""
+    printf '[executor] step temp output disappeared before capture: %s\n' "${STEP_TMP}" > "${STEP_RAW_PATH}"
+  fi
   rm -f "${STEP_TMP}"
   DURATION="$(( $(date '+%s') - START_STEP ))"
+  SHOULD_HALT=0
+
+  if [ ! -s "${STEP_OUTPUT_PATH}" ]; then
+    {
+      printf '# %s\n\n' "${step_id}"
+      printf '> Executor fallback: agent did not write the required output file; captured stdout/stderr was preserved here.\n\n'
+      printf -- '---\n\n'
+      printf '%s\n' "${output}"
+    } > "${STEP_OUTPUT_PATH}"
+  fi
 
   if [ -n "${STOP_REASON}" ]; then
+    STEP_STATUS="${STOP_REASON}"
     step_status "stop" "${step_id}" "${DURATION}"
     FAILED=$((FAILED + 1))
     case "${STOP_REASON}" in
@@ -475,12 +563,14 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
       done
     fi
     printf "%s\n" "${ERROR_HINT}"
-    break
+    SHOULD_HALT=1
   elif [ "${exit_code}" -eq 0 ]; then
+    STEP_STATUS="ok"
     step_status "ok" "${step_id}" "${DURATION}"
     COMPLETED=$((COMPLETED + 1))
     bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} capability:${capability} agent:${agent_alias} cli:${effective_cli}" "成功" >/dev/null 2>&1 || true
   else
+    STEP_STATUS="failed"
     step_status "fail" "${step_id}" "${DURATION}"
     FAILED=$((FAILED + 1))
 
@@ -531,7 +621,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
 
     if [ "${optional}" != "True" ]; then
       printf "\n${RED}✗ Workflow halted at step: ${step_id}${RESET}\n"
-      break
+      SHOULD_HALT=1
     fi
   fi
 
@@ -546,6 +636,29 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     fi
   fi
 
+  {
+    printf '\n### %s\n\n' "${step_id}"
+    printf -- '- phase: %s\n' "${phase_num}"
+    printf -- '- capability: %s\n' "${capability}"
+    printf -- '- agent: %s\n' "${agent_alias}"
+    printf -- '- cli: %s\n' "${effective_cli}"
+    printf -- '- status: %s\n' "${STEP_STATUS}"
+    printf -- '- duration_seconds: %s\n' "${DURATION}"
+    printf -- '- output: %s\n' "${STEP_OUTPUT_PATH}"
+    printf -- '- raw_output: %s\n' "${STEP_RAW_PATH}"
+  } >> "${ARTIFACT_INDEX}"
+
+  {
+    printf '\n### %s\n\n' "${step_id}"
+    printf -- '- status: %s\n' "${STEP_STATUS}"
+    printf -- '- duration_seconds: %s\n' "${DURATION}"
+    printf -- '- output: %s\n' "${STEP_OUTPUT_PATH}"
+  } >> "${RUN_SUMMARY}"
+
+  if [ "${SHOULD_HALT}" -eq 1 ]; then
+    break
+  fi
+
 done 3<<< "${STEP_LINES}"
 
 TOTAL_DURATION="$(( $(date '+%s') - START_TOTAL ))"
@@ -553,7 +666,18 @@ TOTAL_DURATION="$(( $(date '+%s') - START_TOTAL ))"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 printf "  Done in %ss  |  ✓ %s  ✗ %s  ⊘ %s\n" "${TOTAL_DURATION}" "${COMPLETED}" "${FAILED}" "${SKIPPED}"
+printf "  Artifacts: %s\n" "${WORKFLOW_OUTPUT_DIR}"
+printf "  Index: %s\n" "${ARTIFACT_INDEX}"
 echo ""
+
+{
+  printf '\n## Finished\n\n'
+  printf -- '- finished_at: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+  printf -- '- total_duration_seconds: %s\n' "${TOTAL_DURATION}"
+  printf -- '- completed: %s\n' "${COMPLETED}"
+  printf -- '- failed: %s\n' "${FAILED}"
+  printf -- '- skipped: %s\n' "${SKIPPED}"
+} >> "${RUN_SUMMARY}"
 
 FINAL_STATE="completed"
 FINAL_RESULT="success"

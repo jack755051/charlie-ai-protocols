@@ -9,6 +9,8 @@
 
 - spinner 顯示最新輸出尾行預覽
 - spinner 顯示 `silent=<秒數>`，可看出多久沒有新輸出
+- 每個 step 的完整輸出會保存到 CAP storage，不再只存在暫存檔
+- 每次 workflow run 會產生 `artifact-index.md` 與 `run-summary.md`
 - step 硬性 timeout，預設 `600` 秒
 - step 靜默 stall 偵測，預設 `120` 秒
 - workflow step 可設定 `timeout_seconds` / `stall_seconds` / `stall_action`
@@ -22,6 +24,18 @@
 | `CAP_WORKFLOW_STEP_STALL_SECONDS` | `120` | 全域 step 靜默上限 |
 | `CAP_WORKFLOW_STALL_ACTION` | `warn` | 靜默達上限時 `warn` 或 `kill` |
 | `CAP_WORKFLOW_PREVIEW_CHARS` | `80` | spinner 尾行預覽字元數 |
+
+輸出位置：
+
+```text
+~/.cap/projects/<project_id>/reports/workflows/<workflow_id>/<run_id>/
+├── artifact-index.md
+├── run-summary.md
+├── <phase>-<step_id>.md
+└── <phase>-<step_id>.raw.log
+```
+
+若 agent 沒有主動寫入指定 output file，executor 會把 captured stdout/stderr fallback 保存到 `<phase>-<step_id>.md`，避免執行結果遺失。
 
 ## 問題描述
 
