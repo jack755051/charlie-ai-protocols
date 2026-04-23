@@ -16,16 +16,38 @@ def print_workflow_plan(plan):
     print(f"Name: {plan['name']}")
     print(f"Source: {plan['source_path']}")
     print(f"Summary: {plan['summary']}")
-    print("\nSteps:")
-    for index, step in enumerate(plan["steps"], start=1):
-        print(
-            f"{index}. [{step['step_id']}] {step['step_name']} "
-            f"=> capability={step['capability']} / agent={step['agent_alias']}"
-        )
-        if step["needs"]:
-            print(f"   needs: {', '.join(step['needs'])}")
-        if step["outputs"]:
-            print(f"   outputs: {', '.join(step['outputs'])}")
+    governance = plan.get("governance", {})
+    if governance:
+        print("\nGovernance:")
+        print(f"- watcher_mode: {governance.get('watcher_mode', 'n/a')}")
+        print(f"- logger_mode: {governance.get('logger_mode', 'n/a')}")
+        if governance.get("watcher_checkpoints"):
+            print(f"- watcher_checkpoints: {', '.join(governance['watcher_checkpoints'])}")
+        if governance.get("logger_checkpoints"):
+            print(f"- logger_checkpoints: {', '.join(governance['logger_checkpoints'])}")
+
+    print("\nPhases:")
+    for phase in plan["phases"]:
+        print(f"{phase['phase']}.")
+        for step in phase["steps"]:
+            print(
+                f"   - [{step['step_id']}] {step['step_name']} "
+                f"=> capability={step['capability']} / agent={step['agent_alias']}"
+            )
+            if step["needs"]:
+                print(f"     needs: {', '.join(step['needs'])}")
+            if step["outputs"]:
+                print(f"     outputs: {', '.join(step['outputs'])}")
+        if phase.get("gate"):
+            print(
+                f"   gate: type={phase['gate'].get('type')} / "
+                f"partner={phase['gate'].get('partner')}"
+            )
+
+    if plan.get("standby_steps"):
+        print("\nStandby Steps:")
+        for step in plan["standby_steps"]:
+            print(f"- [{step['step_id']}] {step['step_name']}")
 
 
 def main():
@@ -56,7 +78,7 @@ def main():
     workflow_plan = None
     if workflow_ref:
         loader = WorkflowLoader()
-        workflow_plan = loader.build_execution_plan(workflow_ref)
+        workflow_plan = loader.build_execution_phases(workflow_ref)
         print_workflow_plan(workflow_plan)
 
     workflow_context = ""
@@ -66,13 +88,25 @@ def main():
             "請以以下 workflow execution plan 作為編排依據：",
             f"- workflow_id: {workflow_plan['workflow_id']}",
             f"- summary: {workflow_plan['summary']}",
-            "- step plan:",
+            f"- governance: {workflow_plan.get('governance', {})}",
+            "- phase plan:",
         ]
-        for step in workflow_plan["steps"]:
-            lines.append(
-                f"  - {step['step_id']}: capability={step['capability']}, "
-                f"agent_alias={step['agent_alias']}, needs={step['needs']}, outputs={step['outputs']}"
-            )
+        for phase in workflow_plan["phases"]:
+            lines.append(f"  - phase {phase['phase']}:")
+            for step in phase["steps"]:
+                lines.append(
+                    f"    - {step['step_id']}: capability={step['capability']}, "
+                    f"agent_alias={step['agent_alias']}, needs={step['needs']}, outputs={step['outputs']}, "
+                    f"record_level={step.get('record_level')}, on_fail={step.get('on_fail')}"
+                )
+            if phase.get("gate"):
+                lines.append(f"    - gate: {phase['gate']}")
+        if workflow_plan.get("standby_steps"):
+            lines.append("  - standby steps:")
+            for step in workflow_plan["standby_steps"]:
+                lines.append(
+                    f"    - {step['step_id']}: capability={step['capability']}, optional={step['optional']}"
+                )
         workflow_context = "\n".join(lines)
 
     # 3. 建立「初始啟動任務」，並直接指派給 PM (01)
@@ -86,7 +120,9 @@ def main():
         2. 若 workflow execution plan 已提供，依該 plan 的 capability、step 順序與產物要求進行編排。
         3. 若無 workflow，參考 `schemas/workflows/feature-delivery.yaml` 作為預設流程。
         4. 編排決策依據 `schemas/capabilities.yaml` 與 `schemas/handoff-ticket.schema.yaml`。
-        5. 正式文件請寫入 `../docs/` 對應目錄；執行期 log、trace、草稿與報告請優先寫入 CAP 本機儲存區（例如 `~/.cap/projects/<project_id>/`）。
+        5. 你必須明確執行 workflow governance：依 `governance.watcher_mode/logger_mode` 安排 Watcher/Logger 的介入節點。
+        6. 正式派工時必須組裝結構化 handoff ticket，至少補齊 workflow_context、acceptance_criteria、route_back_to、governance 與 artifact 路徑。
+        7. 正式文件請寫入 `../docs/` 對應目錄；執行期 log、trace、草稿與報告請優先寫入 CAP 本機儲存區（例如 `~/.cap/projects/<project_id>/`）。
         """,
         expected_output="完成整個流水線開發，確保 docs 中有正式規格，且 CAP 本機儲存區保留必要的 trace 與報告。",
         agent=pm_agent

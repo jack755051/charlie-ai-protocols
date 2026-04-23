@@ -45,3 +45,18 @@
 - 完成任務後，必須附上結構化交接摘要，格式依 `schemas/handoff-ticket.schema.yaml` 定義。
 - **最低必填欄位**：`agent_id`、`task_summary`、`output_paths`、`result`。
 - 各 Agent 的 `agent_id` 由其領域文件指定（如 `01-Supervisor`、`04-Frontend`）。若該角色有額外交接欄位（如 Figma 的 `figma_sync_mode`），在領域文件中補充。
+
+### 5.4 Workflow 治理鐵則 (Workflow Governance)
+- 在 workflow 模式下，**不得**只靠口頭描述派工。所有正式派發都必須可追溯到：
+  - `workflow_id / step_id / phase`
+  - 上游 artifact 與其路徑
+  - 驗收條件 (`acceptance_criteria`)
+  - 失敗後回流目標 (`route_back_to`)
+- 若交接單缺少足以讓下游安全執行的關鍵欄位，接手 Agent 有權拒收並回報 `needs_data`。
+- 任一 gate / audit / security 結果為 FAIL 時，**禁止**帶著缺陷往後一個 phase 推進；必須先回到指定修復節點，修復後再重新驗證。
+
+### 5.5 橫向監管軌 (Horizontal Governance Rails)
+- **Watcher (90)** 與 **Logger (99)** 在 workflow 模式下屬於橫向監管角色，不一定是每個 step 的主要執行者，但必須依 workflow 定義在關鍵節點介入。
+- **Watcher (90)** 預設採 `milestone_gate`：於規格定版、實作完成、品質門禁與交付前等里程碑執行一致性稽核。
+- **Logger (99)** 預設採 `milestone_log`：記錄 phase 切換、異常路由、gate 決策與結案摘要，維持可追溯的執行鏈。
+- 若 workflow 明確標示 `always_on`，Watcher / Logger 必須視為常駐監管軌；若標示 `final_only`，則至少在結案前執行一次最終治理檢查或歸檔。

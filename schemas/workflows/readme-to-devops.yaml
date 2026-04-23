@@ -12,6 +12,12 @@ artifacts:
   repo_summary: 人類可讀的 repo 導讀摘要
   ci_config: CI/CD 初始設定
   deploy_spec: 部署規格摘要
+governance:
+  watcher_mode: final_only
+  logger_mode: milestone_log
+  watcher_checkpoints: [setup_delivery]
+  logger_checkpoints: [normalize_repo, setup_delivery, archive_result]
+  halt_on_missing_handoff: true
 steps:
   - id: normalize_repo
     name: Normalize README And Repo Metadata

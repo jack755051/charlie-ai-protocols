@@ -25,7 +25,18 @@ workflow schema 用來描述：
 | `owner` | string | no | 維護團隊或主要責任角色 |
 | `triggers` | string[] | no | 適用情境，例如 `manual`, `repo-intake`, `delivery` |
 | `artifacts` | object | no | workflow 級別的共同產物定義 |
+| `governance` | object | no | Watcher / Logger 的治理模式與 checkpoint 定義 |
 | `steps` | array | yes | 流程步驟清單 |
+
+### 2.1 `governance` 欄位
+
+| 欄位 | 型別 | 必填 | 說明 |
+|---|---|---|---|
+| `watcher_mode` | string | no | `always_on`, `milestone_gate`, `final_only`, `off` |
+| `logger_mode` | string | no | `full_log`, `milestone_log`, `final_only`, `off` |
+| `watcher_checkpoints` | string[] | no | 必須由 Watcher 介入的 step id 清單 |
+| `logger_checkpoints` | string[] | no | 必須由 Logger 留痕的 step id 清單 |
+| `halt_on_missing_handoff` | boolean | no | 缺少正式交接單時是否阻斷往下執行 |
 
 ## 3. Step 欄位
 
@@ -66,6 +77,12 @@ workflow_id: readme-to-devops
 version: 1
 name: README To DevOps Delivery
 summary: 先完成 repo intake 與 README 治理，再交由 DevOps 建立交付基線
+governance:
+  watcher_mode: final_only
+  logger_mode: milestone_log
+  watcher_checkpoints: [setup_delivery]
+  logger_checkpoints: [normalize_repo, setup_delivery, archive_result]
+  halt_on_missing_handoff: true
 steps:
   - id: normalize_repo
     name: Normalize README And Manifest
@@ -121,6 +138,7 @@ steps:
 - `needs` 表達依賴；執行器應結合 `needs` 與 `parallel_with` 決定排程
 - `done_when` 是給 orchestrator 與 reviewer 的摘要條件，不是可執行程式碼
 - Workflow 不嵌入 prompt 內容
+- `governance.*_checkpoints` 內的 step id 必須存在於同一個 workflow
 
 ## 6. 與 capability contract 的關係
 

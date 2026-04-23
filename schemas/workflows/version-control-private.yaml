@@ -14,6 +14,13 @@ artifacts:
   commit_message: 版本控制提交訊息
   commit_result: 版本控制提交結果
 
+governance:
+  watcher_mode: final_only
+  logger_mode: final_only
+  watcher_checkpoints: [commit_changes]
+  logger_checkpoints: [commit_changes]
+  halt_on_missing_handoff: true
+
 steps:
   - id: normalize_repo
     name: Normalize README And Repo Metadata

@@ -100,6 +100,7 @@ class WorkflowLoader:
             "name": workflow["name"],
             "summary": workflow["summary"],
             "source_path": workflow["_source_path"],
+            "governance": workflow.get("governance", {}),
             "steps": plan,
         }
 
@@ -163,6 +164,7 @@ class WorkflowLoader:
             "name": workflow["name"],
             "summary": workflow["summary"],
             "source_path": workflow["_source_path"],
+            "governance": workflow.get("governance", {}),
             "phases": phases,
             "standby_steps": standby_steps,
             "fail_routes": fail_routes,
@@ -255,3 +257,12 @@ class WorkflowLoader:
             if step["id"] in seen_ids:
                 raise ValueError(f"{workflow_path} 出現重複的 step id: {step['id']}")
             seen_ids.add(step["id"])
+
+        governance = workflow.get("governance", {})
+        if governance:
+            for field in ["watcher_checkpoints", "logger_checkpoints"]:
+                for step_id in governance.get(field, []):
+                    if step_id not in seen_ids:
+                        raise ValueError(
+                            f"{workflow_path} 的 governance.{field} 包含不存在的 step id: {step_id}"
+                        )

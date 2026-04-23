@@ -28,6 +28,28 @@ artifacts:
   deploy_spec: 部署規格
   figma_sync_report: Figma 同步報告
 
+governance:
+  watcher_mode: milestone_gate
+  logger_mode: milestone_log
+  watcher_checkpoints:
+    - dba_api
+    - ui
+    - frontend
+    - backend
+    - structure_audit
+    - qa
+    - devops
+  logger_checkpoints:
+    - prd
+    - tech_plan
+    - dba_api
+    - structure_audit
+    - security_audit
+    - qa
+    - devops
+    - archive
+  halt_on_missing_handoff: true
+
 steps:
 
   # ── 需求與規劃 ──

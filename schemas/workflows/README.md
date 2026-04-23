@@ -14,12 +14,14 @@ workflow 的目的，是把固定順序的工作流從 agent prompt 中抽離，
 - 流程順序硬編碼到單一 agent
 - 更換 agent 時必須重寫流程
 - 同一組流程在不同情境下難以複用
+- Watcher / Logger 這類橫向監管角色只能靠口頭約定，無法在流程層被強制執行
 
 ## 2. 設計原則
 
 - **綁 capability，不綁 implementation**：step 應描述需要的能力，不應直接綁死某個 agent 檔名。
 - **agent 可替換**：workflow 只依賴 capability contract；實際由哪個 agent 執行，交給 registry 或 runtime 決定。
 - **artifact 導向**：每個 step 應明確定義輸入、輸出與完成條件。
+- **governance 顯式化**：workflow 應明確定義 Watcher / Logger 的介入模式與 checkpoint。
 - **框架中立**：workflow schema 應可被 CrewAI、自寫 orchestrator 或未來的 graph runtime 解析。
 
 ## 3. 檔案結構
@@ -40,6 +42,7 @@ workflow 的目的，是把固定順序的工作流從 agent prompt 中抽離，
 3. 根據 `capability` 找到對應 agent
 4. 驗證產物是否符合 capability contract
 5. 失敗時安排 reroute、重試或退回前一步
+6. 依 `governance` 設定安排 Watcher / Logger 的 checkpoint 介入
 
 ## 5. 與 registry 的關係
 

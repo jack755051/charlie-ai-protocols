@@ -25,14 +25,14 @@ docs/agent-skills/
 ├── 10-troubleshoot-agent.md     (🔧 故障排查：全棧根因分析、修復建議回交 Supervisor)
 │
 │   --- 品質門禁階段 ---
-├── 90-watcher-agent.md          (🔍 監控員：橫向稽核，確保各 Agent 產出一致)
+├── 90-watcher-agent.md          (🔍 監控員：橫向稽核，依 workflow checkpoint 介入)
 ├── 08-security-agent.md         (🛡️ 安全審查：與 Watcher 同步執行安全掃描)
 ├── 07-qa-agent.md               (🧪 QA 工程師：E2E 測試與壓力測試)
 ├── 11-sre-agent.md              (📊 SRE 專家：效能瓶頸診斷與優化)
 │
 │   --- 收尾與部署階段 ---
 ├── 06-devops-agent.md           (🛠️ DevOps 管家：Docker、CI/CD)
-├── 99-logger-agent.md           (📝 書記官：紀錄 Devlog 與 Changelog)
+├── 99-logger-agent.md           (📝 書記官：維持 phase / gate / 結案可追溯紀錄)
 │
 │   --- 選配 / 輔助 Agent（非主流水線必經） ---
 ├── 101-readme-agent.md          (📘 README Agent：README 標準化、Repo Intake、自動讀取入口治理)
@@ -71,3 +71,5 @@ docs/agent-skills/
 ```
 
 > 補充：`101 README Agent` 不在主流水線中。它屬於治理 / 文件標準化工具，通常只在「多 repo 盤點」、「README 正規化」或「排程自動讀取」這類任務中單獨呼叫。
+
+> 補充：`90 Watcher` 與 `99 Logger` 在 workflow 模式下屬於橫向監管軌，不一定要成為每個 step 的主執行者；是否常駐、里程碑介入或僅最終介入，應由 workflow 的 `governance` 欄位決定。
