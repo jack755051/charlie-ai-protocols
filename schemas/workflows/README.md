@@ -81,10 +81,14 @@ workflow 不負責決定最終 agent，只負責宣告：
 
 - 用途：非正式小工具開發前置流程，先產出可交接規格，不直接進入實作
 - 適用情境：side project、小工具、技術方向未定、想先整理需求與規格再決定是否開發
-- 主要步驟：
-  - PRD / Tech Plan / BA / DBA-API / UI
-  - Watcher 規格一致性 gate
-  - Logger 歸檔
+- 預設主線：
+  - PRD / Tech Plan
+- opt-in 延伸：
+  - BA / DBA-API / UI / Watcher Audit / Archive
+- 治理特性：
+  - `goal_stage: informal_planning`
+  - `context_mode: summary_first`
+  - `max_primary_phases: 2`
 - 刻意不包含：
   - Frontend implementation (`04`)
   - DevOps delivery (`06`)

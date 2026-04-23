@@ -176,9 +176,39 @@ class RuntimeBinder:
         semantic_plan = self.loader.build_semantic_plan(workflow_ref)
         binding = self.bind_capabilities(workflow_ref, registry_ref, semantic_plan=semantic_plan)
         binding_by_step = {step["step_id"]: step for step in binding["steps"]}
+        governance = semantic_plan.get("governance", {})
+        phase_limit = self._governance_phase_limit(semantic_plan)
+        goal_stage = governance.get("goal_stage")
 
         phases: list[dict] = []
+        deferred_steps: list[dict] = []
         for phase in semantic_plan["phases"]:
+            if phase_limit is not None and phase["phase"] > phase_limit:
+                for step in phase["steps"]:
+                    step_binding = binding_by_step[step["step_id"]]
+                    deferred_steps.append(
+                        {
+                            "step_id": step["step_id"],
+                            "step_name": step["step_name"],
+                            "capability": step["capability"],
+                            "optional": True,
+                            "resolution_status": "optional_unresolved",
+                            "skill_id": step_binding["selected_skill_id"],
+                            "provider": step_binding["selected_provider"],
+                            "agent_alias": step_binding["selected_agent_alias"],
+                            "prompt_file": step_binding["selected_prompt_file"],
+                            "cli": step_binding["selected_cli"],
+                            "input_mode": self._resolve_input_mode(step, governance),
+                            "output_tier": self._resolve_output_tier(step, governance),
+                            "continue_reason": step.get("continue_reason")
+                            or "requires explicit opt-in beyond default workflow scope",
+                            "budget_state": "deferred_by_constitution",
+                            "governance_reason": (
+                                f"goal_stage={goal_stage} limited to first {phase_limit} phase(s)"
+                            ),
+                        }
+                    )
+                continue
             phase_steps: list[dict] = []
             gate = None
             for step in phase["steps"]:
@@ -207,6 +237,11 @@ class RuntimeBinder:
                     "cli": step_binding["selected_cli"],
                     "binding_mode": step_binding["binding_mode"],
                     "missing_policy": step_binding["missing_policy"],
+                    "input_mode": self._resolve_input_mode(step, governance),
+                    "output_tier": self._resolve_output_tier(step, governance),
+                    "continue_reason": step.get("continue_reason")
+                    or self._default_continue_reason(step, phase_limit),
+                    "budget_state": self._resolve_budget_state(step, phase_limit),
                 }
                 phase_steps.append(bound_step)
                 if step["gate"]:
@@ -251,10 +286,55 @@ class RuntimeBinder:
             "summary": semantic_plan["summary"],
             "source_path": semantic_plan["source_path"],
             "governance": semantic_plan.get("governance", {}),
+            "governance_runtime": {
+                "goal_stage": goal_stage,
+                "phase_limit": phase_limit,
+                "deferred_steps": [step["step_id"] for step in deferred_steps],
+            },
             "binding": binding,
             "phases": phases,
-            "standby_steps": standby_steps,
+            "standby_steps": standby_steps + deferred_steps,
         }
+
+    @staticmethod
+    def _governance_phase_limit(semantic_plan: dict) -> int | None:
+        governance = semantic_plan.get("governance", {})
+        goal_stage = governance.get("goal_stage")
+        if goal_stage == "informal_planning":
+            raw = governance.get("max_primary_phases", 2)
+            if isinstance(raw, int) and raw > 0:
+                return raw
+            return 2
+        return None
+
+    @staticmethod
+    def _resolve_input_mode(step: dict, governance: dict) -> str:
+        if step.get("input_mode"):
+            return step["input_mode"]
+        if step["capability"].endswith("_audit"):
+            return "full"
+        return governance.get("context_mode", "summary_first").replace("_first", "")
+
+    @staticmethod
+    def _resolve_output_tier(step: dict, governance: dict) -> str:
+        if step.get("output_tier"):
+            return step["output_tier"]
+        goal_stage = governance.get("goal_stage")
+        if goal_stage == "informal_planning":
+            return "planning_artifact"
+        return "full_artifact"
+
+    @staticmethod
+    def _default_continue_reason(step: dict, phase_limit: int | None) -> str:
+        if phase_limit is not None and step["phase"] <= phase_limit:
+            return "within default workflow scope"
+        return "required by declared workflow dependency"
+
+    @staticmethod
+    def _resolve_budget_state(step: dict, phase_limit: int | None) -> str:
+        if phase_limit is not None and step["phase"] > phase_limit:
+            return "deferred_by_budget"
+        return "within_budget"
 
     def _load_legacy_registry_adapter(self, missing_registry_path: Path) -> dict:
         legacy_path = self.base_dir / self.LEGACY_AGENT_REGISTRY_PATH

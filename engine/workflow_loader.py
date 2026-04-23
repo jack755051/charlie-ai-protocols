@@ -141,6 +141,9 @@ class WorkflowLoader:
                 "timeout_seconds": step.get("timeout_seconds"),
                 "stall_seconds": step.get("stall_seconds"),
                 "stall_action": step.get("stall_action"),
+                "input_mode": step.get("input_mode"),
+                "output_tier": step.get("output_tier"),
+                "continue_reason": step.get("continue_reason"),
             }
 
         phases = self._compute_phases(steps_by_id)
@@ -193,6 +196,9 @@ class WorkflowLoader:
                 "timeout_seconds": step.get("timeout_seconds"),
                 "stall_seconds": step.get("stall_seconds"),
                 "stall_action": step.get("stall_action"),
+                "input_mode": step.get("input_mode"),
+                "output_tier": step.get("output_tier"),
+                "continue_reason": step.get("continue_reason"),
             }
 
         fail_routes = self._collect_fail_routes(steps_by_id)

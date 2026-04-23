@@ -37,6 +37,10 @@ workflow schema 用來描述：
 | `watcher_checkpoints` | string[] | no | 必須由 Watcher 介入的 step id 清單 |
 | `logger_checkpoints` | string[] | no | 必須由 Logger 留痕的 step id 清單 |
 | `halt_on_missing_handoff` | boolean | no | 缺少正式交接單時是否阻斷往下執行 |
+| `goal_stage` | string | no | workflow 預設目標階段，例如 `informal_planning`, `formal_specification` |
+| `context_mode` | string | no | 預設上下文傳遞模式，例如 `summary_first` |
+| `step_count_budget` | integer | no | workflow 預設主線步數上限，用於治理 phase 膨脹 |
+| `max_primary_phases` | integer | no | 預設主線最多放行的 phase 數；超出部分應轉為 standby / opt-in |
 
 ## 3. Step 欄位
 
@@ -70,6 +74,9 @@ workflow schema 用來描述：
 | `timeout_seconds` | integer | no | 此 step 的硬性執行上限；未設定時由 executor 預設值決定 |
 | `stall_seconds` | integer | no | 此 step 的靜默上限；若輸出檔連續 N 秒無新增內容，executor 可視為卡住並中止 |
 | `stall_action` | string | no | 靜默達上限時的處置：`warn` 或 `kill`；預設 `warn`，避免誤殺正常但暫無串流輸出的 AI CLI |
+| `input_mode` | string | no | 預設下游讀取模式：`summary` 或 `full` |
+| `output_tier` | string | no | 輸出層級，例如 `planning_artifact`, `full_artifact`, `handoff_summary` |
+| `continue_reason` | string | no | 此 step 在主線中繼續執行的理由；供 runtime 治理與審計使用 |
 
 ## 4. 範例
 
