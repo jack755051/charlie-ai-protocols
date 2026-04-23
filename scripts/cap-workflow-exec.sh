@@ -347,6 +347,64 @@ stall_action_or_default() {
   esac
 }
 
+ensure_dir_or_fail() {
+  local dir="$1"
+  local label="$2"
+
+  if mkdir -p "${dir}" 2>/dev/null; then
+    return 0
+  fi
+
+  printf "${RED}✗ 無法建立 %s：%s${RESET}\n" "${label}" "${dir}" >&2
+  return 1
+}
+
+write_file_or_fail() {
+  local path="$1"
+  local content="$2"
+  local dir
+  dir="$(dirname "${path}")"
+
+  ensure_dir_or_fail "${dir}" "output directory" || return 1
+  if printf '%s\n' "${content}" > "${path}" 2>/dev/null; then
+    return 0
+  fi
+
+  printf "${RED}✗ 無法寫入檔案：%s${RESET}\n" "${path}" >&2
+  return 1
+}
+
+output_has_executor_fallback_marker() {
+  local path="$1"
+  [ -f "${path}" ] && grep -q 'Executor fallback: agent did not write the required output file' "${path}" 2>/dev/null
+}
+
+materialize_step_output() {
+  local step_id="$1"
+  local output_path="$2"
+  local captured_output="$3"
+  local source="agent_file"
+
+  if [ -s "${output_path}" ] && ! output_has_executor_fallback_marker "${output_path}"; then
+    printf '%s\n' "${source}"
+    return 0
+  fi
+
+  source="captured_stdout"
+  if [ -n "${captured_output}" ]; then
+    write_file_or_fail "${output_path}" "${captured_output}" || return 1
+    printf '%s\n' "${source}"
+    return 0
+  fi
+
+  source="empty_capture"
+  write_file_or_fail "${output_path}" "# ${step_id}
+
+> Executor note: the agent completed without writing the required output file and without producing captured stdout/stderr.
+" || return 1
+  printf '%s\n' "${source}"
+}
+
 # ── Build step prompt ──
 
 build_step_prompt() {
@@ -382,8 +440,9 @@ ${project_docs_dir}
 請嚴格依照 ${SKILLS_DIR}/${prompt_file} 中定義的角色規範執行。
 你必須完成以下事項：
 1. 讀取可用的上游產物索引，若索引內有上游輸出檔，必須把它們視為本步驟輸入，而不是重新猜測。
-2. 將本步驟的完整交付內容寫入「本步驟的強制輸出檔」。
-3. 若本步驟產出可長期追蹤的正式/半正式規格，請建立必要目錄，並同步寫入專案文件目錄下合適的 Markdown 檔。
+2. 將本步驟的完整交付內容直接輸出到 stdout；workflow executor 會負責把 stdout 可靠寫入「本步驟的強制輸出檔」。
+3. 不要因為無法直接寫入「本步驟的強制輸出檔」而請求權限、暫停、或把結果標記為待確認；stdout 就是本步驟的主要交付通道。
+4. 若本步驟產出可長期追蹤的正式/半正式規格，且你確定環境允許寫入，才可額外同步寫入專案文件目錄下合適的 Markdown 檔；若不能寫入，請在 stdout 的交接摘要中列出建議路徑即可。
 
 ${structured_sections}
 
@@ -428,9 +487,10 @@ WORKFLOW_OUTPUT_DIR="${REPORT_DIR}/workflows/${WORKFLOW_ID}/${RUN_LABEL}"
 PROJECT_DOCS_DIR="${PROJECT_ROOT}/docs"
 ARTIFACT_INDEX="${WORKFLOW_OUTPUT_DIR}/artifact-index.md"
 RUN_SUMMARY="${WORKFLOW_OUTPUT_DIR}/run-summary.md"
-mkdir -p "${WORKFLOW_OUTPUT_DIR}" "${PROJECT_DOCS_DIR}" >/dev/null 2>&1 || true
+ensure_dir_or_fail "${WORKFLOW_OUTPUT_DIR}" "workflow output directory" || exit 1
+ensure_dir_or_fail "${PROJECT_DOCS_DIR}" "project docs directory" || true
 
-cat > "${ARTIFACT_INDEX}" <<EOF
+write_file_or_fail "${ARTIFACT_INDEX}" "$(cat <<EOF
 # Workflow Artifact Index
 
 - workflow_id: ${WORKFLOW_ID}
@@ -441,8 +501,9 @@ cat > "${ARTIFACT_INDEX}" <<EOF
 
 ## Step Outputs
 EOF
+)" || exit 1
 
-cat > "${RUN_SUMMARY}" <<EOF
+write_file_or_fail "${RUN_SUMMARY}" "$(cat <<EOF
 # Workflow Run Summary
 
 - workflow_id: ${WORKFLOW_ID}
@@ -458,6 +519,7 @@ ${USER_PROMPT}
 
 ## Steps
 EOF
+)" || exit 1
 
 echo "  Output dir: ${WORKFLOW_OUTPUT_DIR}"
 
@@ -631,26 +693,33 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     if [ -n "${CURRENT_SIZE}" ] && [ "${CURRENT_SIZE}" -gt "${LAST_SIZE}" ]; then
       print_live_output_chunk "${STEP_TMP}" "${LAST_SIZE}" "${CURRENT_SIZE}"
     fi
-    cp "${STEP_TMP}" "${STEP_RAW_PATH}" 2>/dev/null || true
+    if ! cp "${STEP_TMP}" "${STEP_RAW_PATH}" 2>/dev/null; then
+      printf "${YELLOW}  │ warning: 無法寫入 raw output：%s${RESET}\n" "${STEP_RAW_PATH}"
+    fi
     output="$(cat "${STEP_TMP}" 2>/dev/null || true)"
   else
     output=""
-    printf '[executor] step temp output disappeared before capture: %s\n' "${STEP_TMP}" > "${STEP_RAW_PATH}"
+    write_file_or_fail "${STEP_RAW_PATH}" "[executor] step temp output disappeared before capture: ${STEP_TMP}" || true
   fi
   rm -f "${STEP_TMP}"
   DURATION="$(( $(date '+%s') - START_STEP ))"
   SHOULD_HALT=0
+  OUTPUT_SOURCE=""
 
-  if [ ! -s "${STEP_OUTPUT_PATH}" ]; then
-    {
-      printf '# %s\n\n' "${step_id}"
-      printf '> Executor fallback: agent did not write the required output file; captured stdout/stderr was preserved here.\n\n'
-      printf -- '---\n\n'
-      printf '%s\n' "${output}"
-    } > "${STEP_OUTPUT_PATH}"
+  if ! OUTPUT_SOURCE="$(materialize_step_output "${step_id}" "${STEP_OUTPUT_PATH}" "${output}")"; then
+    STEP_STATUS="write_failed"
+    step_status "fail" "${step_id}" "${DURATION}"
+    FAILED=$((FAILED + 1))
+    ERROR_TYPE="write_permission"
+    ERROR_HINT="  executor 無法寫入強制輸出檔：${STEP_OUTPUT_PATH}。請檢查目錄是否存在、owner/group、以及目前使用者是否有寫入權限。"
+    bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} output:${STEP_OUTPUT_PATH}" "失敗" >/dev/null 2>&1 || true
+    printf "%s\n" "${ERROR_HINT}"
+    SHOULD_HALT=1
   fi
 
-  if [ -n "${STOP_REASON}" ]; then
+  if [ "${SHOULD_HALT}" -eq 1 ]; then
+    :
+  elif [ -n "${STOP_REASON}" ]; then
     STEP_STATUS="${STOP_REASON}"
     step_status "stop" "${step_id}" "${DURATION}"
     FAILED=$((FAILED + 1))
@@ -742,6 +811,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     printf -- '- status: %s\n' "${STEP_STATUS}"
     printf -- '- duration_seconds: %s\n' "${DURATION}"
     printf -- '- output: %s\n' "${STEP_OUTPUT_PATH}"
+    printf -- '- output_source: %s\n' "${OUTPUT_SOURCE:-unknown}"
     printf -- '- raw_output: %s\n' "${STEP_RAW_PATH}"
   } >> "${ARTIFACT_INDEX}"
 
@@ -750,6 +820,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     printf -- '- status: %s\n' "${STEP_STATUS}"
     printf -- '- duration_seconds: %s\n' "${DURATION}"
     printf -- '- output: %s\n' "${STEP_OUTPUT_PATH}"
+    printf -- '- output_source: %s\n' "${OUTPUT_SOURCE:-unknown}"
   } >> "${RUN_SUMMARY}"
 
   if [ "${SHOULD_HALT}" -eq 1 ]; then
