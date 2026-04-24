@@ -19,6 +19,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 - `RuntimeBinder`、`WorkflowLoader` 與相關文件同步保留 `done_when` / `notes` metadata，改善 workflow handoff 與執行期可追溯性
 - README、workflow 文件與 manifest 同步更新 CAP CLI 指令與私人版控流程說明
 
+### Fixed
+
+- `cap-workflow-exec.sh` 在 detached HEAD 狀態下會阻擋 `version_control_commit` / `version_control_tag`，避免在錯誤 ref 上建立 release commit 或 tag
+- 修正 workflow intrinsic `commit_scope` 解析，讓 staged file list 可以穩定傳入版本控制 step
+
 ## [v0.6.6] - 2026-04-23
 
 ### Changed

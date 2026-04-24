@@ -258,7 +258,7 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 
 ## Notes
 
-- 最新已驗證 tag：`v0.8.1`；下一個預計 release tag：`v0.9.0`（本次變更已判定為 minor bump）
+- 最新已驗證 tag：`v0.9.0`；目前 `version-control-private` 會先判斷 tag 需求並同步 `README.md` / `CHANGELOG.md`，再進行 commit 與 tag
 - 同一份 `docs/agent-skills/` 供 CrewAI、Claude Code、Codex 共用
 - `schemas/workflows/` 只保留內建模板，不承載 task-scoped runtime workflow
 - `cap workflow constitution / compile / run-task` 會把 task constitution、compiled workflow、binding report 寫入 `.cap`
