@@ -407,7 +407,7 @@ class RuntimeBinder:
                     "provider": meta.get("provider", data.get("default_provider", "builtin")),
                     "enabled": True,
                     "priority": 100,
-                    "compatible_workflow_versions": [1, 2],
+                    "compatible_workflow_versions": [],
                     "provided_capabilities": self._capabilities_for_alias(alias),
                     "fallback_roles": self._fallback_roles_for_alias(alias),
                     "agent_alias": alias,

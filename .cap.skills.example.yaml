@@ -15,7 +15,7 @@ skills:
     priority: 100
     prompt_file: 01-supervisor-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities:
       - prd_generation
       - workflow_orchestration
@@ -30,7 +30,7 @@ skills:
     priority: 100
     prompt_file: 02-techlead-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities:
       - technical_planning
       - technical_review
@@ -45,7 +45,7 @@ skills:
     priority: 100
     prompt_file: 02a-ba-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities:
       - business_analysis
     fallback_roles:
@@ -59,7 +59,7 @@ skills:
     priority: 100
     prompt_file: 02b-dba-api-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities:
       - database_api_design
     fallback_roles:
@@ -73,7 +73,7 @@ skills:
     priority: 100
     prompt_file: 03-ui-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities:
       - ui_design
     fallback_roles:
@@ -87,7 +87,7 @@ skills:
     priority: 100
     prompt_file: 12-figma-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities:
       - figma_sync
     fallback_roles:
@@ -101,7 +101,7 @@ skills:
     priority: 100
     prompt_file: 09-analytics-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities:
       - analytics_specification
       - analytics_post_launch
@@ -116,7 +116,7 @@ skills:
     priority: 100
     prompt_file: 04-frontend-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities:
       - frontend_implementation
     fallback_roles:
@@ -130,7 +130,7 @@ skills:
     priority: 100
     prompt_file: 05-backend-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities:
       - backend_implementation
     fallback_roles:
@@ -144,7 +144,7 @@ skills:
     priority: 100
     prompt_file: 90-watcher-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities:
       - code_structure_audit
       - tool_spec_audit
@@ -159,7 +159,7 @@ skills:
     priority: 100
     prompt_file: 08-security-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities:
       - security_audit
     fallback_roles:
@@ -173,7 +173,7 @@ skills:
     priority: 100
     prompt_file: 07-qa-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities:
       - qa_testing
     fallback_roles:
@@ -187,7 +187,7 @@ skills:
     priority: 100
     prompt_file: 10-troubleshoot-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities:
       - troubleshooting
     fallback_roles:
@@ -201,7 +201,7 @@ skills:
     priority: 100
     prompt_file: 11-sre-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities:
       - sre_optimization
     fallback_roles:
@@ -215,7 +215,7 @@ skills:
     priority: 100
     prompt_file: 06-devops-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities:
       - devops_delivery
       - version_control_commit
@@ -231,7 +231,7 @@ skills:
     priority: 100
     prompt_file: 99-logger-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities:
       - technical_logging
     fallback_roles:
@@ -245,7 +245,7 @@ skills:
     priority: 100
     prompt_file: 101-readme-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities:
       - readme_normalization
     fallback_roles:
@@ -259,7 +259,7 @@ skills:
     priority: 10
     prompt_file: 01-supervisor-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities: []
     fallback_roles:
       - supervisor
@@ -272,7 +272,7 @@ skills:
     priority: 10
     prompt_file: 90-watcher-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities: []
     fallback_roles:
       - reviewer
@@ -285,7 +285,7 @@ skills:
     priority: 10
     prompt_file: 99-logger-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities: []
     fallback_roles:
       - logger
@@ -298,7 +298,7 @@ skills:
     priority: 10
     prompt_file: 04-frontend-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2]
+    compatible_workflow_versions: [1, 2, 3]
     provided_capabilities: []
     fallback_roles:
       - implementer
