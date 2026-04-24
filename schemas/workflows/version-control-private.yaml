@@ -45,3 +45,5 @@ steps:
       - 所有操作在單一 agent session 中完成，不拆分多個 step
       - 預設由 06-devops-agent 執行
       - 推送前須確認無敏感檔案混入
+      - "本 step 在非互動模式（claude -p）下執行，agent 無法暫停等使用者確認。請依最佳判斷直接執行，不要輸出 Pre-action Checklist 等待回覆。"
+      - "執行完所有 git 操作後，必須在 stdout 輸出完整的版本控制報告，包含：掃描結果、分支決策、commit 清單、tag 判定、推送結果。若 stdout 為空，executor 會判定為失敗。"
