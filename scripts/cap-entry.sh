@@ -28,8 +28,9 @@ COMMAND                            DESCRIPTION
   cap paths                        顯示 CAP 本機儲存路徑
 
 [Workflow]
-  cap workflow list                列出所有 workflow
-  cap workflow ps                  列出 workflow run instance 狀態
+  cap workflow list                列出所有 workflow（靜態清單）
+  cap workflow ps                  列出正在執行的 workflow run
+  cap workflow ps --all            列出所有歷史 workflow run
   cap workflow show <id>           顯示 workflow 摘要
   cap workflow inspect <run-id>    顯示單次 workflow run 詳情
   cap workflow plan <id>           顯示 semantic plan、phase 與 binding 摘要

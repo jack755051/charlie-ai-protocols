@@ -661,7 +661,13 @@ ensure_status_store
 
 COMMAND="${1:-}"
 if [ -n "${COMMAND}" ] && [[ "${COMMAND}" != "list" && "${COMMAND}" != "ps" && "${COMMAND}" != "show" && "${COMMAND}" != "inspect" && "${COMMAND}" != "plan" && "${COMMAND}" != "bind" && "${COMMAND}" != "constitution" && "${COMMAND}" != "compile" && "${COMMAND}" != "run-task" && "${COMMAND}" != "run" && "${COMMAND}" != "update-run-status" ]]; then
-  set -- show "$@"
+  # cap workflow <id> "prompt" → run <id> "prompt"
+  # cap workflow <id>          → show <id>
+  if [ "$#" -ge 2 ]; then
+    set -- run "$@"
+  else
+    set -- show "$@"
+  fi
 fi
 
 case "${1:-}" in
@@ -698,20 +704,14 @@ for path in files:
     raw = path.read_text(encoding="utf-8")
     data = yaml.safe_load(raw) if path.suffix in {".yaml", ".yml"} else {}
     workflow_id = data.get("workflow_id", path.stem)
-    name = data.get("name", path.stem)
     summary = data.get("summary", "")
-    short_id = "wf_" + hashlib.sha1(workflow_id.encode("utf-8")).hexdigest()[:8]
-    workflow_state = status_data.get(workflow_id, {})
-    status = workflow_state.get("state", "ready")
-    run_count = workflow_state.get("run_count", 0)
-    last_run_at = workflow_state.get("last_run_at", "-")
-    rows.append((short_id, name, path.name, status, run_count, last_run_at, summary))
+    rows.append((workflow_id, path.name, summary))
 
-headers = ("ID", "NAME", "FILE", "STATUS", "RUNS", "LAST RUN", "SUMMARY")
+headers = ("ID", "FILE", "SUMMARY")
 widths = [len(h) for h in headers]
 for row in rows:
     for i, value in enumerate(row):
-        widths[i] = min(max(widths[i], len(str(value))), 60)
+        widths[i] = min(max(widths[i], len(str(value))), 70)
 
 
 def clip(value, width):
@@ -723,41 +723,35 @@ print("WORKFLOW LIST")
 print(
     f"{headers[0]:<{widths[0]}}  "
     f"{headers[1]:<{widths[1]}}  "
-    f"{headers[2]:<{widths[2]}}  "
-    f"{headers[3]:<{widths[3]}}  "
-    f"{headers[4]:>{widths[4]}}  "
-    f"{headers[5]:<{widths[5]}}  "
-    f"{headers[6]:<{widths[6]}}"
+    f"{headers[2]:<{widths[2]}}"
 )
 print(
     f"{'-' * widths[0]}  "
     f"{'-' * widths[1]}  "
-    f"{'-' * widths[2]}  "
-    f"{'-' * widths[3]}  "
-    f"{'-' * widths[4]}  "
-    f"{'-' * widths[5]}  "
-    f"{'-' * widths[6]}"
+    f"{'-' * widths[2]}"
 )
 for row in rows:
     print(
         f"{clip(row[0], widths[0]):<{widths[0]}}  "
         f"{clip(row[1], widths[1]):<{widths[1]}}  "
-        f"{clip(row[2], widths[2]):<{widths[2]}}  "
-        f"{clip(row[3], widths[3]):<{widths[3]}}  "
-        f"{clip(row[4], widths[4]):>{widths[4]}}  "
-        f"{clip(row[5], widths[5]):<{widths[5]}}  "
-        f"{clip(row[6], widths[6]):<{widths[6]}}"
+        f"{clip(row[2], widths[2]):<{widths[2]}}"
     )
 PY
     ;;
   ps)
-    [ "$#" -eq 1 ] || usage
-    "${PYTHON_BIN}" - <<'PY' "$(get_status_store)"
+    shift || true
+    PS_FILTER="active"
+    if [ "${1:-}" = "--all" ] || [ "${1:-}" = "-a" ]; then
+      PS_FILTER="all"
+      shift || true
+    fi
+    "${PYTHON_BIN}" - <<'PY' "$(get_status_store)" "${PS_FILTER}"
 from pathlib import Path
 import json
 import sys
 
 status_file = Path(sys.argv[1])
+ps_filter = sys.argv[2] if len(sys.argv) > 2 else "active"
 
 
 def normalize(payload):
@@ -772,6 +766,9 @@ runs = []
 if status_file.exists():
     runs = normalize(json.loads(status_file.read_text(encoding="utf-8")))
 
+if ps_filter == "active":
+    runs = [r for r in runs if r.get("state") in {"executing", "pending"}]
+
 runs = sorted(
     runs,
     key=lambda r: (
@@ -782,9 +779,13 @@ runs = sorted(
     reverse=True,
 )
 
-print("WORKFLOW RUNS")
+header_label = "ACTIVE WORKFLOW RUNS" if ps_filter == "active" else "ALL WORKFLOW RUNS"
+print(header_label)
 if not runs:
-    print("No workflow runs found.")
+    if ps_filter == "active":
+        print("No active workflow runs. Use 'cap workflow ps --all' to see history.")
+    else:
+        print("No workflow runs found.")
     sys.exit(0)
 
 rows = [
