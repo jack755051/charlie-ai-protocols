@@ -35,6 +35,7 @@ resolve_python() {
 }
 
 PYTHON_BIN="$(resolve_python)"
+STEP_PY="${CAP_ROOT}/engine/step_runtime.py"
 
 # ── Parse args ──
 
@@ -96,45 +97,7 @@ update_workflow_status() {
   local result="$4"
   local status_file
   status_file="$(get_status_store)"
-  python3 - <<'PY' "${status_file}" "${workflow_id}" "${workflow_name}" "${state}" "${result}"
-from pathlib import Path
-import json
-import sys
-from datetime import datetime
-
-status_file = Path(sys.argv[1])
-workflow_id = sys.argv[2]
-workflow_name = sys.argv[3]
-state = sys.argv[4]
-result = sys.argv[5]
-
-def normalize(payload):
-    if isinstance(payload, dict) and ("workflows" in payload or "runs" in payload):
-        workflows = payload.get("workflows", {})
-        runs = payload.get("runs", [])
-    elif isinstance(payload, dict):
-        workflows = {k: v for k, v in payload.items() if isinstance(v, dict)}
-        runs = []
-    else:
-        workflows = {}
-        runs = []
-    return {
-        "version": 2,
-        "workflows": workflows if isinstance(workflows, dict) else {},
-        "runs": runs if isinstance(runs, list) else [],
-    }
-
-payload = normalize(json.loads(status_file.read_text(encoding="utf-8"))) if status_file.exists() else normalize({})
-entry = payload["workflows"].get(workflow_id, {})
-entry["workflow_name"] = workflow_name
-entry["state"] = state
-entry["last_result"] = result
-entry["last_run_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-entry["run_count"] = int(entry.get("run_count", 0))
-payload["workflows"][workflow_id] = entry
-
-status_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-PY
+  "${PYTHON_BIN}" "${STEP_PY}" update-status "${status_file}" "${workflow_id}" "${workflow_name}" "${state}" "${result}"
 }
 
 # ── CLI availability check ──
@@ -432,24 +395,7 @@ materialize_step_output() {
 
 build_handoff_summary_content() {
   local artifact_path="$1"
-  python3 - <<'PY' "${artifact_path}"
-from pathlib import Path
-import re
-import sys
-
-path = Path(sys.argv[1])
-text = path.read_text(encoding="utf-8") if path.exists() else ""
-
-match = re.search(r"^##\s*交接摘要\s*$", text, flags=re.M)
-if match:
-    tail = text[match.start():].strip()
-    print(tail)
-    raise SystemExit(0)
-
-lines = [line.rstrip() for line in text.splitlines() if line.strip()]
-snippet = "\n".join(lines[:40]).strip()
-print(snippet)
-PY
+  "${PYTHON_BIN}" "${STEP_PY}" handoff-summary "${artifact_path}"
 }
 
 materialize_handoff_summary() {
@@ -471,186 +417,14 @@ resolve_step_input_context() {
   local input_mode="$3"
   local registry_path="$4"
 
-  python3 - <<'PY' "${plan_json}" "${current_step_id}" "${input_mode}" "${registry_path}"
-from pathlib import Path
-import json
-import subprocess
-import sys
-
-plan = json.loads(sys.argv[1])
-current_step_id = sys.argv[2]
-input_mode = sys.argv[3]
-registry_path = Path(sys.argv[4])
-registry = {"artifacts": {}, "steps": {}}
-if registry_path.exists():
-    registry = json.loads(registry_path.read_text(encoding="utf-8"))
-
-
-def run_git(*args: str) -> str:
-    try:
-        result = subprocess.run(
-            ["git", *args],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except Exception:
-        return ""
-    if result.returncode != 0:
-        return ""
-    return result.stdout.strip()
-
-
-def intrinsic_context(artifact: str) -> str:
-    if artifact == "user_requirement":
-        return "intrinsic_request"
-    if artifact == "repo_changes":
-        status = run_git("status", "--short")
-        staged = run_git("diff", "--cached", "--stat")
-        unstaged = run_git("diff", "--stat")
-        lines = ["intrinsic_repo_changes"]
-        if status:
-            lines.append("  status:")
-            lines.extend(f"    {line}" for line in status.splitlines())
-        if staged:
-            lines.append("  staged_diff_stat:")
-            lines.extend(f"    {line}" for line in staged.splitlines())
-        if unstaged:
-            lines.append("  unstaged_diff_stat:")
-            lines.extend(f"    {line}" for line in unstaged.splitlines())
-        return "\n".join(lines)
-    if artifact == "project_context":
-        top = run_git("rev-parse", "--show-toplevel")
-        branch = run_git("branch", "--show-current") or "DETACHED"
-        head = run_git("rev-parse", "--short", "HEAD")
-        latest_tag = run_git("describe", "--tags", "--abbrev=0")
-        lines = ["intrinsic_project_context"]
-        if top:
-            lines.append(f"  repo_root: {top}")
-        lines.append(f"  branch: {branch}")
-        if head:
-            lines.append(f"  head: {head}")
-        if latest_tag:
-            lines.append(f"  latest_tag: {latest_tag}")
-        return "\n".join(lines)
-    if artifact == "commit_scope":
-        changed = run_git("status", "--short")
-        paths: list[str] = []
-        for line in changed.splitlines():
-            if not line.strip():
-                continue
-            parts = line.split(maxsplit=1)
-            path = parts[1] if len(parts) == 2 else line.strip()
-            if " -> " in path:
-                path = path.split(" -> ", 1)[1]
-            paths.append(path)
-
-        top_levels = []
-        for path in paths:
-            if "/" in path:
-                top_levels.append(path.split("/", 1)[0])
-            else:
-                top_levels.append(".")
-
-        unique = sorted(set(top_levels))
-        suggested_scope = "repo"
-        if unique == ["docs"]:
-            suggested_scope = "docs"
-        elif unique == ["schemas"] or unique == ["engine"] or unique == ["scripts"]:
-            suggested_scope = unique[0]
-        elif set(unique).issubset({".", "README.md", "CHANGELOG.md", "docs", "schemas", "engine", "scripts"}):
-            suggested_scope = "workflow"
-
-        lines = ["intrinsic_commit_scope", f"  suggested_scope: {suggested_scope}"]
-        if paths:
-            lines.append("  changed_paths:")
-            lines.extend(f"    {path}" for path in paths)
-        return "\n".join(lines)
-    return "intrinsic_unknown"
-
-target = None
-for phase in plan.get("phases", []):
-    for step in phase.get("steps", []):
-        if step["step_id"] == current_step_id:
-            target = step
-            break
-    if target:
-        break
-
-if target is None:
-    print("- 無法解析當前 step 輸入")
-    raise SystemExit(0)
-
-inputs = target.get("inputs", [])
-if not inputs:
-    print("- 無上游輸入")
-    raise SystemExit(0)
-
-lines = []
-for artifact in inputs:
-    if artifact in {"user_requirement", "repo_changes", "project_context", "commit_scope"}:
-        lines.append(f"- {artifact}:")
-        for detail in intrinsic_context(artifact).splitlines():
-            lines.append(f"  {detail}")
-        continue
-    producer = registry.get("artifacts", {}).get(artifact)
-    if not producer:
-        lines.append(f"- {artifact}: unresolved")
-        continue
-    artifact_path = producer.get("path")
-    handoff_path = producer.get("handoff_path")
-    if input_mode == "full":
-        selected = artifact_path
-        mode = "full_artifact"
-    else:
-        selected = handoff_path if handoff_path and Path(handoff_path).exists() else artifact_path
-        mode = "handoff_summary" if handoff_path and Path(handoff_path).exists() else "artifact_fallback"
-    lines.append(
-        f"- {artifact}: step={producer['source_step']} mode={mode} path={selected}"
-    )
-
-print("\n".join(lines))
-PY
+  "${PYTHON_BIN}" "${STEP_PY}" resolve-inputs "${plan_json}" "${current_step_id}" "${input_mode}" "${registry_path}"
 }
 
 resolve_step_contract_context() {
   local plan_json="$1"
   local current_step_id="$2"
 
-  python3 - <<'PY' "${plan_json}" "${current_step_id}"
-import json
-import sys
-
-plan = json.loads(sys.argv[1])
-current_step_id = sys.argv[2]
-
-target = None
-for phase in plan.get("phases", []):
-    for step in phase.get("steps", []):
-        if step["step_id"] == current_step_id:
-            target = step
-            break
-    if target:
-        break
-
-if target is None:
-    print("- 無法解析 step 契約")
-    raise SystemExit(0)
-
-def emit_list(title, values):
-    if not values:
-        return [f"{title}: -"]
-    lines = [f"{title}:"]
-    lines.extend(f"  - {value}" for value in values)
-    return lines
-
-lines = []
-lines.extend(emit_list("inputs", target.get("inputs", [])))
-lines.extend(emit_list("outputs", target.get("outputs", [])))
-lines.extend(emit_list("done_when", target.get("done_when", [])))
-lines.extend(emit_list("notes", target.get("notes", [])))
-print("\n".join(lines))
-PY
+  "${PYTHON_BIN}" "${STEP_PY}" resolve-contract "${plan_json}" "${current_step_id}"
 }
 
 validate_step_inputs() {
@@ -658,74 +432,7 @@ validate_step_inputs() {
   local current_step_id="$2"
   local registry_path="$3"
 
-  python3 - <<'PY' "${plan_json}" "${current_step_id}" "${registry_path}"
-from pathlib import Path
-import json
-import sys
-
-plan = json.loads(sys.argv[1])
-current_step_id = sys.argv[2]
-registry_path = Path(sys.argv[3])
-registry = {"artifacts": {}, "steps": {}}
-if registry_path.exists():
-    registry = json.loads(registry_path.read_text(encoding="utf-8"))
-
-target = None
-for phase in plan.get("phases", []):
-    for step in phase.get("steps", []):
-        if step["step_id"] == current_step_id:
-            target = step
-            break
-    if target:
-        break
-
-if target is None:
-    print(json.dumps({"ok": False, "missing": [], "resolved": [], "reason": "step_not_found"}, ensure_ascii=False))
-    raise SystemExit(0)
-
-missing = []
-resolved = []
-for artifact in target.get("inputs", []):
-    if artifact in {"user_requirement", "repo_changes", "project_context", "commit_scope"}:
-        resolved.append(
-            {
-                "artifact": artifact,
-                "source_step": "__request__",
-                "path": "<inline:user_request>",
-                "handoff_path": "",
-            }
-        )
-        continue
-    entry = registry.get("artifacts", {}).get(artifact)
-    if not entry:
-        missing.append(artifact)
-        continue
-    source_step = entry.get("source_step")
-    source_state = registry.get("steps", {}).get(source_step, {}).get("execution_state")
-    if source_state != "validated":
-        missing.append(artifact)
-        continue
-    resolved.append(
-        {
-            "artifact": artifact,
-            "source_step": source_step,
-            "path": entry.get("path"),
-            "handoff_path": entry.get("handoff_path"),
-        }
-    )
-
-print(
-    json.dumps(
-        {
-            "ok": not missing,
-            "missing": missing,
-            "resolved": resolved,
-            "reason": "" if not missing else "missing_input_artifact",
-        },
-        ensure_ascii=False,
-    )
-)
-PY
+  "${PYTHON_BIN}" "${STEP_PY}" validate-inputs "${plan_json}" "${current_step_id}" "${registry_path}"
 }
 
 current_git_branch() {
@@ -757,59 +464,7 @@ register_step_runtime_state() {
   local output_path="$7"
   local handoff_path="$8"
 
-  python3 - <<'PY' "${plan_json}" "${registry_path}" "${step_id}" "${execution_state}" "${blocked_reason}" "${output_source}" "${output_path}" "${handoff_path}"
-from pathlib import Path
-import json
-import sys
-
-plan = json.loads(sys.argv[1])
-registry_path = Path(sys.argv[2])
-step_id = sys.argv[3]
-execution_state = sys.argv[4]
-blocked_reason = sys.argv[5]
-output_source = sys.argv[6]
-output_path = sys.argv[7]
-handoff_path = sys.argv[8]
-
-registry = {"artifacts": {}, "steps": {}}
-if registry_path.exists():
-    registry = json.loads(registry_path.read_text(encoding="utf-8"))
-
-target = None
-target_phase = None
-for phase in plan.get("phases", []):
-    for step in phase.get("steps", []):
-        if step["step_id"] == step_id:
-            target = step
-            target_phase = phase["phase"]
-            break
-    if target:
-        break
-
-if target is None:
-    raise SystemExit(0)
-
-registry["steps"][step_id] = {
-    "phase": target_phase,
-    "capability": target.get("capability"),
-    "execution_state": execution_state,
-    "blocked_reason": blocked_reason or "",
-    "output_source": output_source or "",
-    "output_path": output_path or "",
-    "handoff_path": handoff_path or "",
-}
-
-if execution_state == "validated":
-    for artifact in target.get("outputs", []):
-        registry["artifacts"][artifact] = {
-            "artifact": artifact,
-            "source_step": step_id,
-            "path": output_path,
-            "handoff_path": handoff_path,
-        }
-
-registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2), encoding="utf-8")
-PY
+  "${PYTHON_BIN}" "${STEP_PY}" register-state "${plan_json}" "${registry_path}" "${step_id}" "${execution_state}" "${blocked_reason}" "${output_source}" "${output_path}" "${handoff_path}"
 }
 
 # ── Build step prompt ──
@@ -957,34 +612,7 @@ echo "  Output dir: ${WORKFLOW_OUTPUT_DIR}"
 
 # Flatten phases into step lines:
 # phase_num|total|step_ids|agents|step_id|capability|agent_alias|prompt_file|step_cli|inputs|optional|resolution_status|timeout_seconds|stall_seconds|stall_action|input_mode|output_tier|continue_reason
-STEP_LINES="$(python3 - "${PLAN_JSON}" <<'PYEOF'
-import json, sys
-plan = json.loads(sys.argv[1])
-total = len(plan["phases"])
-for phase in plan["phases"]:
-    pnum = phase["phase"]
-    ids_joined = " + ".join(s["step_id"] for s in phase["steps"])
-    agents_joined = ", ".join(
-        dict.fromkeys((s.get("agent_alias") or s.get("skill_id") or "-") for s in phase["steps"])
-    )
-    for step in phase["steps"]:
-        inputs = ",".join(step.get("inputs", []))
-        opt = str(step.get("optional", False))
-        resolution_status = step.get("resolution_status", "resolved")
-        timeout_seconds = str(step.get("timeout_seconds") or "")
-        stall_seconds = str(step.get("stall_seconds") or "")
-        stall_action = str(step.get("stall_action") or "")
-        input_mode = str(step.get("input_mode") or "")
-        output_tier = str(step.get("output_tier") or "")
-        continue_reason = str(step.get("continue_reason") or "").replace("|", "/")
-        print("|".join([
-            str(pnum), str(total), ids_joined, agents_joined,
-            step["step_id"], step["capability"], step.get("agent_alias") or "",
-            step.get("prompt_file") or "", step.get("cli") or "", inputs, opt, resolution_status,
-            timeout_seconds, stall_seconds, stall_action, input_mode, output_tier, continue_reason,
-        ]))
-PYEOF
-)"
+STEP_LINES="$("${PYTHON_BIN}" "${STEP_PY}" flatten-steps "${PLAN_JSON}")"
 
 PREV_PHASE=""
 
