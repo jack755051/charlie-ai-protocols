@@ -6,6 +6,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.11.1] - 2026-04-24
+
+### Changed
+
+- `engine/workflow_cli.py` 追加 workflow binding / constitution / compile 的報表輸出子命令
+- `scripts/cap-workflow.sh` 改為直接呼叫 `engine/workflow_cli.py`，移除剩餘 inline Python heredoc
+
 ## [v0.10.3] - 2026-04-24
 
 ### Fixed

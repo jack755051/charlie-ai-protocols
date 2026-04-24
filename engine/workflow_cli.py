@@ -97,6 +97,10 @@ def _clip(value: str, width: int) -> str:
     return value if len(value) <= width else value[: width - 3] + "..."
 
 
+def _load_json_arg(raw: str) -> dict:
+    return json.loads(raw)
+
+
 # ---------------------------------------------------------------------------
 # Subcommand: resolve-ref
 # ---------------------------------------------------------------------------
@@ -620,6 +624,292 @@ def cmd_bind(cap_root: str, workflow_ref: str, registry_ref: str | None = None) 
 
 
 # ---------------------------------------------------------------------------
+# Subcommand: build-bound-plan
+# ---------------------------------------------------------------------------
+
+def cmd_build_bound_plan(cap_root: str, workflow_ref: str) -> None:
+    """Build a bound execution plan and print JSON."""
+    base_dir = Path(cap_root)
+    sys.path.insert(0, str(base_dir))
+    from engine.runtime_binder import RuntimeBinder  # noqa: E402
+
+    binder = RuntimeBinder(base_dir=base_dir)
+    result = binder.build_bound_execution_phases(workflow_ref)
+    print(json.dumps(result, ensure_ascii=False))
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: constitution-json
+# ---------------------------------------------------------------------------
+
+def cmd_constitution_json(cap_root: str, request: str) -> None:
+    """Build a task constitution JSON from a one-line request."""
+    base_dir = Path(cap_root)
+    sys.path.insert(0, str(base_dir))
+    from engine.task_scoped_compiler import TaskScopedWorkflowCompiler  # noqa: E402
+
+    compiler = TaskScopedWorkflowCompiler(base_dir=base_dir)
+    constitution = compiler.build_task_constitution(request)
+    print(json.dumps(constitution, ensure_ascii=False))
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: compile-json
+# ---------------------------------------------------------------------------
+
+def cmd_compile_json(cap_root: str, request: str, registry_ref: str | None = None) -> None:
+    """Compile a task-scoped workflow and print JSON."""
+    base_dir = Path(cap_root)
+    sys.path.insert(0, str(base_dir))
+    from engine.task_scoped_compiler import TaskScopedWorkflowCompiler  # noqa: E402
+
+    compiler = TaskScopedWorkflowCompiler(base_dir=base_dir)
+    compiled = compiler.compile_task(request, registry_ref=registry_ref or None)
+    print(json.dumps(compiled, ensure_ascii=False))
+
+
+# ---------------------------------------------------------------------------
+# Render helpers for shell UI
+# ---------------------------------------------------------------------------
+
+def cmd_print_constitution_report(constitution_json: str, snapshot_json: str) -> None:
+    constitution = _load_json_arg(constitution_json)
+    snapshot = _load_json_arg(snapshot_json)
+    print("TASK CONSTITUTION")
+    print(f"task_id: {constitution['task_id']}")
+    print(f"goal_stage: {constitution['goal_stage']}")
+    print(f"risk_profile: {constitution['risk_profile']}")
+    print(f"goal: {constitution['goal']}")
+    print("scope:")
+    for item in constitution.get("scope", []):
+        print(f"  - {item}")
+    print("success_criteria:")
+    for item in constitution.get("success_criteria", []):
+        print(f"  - {item}")
+    if constitution.get("constraints"):
+        print("constraints:")
+        for item in constitution["constraints"]:
+            print(f"  - {item}")
+    if constitution.get("non_goals"):
+        print("non_goals:")
+        for item in constitution["non_goals"]:
+            print(f"  - {item}")
+    print("inferred_context:")
+    for key, value in constitution.get("inferred_context", {}).items():
+        print(f"  - {key}: {value}")
+    if constitution.get("required_questions"):
+        print("required_questions:")
+        for item in constitution["required_questions"]:
+            print(f"  - {item}")
+    print("stored:")
+    print(f"  - json: {snapshot['json_path']}")
+    print(f"  - markdown: {snapshot['markdown_path']}")
+    print("raw_json:")
+    print(json.dumps(constitution, ensure_ascii=False, indent=2))
+
+
+def cmd_print_compile_report(compiled_json: str, snapshot_json: str) -> None:
+    compiled = _load_json_arg(compiled_json)
+    snapshot = _load_json_arg(snapshot_json)
+    constitution = compiled["task_constitution"]
+    graph = compiled["capability_graph"]
+    binding = compiled["binding"]
+    plan = compiled["plan"]
+    policy = compiled["unresolved_policy"]
+
+    print("TASK COMPILE REPORT")
+    print(f"task_id: {constitution['task_id']}")
+    print(f"goal_stage: {constitution['goal_stage']}")
+    print(f"workflow_id: {plan['workflow_id']}")
+    print(f"binding_status: {binding['binding_status']}")
+    print("stored:")
+    print(f"  - constitution_json: {snapshot['constitution_json_path']}")
+    print(f"  - binding_json: {snapshot['binding_json_path']}")
+    print(f"  - bundle_dir: {snapshot['bundle_dir']}")
+    print("capability_graph:")
+    for node in graph["nodes"]:
+        print(f"  - {node['step_id']} => {node['capability']} / required={node['required']} / depends_on={node['depends_on']}")
+    print("unresolved_policy:")
+    for decision in policy["decisions"]:
+        print(
+            f"  - {decision['step_id']} => {decision['resolution_status']} / "
+            f"action={decision['action']} / reason={decision['reason']}"
+        )
+    print("compiled_phases:")
+    for phase in plan["phases"]:
+        print(f"  Phase {phase['phase']}:")
+        for step in phase["steps"]:
+            print(
+                f"    - {step['step_id']} => capability={step['capability']} / "
+                f"agent={step['agent_alias'] or '-'} / input_mode={step.get('input_mode')} / "
+                f"continue_reason={step.get('continue_reason')}"
+            )
+    if plan["standby_steps"]:
+        print("standby_steps:")
+        for step in plan["standby_steps"]:
+            print(f"  - {step['step_id']} => {step.get('governance_reason', step.get('resolution_status'))}")
+
+
+def cmd_print_compiled_dry_run(constitution_json: str, policy_json: str, plan_json: str, snapshot_json: str) -> None:
+    constitution = _load_json_arg(constitution_json)
+    policy = _load_json_arg(policy_json)
+    plan = _load_json_arg(plan_json)
+    snapshot = _load_json_arg(snapshot_json)
+
+    print(f"task_id: {constitution['task_id']}")
+    print(f"goal_stage: {constitution['goal_stage']}")
+    print(f"risk_profile: {constitution['risk_profile']}")
+    print("stored:")
+    print(f"  - constitution_json: {snapshot['constitution_json_path']}")
+    print(f"  - binding_json: {snapshot['binding_json_path']}")
+    print(f"  - bundle_dir: {snapshot['bundle_dir']}")
+    print("unresolved_policy:")
+    for item in policy["decisions"]:
+        print(f"  - {item['step_id']}: {item['action']} ({item['resolution_status']})")
+    print("phases:")
+    total = len(plan["phases"])
+    for p in plan["phases"]:
+        ids = " + ".join(s["step_id"] for s in p["steps"])
+        agents = ", ".join(dict.fromkeys((s["agent_alias"] or s["skill_id"] or "-") for s in p["steps"]))
+        print(f"  Phase {p['phase']:>2}/{total}   {ids:<30} -> {agents}")
+    if plan["standby_steps"]:
+        print("standby:")
+        for step in plan["standby_steps"]:
+            print(f"  - {step['step_id']} => {step.get('governance_reason', step.get('resolution_status'))}")
+
+
+def cmd_print_compiled_blocked(constitution_json: str, policy_json: str, binding_json: str, snapshot_json: str) -> None:
+    constitution = _load_json_arg(constitution_json)
+    policy = _load_json_arg(policy_json)
+    binding = _load_json_arg(binding_json)
+    snapshot = _load_json_arg(snapshot_json)
+    print(f"task_id: {constitution['task_id']}")
+    print(f"goal_stage: {constitution['goal_stage']}")
+    print(f"binding_status: {binding['binding_status']}")
+    print(f"binding_json: {snapshot['binding_json_path']}")
+    print(f"bundle_dir: {snapshot['bundle_dir']}")
+    print("policy decisions:")
+    for item in policy["decisions"]:
+        if item["action"] in {"pending", "manual", "re_scope"}:
+            print(f"  - {item['step_id']} => {item['action']} / {item['reason']}")
+
+
+def cmd_print_compiled_degraded(policy_json: str, snapshot_json: str) -> None:
+    policy = _load_json_arg(policy_json)
+    snapshot = _load_json_arg(snapshot_json)
+    print(f"binding_json: {snapshot['binding_json_path']}")
+    print(f"bundle_dir: {snapshot['bundle_dir']}")
+    for item in policy["decisions"]:
+        if item["action"] in {"fallback", "skip"}:
+            print(f"  - {item['step_id']} => {item['action']} / {item['reason']}")
+
+
+def cmd_print_compile_start(snapshot_json: str, run_id: str) -> None:
+    snapshot = _load_json_arg(snapshot_json)
+    print(f"  Constitution: {snapshot['constitution_json_path']}")
+    print(f"  Binding: {snapshot['binding_json_path']}")
+    print(f"  Compiled bundle: {snapshot['bundle_dir']}")
+    print(f"  Run ID: {run_id}")
+
+
+def cmd_print_workflow_plan(plan_json: str) -> None:
+    plan = _load_json_arg(plan_json)
+    total = len(plan["phases"])
+    for p in plan["phases"]:
+        steps = p["steps"]
+        ids = " + ".join(s["step_id"] for s in steps)
+        agents = ", ".join(dict.fromkeys((s["agent_alias"] or s["skill_id"] or "-") for s in steps))
+        suffix = ""
+        if len(steps) > 1:
+            suffix = "  (parallel)"
+        gate = p.get("gate", {})
+        if gate and gate.get("type"):
+            suffix = f"  gate:{gate['type']}"
+        print(f"  Phase {p['phase']:>2}/{total}   {ids:<40} -> {agents}{suffix}")
+    if plan["standby_steps"]:
+        print(f"\n  Standby: {', '.join(s['step_id'] for s in plan['standby_steps'])}")
+
+
+def cmd_print_binding_summary(binding_json: str, snapshot_json: str) -> None:
+    binding = _load_json_arg(binding_json)
+    snapshot = _load_json_arg(snapshot_json)
+    print(f"  Binding: {binding['binding_status']}  |  registry_missing={binding['registry_missing']}  |  adapter_from_legacy={binding['adapter_from_legacy']}")
+    print(f"  Binding file: {snapshot['json_path']}")
+    for step in binding["steps"]:
+        print(f"    - {step['step_id']}: {step['resolution_status']} -> {step['selected_skill_id'] or '-'}")
+
+
+def cmd_print_bind_report(report_json: str, snapshot_json: str) -> None:
+    report = _load_json_arg(report_json)
+    snapshot = _load_json_arg(snapshot_json)
+    print("WORKFLOW BINDING REPORT")
+    print(f"workflow_id: {report['workflow_id']}")
+    print(f"workflow_version: {report['workflow_version']}")
+    print(f"binding_status: {report['binding_status']}")
+    print(f"registry_source: {report['registry_source_path']}")
+    print(f"registry_missing: {report['registry_missing']}")
+    print(f"adapter_from_legacy: {report['adapter_from_legacy']}")
+    print("stored:")
+    print(f"  - json: {snapshot['json_path']}")
+    print(f"  - markdown: {snapshot['markdown_path']}")
+    print(
+        "summary: "
+        f"total={report['summary']['total_steps']}, "
+        f"resolved={report['summary']['resolved_steps']}, "
+        f"fallback={report['summary']['fallback_steps']}, "
+        f"required_unresolved={report['summary']['unresolved_required_steps']}, "
+        f"optional_unresolved={report['summary']['unresolved_optional_steps']}"
+    )
+    if report["contract_missing_steps"]:
+        print(f"contract_missing_steps: {', '.join(report['contract_missing_steps'])}")
+    print("steps:")
+    for step in report["steps"]:
+        print(
+            f"  - {step['step_id']} (phase {step['phase']}) => "
+            f"{step['resolution_status']} / capability={step['capability']} / "
+            f"skill={step['selected_skill_id'] or '-'} / provider={step['selected_provider'] or '-'}"
+        )
+        print(
+            f"    binding_mode={step['binding_mode']} / missing_policy={step['missing_policy']} / "
+            f"reason={step['reason']}"
+        )
+
+
+def cmd_print_binding_blocked(binding_json: str, snapshot_json: str) -> None:
+    binding = _load_json_arg(binding_json)
+    snapshot = _load_json_arg(snapshot_json)
+    print(f"binding_status: {binding['binding_status']}")
+    print(f"registry_source: {binding['registry_source_path']}")
+    print(f"registry_missing: {binding['registry_missing']}")
+    print(f"adapter_from_legacy: {binding['adapter_from_legacy']}")
+    print(f"binding_json: {snapshot['json_path']}")
+    print("unresolved steps:")
+    for step in binding["steps"]:
+        if step["resolution_status"] in {"required_unresolved", "incompatible"}:
+            print(f"  - {step['step_id']} => {step['resolution_status']} / capability={step['capability']} / reason={step['reason']}")
+
+
+def cmd_print_binding_degraded(binding_json: str, snapshot_json: str) -> None:
+    binding = _load_json_arg(binding_json)
+    snapshot = _load_json_arg(snapshot_json)
+    print(f"binding_status: {binding['binding_status']}")
+    print(f"registry_source: {binding['registry_source_path']}")
+    print(f"registry_missing: {binding['registry_missing']}")
+    print(f"adapter_from_legacy: {binding['adapter_from_legacy']}")
+    print(f"binding_json: {snapshot['json_path']}")
+    print("degraded steps:")
+    for step in binding["steps"]:
+        if step["resolution_status"] in {"fallback_available", "optional_unresolved"}:
+            print(f"  - {step['step_id']} => {step['resolution_status']} / capability={step['capability']} / selected={step['selected_skill_id'] or '-'}")
+
+
+def cmd_print_binding_start(snapshot_json: str, run_id: str) -> None:
+    snapshot = _load_json_arg(snapshot_json)
+    print(f"  Binding: {snapshot['json_path']}")
+    print(f"  Run ID: {run_id}")
+
+
+# ---------------------------------------------------------------------------
 # Subcommand: persist-constitution
 # ---------------------------------------------------------------------------
 
@@ -1007,6 +1297,22 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("workflow_ref")
     p.add_argument("registry_ref", nargs="?", default=None)
 
+    # build-bound-plan
+    p = sub.add_parser("build-bound-plan", help="Build bound execution plan JSON")
+    p.add_argument("cap_root")
+    p.add_argument("workflow_ref")
+
+    # constitution-json
+    p = sub.add_parser("constitution-json", help="Build task constitution JSON")
+    p.add_argument("cap_root")
+    p.add_argument("request")
+
+    # compile-json
+    p = sub.add_parser("compile-json", help="Compile task-scoped workflow JSON")
+    p.add_argument("cap_root")
+    p.add_argument("request")
+    p.add_argument("registry_ref", nargs="?", default=None)
+
     # persist-constitution
     p = sub.add_parser("persist-constitution", help="Persist a task constitution snapshot")
     p.add_argument("constitution_dir")
@@ -1029,6 +1335,69 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("registry_ref")
     p.add_argument("origin")
     p.add_argument("compiled_json")
+
+    # print-constitution-report
+    p = sub.add_parser("print-constitution-report", help="Render constitution report for shell UI")
+    p.add_argument("constitution_json")
+    p.add_argument("snapshot_json")
+
+    # print-compile-report
+    p = sub.add_parser("print-compile-report", help="Render compile report for shell UI")
+    p.add_argument("compiled_json")
+    p.add_argument("snapshot_json")
+
+    # print-compiled-dry-run
+    p = sub.add_parser("print-compiled-dry-run", help="Render compiled workflow dry-run summary")
+    p.add_argument("constitution_json")
+    p.add_argument("policy_json")
+    p.add_argument("plan_json")
+    p.add_argument("snapshot_json")
+
+    # print-compiled-blocked
+    p = sub.add_parser("print-compiled-blocked", help="Render compiled workflow blocked summary")
+    p.add_argument("constitution_json")
+    p.add_argument("policy_json")
+    p.add_argument("binding_json")
+    p.add_argument("snapshot_json")
+
+    # print-compiled-degraded
+    p = sub.add_parser("print-compiled-degraded", help="Render compiled workflow degraded summary")
+    p.add_argument("policy_json")
+    p.add_argument("snapshot_json")
+
+    # print-compile-start
+    p = sub.add_parser("print-compile-start", help="Render compiled workflow start paths")
+    p.add_argument("snapshot_json")
+    p.add_argument("run_id")
+
+    # print-workflow-plan
+    p = sub.add_parser("print-workflow-plan", help="Render workflow phase summary")
+    p.add_argument("plan_json")
+
+    # print-binding-summary
+    p = sub.add_parser("print-binding-summary", help="Render binding summary")
+    p.add_argument("binding_json")
+    p.add_argument("snapshot_json")
+
+    # print-bind-report
+    p = sub.add_parser("print-bind-report", help="Render full binding report")
+    p.add_argument("report_json")
+    p.add_argument("snapshot_json")
+
+    # print-binding-blocked
+    p = sub.add_parser("print-binding-blocked", help="Render blocked binding summary")
+    p.add_argument("binding_json")
+    p.add_argument("snapshot_json")
+
+    # print-binding-degraded
+    p = sub.add_parser("print-binding-degraded", help="Render degraded binding summary")
+    p.add_argument("binding_json")
+    p.add_argument("snapshot_json")
+
+    # print-binding-start
+    p = sub.add_parser("print-binding-start", help="Render workflow start paths")
+    p.add_argument("snapshot_json")
+    p.add_argument("run_id")
 
     return parser
 
@@ -1075,6 +1444,12 @@ def main() -> None:
             cmd_plan(args.cap_root, args.workflow_ref)
         case "bind":
             cmd_bind(args.cap_root, args.workflow_ref, args.registry_ref)
+        case "build-bound-plan":
+            cmd_build_bound_plan(args.cap_root, args.workflow_ref)
+        case "constitution-json":
+            cmd_constitution_json(args.cap_root, args.request)
+        case "compile-json":
+            cmd_compile_json(args.cap_root, args.request, args.registry_ref)
         case "persist-constitution":
             cmd_persist_constitution(
                 args.constitution_dir,
@@ -1094,6 +1469,30 @@ def main() -> None:
                 args.origin,
                 args.compiled_json,
             )
+        case "print-constitution-report":
+            cmd_print_constitution_report(args.constitution_json, args.snapshot_json)
+        case "print-compile-report":
+            cmd_print_compile_report(args.compiled_json, args.snapshot_json)
+        case "print-compiled-dry-run":
+            cmd_print_compiled_dry_run(args.constitution_json, args.policy_json, args.plan_json, args.snapshot_json)
+        case "print-compiled-blocked":
+            cmd_print_compiled_blocked(args.constitution_json, args.policy_json, args.binding_json, args.snapshot_json)
+        case "print-compiled-degraded":
+            cmd_print_compiled_degraded(args.policy_json, args.snapshot_json)
+        case "print-compile-start":
+            cmd_print_compile_start(args.snapshot_json, args.run_id)
+        case "print-workflow-plan":
+            cmd_print_workflow_plan(args.plan_json)
+        case "print-binding-summary":
+            cmd_print_binding_summary(args.binding_json, args.snapshot_json)
+        case "print-bind-report":
+            cmd_print_bind_report(args.report_json, args.snapshot_json)
+        case "print-binding-blocked":
+            cmd_print_binding_blocked(args.binding_json, args.snapshot_json)
+        case "print-binding-degraded":
+            cmd_print_binding_degraded(args.binding_json, args.snapshot_json)
+        case "print-binding-start":
+            cmd_print_binding_start(args.snapshot_json, args.run_id)
         case _:
             parser.print_help()
             sys.exit(1)

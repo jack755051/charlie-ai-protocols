@@ -264,113 +264,20 @@ case "${1:-}" in
     BINDING_WORKFLOW_ID="$(printf '%s' "${BINDING_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["workflow_id"])')"
     BINDING_WORKFLOW_NAME="$(basename "${WORKFLOW_REF}")"
     BINDING_SNAPSHOT_JSON="$(persist_binding_snapshot "${BINDING_JSON}" "${BINDING_WORKFLOW_ID}" "${BINDING_WORKFLOW_NAME}" "${WORKFLOW_REF}" "bind")"
-    # Display the binding report
-    "${PYTHON_BIN}" - <<'PY' "${BINDING_JSON}" "${BINDING_SNAPSHOT_JSON}"
-import json
-import sys
-
-report = json.loads(sys.argv[1])
-snapshot = json.loads(sys.argv[2])
-print("WORKFLOW BINDING REPORT")
-print(f"workflow_id: {report['workflow_id']}")
-print(f"workflow_version: {report['workflow_version']}")
-print(f"binding_status: {report['binding_status']}")
-print(f"registry_source: {report['registry_source_path']}")
-print(f"registry_missing: {report['registry_missing']}")
-print(f"adapter_from_legacy: {report['adapter_from_legacy']}")
-print("stored:")
-print(f"  - json: {snapshot['json_path']}")
-print(f"  - markdown: {snapshot['markdown_path']}")
-print(
-    "summary: "
-    f"total={report['summary']['total_steps']}, "
-    f"resolved={report['summary']['resolved_steps']}, "
-    f"fallback={report['summary']['fallback_steps']}, "
-    f"required_unresolved={report['summary']['unresolved_required_steps']}, "
-    f"optional_unresolved={report['summary']['unresolved_optional_steps']}"
-)
-if report["contract_missing_steps"]:
-    print(f"contract_missing_steps: {', '.join(report['contract_missing_steps'])}")
-print("steps:")
-for step in report["steps"]:
-    print(
-        f"  - {step['step_id']} (phase {step['phase']}) => "
-        f"{step['resolution_status']} / capability={step['capability']} / "
-        f"skill={step['selected_skill_id'] or '-'} / provider={step['selected_provider'] or '-'}"
-    )
-    print(
-        f"    binding_mode={step['binding_mode']} / missing_policy={step['missing_policy']} / "
-        f"reason={step['reason']}"
-    )
-PY
+    "${PYTHON_BIN}" "${CLI_PY}" print-bind-report "${BINDING_JSON}" "${BINDING_SNAPSHOT_JSON}"
     ;;
   constitution)
-    # TODO: Add constitution/compile subcommands to workflow_cli.py
-    # to replace the remaining inline Python blocks below.
     shift || true
     [ "$#" -ge 1 ] || {
       echo "Usage: cap workflow constitution <request...>" >&2
       exit 1
     }
     REQUEST="$*"
-    CONSTITUTION_JSON="$("${PYTHON_BIN}" - <<'PY' "${CAP_ROOT}" "${REQUEST}"
-from pathlib import Path
-import json
-import sys
-
-base_dir = Path(sys.argv[1])
-request = sys.argv[2]
-sys.path.insert(0, str(base_dir))
-from engine.task_scoped_compiler import TaskScopedWorkflowCompiler
-
-compiler = TaskScopedWorkflowCompiler(base_dir=base_dir)
-constitution = compiler.build_task_constitution(request)
-print(json.dumps(constitution, ensure_ascii=False))
-PY
-)"
+    CONSTITUTION_JSON="$("${PYTHON_BIN}" "${CLI_PY}" constitution-json "${CAP_ROOT}" "${REQUEST}")"
     CONSTITUTION_SNAPSHOT_JSON="$(persist_constitution_artifact "${CONSTITUTION_JSON}" "${REQUEST}" "constitution")"
-    "${PYTHON_BIN}" - <<'PY' "${CONSTITUTION_JSON}" "${CONSTITUTION_SNAPSHOT_JSON}"
-import json
-import sys
-
-constitution = json.loads(sys.argv[1])
-snapshot = json.loads(sys.argv[2])
-print("TASK CONSTITUTION")
-print(f"task_id: {constitution['task_id']}")
-print(f"goal_stage: {constitution['goal_stage']}")
-print(f"risk_profile: {constitution['risk_profile']}")
-print(f"goal: {constitution['goal']}")
-print("scope:")
-for item in constitution.get("scope", []):
-    print(f"  - {item}")
-print("success_criteria:")
-for item in constitution.get("success_criteria", []):
-    print(f"  - {item}")
-if constitution.get("constraints"):
-    print("constraints:")
-    for item in constitution["constraints"]:
-        print(f"  - {item}")
-if constitution.get("non_goals"):
-    print("non_goals:")
-    for item in constitution["non_goals"]:
-        print(f"  - {item}")
-print("inferred_context:")
-for key, value in constitution.get("inferred_context", {}).items():
-    print(f"  - {key}: {value}")
-if constitution.get("required_questions"):
-    print("required_questions:")
-    for item in constitution["required_questions"]:
-        print(f"  - {item}")
-print("stored:")
-print(f"  - json: {snapshot['json_path']}")
-print(f"  - markdown: {snapshot['markdown_path']}")
-print("raw_json:")
-print(json.dumps(constitution, ensure_ascii=False, indent=2))
-PY
+    "${PYTHON_BIN}" "${CLI_PY}" print-constitution-report "${CONSTITUTION_JSON}" "${CONSTITUTION_SNAPSHOT_JSON}"
     ;;
   compile)
-    # TODO: Add compile subcommand to workflow_cli.py
-    # to replace the remaining inline Python blocks below.
     shift || true
     REGISTRY_REF=""
     while [ "$#" -gt 0 ]; do
@@ -384,71 +291,11 @@ PY
       exit 1
     }
     REQUEST="$*"
-    COMPILED_JSON="$("${PYTHON_BIN}" - <<'PY' "${CAP_ROOT}" "${REQUEST}" "${REGISTRY_REF}"
-from pathlib import Path
-import json
-import sys
-
-base_dir = Path(sys.argv[1])
-request = sys.argv[2]
-registry_ref = sys.argv[3] or None
-sys.path.insert(0, str(base_dir))
-from engine.task_scoped_compiler import TaskScopedWorkflowCompiler
-
-compiler = TaskScopedWorkflowCompiler(base_dir=base_dir)
-compiled = compiler.compile_task(request, registry_ref=registry_ref)
-print(json.dumps(compiled, ensure_ascii=False))
-PY
-)"
+    COMPILED_JSON="$("${PYTHON_BIN}" "${CLI_PY}" compile-json "${CAP_ROOT}" "${REQUEST}" "${REGISTRY_REF}")"
     COMPILE_SNAPSHOT_JSON="$(persist_task_compile_bundle "${COMPILED_JSON}" "${REQUEST}" "${REGISTRY_REF}" "compile")"
-    "${PYTHON_BIN}" - <<'PY' "${COMPILED_JSON}" "${COMPILE_SNAPSHOT_JSON}"
-import json
-import sys
-
-compiled = json.loads(sys.argv[1])
-snapshot = json.loads(sys.argv[2])
-constitution = compiled["task_constitution"]
-graph = compiled["capability_graph"]
-binding = compiled["binding"]
-plan = compiled["plan"]
-policy = compiled["unresolved_policy"]
-
-print("TASK COMPILE REPORT")
-print(f"task_id: {constitution['task_id']}")
-print(f"goal_stage: {constitution['goal_stage']}")
-print(f"workflow_id: {plan['workflow_id']}")
-print(f"binding_status: {binding['binding_status']}")
-print("stored:")
-print(f"  - constitution_json: {snapshot['constitution_json_path']}")
-print(f"  - binding_json: {snapshot['binding_json_path']}")
-print(f"  - bundle_dir: {snapshot['bundle_dir']}")
-print("capability_graph:")
-for node in graph["nodes"]:
-    print(f"  - {node['step_id']} => {node['capability']} / required={node['required']} / depends_on={node['depends_on']}")
-print("unresolved_policy:")
-for decision in policy["decisions"]:
-    print(
-        f"  - {decision['step_id']} => {decision['resolution_status']} / "
-        f"action={decision['action']} / reason={decision['reason']}"
-    )
-print("compiled_phases:")
-for phase in plan["phases"]:
-    print(f"  Phase {phase['phase']}:")
-    for step in phase["steps"]:
-        print(
-            f"    - {step['step_id']} => capability={step['capability']} / "
-            f"agent={step['agent_alias'] or '-'} / input_mode={step.get('input_mode')} / "
-            f"continue_reason={step.get('continue_reason')}"
-        )
-if plan["standby_steps"]:
-    print("standby_steps:")
-    for step in plan["standby_steps"]:
-        print(f"  - {step['step_id']} => {step.get('governance_reason', step.get('resolution_status'))}")
-PY
+    "${PYTHON_BIN}" "${CLI_PY}" print-compile-report "${COMPILED_JSON}" "${COMPILE_SNAPSHOT_JSON}"
     ;;
   run-task)
-    # TODO: Add run-task related subcommands to workflow_cli.py
-    # to replace the remaining inline Python blocks below.
     shift || true
 
     DETACH=0
@@ -472,22 +319,7 @@ PY
     }
 
     USER_PROMPT="$*"
-    COMPILED_JSON="$("${PYTHON_BIN}" - <<'PY' "${CAP_ROOT}" "${USER_PROMPT}" "${REGISTRY_REF}"
-from pathlib import Path
-import json
-import sys
-
-base_dir = Path(sys.argv[1])
-request = sys.argv[2]
-registry_ref = sys.argv[3] or None
-sys.path.insert(0, str(base_dir))
-from engine.task_scoped_compiler import TaskScopedWorkflowCompiler
-
-compiler = TaskScopedWorkflowCompiler(base_dir=base_dir)
-compiled = compiler.compile_task(request, registry_ref=registry_ref)
-print(json.dumps(compiled, ensure_ascii=False))
-PY
-)"
+    COMPILED_JSON="$("${PYTHON_BIN}" "${CLI_PY}" compile-json "${CAP_ROOT}" "${USER_PROMPT}" "${REGISTRY_REF}")"
 
     PLAN_JSON="$(printf '%s' "${COMPILED_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["plan"], ensure_ascii=False))')"
     CONSTITUTION_JSON="$(printf '%s' "${COMPILED_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["task_constitution"], ensure_ascii=False))')"
@@ -502,36 +334,7 @@ PY
       echo ""
       echo "COMPILED WORKFLOW DRY RUN — ${WORKFLOW_NAME}"
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-      "${PYTHON_BIN}" - <<'PY' "${CONSTITUTION_JSON}" "${POLICY_JSON}" "${PLAN_JSON}" "${COMPILE_SNAPSHOT_JSON}"
-import json
-import sys
-
-constitution = json.loads(sys.argv[1])
-policy = json.loads(sys.argv[2])
-plan = json.loads(sys.argv[3])
-snapshot = json.loads(sys.argv[4])
-
-print(f"task_id: {constitution['task_id']}")
-print(f"goal_stage: {constitution['goal_stage']}")
-print(f"risk_profile: {constitution['risk_profile']}")
-print("stored:")
-print(f"  - constitution_json: {snapshot['constitution_json_path']}")
-print(f"  - binding_json: {snapshot['binding_json_path']}")
-print(f"  - bundle_dir: {snapshot['bundle_dir']}")
-print("unresolved_policy:")
-for item in policy["decisions"]:
-    print(f"  - {item['step_id']}: {item['action']} ({item['resolution_status']})")
-print("phases:")
-total = len(plan["phases"])
-for p in plan["phases"]:
-    ids = " + ".join(s["step_id"] for s in p["steps"])
-    agents = ", ".join(dict.fromkeys((s["agent_alias"] or s["skill_id"] or "-") for s in p["steps"]))
-    print(f"  Phase {p['phase']:>2}/{total}   {ids:<30} -> {agents}")
-if plan["standby_steps"]:
-    print("standby:")
-    for step in plan["standby_steps"]:
-        print(f"  - {step['step_id']} => {step.get('governance_reason', step.get('resolution_status'))}")
-PY
+      "${PYTHON_BIN}" "${CLI_PY}" print-compiled-dry-run "${CONSTITUTION_JSON}" "${POLICY_JSON}" "${PLAN_JSON}" "${COMPILE_SNAPSHOT_JSON}"
       echo ""
       exit 0
     fi
@@ -540,24 +343,7 @@ PY
       echo ""
       echo "COMPILED WORKFLOW PREFLIGHT BLOCKED — ${WORKFLOW_NAME}"
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-      "${PYTHON_BIN}" - <<'PY' "${CONSTITUTION_JSON}" "${POLICY_JSON}" "${BINDING_JSON}" "${COMPILE_SNAPSHOT_JSON}"
-import json
-import sys
-
-constitution = json.loads(sys.argv[1])
-policy = json.loads(sys.argv[2])
-binding = json.loads(sys.argv[3])
-snapshot = json.loads(sys.argv[4])
-print(f"task_id: {constitution['task_id']}")
-print(f"goal_stage: {constitution['goal_stage']}")
-print(f"binding_status: {binding['binding_status']}")
-print(f"binding_json: {snapshot['binding_json_path']}")
-print(f"bundle_dir: {snapshot['bundle_dir']}")
-print("policy decisions:")
-for item in policy["decisions"]:
-    if item["action"] in {"pending", "manual", "re_scope"}:
-        print(f"  - {item['step_id']} => {item['action']} / {item['reason']}")
-PY
+      "${PYTHON_BIN}" "${CLI_PY}" print-compiled-blocked "${CONSTITUTION_JSON}" "${POLICY_JSON}" "${BINDING_JSON}" "${COMPILE_SNAPSHOT_JSON}"
       echo ""
       exit 2
     fi
@@ -566,18 +352,7 @@ PY
       echo ""
       echo "COMPILED WORKFLOW PREFLIGHT DEGRADED — ${WORKFLOW_NAME}"
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-      "${PYTHON_BIN}" - <<'PY' "${POLICY_JSON}" "${COMPILE_SNAPSHOT_JSON}"
-import json
-import sys
-
-policy = json.loads(sys.argv[1])
-snapshot = json.loads(sys.argv[2])
-print(f"binding_json: {snapshot['binding_json_path']}")
-print(f"bundle_dir: {snapshot['bundle_dir']}")
-for item in policy["decisions"]:
-    if item["action"] in {"fallback", "skip"}:
-        print(f"  - {item['step_id']} => {item['action']} / {item['reason']}")
-PY
+      "${PYTHON_BIN}" "${CLI_PY}" print-compiled-degraded "${POLICY_JSON}" "${COMPILE_SNAPSHOT_JSON}"
       echo ""
     fi
 
@@ -590,17 +365,7 @@ PY
 
     RUN_ID="$(create_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "executing" "foreground_start" "foreground" "${RUN_CLI}" "${USER_PROMPT}")"
     bash "${SCRIPT_DIR}/trace-log.sh" append "Workflow" "compiled_workflow:${WORKFLOW_ID} run:${RUN_ID} 啟動 (${WORKFLOW_NAME})" "成功" >/dev/null 2>&1 || true
-    "${PYTHON_BIN}" - <<'PY' "${COMPILE_SNAPSHOT_JSON}" "${RUN_ID}"
-import json
-import sys
-
-snapshot = json.loads(sys.argv[1])
-run_id = sys.argv[2]
-print(f"  Constitution: {snapshot['constitution_json_path']}")
-print(f"  Binding: {snapshot['binding_json_path']}")
-print(f"  Compiled bundle: {snapshot['bundle_dir']}")
-print(f"  Run ID: {run_id}")
-PY
+    "${PYTHON_BIN}" "${CLI_PY}" print-compile-start "${COMPILE_SNAPSHOT_JSON}" "${RUN_ID}"
     if [ "${CLI_OVERRIDE}" -eq 1 ]; then
       exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --cli "${RUN_CLI}" --run-id "${RUN_ID}"
     fi
@@ -643,22 +408,7 @@ PY
     shift
     USER_PROMPT="$*"
 
-    # TODO: Add a build-bound-plan subcommand to workflow_cli.py for JSON output
-    PLAN_JSON="$("${PYTHON_BIN}" - <<'PY' "${CAP_ROOT}" "${WORKFLOW_REF}"
-from pathlib import Path
-import json
-import sys
-
-base_dir = Path(sys.argv[1])
-sys.path.insert(0, str(base_dir))
-from engine.runtime_binder import RuntimeBinder
-
-workflow_ref = sys.argv[2]
-loader = RuntimeBinder(base_dir=base_dir)
-result = loader.build_bound_execution_phases(workflow_ref)
-print(json.dumps(result, ensure_ascii=False))
-PY
-)"
+    PLAN_JSON="$("${PYTHON_BIN}" "${CLI_PY}" build-bound-plan "${CAP_ROOT}" "${WORKFLOW_REF}")"
 
     WORKFLOW_ID="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["workflow_id"])')"
     WORKFLOW_NAME="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["name"])')"
@@ -681,22 +431,7 @@ PY
     SELECTED_WORKFLOW_REF="$(printf '%s' "${MODE_RESOLUTION_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["selected_workflow_ref"])')"
     if [ "${SELECTOR_APPLIED}" = "True" ]; then
       WORKFLOW_REF="${SELECTED_WORKFLOW_REF}"
-      # TODO: Add a build-bound-plan subcommand to workflow_cli.py for JSON output
-      PLAN_JSON="$("${PYTHON_BIN}" - <<'PY' "${CAP_ROOT}" "${WORKFLOW_REF}"
-from pathlib import Path
-import json
-import sys
-
-base_dir = Path(sys.argv[1])
-sys.path.insert(0, str(base_dir))
-from engine.runtime_binder import RuntimeBinder
-
-workflow_ref = sys.argv[2]
-loader = RuntimeBinder(base_dir=base_dir)
-result = loader.build_bound_execution_phases(workflow_ref)
-print(json.dumps(result, ensure_ascii=False))
-PY
-)"
+      PLAN_JSON="$("${PYTHON_BIN}" "${CLI_PY}" build-bound-plan "${CAP_ROOT}" "${WORKFLOW_REF}")"
       WORKFLOW_ID="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["workflow_id"])')"
       WORKFLOW_NAME="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["name"])')"
       BINDING_JSON="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["binding"], ensure_ascii=False))')"
@@ -719,38 +454,9 @@ PY
         echo "  Confidence: ${MODE_CONFIDENCE}"
         echo ""
       fi
-      "${PYTHON_BIN}" - <<'PY' "${PLAN_JSON}"
-import json
-import sys
-
-plan = json.loads(sys.argv[1])
-total = len(plan["phases"])
-for p in plan["phases"]:
-    steps = p["steps"]
-    ids = " + ".join(s["step_id"] for s in steps)
-    agents = ", ".join(dict.fromkeys((s["agent_alias"] or s["skill_id"] or "-") for s in steps))
-    suffix = ""
-    if len(steps) > 1:
-        suffix = "  (parallel)"
-    gate = p.get("gate", {})
-    if gate and gate.get("type"):
-        suffix = f"  gate:{gate['type']}"
-    print(f"  Phase {p['phase']:>2}/{total}   {ids:<40} -> {agents}{suffix}")
-if plan["standby_steps"]:
-    print(f"\n  Standby: {', '.join(s['step_id'] for s in plan['standby_steps'])}")
-PY
+      "${PYTHON_BIN}" "${CLI_PY}" print-workflow-plan "${PLAN_JSON}"
       echo ""
-      "${PYTHON_BIN}" - <<'PY' "${BINDING_JSON}" "${BINDING_SNAPSHOT_JSON}"
-import json
-import sys
-
-binding = json.loads(sys.argv[1])
-snapshot = json.loads(sys.argv[2])
-print(f"  Binding: {binding['binding_status']}  |  registry_missing={binding['registry_missing']}  |  adapter_from_legacy={binding['adapter_from_legacy']}")
-print(f"  Binding file: {snapshot['json_path']}")
-for step in binding["steps"]:
-    print(f"    - {step['step_id']}: {step['resolution_status']} -> {step['selected_skill_id'] or '-'}")
-PY
+      "${PYTHON_BIN}" "${CLI_PY}" print-binding-summary "${BINDING_JSON}" "${BINDING_SNAPSHOT_JSON}"
       echo ""
       if [ "${DRY_RUN}" -eq 1 ]; then
         echo "  Dry run only — no step was executed."
@@ -770,22 +476,7 @@ PY
         echo "reason: ${MODE_REASON}"
         echo ""
       fi
-      "${PYTHON_BIN}" - <<'PY' "${BINDING_JSON}" "${BINDING_SNAPSHOT_JSON}"
-import json
-import sys
-
-binding = json.loads(sys.argv[1])
-snapshot = json.loads(sys.argv[2])
-print(f"binding_status: {binding['binding_status']}")
-print(f"registry_source: {binding['registry_source_path']}")
-print(f"registry_missing: {binding['registry_missing']}")
-print(f"adapter_from_legacy: {binding['adapter_from_legacy']}")
-print(f"binding_json: {snapshot['json_path']}")
-print("unresolved steps:")
-for step in binding["steps"]:
-    if step["resolution_status"] in {"required_unresolved", "incompatible"}:
-        print(f"  - {step['step_id']} => {step['resolution_status']} / capability={step['capability']} / reason={step['reason']}")
-PY
+      "${PYTHON_BIN}" "${CLI_PY}" print-binding-blocked "${BINDING_JSON}" "${BINDING_SNAPSHOT_JSON}"
       echo ""
       echo "Workflow 已停止，請先補齊 skill registry 或調整 binding policy。"
       exit 2
@@ -800,22 +491,7 @@ PY
         echo "reason: ${MODE_REASON}"
         echo ""
       fi
-      "${PYTHON_BIN}" - <<'PY' "${BINDING_JSON}" "${BINDING_SNAPSHOT_JSON}"
-import json
-import sys
-
-binding = json.loads(sys.argv[1])
-snapshot = json.loads(sys.argv[2])
-print(f"binding_status: {binding['binding_status']}")
-print(f"registry_source: {binding['registry_source_path']}")
-print(f"registry_missing: {binding['registry_missing']}")
-print(f"adapter_from_legacy: {binding['adapter_from_legacy']}")
-print(f"binding_json: {snapshot['json_path']}")
-print("degraded steps:")
-for step in binding["steps"]:
-    if step["resolution_status"] in {"fallback_available", "optional_unresolved"}:
-        print(f"  - {step['step_id']} => {step['resolution_status']} / capability={step['capability']} / selected={step['selected_skill_id'] or '-'}")
-PY
+      "${PYTHON_BIN}" "${CLI_PY}" print-binding-degraded "${BINDING_JSON}" "${BINDING_SNAPSHOT_JSON}"
       echo ""
       echo "將以 degraded 模式繼續執行。"
     fi
@@ -836,15 +512,7 @@ PY
       echo "  Reason: ${MODE_REASON}"
       echo "  Confidence: ${MODE_CONFIDENCE}"
     fi
-    "${PYTHON_BIN}" - <<'PY' "${BINDING_SNAPSHOT_JSON}" "${RUN_ID}"
-import json
-import sys
-
-snapshot = json.loads(sys.argv[1])
-run_id = sys.argv[2]
-print(f"  Binding: {snapshot['json_path']}")
-print(f"  Run ID: {run_id}")
-PY
+    "${PYTHON_BIN}" "${CLI_PY}" print-binding-start "${BINDING_SNAPSHOT_JSON}" "${RUN_ID}"
     if [ "${CLI_OVERRIDE}" -eq 1 ]; then
       exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --cli "${RUN_CLI}" --run-id "${RUN_ID}"
     fi
