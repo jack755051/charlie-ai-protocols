@@ -6,6 +6,28 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.10.2] - 2026-04-24
+
+### Fixed
+
+- CLI 子命令語意釐清：移除歧義的 `cap list`，強制使用 `cap skill list` / `cap workflow list`
+- `cap workflow list` 恢復 `wf_` 短 ID 顯示
+- `cap workflow ps` 新增 zombie run 偵測，自動標記超時或孤兒 workflow run
+- `cap workflow help` 清理未實作的 `-d` flag，補齊 `--cli` 文件
+- `RuntimeBinder` 解除 workflow version 3 在 legacy adapter 與 skill registry 的阻斷
+- workflow executor 在 step prompt 強制注入文字輸出指引，修正 empty_capture 問題
+- 非互動模式輸出要求移入 workflow notes，避免汙染 step contract
+
+### Changed
+
+- `version-control-private` 精簡為單一 step，合併 tag 判定、changelog 同步與 commit/tag 操作
+
+## [v0.10.1] - 2026-04-24
+
+### Changed
+
+- schemas 從 7 份收斂為 3 份現役 schema（`capabilities.yaml`、`skill-registry.schema.yaml`、`task-constitution.schema.yaml`），移除冗餘定義
+
 ## [v0.10.0] - 2026-04-24
 
 ### Changed
