@@ -764,8 +764,30 @@ def normalize(payload):
 
 
 runs = []
+dirty = False
 if status_file.exists():
-    runs = normalize(json.loads(status_file.read_text(encoding="utf-8")))
+    raw_data = json.loads(status_file.read_text(encoding="utf-8"))
+    runs = normalize(raw_data)
+
+# Auto-mark stale: executing runs older than 2 hours
+from datetime import datetime, timedelta
+now = datetime.now()
+stale_threshold = timedelta(hours=2)
+for r in runs:
+    if r.get("state") == "executing":
+        updated = r.get("updated_at") or r.get("created_at", "")
+        if updated:
+            try:
+                ts = datetime.strptime(updated, "%Y-%m-%d %H:%M:%S")
+                if now - ts > stale_threshold:
+                    r["state"] = "stale"
+                    r["result"] = "zombie_auto_cleanup"
+                    dirty = True
+            except ValueError:
+                pass
+
+if dirty:
+    status_file.write_text(json.dumps(raw_data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 if ps_filter == "active":
     runs = [r for r in runs if r.get("state") in {"executing", "pending"}]
