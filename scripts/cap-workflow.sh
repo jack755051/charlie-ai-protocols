@@ -18,6 +18,9 @@ Usage:
   bash scripts/cap-workflow.sh inspect <run_id>
   bash scripts/cap-workflow.sh plan <workflow_id|file>
   bash scripts/cap-workflow.sh bind <workflow_id|file> [registry]
+  bash scripts/cap-workflow.sh constitution <request...>
+  bash scripts/cap-workflow.sh compile <request...> [--registry path]
+  bash scripts/cap-workflow.sh run-task [--dry-run] [-d] [--cli codex|claude] [--registry path] <request...>
   bash scripts/cap-workflow.sh run [--dry-run] [-d] [--cli codex|claude] <workflow_id|file> [prompt...]
 EOF
   exit 1
@@ -335,7 +338,7 @@ PYTHON_BIN="$(resolve_python)"
 ensure_status_store
 
 COMMAND="${1:-}"
-if [ -n "${COMMAND}" ] && [[ "${COMMAND}" != "list" && "${COMMAND}" != "ps" && "${COMMAND}" != "show" && "${COMMAND}" != "inspect" && "${COMMAND}" != "plan" && "${COMMAND}" != "bind" && "${COMMAND}" != "run" && "${COMMAND}" != "update-run-status" ]]; then
+if [ -n "${COMMAND}" ] && [[ "${COMMAND}" != "list" && "${COMMAND}" != "ps" && "${COMMAND}" != "show" && "${COMMAND}" != "inspect" && "${COMMAND}" != "plan" && "${COMMAND}" != "bind" && "${COMMAND}" != "constitution" && "${COMMAND}" != "compile" && "${COMMAND}" != "run-task" && "${COMMAND}" != "run" && "${COMMAND}" != "update-run-status" ]]; then
   set -- show "$@"
 fi
 
@@ -736,6 +739,252 @@ for step in report["steps"]:
         f"reason={step['reason']}"
     )
 PY
+    ;;
+  constitution)
+    shift || true
+    [ "$#" -ge 1 ] || {
+      echo "Usage: cap workflow constitution <request...>" >&2
+      exit 1
+    }
+    REQUEST="$*"
+    "${PYTHON_BIN}" - <<'PY' "${CAP_ROOT}" "${REQUEST}"
+from pathlib import Path
+import json
+import sys
+
+base_dir = Path(sys.argv[1])
+request = sys.argv[2]
+sys.path.insert(0, str(base_dir))
+from engine.task_scoped_compiler import TaskScopedWorkflowCompiler
+
+compiler = TaskScopedWorkflowCompiler(base_dir=base_dir)
+constitution = compiler.build_task_constitution(request)
+
+print("TASK CONSTITUTION")
+print(f"task_id: {constitution['task_id']}")
+print(f"goal_stage: {constitution['goal_stage']}")
+print(f"risk_profile: {constitution['risk_profile']}")
+print(f"goal: {constitution['goal']}")
+print("scope:")
+for item in constitution.get("scope", []):
+    print(f"  - {item}")
+print("success_criteria:")
+for item in constitution.get("success_criteria", []):
+    print(f"  - {item}")
+if constitution.get("constraints"):
+    print("constraints:")
+    for item in constitution["constraints"]:
+        print(f"  - {item}")
+if constitution.get("non_goals"):
+    print("non_goals:")
+    for item in constitution["non_goals"]:
+        print(f"  - {item}")
+print("inferred_context:")
+for key, value in constitution.get("inferred_context", {}).items():
+    print(f"  - {key}: {value}")
+if constitution.get("required_questions"):
+    print("required_questions:")
+    for item in constitution["required_questions"]:
+        print(f"  - {item}")
+print("raw_json:")
+print(json.dumps(constitution, ensure_ascii=False, indent=2))
+PY
+    ;;
+  compile)
+    shift || true
+    REGISTRY_REF=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --registry) REGISTRY_REF="$2"; shift 2 ;;
+        *) break ;;
+      esac
+    done
+    [ "$#" -ge 1 ] || {
+      echo "Usage: cap workflow compile <request...> [--registry path]" >&2
+      exit 1
+    }
+    REQUEST="$*"
+    "${PYTHON_BIN}" - <<'PY' "${CAP_ROOT}" "${REQUEST}" "${REGISTRY_REF}"
+from pathlib import Path
+import sys
+
+base_dir = Path(sys.argv[1])
+request = sys.argv[2]
+registry_ref = sys.argv[3] or None
+sys.path.insert(0, str(base_dir))
+from engine.task_scoped_compiler import TaskScopedWorkflowCompiler
+
+compiler = TaskScopedWorkflowCompiler(base_dir=base_dir)
+compiled = compiler.compile_task(request, registry_ref=registry_ref)
+constitution = compiled["task_constitution"]
+graph = compiled["capability_graph"]
+binding = compiled["binding"]
+plan = compiled["plan"]
+policy = compiled["unresolved_policy"]
+
+print("TASK COMPILE REPORT")
+print(f"task_id: {constitution['task_id']}")
+print(f"goal_stage: {constitution['goal_stage']}")
+print(f"workflow_id: {plan['workflow_id']}")
+print(f"binding_status: {binding['binding_status']}")
+print("capability_graph:")
+for node in graph["nodes"]:
+    print(f"  - {node['step_id']} => {node['capability']} / required={node['required']} / depends_on={node['depends_on']}")
+print("unresolved_policy:")
+for decision in policy["decisions"]:
+    print(
+        f"  - {decision['step_id']} => {decision['resolution_status']} / "
+        f"action={decision['action']} / reason={decision['reason']}"
+    )
+print("compiled_phases:")
+for phase in plan["phases"]:
+    print(f"  Phase {phase['phase']}:")
+    for step in phase["steps"]:
+        print(
+            f"    - {step['step_id']} => capability={step['capability']} / "
+            f"agent={step['agent_alias'] or '-'} / input_mode={step.get('input_mode')} / "
+            f"continue_reason={step.get('continue_reason')}"
+        )
+if plan["standby_steps"]:
+    print("standby_steps:")
+    for step in plan["standby_steps"]:
+        print(f"  - {step['step_id']} => {step.get('governance_reason', step.get('resolution_status'))}")
+PY
+    ;;
+  run-task)
+    shift || true
+
+    DETACH=0
+    DRY_RUN=0
+    RUN_CLI="${CAP_DEFAULT_AGENT_CLI:-auto}"
+    CLI_OVERRIDE=0
+    REGISTRY_REF=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        -d) DETACH=1; shift ;;
+        --dry-run) DRY_RUN=1; shift ;;
+        --cli) RUN_CLI="$2"; CLI_OVERRIDE=1; shift 2 ;;
+        --registry) REGISTRY_REF="$2"; shift 2 ;;
+        *) break ;;
+      esac
+    done
+
+    [ "$#" -ge 1 ] || {
+      echo "Usage: cap workflow run-task [--dry-run] [-d] [--cli codex|claude] [--registry path] <request...>" >&2
+      exit 1
+    }
+
+    USER_PROMPT="$*"
+    COMPILED_JSON="$("${PYTHON_BIN}" - <<'PY' "${CAP_ROOT}" "${USER_PROMPT}" "${REGISTRY_REF}"
+from pathlib import Path
+import json
+import sys
+
+base_dir = Path(sys.argv[1])
+request = sys.argv[2]
+registry_ref = sys.argv[3] or None
+sys.path.insert(0, str(base_dir))
+from engine.task_scoped_compiler import TaskScopedWorkflowCompiler
+
+compiler = TaskScopedWorkflowCompiler(base_dir=base_dir)
+compiled = compiler.compile_task(request, registry_ref=registry_ref)
+print(json.dumps(compiled, ensure_ascii=False))
+PY
+)"
+
+    PLAN_JSON="$(printf '%s' "${COMPILED_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["plan"], ensure_ascii=False))')"
+    CONSTITUTION_JSON="$(printf '%s' "${COMPILED_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["task_constitution"], ensure_ascii=False))')"
+    POLICY_JSON="$(printf '%s' "${COMPILED_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["unresolved_policy"], ensure_ascii=False))')"
+    WORKFLOW_ID="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["workflow_id"])')"
+    WORKFLOW_NAME="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["name"])')"
+    BINDING_JSON="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["binding"], ensure_ascii=False))')"
+    BINDING_STATUS="$(printf '%s' "${BINDING_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["binding_status"])')"
+
+    if [ "${DRY_RUN}" -eq 1 ]; then
+      echo ""
+      echo "COMPILED WORKFLOW DRY RUN — ${WORKFLOW_NAME}"
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      "${PYTHON_BIN}" - <<'PY' "${CONSTITUTION_JSON}" "${POLICY_JSON}" "${PLAN_JSON}"
+import json
+import sys
+
+constitution = json.loads(sys.argv[1])
+policy = json.loads(sys.argv[2])
+plan = json.loads(sys.argv[3])
+
+print(f"task_id: {constitution['task_id']}")
+print(f"goal_stage: {constitution['goal_stage']}")
+print(f"risk_profile: {constitution['risk_profile']}")
+print("unresolved_policy:")
+for item in policy["decisions"]:
+    print(f"  - {item['step_id']}: {item['action']} ({item['resolution_status']})")
+print("phases:")
+total = len(plan["phases"])
+for p in plan["phases"]:
+    ids = " + ".join(s["step_id"] for s in p["steps"])
+    agents = ", ".join(dict.fromkeys((s["agent_alias"] or s["skill_id"] or "-") for s in p["steps"]))
+    print(f"  Phase {p['phase']:>2}/{total}   {ids:<30} -> {agents}")
+if plan["standby_steps"]:
+    print("standby:")
+    for step in plan["standby_steps"]:
+        print(f"  - {step['step_id']} => {step.get('governance_reason', step.get('resolution_status'))}")
+PY
+      echo ""
+      exit 0
+    fi
+
+    if [ "${BINDING_STATUS}" = "blocked" ]; then
+      echo ""
+      echo "COMPILED WORKFLOW PREFLIGHT BLOCKED — ${WORKFLOW_NAME}"
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      "${PYTHON_BIN}" - <<'PY' "${CONSTITUTION_JSON}" "${POLICY_JSON}" "${BINDING_JSON}"
+import json
+import sys
+
+constitution = json.loads(sys.argv[1])
+policy = json.loads(sys.argv[2])
+binding = json.loads(sys.argv[3])
+print(f"task_id: {constitution['task_id']}")
+print(f"goal_stage: {constitution['goal_stage']}")
+print(f"binding_status: {binding['binding_status']}")
+print("policy decisions:")
+for item in policy["decisions"]:
+    if item["action"] in {"pending", "manual", "re_scope"}:
+        print(f"  - {item['step_id']} => {item['action']} / {item['reason']}")
+PY
+      echo ""
+      exit 2
+    fi
+
+    if [ "${BINDING_STATUS}" = "degraded" ]; then
+      echo ""
+      echo "COMPILED WORKFLOW PREFLIGHT DEGRADED — ${WORKFLOW_NAME}"
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      "${PYTHON_BIN}" - <<'PY' "${POLICY_JSON}"
+import json
+import sys
+
+policy = json.loads(sys.argv[1])
+for item in policy["decisions"]:
+    if item["action"] in {"fallback", "skip"}:
+        print(f"  - {item['step_id']} => {item['action']} / {item['reason']}")
+PY
+      echo ""
+    fi
+
+    if [ "${DETACH}" -eq 1 ]; then
+      RUN_ID="$(create_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "detached" "background_start" "detached" "${RUN_CLI}" "${USER_PROMPT}")"
+      echo "Background mode is not yet implemented."
+      echo "RUN ID: ${RUN_ID}"
+      exit 0
+    fi
+
+    RUN_ID="$(create_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "executing" "foreground_start" "foreground" "${RUN_CLI}" "${USER_PROMPT}")"
+    bash "${SCRIPT_DIR}/trace-log.sh" append "Workflow" "compiled_workflow:${WORKFLOW_ID} run:${RUN_ID} 啟動 (${WORKFLOW_NAME})" "成功" >/dev/null 2>&1 || true
+    if [ "${CLI_OVERRIDE}" -eq 1 ]; then
+      exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --cli "${RUN_CLI}" --run-id "${RUN_ID}"
+    fi
+    exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --run-id "${RUN_ID}"
     ;;
   run)
     shift || true

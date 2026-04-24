@@ -34,6 +34,7 @@ CAP 解決的核心問題是：當多位 AI Agent 共同參與軟體開發流程
 
 架構細節請看 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 Skill marketplace 與 runtime binding 草案請看 [docs/SKILL-MARKETPLACE-RUNTIME-DRAFT.md](docs/SKILL-MARKETPLACE-RUNTIME-DRAFT.md)。
+Task-scoped workflow compiler 草案請看 [docs/TASK-SCOPED-WORKFLOW-COMPILER-DRAFT.md](docs/TASK-SCOPED-WORKFLOW-COMPILER-DRAFT.md)。
 可選的本地 skill registry 範例請看 [.cap.skills.example.yaml](.cap.skills.example.yaml)。
 
 目前狀態：
@@ -67,6 +68,9 @@ cap workflow list
 cap workflow ps
 cap workflow show version-control-private
 cap workflow plan version-control-private
+cap workflow constitution "用 Tauri 做個 AI 額度監控小工具，先不要直接實作"
+cap workflow compile "用 Tauri 做個 AI 額度監控小工具，先不要直接實作"
+cap workflow run-task --dry-run "用 Tauri 做個 AI 額度監控小工具，先不要直接實作"
 cap workflow run --dry-run workflow-smoke-test "test"
 cap workflow run version-control-private "請針對目前變更建立 commit"
 ```
@@ -109,6 +113,9 @@ cap workflow run version-control-private "請針對目前變更建立 commit"
 - `show`：inspect 風格檢視單一 workflow
 - `inspect`：檢視單一 `run_id` 的執行狀態
 - `plan`：顯示 phase、capability 與 agent 綁定
+- `constitution`：從一句話需求產出 task constitution
+- `compile`：從一句話需求編譯最小 workflow
+- `run-task`：從一句話需求直接 compile 並執行
 - `run`：有 prompt 時進入前景執行；沒有 prompt 時會先詢問或只顯示 plan
 - `run --dry-run`：只顯示執行計畫，不真的執行 step
 
@@ -149,6 +156,8 @@ Workflow 與 Agent Skills 是並存的兩種使用方式：
 - [docs/workflows/README.md](docs/workflows/README.md)
 - [docs/workflows/workflow-schema.md](docs/workflows/workflow-schema.md)
 - [schemas/capabilities.yaml](schemas/capabilities.yaml)
+- [schemas/task-constitution.schema.yaml](schemas/task-constitution.schema.yaml)
+- [schemas/workflow-run-state.schema.yaml](schemas/workflow-run-state.schema.yaml)
 
 ## Project Structure
 

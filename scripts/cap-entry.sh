@@ -34,6 +34,9 @@ COMMAND                            DESCRIPTION
   cap workflow inspect <run-id>    顯示單次 workflow run 詳情
   cap workflow plan <id>           顯示 semantic plan、phase 與 binding 摘要
   cap workflow bind <id> [registry]  顯示 skill binding report
+  cap workflow constitution "<需求>"   產出 task constitution
+  cap workflow compile "<需求>"        從一句話需求編譯最小 workflow
+  cap workflow run-task "<需求>"       從一句話需求直接 compile 並執行
   cap workflow run <id> [prompt]   前景執行；無 prompt 時會先詢問或只顯示 plan
   cap workflow run --dry-run <id> [prompt]  只顯示執行計畫，不真的執行
   cap workflow run -d <id> <prompt>  背景執行（planned）
