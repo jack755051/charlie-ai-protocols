@@ -20,7 +20,7 @@ Usage:
   cap workflow constitution <request...>
   cap workflow compile <request...> [--registry path]
   cap workflow run-task [--dry-run] [--cli codex|claude] [--registry path] <request...>
-  cap workflow run [--dry-run] [--cli codex|claude] <id> [prompt...]
+  cap workflow run [--dry-run] [--cli codex|claude] [--mode quick|governed|auto] <id> [prompt...]
   cap workflow <id> "<prompt>"            (run 的簡寫)
 
 Default CLI: claude (可用 --cli codex 覆寫，或設定 CAP_DEFAULT_AGENT_CLI 環境變數)
@@ -78,6 +78,127 @@ for path in sorted(workflows_dir.iterdir()):
 sys.exit(1)
 PY
   return $?
+}
+
+collect_repo_change_files() {
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    return 0
+  fi
+
+  {
+    git diff --name-only --cached 2>/dev/null || true
+    git diff --name-only 2>/dev/null || true
+    git ls-files --others --exclude-standard 2>/dev/null || true
+  } | sed '/^[[:space:]]*$/d' | sort -u
+}
+
+resolve_run_execution_mode() {
+  local workflow_ref="$1"
+  local requested_mode="$2"
+  local user_prompt="$3"
+  local changed_files
+
+  changed_files="$(collect_repo_change_files || true)"
+
+  "${PYTHON_BIN}" - <<'PY' "${CAP_ROOT}" "${workflow_ref}" "${requested_mode}" "${user_prompt}" "${changed_files}"
+from pathlib import Path
+import json
+import sys
+import yaml
+
+base_dir = Path(sys.argv[1])
+workflow_ref = Path(sys.argv[2])
+requested_mode = sys.argv[3]
+user_prompt = sys.argv[4]
+changed_files = [line.strip() for line in sys.argv[5].splitlines() if line.strip()]
+
+workflow_data = yaml.safe_load(workflow_ref.read_text(encoding="utf-8"))
+workflow_id = workflow_data.get("workflow_id", workflow_ref.stem)
+
+quick_path = base_dir / "schemas/workflows/version-control-quick.yaml"
+governed_path = base_dir / "schemas/workflows/version-control-private.yaml"
+family_ids = {"version-control-private", "version-control-quick"}
+
+result = {
+    "selector_applied": False,
+    "requested_mode": requested_mode,
+    "selected_mode": "fixed",
+    "confidence": "high",
+    "reason": "workflow family does not require mode routing",
+    "selected_workflow_ref": str(workflow_ref),
+    "selected_workflow_id": workflow_id,
+    "original_workflow_id": workflow_id,
+}
+
+if workflow_id not in family_ids:
+    print(json.dumps(result, ensure_ascii=False))
+    raise SystemExit(0)
+
+prompt = user_prompt.lower().strip()
+release_keywords = [
+    "release", "tag", "changelog", "readme", "版本號", "版號", "發版", "正式發版",
+    "同步 changelog", "同步 readme", "版本徽章", "release note", "發佈",
+]
+quick_keywords = [
+    "版本更新", "commit", "提交", "快速提交", "只要 commit", "只做 commit",
+    "整理這次變更", "存檔", "快速版控", "quick commit",
+]
+
+changed_lower = [path.lower() for path in changed_files]
+release_file_touched = any(
+    path in {"readme.md", "changelog.md", "repo.manifest.yaml"} or path.endswith("/readme.md")
+    for path in changed_lower
+)
+explicit_governed = any(keyword in prompt for keyword in release_keywords)
+explicit_quick = any(keyword in prompt for keyword in quick_keywords)
+
+if requested_mode == "quick":
+    selected_mode = "quick"
+    reason = "explicit --mode quick"
+    confidence = "high"
+elif requested_mode == "governed":
+    selected_mode = "governed"
+    reason = "explicit --mode governed"
+    confidence = "high"
+elif workflow_id == "version-control-quick":
+    selected_mode = "quick"
+    reason = "quick workflow requested directly"
+    confidence = "high"
+elif explicit_governed:
+    selected_mode = "governed"
+    reason = "prompt includes release/tag/changelog/readme intent"
+    confidence = "high"
+elif explicit_quick:
+    selected_mode = "quick"
+    reason = "prompt indicates quick commit-only intent"
+    confidence = "high"
+elif release_file_touched:
+    selected_mode = "governed"
+    reason = "release-related files changed (README.md / CHANGELOG.md / repo.manifest.yaml)"
+    confidence = "medium"
+elif len(changed_files) <= 6:
+    selected_mode = "quick"
+    reason = "auto default for lightweight version-control requests"
+    confidence = "medium"
+else:
+    selected_mode = "governed"
+    reason = "change set is larger and no quick intent was detected"
+    confidence = "medium"
+
+selected_ref = quick_path if selected_mode == "quick" else governed_path
+selected_data = yaml.safe_load(selected_ref.read_text(encoding="utf-8"))
+result.update(
+    {
+        "selector_applied": True,
+        "selected_mode": selected_mode,
+        "confidence": confidence,
+        "reason": reason,
+        "selected_workflow_ref": str(selected_ref),
+        "selected_workflow_id": selected_data.get("workflow_id", selected_ref.stem),
+    }
+)
+print(json.dumps(result, ensure_ascii=False))
+PY
 }
 
 ensure_status_store() {
@@ -1406,19 +1527,28 @@ PY
     DRY_RUN=0
     RUN_CLI="${CAP_DEFAULT_AGENT_CLI:-auto}"
     CLI_OVERRIDE=0
+    EXECUTION_MODE="auto"
     while [ "$#" -gt 0 ]; do
       case "$1" in
         -d)       DETACH=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         --cli)    RUN_CLI="$2"; CLI_OVERRIDE=1; shift 2 ;;
+        --mode)   EXECUTION_MODE="$2"; shift 2 ;;
         *)        break ;;
       esac
     done
 
     [ "$#" -ge 1 ] || {
-      echo "Usage: cap workflow run [--dry-run] [-d] [--cli codex|claude] <workflow> [prompt...]" >&2
+      echo "Usage: cap workflow run [--dry-run] [-d] [--cli codex|claude] [--mode quick|governed|auto] <workflow> [prompt...]" >&2
       exit 1
     }
+    case "${EXECUTION_MODE}" in
+      quick|governed|auto) ;;
+      *)
+        echo "不支援的 --mode：${EXECUTION_MODE}。可用值：quick | governed | auto" >&2
+        exit 1
+        ;;
+    esac
 
     WORKFLOW_REF="$(resolve_workflow_ref "$1")" || {
       echo "找不到 workflow：$1" >&2
@@ -1456,6 +1586,36 @@ PY
       fi
     fi
 
+    MODE_RESOLUTION_JSON="$(resolve_run_execution_mode "${WORKFLOW_REF}" "${EXECUTION_MODE}" "${USER_PROMPT}")"
+    SELECTOR_APPLIED="$(printf '%s' "${MODE_RESOLUTION_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["selector_applied"])')"
+    SELECTED_MODE="$(printf '%s' "${MODE_RESOLUTION_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["selected_mode"])')"
+    MODE_REASON="$(printf '%s' "${MODE_RESOLUTION_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["reason"])')"
+    MODE_CONFIDENCE="$(printf '%s' "${MODE_RESOLUTION_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["confidence"])')"
+    SELECTED_WORKFLOW_REF="$(printf '%s' "${MODE_RESOLUTION_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["selected_workflow_ref"])')"
+    if [ "${SELECTOR_APPLIED}" = "True" ]; then
+      WORKFLOW_REF="${SELECTED_WORKFLOW_REF}"
+      PLAN_JSON="$("${PYTHON_BIN}" - <<'PY' "${CAP_ROOT}" "${WORKFLOW_REF}"
+from pathlib import Path
+import json
+import sys
+
+base_dir = Path(sys.argv[1])
+sys.path.insert(0, str(base_dir))
+from engine.runtime_binder import RuntimeBinder
+
+workflow_ref = sys.argv[2]
+loader = RuntimeBinder(base_dir=base_dir)
+result = loader.build_bound_execution_phases(workflow_ref)
+print(json.dumps(result, ensure_ascii=False))
+PY
+)"
+      WORKFLOW_ID="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["workflow_id"])')"
+      WORKFLOW_NAME="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["name"])')"
+      BINDING_JSON="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["binding"], ensure_ascii=False))')"
+      BINDING_STATUS="$(printf '%s' "${BINDING_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["binding_status"])')"
+      BINDING_SNAPSHOT_JSON="$(persist_binding_snapshot "${BINDING_JSON}" "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "${WORKFLOW_REF}" "run")"
+    fi
+
     if [ -z "${USER_PROMPT}" ] || [ "${DRY_RUN}" -eq 1 ]; then
       echo ""
       if [ "${DRY_RUN}" -eq 1 ]; then
@@ -1465,6 +1625,12 @@ PY
       fi
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       echo ""
+      if [ "${SELECTOR_APPLIED}" = "True" ]; then
+        echo "  Mode: ${SELECTED_MODE} (${EXECUTION_MODE})"
+        echo "  Reason: ${MODE_REASON}"
+        echo "  Confidence: ${MODE_CONFIDENCE}"
+        echo ""
+      fi
       "${PYTHON_BIN}" - <<'PY' "${PLAN_JSON}"
 import json
 import sys
@@ -1511,6 +1677,11 @@ PY
       echo ""
       echo "WORKFLOW PREFLIGHT BLOCKED — ${WORKFLOW_NAME}"
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      if [ "${SELECTOR_APPLIED}" = "True" ]; then
+        echo "mode: ${SELECTED_MODE} (${EXECUTION_MODE})"
+        echo "reason: ${MODE_REASON}"
+        echo ""
+      fi
       "${PYTHON_BIN}" - <<'PY' "${BINDING_JSON}" "${BINDING_SNAPSHOT_JSON}"
 import json
 import sys
@@ -1536,6 +1707,11 @@ PY
       echo ""
       echo "WORKFLOW PREFLIGHT DEGRADED — ${WORKFLOW_NAME}"
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      if [ "${SELECTOR_APPLIED}" = "True" ]; then
+        echo "mode: ${SELECTED_MODE} (${EXECUTION_MODE})"
+        echo "reason: ${MODE_REASON}"
+        echo ""
+      fi
       "${PYTHON_BIN}" - <<'PY' "${BINDING_JSON}" "${BINDING_SNAPSHOT_JSON}"
 import json
 import sys
@@ -1567,6 +1743,11 @@ PY
 
     RUN_ID="$(create_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "executing" "foreground_start" "foreground" "${RUN_CLI}" "${USER_PROMPT}")"
     bash "${SCRIPT_DIR}/trace-log.sh" append "Workflow" "workflow:${WORKFLOW_ID} run:${RUN_ID} 啟動 (${WORKFLOW_NAME})" "成功" >/dev/null 2>&1 || true
+    if [ "${SELECTOR_APPLIED}" = "True" ]; then
+      echo "  Mode: ${SELECTED_MODE} (${EXECUTION_MODE})"
+      echo "  Reason: ${MODE_REASON}"
+      echo "  Confidence: ${MODE_CONFIDENCE}"
+    fi
     "${PYTHON_BIN}" - <<'PY' "${BINDING_SNAPSHOT_JSON}" "${RUN_ID}"
 import json
 import sys

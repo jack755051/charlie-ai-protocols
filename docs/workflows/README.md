@@ -93,11 +93,17 @@ workflow 不負責決定最終 agent，只負責宣告：
 
 #### `version-control-private.yaml`
 
-- 用途：私人專案版本控制（單一 step）
-- 設計理由：版本控制是單一責任、短鏈、機械性工作，不適合拆成多個 AI session；單一 step 在一次 session 內完成 scan → branch → commit → tag 判定 → CHANGELOG/README → push
+- 用途：私人專案版本控制治理流程（單一 step）
+- 設計理由：當任務包含 release / tag / CHANGELOG / README 同步時，應以單一治理 step 在一次 session 內完成 scan → branch → commit → tag 判定 → CHANGELOG/README → push
 - 主要步驟：
   - `version_control_commit` — 一次完成所有版本控制操作
-  - `technical_logging` — 歸檔（optional）
+
+#### `version-control-quick.yaml`
+
+- 用途：私人專案快速版控
+- 設計理由：日常「版本更新 / 幫我 commit / 整理這次變更」不該走完整 release 治理鏈；quick path 只做 scan → commit → push
+- 主要步驟：
+  - `version_control_commit` — 快速完成 scan、commit、push
 
 ### B. 補充流程
 
@@ -113,6 +119,9 @@ workflow 不負責決定最終 agent，只負責宣告：
 
 - 如果你是逐步手動操作：直接用 `$skill` 呼叫單一 agent
 - 如果你要固定順序、可重複交付：優先從 `version-control-private.yaml`、`readme-to-devops.yaml` 與 `workflow-smoke-test.yaml` 之間選擇最小可行流程
+- 若是日常 commit：優先走 `version-control-quick.yaml`
+- 若包含 tag / release / CHANGELOG / README 同步：走 `version-control-private.yaml`
+- `cap workflow run --mode auto version-control-private "版本更新"` 會由 runtime selector 自動落到 quick 或 governed 路徑
 - 如果目前 schema 尚未支援條件分支，優先拆成兩條明確 workflow，而不是在單一檔案裡混入情境判斷
 - 若你想處理的是「最後收尾、核對、補文件、提交與 release」：先強化既有 `version-control-private`，不要先新增命名模糊的「收斂 workflow」
 - 只有在「收斂」本身有獨立產物、獨立驗收條件、且步驟序列明顯不同於版控流程時，才新增新的 workflow，例如 `release-convergence.yaml`

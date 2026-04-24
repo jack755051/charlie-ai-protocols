@@ -1,0 +1,45 @@
+workflow_id: version-control-quick
+version: 1
+name: Quick Version Control
+summary: 私人專案快速版控：單一 DevOps session 完成 scan → commit → push，不做 tag / CHANGELOG / README release 同步。
+owner: supervisor
+triggers:
+  - manual
+  - version-control
+  - private-project
+  - quick
+
+artifacts:
+  commit_message: 版本控制提交訊息
+  commit_result: 版本控制提交結果
+
+governance:
+  watcher_mode: final_only
+  logger_mode: final_only
+  watcher_checkpoints: []
+  logger_checkpoints: []
+  halt_on_missing_handoff: false
+
+steps:
+  - id: commit_changes
+    name: Quick Commit Changes
+    capability: version_control_commit
+    inputs:
+      - repo_changes
+      - commit_scope
+      - project_context
+    outputs:
+      - commit_message
+      - commit_result
+    done_when:
+      - 已掃描 git status / diff，確認本次 commit 範圍
+      - 已依 git-workflow.md 決定是否直接 commit 或先開分支
+      - 已完成 commit，訊息符合 Conventional Commits 規範
+      - 已依需要推送 commit，或明確回報阻塞原因
+    on_fail: halt
+    timeout_seconds: 180
+    notes:
+      - 這是 quick path，不做 tag 判定、CHANGELOG.md 更新與 README.md release 同步
+      - 所有操作在單一 agent session 中完成，不拆分多個 AI step
+      - "本 step 在非互動模式（claude -p）下執行，agent 無法暫停等使用者確認。請依最佳判斷直接執行，不要輸出 Pre-action Checklist 等待回覆。"
+      - "執行完所有 git 操作後，必須在 stdout 輸出完整的 quick version-control 報告，包含：掃描結果、分支決策、commit 訊息、推送結果。若 stdout 為空，executor 會判定為失敗。"
