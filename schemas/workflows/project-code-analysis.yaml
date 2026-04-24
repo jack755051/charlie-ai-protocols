@@ -1,0 +1,155 @@
+workflow_id: project-code-analysis
+version: 1
+name: Project Code Analysis
+summary: 針對既有、待維護 repo 做 repo intake、架構 reverse engineering、風險與技術債分析，最後輸出正式分析報告。
+owner: supervisor
+triggers:
+  - manual
+  - analysis
+  - codebase-audit
+  - maintenance-handoff
+
+artifacts:
+  prd_document: 分析範圍、深度與輸出要求
+  repo_manifest: repo metadata 與入口點清單
+  repo_summary: 專案結構導讀摘要
+  tech_plan: 架構分析、模組關係與風險清單
+  delivery_artifacts: 供審閱用的分析交付包
+  error_evidence: 熱點與疑難區證據摘要
+  diagnostic_report: 高風險區與技術債診斷報告
+  fix_recommendation: 優先修復建議
+  review_note: 分析完整度審閱意見
+  audit_reports: 最終審閱與風險彙整
+  trace_log: 執行摘要
+  devlog: 正式分析報告
+
+governance:
+  watcher_mode: final_only
+  logger_mode: milestone_log
+  watcher_checkpoints: []
+  logger_checkpoints: [analysis_scope, architecture_scan, archive_report]
+  halt_on_missing_handoff: true
+
+steps:
+  - id: analysis_scope
+    name: Define Analysis Scope
+    capability: prd_generation
+    inputs:
+      - user_requirement
+      - project_context
+    outputs:
+      - prd_document
+    done_when:
+      - 已明確定義本次分析範圍、分析深度與輸出格式
+      - 已說明是否聚焦架構、模組關係、風險、技術債或可維護性
+    on_fail: halt
+    notes:
+      - 這一步不是產品 PRD，而是本次 codebase analysis 的任務憲法
+      - 需明確標示目錄範圍、語言/框架與希望產出的報告型式
+      - 本流程預設面向接手維護中的既有 repo，不是新功能交付後的 QA 驗收
+
+  - id: repo_intake
+    name: Normalize Repo And Inventory Codebase
+    capability: readme_normalization
+    needs:
+      - analysis_scope
+    inputs:
+      - prd_document
+      - repo_files
+      - project_context
+    outputs:
+      - repo_manifest
+      - repo_summary
+    done_when:
+      - 已整理 repo 結構、入口點、啟動方式與主要技術棧
+      - 已提供後續分析所需的 codebase inventory baseline
+    on_fail: halt
+    notes:
+      - 若 README.md 不完整，可在不改動業務邏輯的前提下補出最小可讀 repo summary
+
+  - id: architecture_scan
+    name: Analyze Architecture And Risks
+    capability: technical_planning
+    needs:
+      - analysis_scope
+      - repo_intake
+    inputs:
+      - prd_document
+      - repo_manifest
+      - repo_summary
+      - repo_changes
+      - project_context
+    outputs:
+      - tech_plan
+      - delivery_artifacts
+      - error_evidence
+    done_when:
+      - 已產出系統架構摘要、模組邊界、依賴關係與主要風險
+      - 已指出高耦合區、可疑熱點、技術債與後續優先修復方向
+      - 已整理成可供後續審閱的分析交付包
+    on_fail: halt
+    notes:
+      - 這一步的 TechPlan 應偏向 codebase reverse engineering，而不是新功能設計
+      - delivery_artifacts 應包含架構摘要、依賴觀察、風險清單與建議閱讀順序
+      - 預設不要求 frontend/backend 可執行交付物，因此不直接串接 QA 或 Security capability
+
+  - id: hotspot_diagnostics
+    name: Diagnose Hotspots And Debt
+    capability: troubleshooting
+    needs:
+      - architecture_scan
+    inputs:
+      - error_evidence
+      - project_context
+    outputs:
+      - diagnostic_report
+      - fix_recommendation
+    done_when:
+      - 已針對高風險區、複雜模組或可疑區段產出診斷報告
+      - 已給出可執行的修復或重構優先順序
+    on_fail: halt
+    notes:
+      - 這一步不用真的修 code，只做根因分析與重構建議
+
+  - id: review_analysis
+    name: Review Analysis Completeness
+    capability: technical_review
+    needs:
+      - architecture_scan
+      - hotspot_diagnostics
+    inputs:
+      - delivery_artifacts
+      - diagnostic_report
+      - fix_recommendation
+      - tech_plan
+    outputs:
+      - review_note
+      - audit_reports
+    done_when:
+      - 已確認分析內容完整、自洽，且有明確指出盲點與未覆蓋區
+      - 已將主要風險、熱點與優先處理順序整理為審閱結論
+    on_fail: halt
+    notes:
+      - 此步驟是分析報告的 completeness gate，不負責新增新分析範圍
+
+  - id: archive_report
+    name: Archive Analysis Report
+    capability: technical_logging
+    needs:
+      - review_analysis
+    inputs:
+      - tech_plan
+      - review_note
+      - audit_reports
+      - diagnostic_report
+      - fix_recommendation
+    outputs:
+      - trace_log
+      - devlog
+    done_when:
+      - 已輸出一份正式 codebase analysis 報告
+      - 已整理 executive summary、主要風險與建議下一步
+    on_fail: halt
+    notes:
+      - devlog 應視為本次專案分析報告主文件
+      - 報告應聚焦維護接手所需資訊：架構地圖、熱點、風險、技術債、優先改善順序

@@ -107,6 +107,31 @@ workflow 不負責決定最終 agent，只負責宣告：
 
 ### B. 補充流程
 
+#### `project-code-analysis.yaml`
+
+- 用途：針對既有、待維護 repo 進行架構 reverse engineering、風險、熱點與技術債分析，最後產出正式分析報告
+- 適用情境：接手陌生專案、進行 codebase audit、盤點重構優先順序、建立閱讀地圖、維護前盤點
+- 主要步驟：
+  - `analysis_scope`
+  - `repo_intake`
+  - `architecture_scan`
+  - `hotspot_diagnostics`
+  - `review_analysis`
+  - `archive_report`
+- 最低參與 agent：
+  - `01-supervisor`
+  - `101-readme`
+  - `02-techlead`
+  - `10-troubleshoot`
+  - `99-logger`
+- 不包含：
+  - `07-qa`
+  - `08-security`
+- 理由：
+  - 這條流程是接手維護中的 repo 分析，不是開發後驗收
+  - 目前主線先聚焦架構理解、熱點診斷、技術債與維護風險
+  - 若未來要做測試性 / 安全性專項分析，較適合另外拆成 extension workflow，而不是硬塞進主線
+
 #### `version-control-company.yaml`
 
 - 用途：公司專案的最小版本控制流程
