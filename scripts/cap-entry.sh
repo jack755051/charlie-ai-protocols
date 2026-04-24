@@ -38,9 +38,10 @@ COMMAND                            DESCRIPTION
   cap workflow constitution "<需求>"   產出 task constitution
   cap workflow compile "<需求>"        從一句話需求編譯最小 workflow
   cap workflow run-task "<需求>"       從一句話需求直接 compile 並執行
-  cap workflow run <id> [prompt]   前景執行；無 prompt 時會先詢問或只顯示 plan
+  cap workflow run <id> [prompt]   前景執行（預設 CLI: claude）
+  cap workflow run --cli codex <id> [prompt]  指定使用 codex 執行
   cap workflow run --dry-run <id> [prompt]  只顯示執行計畫，不真的執行
-  cap workflow run -d <id> <prompt>  背景執行（planned）
+  cap workflow <id> "<prompt>"     run 的簡寫
 
 [Execution]
   cap run                          啟動 CrewAI 引擎 (FRAMEWORK=nextjs|angular|nuxt)

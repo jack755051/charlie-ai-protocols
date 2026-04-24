@@ -11,17 +11,19 @@ PATH_HELPER="${SCRIPT_DIR}/cap-paths.sh"
 usage() {
   cat <<'EOF' >&2
 Usage:
-  bash scripts/cap-workflow.sh list
-  bash scripts/cap-workflow.sh ps
-  bash scripts/cap-workflow.sh <workflow_id|short_id|file>
-  bash scripts/cap-workflow.sh show <workflow_id|file>
-  bash scripts/cap-workflow.sh inspect <run_id>
-  bash scripts/cap-workflow.sh plan <workflow_id|file>
-  bash scripts/cap-workflow.sh bind <workflow_id|file> [registry]
-  bash scripts/cap-workflow.sh constitution <request...>
-  bash scripts/cap-workflow.sh compile <request...> [--registry path]
-  bash scripts/cap-workflow.sh run-task [--dry-run] [-d] [--cli codex|claude] [--registry path] <request...>
-  bash scripts/cap-workflow.sh run [--dry-run] [-d] [--cli codex|claude] <workflow_id|file> [prompt...]
+  cap workflow list
+  cap workflow ps [--all]
+  cap workflow show <id>
+  cap workflow inspect <run-id>
+  cap workflow plan <id>
+  cap workflow bind <id> [registry]
+  cap workflow constitution <request...>
+  cap workflow compile <request...> [--registry path]
+  cap workflow run-task [--dry-run] [--cli codex|claude] [--registry path] <request...>
+  cap workflow run [--dry-run] [--cli codex|claude] <id> [prompt...]
+  cap workflow <id> "<prompt>"            (run 的簡寫)
+
+Default CLI: claude (可用 --cli codex 覆寫，或設定 CAP_DEFAULT_AGENT_CLI 環境變數)
 EOF
   exit 1
 }
