@@ -6,8 +6,10 @@ from pathlib import Path
 import yaml
 
 try:
+    from .project_context_loader import ProjectContextLoader
     from .workflow_loader import WorkflowLoader
 except ImportError:  # pragma: no cover
+    from project_context_loader import ProjectContextLoader
     from workflow_loader import WorkflowLoader
 
 
@@ -23,6 +25,7 @@ class RuntimeBinder:
     def __init__(self, base_dir: Path | None = None):
         self.base_dir = Path(base_dir) if base_dir else Path(__file__).resolve().parents[1]
         self.loader = WorkflowLoader(self.base_dir)
+        self.project_context_loader = ProjectContextLoader(self.base_dir)
 
     def load_skill_registry(self, registry_ref: str | None = None) -> dict:
         registry_path = Path(registry_ref) if registry_ref else self.base_dir / self.DEFAULT_REGISTRY_PATH
@@ -72,7 +75,12 @@ class RuntimeBinder:
                      binding_mode, missing_policy, reason}]
         """
         registry = self.load_skill_registry(registry_ref)
-        defaults = registry.get("binding_defaults", {})
+        project_context = self.project_context_loader.build_runtime_summary()
+        constitution_binding_policy = project_context.get("binding_policy", {}) or {}
+        defaults = dict(registry.get("binding_defaults", {}))
+        defaults.update(constitution_binding_policy.get("defaults", {}))
+        allowed_capabilities = set(constitution_binding_policy.get("allowed_capabilities", []) or [])
+        self._assert_workflow_source_allowed(semantic_plan.get("source_path"), project_context)
 
         step_reports: list[dict] = []
         resolved_steps = 0
@@ -87,6 +95,37 @@ class RuntimeBinder:
             preferred_agent_alias = capability_contract.get("default_agent")
             binding_mode = self._get_binding_mode(step, defaults)
             missing_policy = self._get_missing_policy(step, defaults)
+            if allowed_capabilities and capability not in allowed_capabilities:
+                resolution_status = "blocked_by_constitution"
+                reason = "capability is not allowed by project constitution"
+                selected_skill_id = None
+                selected_provider = None
+                selected_agent_alias = None
+                selected_prompt_file = None
+                selected_cli = None
+                if optional:
+                    unresolved_optional_steps += 1
+                else:
+                    unresolved_required_steps += 1
+                step_reports.append(
+                    {
+                        "step_id": step["step_id"],
+                        "phase": step["phase"],
+                        "capability": capability,
+                        "optional": optional,
+                        "resolution_status": resolution_status,
+                        "selected_skill_id": selected_skill_id,
+                        "selected_provider": selected_provider,
+                        "selected_agent_alias": selected_agent_alias,
+                        "selected_prompt_file": selected_prompt_file,
+                        "selected_cli": selected_cli,
+                        "binding_mode": binding_mode,
+                        "missing_policy": missing_policy,
+                        "reason": reason,
+                        "candidate_skill_ids": [],
+                    }
+                )
+                continue
             candidates = self._find_candidates(
                 registry,
                 capability,
@@ -172,6 +211,7 @@ class RuntimeBinder:
             "workflow_version": semantic_plan["version"],
             "binding_status": binding_status,
             "registry_source_path": registry.get("_source_path"),
+            "project_context": project_context,
             "registry_missing": registry.get("_missing", False),
             "adapter_from_legacy": registry.get("_adapter_from_legacy", False),
             "contract_missing_steps": semantic_plan["contract_missing_steps"],
@@ -488,6 +528,33 @@ class RuntimeBinder:
         if fallback_steps > 0 or unresolved_optional_steps > 0:
             return "degraded"
         return "ready"
+
+    def _assert_workflow_source_allowed(self, source_path: str | None, project_context: dict) -> None:
+        if not source_path or source_path.startswith("<"):
+            return
+
+        workflow_policy = project_context.get("workflow_policy", {}) or {}
+        if not workflow_policy.get("enforce_allowed_source_roots", False):
+            return
+
+        allowed_roots = workflow_policy.get("allowed_source_roots", []) or []
+        if not allowed_roots:
+            return
+
+        source = Path(source_path)
+        if not source.is_absolute():
+            source = self.base_dir / source
+        source = source.resolve()
+
+        for root_ref in allowed_roots:
+            root_path = Path(root_ref)
+            if not root_path.is_absolute():
+                root_path = self.base_dir / root_path
+            root_path = root_path.resolve()
+            if source == root_path or root_path in source.parents:
+                return
+
+        raise ValueError(f"workflow 來源不符合 project constitution 限制: {source_path}")
 
     @staticmethod
     def _has_execution_metadata(skill: dict) -> bool:

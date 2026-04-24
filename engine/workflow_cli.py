@@ -675,11 +675,18 @@ def cmd_compile_json(cap_root: str, request: str, registry_ref: str | None = Non
 def cmd_print_constitution_report(constitution_json: str, snapshot_json: str) -> None:
     constitution = _load_json_arg(constitution_json)
     snapshot = _load_json_arg(snapshot_json)
+    project_context = constitution.get("project_context", {})
     print("TASK CONSTITUTION")
     print(f"task_id: {constitution['task_id']}")
     print(f"goal_stage: {constitution['goal_stage']}")
     print(f"risk_profile: {constitution['risk_profile']}")
     print(f"goal: {constitution['goal']}")
+    if project_context:
+        print("project_context:")
+        print(f"  - project_id: {project_context.get('project_id', '-')}")
+        print(f"  - project_type: {project_context.get('project_type', '-')}")
+        print(f"  - constitution_id: {project_context.get('constitution_id', '-')}")
+        print(f"  - project_constitution_path: {project_context.get('project_constitution_path', '-')}")
     print("scope:")
     for item in constitution.get("scope", []):
         print(f"  - {item}")
@@ -712,6 +719,7 @@ def cmd_print_compile_report(compiled_json: str, snapshot_json: str) -> None:
     compiled = _load_json_arg(compiled_json)
     snapshot = _load_json_arg(snapshot_json)
     constitution = compiled["task_constitution"]
+    project_context = compiled.get("project_context") or constitution.get("project_context", {})
     graph = compiled["capability_graph"]
     binding = compiled["binding"]
     plan = compiled["plan"]
@@ -722,6 +730,9 @@ def cmd_print_compile_report(compiled_json: str, snapshot_json: str) -> None:
     print(f"goal_stage: {constitution['goal_stage']}")
     print(f"workflow_id: {plan['workflow_id']}")
     print(f"binding_status: {binding['binding_status']}")
+    if project_context:
+        print(f"project_id: {project_context.get('project_id', '-')}")
+        print(f"project_constitution: {project_context.get('project_constitution_path', '-')}")
     print("stored:")
     print(f"  - constitution_json: {snapshot['constitution_json_path']}")
     print(f"  - binding_json: {snapshot['binding_json_path']}")
@@ -842,11 +853,15 @@ def cmd_print_binding_summary(binding_json: str, snapshot_json: str) -> None:
 def cmd_print_bind_report(report_json: str, snapshot_json: str) -> None:
     report = _load_json_arg(report_json)
     snapshot = _load_json_arg(snapshot_json)
+    project_context = report.get("project_context", {})
     print("WORKFLOW BINDING REPORT")
     print(f"workflow_id: {report['workflow_id']}")
     print(f"workflow_version: {report['workflow_version']}")
     print(f"binding_status: {report['binding_status']}")
     print(f"registry_source: {report['registry_source_path']}")
+    if project_context:
+        print(f"project_id: {project_context.get('project_id', '-')}")
+        print(f"project_constitution: {project_context.get('project_constitution_path', '-')}")
     print(f"registry_missing: {report['registry_missing']}")
     print(f"adapter_from_legacy: {report['adapter_from_legacy']}")
     print("stored:")
@@ -946,6 +961,13 @@ def cmd_persist_constitution(
         f"- saved_at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         f"- goal_stage: {constitution.get('goal_stage', '-')}",
         f"- risk_profile: {constitution.get('risk_profile', '-')}",
+        "",
+        "## Project Context",
+        "",
+        f"- project_id: {constitution.get('project_context', {}).get('project_id', '-')}",
+        f"- project_type: {constitution.get('project_context', {}).get('project_type', '-')}",
+        f"- constitution_id: {constitution.get('project_context', {}).get('constitution_id', '-')}",
+        f"- project_constitution_path: {constitution.get('project_context', {}).get('project_constitution_path', '-')}",
         "",
         "## Request",
         "",

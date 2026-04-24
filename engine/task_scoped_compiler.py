@@ -5,9 +5,11 @@ import re
 from pathlib import Path
 
 try:
+    from .project_context_loader import ProjectContextLoader
     from .runtime_binder import RuntimeBinder
     from .workflow_loader import WorkflowLoader
 except ImportError:  # pragma: no cover
+    from project_context_loader import ProjectContextLoader
     from runtime_binder import RuntimeBinder
     from workflow_loader import WorkflowLoader
 
@@ -19,12 +21,14 @@ class TaskScopedWorkflowCompiler:
         self.base_dir = Path(base_dir) if base_dir else Path(__file__).resolve().parents[1]
         self.loader = WorkflowLoader(self.base_dir)
         self.binder = RuntimeBinder(self.base_dir)
+        self.project_context_loader = ProjectContextLoader(self.base_dir)
         self.capabilities = self.loader.load_capabilities()
 
     def build_task_constitution(self, source_request: str) -> dict:
         request = " ".join(source_request.split())
         lowered = request.lower()
         task_id = "task_" + hashlib.sha1(request.encode("utf-8")).hexdigest()[:10]
+        project_context = self.project_context_loader.build_runtime_summary()
 
         planning_only = any(
             token in request
@@ -132,6 +136,7 @@ class TaskScopedWorkflowCompiler:
             "task_id": task_id,
             "source_request": request,
             "goal": request,
+            "project_context": project_context,
             "scope": scope,
             "non_goals": non_goals,
             "success_criteria": success_criteria,
@@ -274,6 +279,7 @@ class TaskScopedWorkflowCompiler:
         )
         return {
             "task_constitution": constitution,
+            "project_context": constitution.get("project_context", {}),
             "capability_graph": capability_graph,
             "binding": binding,
             "unresolved_policy": unresolved_policy,
@@ -305,6 +311,9 @@ class TaskScopedWorkflowCompiler:
             elif status == "incompatible":
                 action = "manual"
                 reason = "skill exists but execution metadata is incomplete"
+            elif status == "blocked_by_constitution":
+                action = "pending"
+                reason = "capability is blocked by project constitution"
             decisions.append(
                 {
                     "step_id": step["step_id"],

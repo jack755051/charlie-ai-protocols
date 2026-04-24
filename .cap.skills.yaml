@@ -1,0 +1,304 @@
+schema_version: 1
+
+default_provider: builtin
+
+binding_defaults:
+  binding_mode: fallback_allowed
+  missing_policy: manual
+
+skills:
+  - skill_id: builtin-supervisor
+
+    agent_alias: supervisor
+    provider: builtin
+    enabled: true
+    priority: 100
+    prompt_file: 01-supervisor-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - prd_generation
+      - workflow_orchestration
+    fallback_roles:
+      - supervisor
+
+  - skill_id: builtin-techlead
+
+    agent_alias: techlead
+    provider: builtin
+    enabled: true
+    priority: 100
+    prompt_file: 02-techlead-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - technical_planning
+      - technical_review
+    fallback_roles:
+      - reviewer
+
+  - skill_id: builtin-ba
+
+    agent_alias: ba
+    provider: builtin
+    enabled: true
+    priority: 100
+    prompt_file: 02a-ba-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - business_analysis
+    fallback_roles:
+      - reviewer
+
+  - skill_id: builtin-dba
+
+    agent_alias: dba
+    provider: builtin
+    enabled: true
+    priority: 100
+    prompt_file: 02b-dba-api-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - database_api_design
+    fallback_roles:
+      - implementer
+
+  - skill_id: builtin-ui
+
+    agent_alias: ui
+    provider: builtin
+    enabled: true
+    priority: 100
+    prompt_file: 03-ui-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - ui_design
+    fallback_roles:
+      - implementer
+
+  - skill_id: builtin-figma
+
+    agent_alias: figma
+    provider: builtin
+    enabled: true
+    priority: 100
+    prompt_file: 12-figma-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - figma_sync
+    fallback_roles:
+      - implementer
+
+  - skill_id: builtin-analytics
+
+    agent_alias: analytics
+    provider: builtin
+    enabled: true
+    priority: 100
+    prompt_file: 09-analytics-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - analytics_specification
+      - analytics_post_launch
+    fallback_roles:
+      - reviewer
+
+  - skill_id: builtin-frontend
+
+    agent_alias: frontend
+    provider: builtin
+    enabled: true
+    priority: 100
+    prompt_file: 04-frontend-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - frontend_implementation
+    fallback_roles:
+      - implementer
+
+  - skill_id: builtin-backend
+
+    agent_alias: backend
+    provider: builtin
+    enabled: true
+    priority: 100
+    prompt_file: 05-backend-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - backend_implementation
+    fallback_roles:
+      - implementer
+
+  - skill_id: builtin-watcher
+
+    agent_alias: watcher
+    provider: builtin
+    enabled: true
+    priority: 100
+    prompt_file: 90-watcher-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - code_structure_audit
+      - tool_spec_audit
+    fallback_roles:
+      - reviewer
+
+  - skill_id: builtin-security
+
+    agent_alias: security
+    provider: builtin
+    enabled: true
+    priority: 100
+    prompt_file: 08-security-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - security_audit
+    fallback_roles:
+      - reviewer
+
+  - skill_id: builtin-qa
+
+    agent_alias: qa
+    provider: builtin
+    enabled: true
+    priority: 100
+    prompt_file: 07-qa-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - qa_testing
+    fallback_roles:
+      - reviewer
+
+  - skill_id: builtin-troubleshoot
+
+    agent_alias: troubleshoot
+    provider: builtin
+    enabled: true
+    priority: 100
+    prompt_file: 10-troubleshoot-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - troubleshooting
+    fallback_roles:
+      - reviewer
+
+  - skill_id: builtin-sre
+
+    agent_alias: sre
+    provider: builtin
+    enabled: true
+    priority: 100
+    prompt_file: 11-sre-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - sre_optimization
+    fallback_roles:
+      - reviewer
+
+  - skill_id: builtin-devops
+
+    agent_alias: devops
+    provider: builtin
+    enabled: true
+    priority: 100
+    prompt_file: 06-devops-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - devops_delivery
+      - version_control_commit
+      - version_control_tag
+    fallback_roles:
+      - implementer
+
+  - skill_id: builtin-logger
+
+    agent_alias: logger
+    provider: builtin
+    enabled: true
+    priority: 100
+    prompt_file: 99-logger-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - technical_logging
+    fallback_roles:
+      - logger
+
+  - skill_id: builtin-readme
+
+    agent_alias: readme
+    provider: builtin
+    enabled: true
+    priority: 100
+    prompt_file: 101-readme-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - readme_normalization
+    fallback_roles:
+      - implementer
+
+  - skill_id: generic-supervisor
+
+    agent_alias: generic-supervisor
+    provider: builtin
+    enabled: true
+    priority: 10
+    prompt_file: 01-supervisor-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities: []
+    fallback_roles:
+      - supervisor
+
+  - skill_id: generic-reviewer
+
+    agent_alias: generic-reviewer
+    provider: builtin
+    enabled: true
+    priority: 10
+    prompt_file: 90-watcher-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities: []
+    fallback_roles:
+      - reviewer
+
+  - skill_id: generic-logger
+
+    agent_alias: generic-logger
+    provider: builtin
+    enabled: true
+    priority: 10
+    prompt_file: 99-logger-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities: []
+    fallback_roles:
+      - logger
+
+  - skill_id: generic-implementer
+
+    agent_alias: generic-implementer
+    provider: builtin
+    enabled: true
+    priority: 10
+    prompt_file: 04-frontend-agent.md
+    cli: codex
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities: []
+    fallback_roles:
+      - implementer

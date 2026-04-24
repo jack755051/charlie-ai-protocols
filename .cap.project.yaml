@@ -1,2 +1,7 @@
 project_id: charlie-ai-protocols
+project_name: Charlie's AI Protocols
+project_type: platform
+constitution_file: .cap.constitution.yaml
+skill_registry: .cap.skills.yaml
+workflow_dir: schemas/workflows
 agent_registry: .cap.agents.json

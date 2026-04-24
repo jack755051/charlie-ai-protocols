@@ -49,7 +49,9 @@ entrypoints:
   factory: engine/factory.py
   installer: install.sh
   constitution: docs/agent-skills/00-core-protocol.md
+  project_constitution: .cap.constitution.yaml
   agent_registry: .cap.agents.json
+  skill_registry: .cap.skills.yaml
   project_config: .cap.project.yaml
 
 commands:
