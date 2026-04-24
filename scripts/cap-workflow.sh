@@ -704,8 +704,9 @@ for path in files:
     raw = path.read_text(encoding="utf-8")
     data = yaml.safe_load(raw) if path.suffix in {".yaml", ".yml"} else {}
     workflow_id = data.get("workflow_id", path.stem)
+    short_id = "wf_" + hashlib.sha1(workflow_id.encode("utf-8")).hexdigest()[:8]
     summary = data.get("summary", "")
-    rows.append((workflow_id, path.name, summary))
+    rows.append((short_id, path.name, summary))
 
 headers = ("ID", "FILE", "SUMMARY")
 widths = [len(h) for h in headers]
