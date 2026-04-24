@@ -20,6 +20,16 @@ CAP 解決的核心問題是：當多位 AI Agent 共同參與軟體開發流程
 - Workflow Schema：把固定流程抽成可重複使用的結構化定義
 - CAP CLI：提供安裝、調用、workflow 檢視、trace 與版本管理
 
+## Scope
+
+- In scope：Agent Skills、共享憲法、workflow schema、CrewAI 執行引擎、`cap` CLI、runtime storage 與 README / manifest 治理
+- Out of scope：產品業務模組、對外 API 服務、Web UI 與獨立部署中的應用程式邏輯
+
+## Architecture
+
+CAP 採用 shared constitution + specialized agents + workflow schema 的多層架構。
+`docs/agent-skills/` 定義角色邊界，`schemas/workflows/` 定義流程契約，`engine/` 負責載入與執行，`scripts/` 提供 `cap` CLI 包裝與本機操作入口，執行期輸出則落到 `~/.cap/projects/<project_id>/`。
+
 ## At A Glance
 
 | 元件 | 位置 | 用途 |
@@ -43,11 +53,47 @@ Task-scoped workflow compiler 草案請看 [docs/TASK-SCOPED-WORKFLOW-COMPILER-D
 - `.cap.skills.yaml` 是 workflow binding 的優先輸入；若缺席，會自動 fallback 到 `.cap.agents.json` legacy adapter
 - skill marketplace schema 與遠端 provider 仍屬 draft / 下一階段設計
 
-## Quick Start
+## Project Structure
+
+```text
+charlie-ai-protocols/
+├── docs/
+│   ├── agent-skills/
+│   ├── policies/
+│   └── ARCHITECTURE.md
+├── schemas/
+│   ├── workflows/
+│   ├── capabilities.yaml
+│   └── handoff-ticket.schema.yaml
+├── engine/
+├── scripts/
+├── AGENTS.md
+├── CLAUDE.md
+├── Makefile
+├── repo.manifest.yaml
+└── .cap.agents.json
+```
+
+執行期資料會寫到：
+
+```text
+~/.cap/projects/<project_id>/
+├── constitutions/
+├── compiled-workflows/
+├── bindings/
+├── reports/workflows/
+├── traces/
+└── sessions/
+```
+
+## Runbook
 
 安裝：
 
 ```bash
+bash install.sh
+
+# 或使用遠端安裝腳本
 curl -fsSL https://raw.githubusercontent.com/jack755051/charlie-ai-protocols/main/install.sh | bash
 source ~/.zshrc
 ```
@@ -63,10 +109,11 @@ cap sync
 
 ```bash
 cap help
-cap list
+cap skill list
 cap workflow list
 cap workflow ps
 cap workflow show version-control-private
+cap workflow bind version-control-private
 cap workflow plan version-control-private
 cap workflow constitution "用 Tauri 做個 AI 額度監控小工具，先不要直接實作"
 cap workflow compile "用 Tauri 做個 AI 額度監控小工具，先不要直接實作"
@@ -74,6 +121,12 @@ cap workflow run-task --dry-run "用 Tauri 做個 AI 額度監控小工具，先
 cap workflow run --dry-run workflow-smoke-test "test"
 cap workflow run version-control-private "請針對目前變更建立 commit"
 ```
+
+測試與驗證：
+
+- `test`: `not_applicable`，目前 repo 沒有獨立 automated test target
+- smoke / validation：`cap skill check-aliases`
+- workflow dry-run：`cap workflow run --dry-run workflow-smoke-test "test"`
 
 ## Usage Modes
 
@@ -147,7 +200,7 @@ Workflow 與 Agent Skills 是並存的兩種使用方式：
 - `feature-delivery.yaml`：完整功能交付流程
 - `small-tool-planning.yaml`：非正式小工具開發前置規劃流程
 - `readme-to-devops.yaml`：README 治理到 DevOps 基線
-- `version-control-private.yaml`：私人專案版本控制流程
+- `version-control-private.yaml`：私人專案版本控制流程（先判定 tag 與同步 README/CHANGELOG，再 commit，最後建立 tag）
 - `version-control-company.yaml`：公司專案最小版本控制流程
 - `workflow-smoke-test.yaml`：workflow CLI 與 capability binding 的煙霧測試
 
@@ -181,38 +234,13 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 - 單次任務的 constitution / compiled workflow / binding / run output 都進 `.cap`
 - 只有真正要長期維護的 custom workflow，才應升級成 repo 內檔案
 
-## Project Structure
+## Interfaces
 
-```text
-charlie-ai-protocols/
-├── docs/
-│   ├── agent-skills/
-│   ├── policies/
-│   └── ARCHITECTURE.md
-├── schemas/
-│   ├── workflows/
-│   ├── capabilities.yaml
-│   └── handoff-ticket.schema.yaml
-├── engine/
-├── scripts/
-├── AGENTS.md
-├── CLAUDE.md
-├── Makefile
-├── repo.manifest.yaml
-└── .cap.agents.json
-```
-
-執行期資料會寫到：
-
-```text
-~/.cap/projects/<project_id>/
-├── constitutions/
-├── compiled-workflows/
-├── bindings/
-├── reports/workflows/
-├── traces/
-└── sessions/
-```
+- CLI：`true`，主入口為 `scripts/cap-entry.sh` 與 `Makefile`
+- API：`false`
+- Worker：`false`
+- Cron：`false`
+- Web UI：`false`
 
 ## Dependencies
 
@@ -230,7 +258,7 @@ charlie-ai-protocols/
 
 ## Notes
 
-- 最新 release：`v0.5.0`
+- 最新已驗證 tag：`v0.8.1`；下一個預計 release tag：`v0.9.0`（本次變更已判定為 minor bump）
 - 同一份 `docs/agent-skills/` 供 CrewAI、Claude Code、Codex 共用
 - `schemas/workflows/` 只保留內建模板，不承載 task-scoped runtime workflow
 - `cap workflow constitution / compile / run-task` 會把 task constitution、compiled workflow、binding report 寫入 `.cap`

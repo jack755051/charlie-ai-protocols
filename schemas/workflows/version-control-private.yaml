@@ -1,7 +1,7 @@
 workflow_id: version-control-private
 version: 2
 name: Private Project Version Control
-summary: 私人專案版本控制：README 治理 → 提交 → Tag 判定 → CHANGELOG/README 更新 → 推送歸檔。
+summary: 私人專案版本控制：README 治理 → Tag 判定與 release 文件同步 → 提交 → Tag 建立與推送 → 歸檔。
 owner: supervisor
 triggers:
   - manual
@@ -11,6 +11,7 @@ triggers:
 artifacts:
   repo_manifest: 機器可解析的 repo metadata
   repo_summary: 人類可讀的 repo 導讀摘要
+  release_doc_sync: README / CHANGELOG 同步結果
   commit_message: 版本控制提交訊息
   commit_result: 版本控制提交結果
   tag_decision: Tag 判定結果（是否需要、版號、理由）
@@ -41,17 +42,51 @@ steps:
     notes:
       - 私人專案優先維持 repo 文件完整度與可解析性
 
-  # ── Phase 2: 版本控制提交 ──
+  # ── Phase 2: Tag 判定與 release 文件同步 ──
 
-  - id: commit_changes
-    name: Commit Changes
-    capability: version_control_commit
+  - id: prepare_release_docs
+    name: Decide Tag And Sync Release Docs
+    capability: version_control_tag
     needs:
       - normalize_repo
     inputs:
       - repo_manifest
       - repo_summary
       - repo_changes
+      - project_context
+    outputs:
+      - tag_decision
+      - changelog_update
+      - release_doc_sync
+    done_when:
+      - 已判定是否需要 tag 並說明理由
+      - 若需要 tag：已先更新 CHANGELOG.md
+      - 若需要 tag：已先確認 README.md 中的版本引用與新 tag 一致
+      - 若不需要 tag：已明確說明原因，並將 release 文件同步標記為略過
+    on_fail: halt
+    notes:
+      - 這個步驟只負責判定與同步 release 文件，不建立 tag
+      - 後續 commit 必須納入此步驟產生的 README.md / CHANGELOG.md 變更
+      - Tag 判定依據 git-workflow.md 與 Conventional Commits 規範
+      - "版號決策邏輯：feat = minor bump, fix = patch bump, breaking change = major bump"
+      - 若距上一個 tag 只有 docs/chore/style 類型的 commit，通常不需要 tag
+      - CHANGELOG.md 格式遵循 Keep a Changelog 標準
+      - README.md 中若有版本徽章或版本引用，需同步更新
+
+  # ── Phase 3: 版本控制提交 ──
+
+  - id: commit_changes
+    name: Commit Changes
+    capability: version_control_commit
+    needs:
+      - prepare_release_docs
+    inputs:
+      - repo_manifest
+      - repo_summary
+      - repo_changes
+      - tag_decision
+      - changelog_update
+      - release_doc_sync
       - commit_scope
       - project_context
     outputs:
@@ -59,39 +94,35 @@ steps:
       - commit_result
     done_when:
       - 已完成 commit 或明確回報阻塞原因
+      - 若需要 tag：commit 已包含 README.md 與 CHANGELOG.md 的同步結果
       - commit 訊息符合版本控制規範
     on_fail: halt
 
-  # ── Phase 3: Tag 判定與發版 ──
+  # ── Phase 4: 建立與推送 tag ──
 
   - id: tag_and_release
-    name: Tag Judgment And Release
+    name: Create And Push Tag
     capability: version_control_tag
     needs:
       - commit_changes
     inputs:
       - commit_result
       - commit_message
-      - project_context
-    outputs:
       - tag_decision
       - changelog_update
+      - release_doc_sync
+      - project_context
+    outputs:
       - tag_result
     done_when:
-      - 已判定是否需要 tag 並說明理由
-      - 若需要 tag：已依 Conventional Commits 歷史更新 CHANGELOG.md
-      - 若需要 tag：已確認 README.md 中的版本引用與新 tag 一致
       - 若需要 tag：tag 已建立並推送至遠端
       - 若不需要 tag：已說明原因，僅推送 commit
     on_fail: halt
     notes:
-      - Tag 判定依據 git-workflow.md 與 Conventional Commits 規範
-      - "版號決策邏輯：feat = minor bump, fix = patch bump, breaking change = major bump"
-      - 若距上一個 tag 只有 docs/chore/style 類型的 commit，通常不需要 tag
-      - CHANGELOG.md 格式遵循 Keep a Changelog 標準
-      - README.md 中若有版本徽章或版本引用，需同步更新
+      - 這個步驟必須沿用前一步的 tag_decision，不得重新覆寫 release 文件內容
+      - 只有在 tag_decision 判定需要 tag 時才建立 tag
 
-  # ── Phase 4: 歸檔 ──
+  # ── Phase 5: 歸檔 ──
 
   - id: archive
     name: Archive Result

@@ -303,21 +303,28 @@ capabilities:
       - 已完成最小版本控制提交或明確回報阻塞原因
 
   version_control_tag:
-    description: Tag 判定、版號決策、CHANGELOG 與 README 版本同步、tag 建立與推送
+    description: Tag 判定、版號決策、CHANGELOG 與 README 版本同步，以及 commit 後的 tag 建立與推送
     default_agent: devops
     allowed_agents: [devops]
     inputs:
+      - repo_manifest
+      - repo_summary
+      - repo_changes
       - commit_result
       - commit_message
+      - release_doc_sync
+      - changelog_update
+      - tag_decision
       - project_context
     outputs:
       - tag_decision
       - changelog_update
+      - release_doc_sync
       - tag_result
     done_when:
       - 已判定是否需要 tag 並說明理由
-      - 若需要 tag：CHANGELOG.md 與 README.md 版本已更新、tag 已建立
-      - 若不需要 tag：已說明原因並跳過後續步驟
+      - 若處於 commit 前判定階段：CHANGELOG.md 與 README.md 版本已更新或明確標示略過
+      - 若處於 commit 後發版階段：依既有 tag_decision 建立 tag，或明確說明為何跳過
 
   # ── 紀錄 ──
 

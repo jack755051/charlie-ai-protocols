@@ -461,6 +461,7 @@ resolve_step_input_context() {
   python3 - <<'PY' "${plan_json}" "${current_step_id}" "${input_mode}" "${registry_path}"
 from pathlib import Path
 import json
+import subprocess
 import sys
 
 plan = json.loads(sys.argv[1])
@@ -470,6 +471,88 @@ registry_path = Path(sys.argv[4])
 registry = {"artifacts": {}, "steps": {}}
 if registry_path.exists():
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
+
+
+def run_git(*args: str) -> str:
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return ""
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
+def intrinsic_context(artifact: str) -> str:
+    if artifact == "user_requirement":
+        return "intrinsic_request"
+    if artifact == "repo_changes":
+        status = run_git("status", "--short")
+        staged = run_git("diff", "--cached", "--stat")
+        unstaged = run_git("diff", "--stat")
+        lines = ["intrinsic_repo_changes"]
+        if status:
+            lines.append("  status:")
+            lines.extend(f"    {line}" for line in status.splitlines())
+        if staged:
+            lines.append("  staged_diff_stat:")
+            lines.extend(f"    {line}" for line in staged.splitlines())
+        if unstaged:
+            lines.append("  unstaged_diff_stat:")
+            lines.extend(f"    {line}" for line in unstaged.splitlines())
+        return "\n".join(lines)
+    if artifact == "project_context":
+        top = run_git("rev-parse", "--show-toplevel")
+        branch = run_git("branch", "--show-current") or "DETACHED"
+        head = run_git("rev-parse", "--short", "HEAD")
+        latest_tag = run_git("describe", "--tags", "--abbrev=0")
+        lines = ["intrinsic_project_context"]
+        if top:
+            lines.append(f"  repo_root: {top}")
+        lines.append(f"  branch: {branch}")
+        if head:
+            lines.append(f"  head: {head}")
+        if latest_tag:
+            lines.append(f"  latest_tag: {latest_tag}")
+        return "\n".join(lines)
+    if artifact == "commit_scope":
+        changed = run_git("status", "--short")
+        paths: list[str] = []
+        for line in changed.splitlines():
+            if not line.strip():
+                continue
+            path = line[3:] if len(line) >= 4 else line.strip()
+            if " -> " in path:
+                path = path.split(" -> ", 1)[1]
+            paths.append(path)
+
+        top_levels = []
+        for path in paths:
+            if "/" in path:
+                top_levels.append(path.split("/", 1)[0])
+            else:
+                top_levels.append(".")
+
+        unique = sorted(set(top_levels))
+        suggested_scope = "repo"
+        if unique == ["docs"]:
+            suggested_scope = "docs"
+        elif unique == ["schemas"] or unique == ["engine"] or unique == ["scripts"]:
+            suggested_scope = unique[0]
+        elif set(unique).issubset({".", "README.md", "CHANGELOG.md", "docs", "schemas", "engine", "scripts"}):
+            suggested_scope = "workflow"
+
+        lines = ["intrinsic_commit_scope", f"  suggested_scope: {suggested_scope}"]
+        if paths:
+            lines.append("  changed_paths:")
+            lines.extend(f"    {path}" for path in paths)
+        return "\n".join(lines)
+    return "intrinsic_unknown"
 
 target = None
 for phase in plan.get("phases", []):
@@ -491,8 +574,10 @@ if not inputs:
 
 lines = []
 for artifact in inputs:
-    if artifact in {"user_requirement"}:
-        lines.append(f"- {artifact}: intrinsic_request")
+    if artifact in {"user_requirement", "repo_changes", "project_context", "commit_scope"}:
+        lines.append(f"- {artifact}:")
+        for detail in intrinsic_context(artifact).splitlines():
+            lines.append(f"  {detail}")
         continue
     producer = registry.get("artifacts", {}).get(artifact)
     if not producer:
@@ -510,6 +595,46 @@ for artifact in inputs:
         f"- {artifact}: step={producer['source_step']} mode={mode} path={selected}"
     )
 
+print("\n".join(lines))
+PY
+}
+
+resolve_step_contract_context() {
+  local plan_json="$1"
+  local current_step_id="$2"
+
+  python3 - <<'PY' "${plan_json}" "${current_step_id}"
+import json
+import sys
+
+plan = json.loads(sys.argv[1])
+current_step_id = sys.argv[2]
+
+target = None
+for phase in plan.get("phases", []):
+    for step in phase.get("steps", []):
+        if step["step_id"] == current_step_id:
+            target = step
+            break
+    if target:
+        break
+
+if target is None:
+    print("- 無法解析 step 契約")
+    raise SystemExit(0)
+
+def emit_list(title, values):
+    if not values:
+        return [f"{title}: -"]
+    lines = [f"{title}:"]
+    lines.extend(f"  - {value}" for value in values)
+    return lines
+
+lines = []
+lines.extend(emit_list("inputs", target.get("inputs", [])))
+lines.extend(emit_list("outputs", target.get("outputs", [])))
+lines.extend(emit_list("done_when", target.get("done_when", [])))
+lines.extend(emit_list("notes", target.get("notes", [])))
 print("\n".join(lines))
 PY
 }
@@ -547,7 +672,7 @@ if target is None:
 missing = []
 resolved = []
 for artifact in target.get("inputs", []):
-    if artifact in {"user_requirement"}:
+    if artifact in {"user_requirement", "repo_changes", "project_context", "commit_scope"}:
         resolved.append(
             {
                 "artifact": artifact,
@@ -662,12 +787,13 @@ build_step_prompt() {
   local agent_alias="$3"
   local prompt_file="$4"
   local inputs="$5"
-  local user_req="$6"
-  local output_path="$7"
-  local artifact_index="$8"
-  local project_docs_dir="$9"
-  local input_mode="${10}"
-  local continue_reason="${11}"
+  local step_contract="$6"
+  local user_req="$7"
+  local output_path="$8"
+  local artifact_index="$9"
+  local project_docs_dir="${10}"
+  local input_mode="${11}"
+  local continue_reason="${12}"
   local structured_sections
   structured_sections="$(structured_sections_for_capability "${capability}")"
 
@@ -681,6 +807,9 @@ ${user_req}
 
 本步驟的輸入模式：
 ${input_mode}
+
+本步驟的契約與完成條件：
+${step_contract}
 
 可用的上游產物索引：
 ${artifact_index}
@@ -894,6 +1023,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   fi
   append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "phase:${phase_num} step:${step_id} capability:${capability} cli:${effective_cli} action:start" "running"
   RESOLVED_INPUT_CONTEXT="$(resolve_step_input_context "${PLAN_JSON}" "${step_id}" "${input_mode:-summary}" "${RUNTIME_STATE_JSON}")"
+  STEP_CONTRACT_CONTEXT="$(resolve_step_contract_context "${PLAN_JSON}" "${step_id}")"
 
   # Build and execute step
   step_prompt="$(
@@ -903,6 +1033,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
       "${agent_alias}" \
       "${prompt_file}" \
       "${RESOLVED_INPUT_CONTEXT}" \
+      "${STEP_CONTRACT_CONTEXT}" \
       "${USER_PROMPT}" \
       "${STEP_OUTPUT_PATH}" \
       "${ARTIFACT_INDEX}" \

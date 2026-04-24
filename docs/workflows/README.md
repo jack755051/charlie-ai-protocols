@@ -112,8 +112,9 @@ workflow 不負責決定最終 agent，只負責宣告：
 - 適用情境：個人 repo、side project、portfolio repo
 - 主要步驟：
   - `readme_normalization` — README 治理與 repo metadata 補齊
-  - `version_control_commit` — 分支決策、commit
-  - `version_control_tag` — tag 判定、CHANGELOG/README 更新、tag 建立與推送
+  - `version_control_tag` — 先做 tag 判定、CHANGELOG/README 更新
+  - `version_control_commit` — 納入 release 文件同步結果後再 commit
+  - `version_control_tag` — commit 後依既有判定建立與推送 tag
   - `technical_logging` — 歸檔（optional）
 
 ### `version-control-company.yaml`

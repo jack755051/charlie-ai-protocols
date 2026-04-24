@@ -6,6 +6,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.9.0] - 2026-04-24
+
+### Added
+
+- `version-control-private` 新增 `prepare_release_docs` 階段，將 tag 判定與 release 文件同步前移到 commit 之前
+- workflow executor 會在 step prompt 中注入 `repo_changes`、`project_context` 與 step contract 摘要，讓 summary 模式可直接消化必要 metadata
+
+### Changed
+
+- `version_control_tag` capability 契約改為區分 commit 前的 release 文件同步與 commit 後的 tag 建立流程
+- `RuntimeBinder`、`WorkflowLoader` 與相關文件同步保留 `done_when` / `notes` metadata，改善 workflow handoff 與執行期可追溯性
+- README、workflow 文件與 manifest 同步更新 CAP CLI 指令與私人版控流程說明
+
 ## [v0.6.6] - 2026-04-23
 
 ### Changed

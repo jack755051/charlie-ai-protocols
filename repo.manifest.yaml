@@ -42,7 +42,9 @@ frameworks:
     - crewai
 
 entrypoints:
-  cli: Makefile
+  cli: scripts/cap-entry.sh
+  makefile: Makefile
+  workflow_cli: scripts/cap-workflow.sh
   engine: engine/main.py
   factory: engine/factory.py
   installer: install.sh
@@ -51,11 +53,14 @@ entrypoints:
   project_config: .cap.project.yaml
 
 commands:
-  install: curl -fsSL https://raw.githubusercontent.com/jack755051/charlie-ai-protocols/main/install.sh | bash
+  install: bash install.sh
+  dev: cap run
+  test: not_applicable
   setup: cap setup
   sync: cap sync
   run: cap run
-  list: cap list
+  list: cap skill list
+  skill_check_aliases: cap skill check-aliases
   version: cap version
   update: cap update
   uninstall: cap uninstall
@@ -65,13 +70,24 @@ commands:
   workflow_show: cap workflow show <id>
   workflow_inspect: cap workflow inspect <run-id>
   workflow_plan: cap workflow plan <id>
+  workflow_bind: cap workflow bind <id> [registry]
+  workflow_constitution: cap workflow constitution "<request>"
+  workflow_compile: cap workflow compile "<request>"
+  workflow_run_task: cap workflow run-task [--dry-run] "<request>"
   workflow_run: cap workflow run <id> [prompt]
+  workflow_dry_run: cap workflow run --dry-run <id> [prompt]
 
 interfaces:
   cli: true
   api: false
   web_ui: false
   worker: false
+  cron: false
+
+docs:
+  architecture: docs/ARCHITECTURE.md
+  readme: README.md
+  workflows: docs/workflows/README.md
 
 runtime:
   python: ">=3.10"
