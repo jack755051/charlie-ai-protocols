@@ -78,7 +78,7 @@ case "${COMMAND}" in
     case "${SUB}" in
       list)
         shift || true
-        exec make -C "${CAP_ROOT}" list "$@"
+        exec make -C "${CAP_ROOT}" skill-list "$@"
         ;;
       registry)
         shift || true
@@ -95,8 +95,13 @@ case "${COMMAND}" in
         ;;
     esac
     ;;
-  list|check-aliases|registry)
-    # Backward compat — redirect to cap skill <sub>
+  list)
+    echo "cap list 已移除。請改用：" >&2
+    echo "  cap skill list       # 列出 Agent Skills" >&2
+    echo "  cap workflow list     # 列出 Workflows" >&2
+    exit 1
+    ;;
+  check-aliases|registry)
     exec "$0" skill "${COMMAND}" "$@"
     ;;
   workflow)

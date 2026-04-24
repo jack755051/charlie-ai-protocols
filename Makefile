@@ -75,7 +75,7 @@ uninstall: ## 移除全域安裝與 CAP shell wrapper
 	@bash scripts/mapper.sh --uninstall
 	@bash scripts/manage-cap-alias.sh uninstall
 
-list: ## 列出所有可用的 Agent Skills
+skill-list: ## 列出所有可用的 Agent Skills（由 cap skill list 呼叫）
 	@echo "Agent Skills (docs/agent-skills/):"
 	@echo ""
 	@printf "  %-6s %-26s %-14s %s\n" "編號" "檔案" "\$$前綴" "角色"
