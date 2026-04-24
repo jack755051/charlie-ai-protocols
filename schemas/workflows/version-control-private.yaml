@@ -1,7 +1,7 @@
 workflow_id: version-control-private
-version: 2
+version: 3
 name: Private Project Version Control
-summary: 私人專案版本控制：README 治理 → Tag 判定與 release 文件同步 → 提交 → Tag 建立與推送 → 歸檔。
+summary: 私人專案版本控制：單一 DevOps session 完成 scan → branch → commit → tag 判定 → CHANGELOG/README → push。
 owner: supervisor
 triggers:
   - manual
@@ -9,137 +9,39 @@ triggers:
   - private-project
 
 artifacts:
-  repo_manifest: 機器可解析的 repo metadata
-  repo_summary: 人類可讀的 repo 導讀摘要
-  release_doc_sync: README / CHANGELOG 同步結果
-  commit_message: 版本控制提交訊息
   commit_result: 版本控制提交結果
-  tag_decision: Tag 判定結果（是否需要、版號、理由）
-  changelog_update: CHANGELOG.md 更新內容
-  tag_result: Tag 建立與推送結果
+  tag_result: Tag 建立與推送結果（若有）
+  changelog_update: CHANGELOG.md 更新內容（若有）
 
 governance:
   watcher_mode: final_only
-  logger_mode: milestone_log
-  watcher_checkpoints: [tag_and_release]
-  logger_checkpoints: [commit_changes, tag_and_release, archive]
-  halt_on_missing_handoff: true
+  logger_mode: final_only
+  watcher_checkpoints: [version_control]
+  logger_checkpoints: [version_control]
+  halt_on_missing_handoff: false
 
 steps:
-
-  # ── Phase 1: Repo 治理 ──
-
-  - id: normalize_repo
-    name: Normalize README And Repo Metadata
-    capability: readme_normalization
-    outputs:
-      - repo_manifest
-      - repo_summary
-    done_when:
-      - README.md 或 repo.manifest.yaml 已依治理規範補齊
-      - repo 啟動與測試命令已與實際檔案對照
-    on_fail: halt
-    notes:
-      - 私人專案優先維持 repo 文件完整度與可解析性
-
-  # ── Phase 2: Tag 判定與 release 文件同步 ──
-
-  - id: prepare_release_docs
-    name: Decide Tag And Sync Release Docs
-    capability: version_control_tag
-    needs:
-      - normalize_repo
-    inputs:
-      - repo_manifest
-      - repo_summary
-      - repo_changes
-      - project_context
-    outputs:
-      - tag_decision
-      - changelog_update
-      - release_doc_sync
-    done_when:
-      - 已判定是否需要 tag 並說明理由
-      - 若需要 tag：已先更新 CHANGELOG.md
-      - 若需要 tag：已先確認 README.md 中的版本引用與新 tag 一致
-      - 若不需要 tag：已明確說明原因，並將 release 文件同步標記為略過
-    on_fail: halt
-    notes:
-      - 這個步驟只負責判定與同步 release 文件，不建立 tag
-      - 後續 commit 必須納入此步驟產生的 README.md / CHANGELOG.md 變更
-      - Tag 判定依據 git-workflow.md 與 Conventional Commits 規範
-      - "版號決策邏輯：feat = minor bump, fix = patch bump, breaking change = major bump"
-      - 若距上一個 tag 只有 docs/chore/style 類型的 commit，通常不需要 tag
-      - CHANGELOG.md 格式遵循 Keep a Changelog 標準
-      - README.md 中若有版本徽章或版本引用，需同步更新
-
-  # ── Phase 3: 版本控制提交 ──
-
-  - id: commit_changes
-    name: Commit Changes
+  - id: version_control
+    name: Full Version Control
     capability: version_control_commit
-    needs:
-      - prepare_release_docs
     inputs:
-      - repo_manifest
-      - repo_summary
       - repo_changes
-      - tag_decision
-      - changelog_update
-      - release_doc_sync
-      - commit_scope
       - project_context
     outputs:
-      - commit_message
       - commit_result
-    done_when:
-      - 已完成 commit 或明確回報阻塞原因
-      - 若需要 tag：commit 已包含 README.md 與 CHANGELOG.md 的同步結果
-      - commit 訊息符合版本控制規範
-    on_fail: halt
-
-  # ── Phase 4: 建立與推送 tag ──
-
-  - id: tag_and_release
-    name: Create And Push Tag
-    capability: version_control_tag
-    needs:
-      - commit_changes
-    inputs:
-      - commit_result
-      - commit_message
-      - tag_decision
-      - changelog_update
-      - release_doc_sync
-      - project_context
-    outputs:
       - tag_result
+      - changelog_update
     done_when:
-      - 若需要 tag：tag 已建立並推送至遠端
+      - 已掃描 git status / diff / log，判定變更範圍與類型
+      - 已依 git-workflow.md 決定分支策略（情境 A 直接 commit 或情境 B 開分支）
+      - 已完成 commit，訊息符合 Conventional Commits 規範
+      - 已判定是否需要 tag（feat=minor, fix=patch, docs/chore/style=通常不需要）
+      - 若需要 tag：已更新 CHANGELOG.md（Keep a Changelog 格式）與 README.md 版本引用
+      - 若需要 tag：tag 已建立，合併回 main 並推送至遠端
       - 若不需要 tag：已說明原因，僅推送 commit
     on_fail: halt
+    timeout_seconds: 300
     notes:
-      - 這個步驟必須沿用前一步的 tag_decision，不得重新覆寫 release 文件內容
-      - 只有在 tag_decision 判定需要 tag 時才建立 tag
-
-  # ── Phase 5: 歸檔 ──
-
-  - id: archive
-    name: Archive Result
-    capability: technical_logging
-    needs:
-      - tag_and_release
-    inputs:
-      - commit_result
-      - commit_message
-      - tag_decision
-      - changelog_update
-      - tag_result
-    outputs:
-      - trace_log
-      - devlog
-    done_when:
-      - 已歸檔本次版本控制結果
-    optional: true
-    on_fail: halt
-    record_level: full_log
+      - 所有操作在單一 agent session 中完成，不拆分多個 step
+      - 預設由 06-devops-agent 執行
+      - 推送前須確認無敏感檔案混入
