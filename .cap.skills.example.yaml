@@ -219,6 +219,7 @@ skills:
     provided_capabilities:
       - devops_delivery
       - version_control_commit
+      - version_control_tag
     fallback_roles:
       - implementer
 

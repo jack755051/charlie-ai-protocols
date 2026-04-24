@@ -1,7 +1,7 @@
 workflow_id: version-control-private
-version: 1
+version: 2
 name: Private Project Version Control
-summary: 私人專案先進行 README 治理與 repo metadata 補齊，再執行版本控制提交。
+summary: 私人專案版本控制：README 治理 → 提交 → Tag 判定 → CHANGELOG/README 更新 → 推送歸檔。
 owner: supervisor
 triggers:
   - manual
@@ -13,15 +13,21 @@ artifacts:
   repo_summary: 人類可讀的 repo 導讀摘要
   commit_message: 版本控制提交訊息
   commit_result: 版本控制提交結果
+  tag_decision: Tag 判定結果（是否需要、版號、理由）
+  changelog_update: CHANGELOG.md 更新內容
+  tag_result: Tag 建立與推送結果
 
 governance:
   watcher_mode: final_only
-  logger_mode: final_only
-  watcher_checkpoints: [commit_changes]
-  logger_checkpoints: [commit_changes]
+  logger_mode: milestone_log
+  watcher_checkpoints: [tag_and_release]
+  logger_checkpoints: [commit_changes, tag_and_release, archive]
   halt_on_missing_handoff: true
 
 steps:
+
+  # ── Phase 1: Repo 治理 ──
+
   - id: normalize_repo
     name: Normalize README And Repo Metadata
     capability: readme_normalization
@@ -34,6 +40,8 @@ steps:
     on_fail: halt
     notes:
       - 私人專案優先維持 repo 文件完整度與可解析性
+
+  # ── Phase 2: 版本控制提交 ──
 
   - id: commit_changes
     name: Commit Changes
@@ -53,5 +61,54 @@ steps:
       - 已完成 commit 或明確回報阻塞原因
       - commit 訊息符合版本控制規範
     on_fail: halt
+
+  # ── Phase 3: Tag 判定與發版 ──
+
+  - id: tag_and_release
+    name: Tag Judgment And Release
+    capability: version_control_tag
+    needs:
+      - commit_changes
+    inputs:
+      - commit_result
+      - commit_message
+      - project_context
+    outputs:
+      - tag_decision
+      - changelog_update
+      - tag_result
+    done_when:
+      - 已判定是否需要 tag 並說明理由
+      - 若需要 tag：已依 Conventional Commits 歷史更新 CHANGELOG.md
+      - 若需要 tag：已確認 README.md 中的版本引用與新 tag 一致
+      - 若需要 tag：tag 已建立並推送至遠端
+      - 若不需要 tag：已說明原因，僅推送 commit
+    on_fail: halt
     notes:
-      - 預設由 06-devops-agent 執行，但 workflow 不綁死 agent 檔名
+      - Tag 判定依據 git-workflow.md 與 Conventional Commits 規範
+      - "版號決策邏輯：feat = minor bump, fix = patch bump, breaking change = major bump"
+      - 若距上一個 tag 只有 docs/chore/style 類型的 commit，通常不需要 tag
+      - CHANGELOG.md 格式遵循 Keep a Changelog 標準
+      - README.md 中若有版本徽章或版本引用，需同步更新
+
+  # ── Phase 4: 歸檔 ──
+
+  - id: archive
+    name: Archive Result
+    capability: technical_logging
+    needs:
+      - tag_and_release
+    inputs:
+      - commit_result
+      - commit_message
+      - tag_decision
+      - changelog_update
+      - tag_result
+    outputs:
+      - trace_log
+      - devlog
+    done_when:
+      - 已歸檔本次版本控制結果
+    optional: true
+    on_fail: halt
+    record_level: full_log

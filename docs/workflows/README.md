@@ -108,11 +108,13 @@ workflow 不負責決定最終 agent，只負責宣告：
 
 ### `version-control-private.yaml`
 
-- 用途：私人專案的版本控制流程
+- 用途：私人專案的完整版本控制流程
 - 適用情境：個人 repo、side project、portfolio repo
 - 主要步驟：
-  - `readme_normalization`
-  - `version_control_commit`
+  - `readme_normalization` — README 治理與 repo metadata 補齊
+  - `version_control_commit` — 分支決策、commit
+  - `version_control_tag` — tag 判定、CHANGELOG/README 更新、tag 建立與推送
+  - `technical_logging` — 歸檔（optional）
 
 ### `version-control-company.yaml`
 
