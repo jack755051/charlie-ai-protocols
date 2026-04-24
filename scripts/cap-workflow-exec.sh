@@ -16,6 +16,7 @@ TRACE_LOG="${SCRIPT_DIR}/trace-log.sh"
 PATH_HELPER="${SCRIPT_DIR}/cap-paths.sh"
 SKILLS_DIR="${CAP_ROOT}/docs/agent-skills"
 PROTOCOL_FILE="${SKILLS_DIR}/00-core-protocol.md"
+VENV_PYTHON="${CAP_ROOT}/.venv/bin/python"
 
 CLI_NAME="${CAP_DEFAULT_AGENT_CLI:-}"
 PLAN_JSON=""
@@ -24,6 +25,16 @@ RUN_ID=""
 DEFAULT_STEP_TIMEOUT_SECONDS="${CAP_WORKFLOW_STEP_TIMEOUT_SECONDS:-600}"
 DEFAULT_STEP_STALL_SECONDS="${CAP_WORKFLOW_STEP_STALL_SECONDS:-120}"
 DEFAULT_STEP_STALL_ACTION="${CAP_WORKFLOW_STALL_ACTION:-warn}"
+
+resolve_python() {
+  if [ -x "${VENV_PYTHON}" ]; then
+    printf '%s\n' "${VENV_PYTHON}"
+  else
+    printf '%s\n' "python3"
+  fi
+}
+
+PYTHON_BIN="$(resolve_python)"
 
 # ── Parse args ──
 
@@ -307,6 +318,7 @@ step_status() {
     fail) printf "  ${RED}✗${RESET} %s ${DIM}(%ss)${RESET}\n" "${step_id}" "${duration}" ;;
     skip) printf "  ${YELLOW}⊘${RESET} %s ${DIM}(skipped)${RESET}\n" "${step_id}" ;;
     stop) printf "  ${RED}■${RESET} %s ${DIM}(%ss)${RESET}\n" "${step_id}" "${duration}" ;;
+    block) printf "  ${RED}■${RESET} %s ${DIM}(blocked)${RESET}\n" "${step_id}" ;;
   esac
 }
 
@@ -444,9 +456,9 @@ resolve_step_input_context() {
   local plan_json="$1"
   local current_step_id="$2"
   local input_mode="$3"
-  local output_dir="$4"
+  local registry_path="$4"
 
-  python3 - <<'PY' "${plan_json}" "${current_step_id}" "${input_mode}" "${output_dir}"
+  python3 - <<'PY' "${plan_json}" "${current_step_id}" "${input_mode}" "${registry_path}"
 from pathlib import Path
 import json
 import sys
@@ -454,18 +466,10 @@ import sys
 plan = json.loads(sys.argv[1])
 current_step_id = sys.argv[2]
 input_mode = sys.argv[3]
-output_dir = Path(sys.argv[4])
-
-artifact_producers = {}
-for phase in plan.get("phases", []):
-    pnum = phase["phase"]
-    for step in phase.get("steps", []):
-        for artifact in step.get("outputs", []):
-            artifact_producers[artifact] = {
-                "phase": pnum,
-                "step_id": step["step_id"],
-                "capability": step.get("capability"),
-            }
+registry_path = Path(sys.argv[4])
+registry = {"artifacts": {}, "steps": {}}
+if registry_path.exists():
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
 
 target = None
 for phase in plan.get("phases", []):
@@ -487,24 +491,166 @@ if not inputs:
 
 lines = []
 for artifact in inputs:
-    producer = artifact_producers.get(artifact)
+    if artifact in {"user_requirement"}:
+        lines.append(f"- {artifact}: intrinsic_request")
+        continue
+    producer = registry.get("artifacts", {}).get(artifact)
     if not producer:
         lines.append(f"- {artifact}: unresolved")
         continue
-    base = output_dir / f"{producer['phase']}-{producer['step_id']}"
-    artifact_path = base.with_suffix(".md")
-    handoff_path = output_dir / f"{producer['phase']}-{producer['step_id']}.handoff.md"
+    artifact_path = producer.get("path")
+    handoff_path = producer.get("handoff_path")
     if input_mode == "full":
         selected = artifact_path
         mode = "full_artifact"
     else:
-        selected = handoff_path if handoff_path.exists() else artifact_path
-        mode = "handoff_summary" if handoff_path.exists() else "artifact_fallback"
+        selected = handoff_path if handoff_path and Path(handoff_path).exists() else artifact_path
+        mode = "handoff_summary" if handoff_path and Path(handoff_path).exists() else "artifact_fallback"
     lines.append(
-        f"- {artifact}: step={producer['step_id']} mode={mode} path={selected}"
+        f"- {artifact}: step={producer['source_step']} mode={mode} path={selected}"
     )
 
 print("\n".join(lines))
+PY
+}
+
+validate_step_inputs() {
+  local plan_json="$1"
+  local current_step_id="$2"
+  local registry_path="$3"
+
+  python3 - <<'PY' "${plan_json}" "${current_step_id}" "${registry_path}"
+from pathlib import Path
+import json
+import sys
+
+plan = json.loads(sys.argv[1])
+current_step_id = sys.argv[2]
+registry_path = Path(sys.argv[3])
+registry = {"artifacts": {}, "steps": {}}
+if registry_path.exists():
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+
+target = None
+for phase in plan.get("phases", []):
+    for step in phase.get("steps", []):
+        if step["step_id"] == current_step_id:
+            target = step
+            break
+    if target:
+        break
+
+if target is None:
+    print(json.dumps({"ok": False, "missing": [], "resolved": [], "reason": "step_not_found"}, ensure_ascii=False))
+    raise SystemExit(0)
+
+missing = []
+resolved = []
+for artifact in target.get("inputs", []):
+    if artifact in {"user_requirement"}:
+        resolved.append(
+            {
+                "artifact": artifact,
+                "source_step": "__request__",
+                "path": "<inline:user_request>",
+                "handoff_path": "",
+            }
+        )
+        continue
+    entry = registry.get("artifacts", {}).get(artifact)
+    if not entry:
+        missing.append(artifact)
+        continue
+    source_step = entry.get("source_step")
+    source_state = registry.get("steps", {}).get(source_step, {}).get("execution_state")
+    if source_state != "validated":
+        missing.append(artifact)
+        continue
+    resolved.append(
+        {
+            "artifact": artifact,
+            "source_step": source_step,
+            "path": entry.get("path"),
+            "handoff_path": entry.get("handoff_path"),
+        }
+    )
+
+print(
+    json.dumps(
+        {
+            "ok": not missing,
+            "missing": missing,
+            "resolved": resolved,
+            "reason": "" if not missing else "missing_input_artifact",
+        },
+        ensure_ascii=False,
+    )
+)
+PY
+}
+
+register_step_runtime_state() {
+  local plan_json="$1"
+  local registry_path="$2"
+  local step_id="$3"
+  local execution_state="$4"
+  local blocked_reason="$5"
+  local output_source="$6"
+  local output_path="$7"
+  local handoff_path="$8"
+
+  python3 - <<'PY' "${plan_json}" "${registry_path}" "${step_id}" "${execution_state}" "${blocked_reason}" "${output_source}" "${output_path}" "${handoff_path}"
+from pathlib import Path
+import json
+import sys
+
+plan = json.loads(sys.argv[1])
+registry_path = Path(sys.argv[2])
+step_id = sys.argv[3]
+execution_state = sys.argv[4]
+blocked_reason = sys.argv[5]
+output_source = sys.argv[6]
+output_path = sys.argv[7]
+handoff_path = sys.argv[8]
+
+registry = {"artifacts": {}, "steps": {}}
+if registry_path.exists():
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+
+target = None
+target_phase = None
+for phase in plan.get("phases", []):
+    for step in phase.get("steps", []):
+        if step["step_id"] == step_id:
+            target = step
+            target_phase = phase["phase"]
+            break
+    if target:
+        break
+
+if target is None:
+    raise SystemExit(0)
+
+registry["steps"][step_id] = {
+    "phase": target_phase,
+    "capability": target.get("capability"),
+    "execution_state": execution_state,
+    "blocked_reason": blocked_reason or "",
+    "output_source": output_source or "",
+    "output_path": output_path or "",
+    "handoff_path": handoff_path or "",
+}
+
+if execution_state == "validated":
+    for artifact in target.get("outputs", []):
+        registry["artifacts"][artifact] = {
+            "artifact": artifact,
+            "source_step": step_id,
+            "path": output_path,
+            "handoff_path": handoff_path,
+        }
+
+registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2), encoding="utf-8")
 PY
 }
 
@@ -600,6 +746,7 @@ PROJECT_DOCS_DIR="${PROJECT_ROOT}/docs"
 ARTIFACT_INDEX="${WORKFLOW_OUTPUT_DIR}/artifact-index.md"
 RUN_SUMMARY="${WORKFLOW_OUTPUT_DIR}/run-summary.md"
 WORKFLOW_LOG="${WORKFLOW_OUTPUT_DIR}/workflow.log"
+RUNTIME_STATE_JSON="${WORKFLOW_OUTPUT_DIR}/runtime-state.json"
 ensure_dir_or_fail "${WORKFLOW_OUTPUT_DIR}" "workflow output directory" || exit 1
 ensure_dir_or_fail "${PROJECT_DOCS_DIR}" "project docs directory" || true
 
@@ -640,6 +787,8 @@ write_file_or_fail "${WORKFLOW_LOG}" "$(cat <<EOF
 [$(date '+%Y-%m-%d %H:%M:%S')][workflow][workflow:${WORKFLOW_ID} run:${RUN_LABEL} output_dir:${WORKFLOW_OUTPUT_DIR}][started]
 EOF
 )" || exit 1
+
+write_file_or_fail "${RUNTIME_STATE_JSON}" '{"artifacts": {}, "steps": {}}' || exit 1
 
 echo "  Output dir: ${WORKFLOW_OUTPUT_DIR}"
 
@@ -688,6 +837,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   if [ "${resolution_status}" = "optional_unresolved" ]; then
     step_status "skip" "${step_id}" "0"
     SKIPPED=$((SKIPPED + 1))
+    register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "skipped" "unresolved_binding" "" "" ""
     continue
   fi
 
@@ -695,6 +845,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   if [ "${resolution_status}" = "required_unresolved" ] || [ "${resolution_status}" = "incompatible" ]; then
     echo "  ${RED}│ step ${step_id} 無法執行：binding 狀態為 ${resolution_status}${RESET}"
     FAILED=$((FAILED + 1))
+    register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "unresolved_binding" "" "" ""
     break
   fi
 
@@ -702,12 +853,14 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   if [ "${optional}" = "True" ] && [ -z "${inputs}" ]; then
     step_status "skip" "${step_id}" "0"
     SKIPPED=$((SKIPPED + 1))
+    register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "skipped" "" "" "" ""
     continue
   fi
 
   if [ -z "${agent_alias}" ] || [ -z "${prompt_file}" ]; then
     echo "  ${RED}│ step ${step_id} 缺少 agent_alias 或 prompt_file，無法執行${RESET}"
     FAILED=$((FAILED + 1))
+    register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "unresolved_binding" "" "" ""
     break
   fi
 
@@ -721,8 +874,25 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   STEP_HANDOFF_PATH="${WORKFLOW_OUTPUT_DIR}/${phase_num}-${step_id}.handoff.md"
   STEP_STATUS="running"
   AGENT_SKILL="${agent_alias}:${prompt_file}"
+  INPUT_CHECK_JSON="$(validate_step_inputs "${PLAN_JSON}" "${step_id}" "${RUNTIME_STATE_JSON}")"
+  INPUT_OK="$(printf '%s' "${INPUT_CHECK_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["ok"])')"
+  if [ "${INPUT_OK}" != "True" ]; then
+    MISSING_INPUTS="$(printf '%s' "${INPUT_CHECK_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(", ".join(json.load(sys.stdin)["missing"]))')"
+    if [ "${optional}" = "True" ]; then
+      step_status "skip" "${step_id}" "0"
+      printf "  ${YELLOW}│ optional step skipped: missing inputs -> %s${RESET}\n" "${MISSING_INPUTS}"
+      SKIPPED=$((SKIPPED + 1))
+      register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "skipped" "missing_input_artifact" "" "" ""
+      continue
+    fi
+    step_status "block" "${step_id}" "0"
+    printf "  ${RED}│ blocked_missing_input: %s${RESET}\n" "${MISSING_INPUTS}"
+    FAILED=$((FAILED + 1))
+    register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "missing_input_artifact" "" "" ""
+    break
+  fi
   append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "phase:${phase_num} step:${step_id} capability:${capability} cli:${effective_cli} action:start" "running"
-  RESOLVED_INPUT_CONTEXT="$(resolve_step_input_context "${PLAN_JSON}" "${step_id}" "${input_mode:-summary}" "${WORKFLOW_OUTPUT_DIR}")"
+  RESOLVED_INPUT_CONTEXT="$(resolve_step_input_context "${PLAN_JSON}" "${step_id}" "${input_mode:-summary}" "${RUNTIME_STATE_JSON}")"
 
   # Build and execute step
   step_prompt="$(
@@ -830,9 +1000,11 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   DURATION="$(( $(date '+%s') - START_STEP ))"
   SHOULD_HALT=0
   OUTPUT_SOURCE=""
+  FINAL_STEP_STATE="running"
 
   if ! OUTPUT_SOURCE="$(materialize_step_output "${step_id}" "${STEP_OUTPUT_PATH}" "${output}")"; then
     STEP_STATUS="write_failed"
+    FINAL_STEP_STATE="hard_fail"
     step_status "fail" "${step_id}" "${DURATION}"
     FAILED=$((FAILED + 1))
     ERROR_TYPE="write_permission"
@@ -853,6 +1025,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     :
   elif [ -n "${STOP_REASON}" ]; then
     STEP_STATUS="${STOP_REASON}"
+    FINAL_STEP_STATE="$(printf '%s' "${STOP_REASON}" | tr '[:upper:]' '[:lower:]')"
     step_status "stop" "${step_id}" "${DURATION}"
     FAILED=$((FAILED + 1))
     case "${STOP_REASON}" in
@@ -875,13 +1048,28 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     printf "%s\n" "${ERROR_HINT}"
     SHOULD_HALT=1
   elif [ "${exit_code}" -eq 0 ]; then
-    STEP_STATUS="ok"
-    step_status "ok" "${step_id}" "${DURATION}"
-    COMPLETED=$((COMPLETED + 1))
-    bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} capability:${capability} agent:${agent_alias} cli:${effective_cli}" "成功" >/dev/null 2>&1 || true
-    append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s output:${STEP_OUTPUT_PATH} source:${OUTPUT_SOURCE}" "成功"
+    if [ "${OUTPUT_SOURCE}" = "empty_capture" ]; then
+      STEP_STATUS="missing_output"
+      FINAL_STEP_STATE="hard_fail"
+      step_status "fail" "${step_id}" "${DURATION}"
+      FAILED=$((FAILED + 1))
+      ERROR_TYPE="output_validation_failed"
+      ERROR_HINT="  step exit 0，但沒有產出可用內容；executor 已判定為 hard_fail，避免下游繼續消耗 token。"
+      bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} capability:${capability} cli:${effective_cli}" "失敗" >/dev/null 2>&1 || true
+      append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s error:${ERROR_TYPE}" "失敗"
+      printf "%s\n" "${ERROR_HINT}"
+      SHOULD_HALT=1
+    else
+      STEP_STATUS="ok"
+      FINAL_STEP_STATE="validated"
+      step_status "ok" "${step_id}" "${DURATION}"
+      COMPLETED=$((COMPLETED + 1))
+      bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} capability:${capability} agent:${agent_alias} cli:${effective_cli}" "成功" >/dev/null 2>&1 || true
+      append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s output:${STEP_OUTPUT_PATH} source:${OUTPUT_SOURCE}" "成功"
+    fi
   else
     STEP_STATUS="failed"
+    FINAL_STEP_STATE="hard_fail"
     step_status "fail" "${step_id}" "${DURATION}"
     FAILED=$((FAILED + 1))
 
@@ -936,6 +1124,16 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
       SHOULD_HALT=1
     fi
   fi
+
+  register_step_runtime_state \
+    "${PLAN_JSON}" \
+    "${RUNTIME_STATE_JSON}" \
+    "${step_id}" \
+    "${FINAL_STEP_STATE}" \
+    "$([ "${FINAL_STEP_STATE}" = "blocked" ] && printf '%s' 'missing_input_artifact')" \
+    "${OUTPUT_SOURCE:-}" \
+    "${STEP_OUTPUT_PATH}" \
+    "${STEP_HANDOFF_PATH}"
 
   {
     printf '\n### %s\n\n' "${step_id}"

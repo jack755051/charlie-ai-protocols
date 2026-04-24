@@ -35,9 +35,14 @@ class WorkflowLoader:
         else:
             data = yaml.safe_load(raw)
 
-        self._validate_workflow(data, workflow_path)
-        data["_source_path"] = str(workflow_path)
-        return data
+        return self.normalize_workflow_data(data, workflow_path)
+
+    def normalize_workflow_data(self, workflow: dict, workflow_path: str | Path = "<inline>") -> dict:
+        workflow_path = str(workflow_path)
+        self._validate_workflow(workflow, workflow_path)
+        normalized = dict(workflow)
+        normalized["_source_path"] = workflow_path
+        return normalized
 
     def load_capabilities(self) -> dict:
         """從 schemas/capabilities.yaml 讀取 capability 契約。"""
@@ -111,6 +116,9 @@ class WorkflowLoader:
         這個 plan 不做 agent / skill 綁定，讓 workflow 在 skill 缺失時仍可被載入與審核。
         """
         workflow = self.load_workflow(workflow_ref)
+        return self.build_semantic_plan_from_workflow(workflow)
+
+    def build_semantic_plan_from_workflow(self, workflow: dict) -> dict:
         capabilities = self.load_capabilities()
 
         steps_by_id: dict[str, dict] = {}

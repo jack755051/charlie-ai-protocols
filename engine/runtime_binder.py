@@ -53,6 +53,9 @@ class RuntimeBinder:
         semantic_plan: dict | None = None,
     ) -> dict:
         semantic_plan = semantic_plan or self.loader.build_semantic_plan(workflow_ref)
+        return self.bind_semantic_plan(semantic_plan, registry_ref=registry_ref)
+
+    def bind_semantic_plan(self, semantic_plan: dict, registry_ref: str | None = None) -> dict:
         registry = self.load_skill_registry(registry_ref)
         defaults = registry.get("binding_defaults", {})
 
@@ -174,7 +177,15 @@ class RuntimeBinder:
         此方法會以 semantic plan + binding report 為基礎，輸出真正可執行的 step metadata。
         """
         semantic_plan = self.loader.build_semantic_plan(workflow_ref)
-        binding = self.bind_capabilities(workflow_ref, registry_ref, semantic_plan=semantic_plan)
+        return self.build_bound_execution_phases_from_semantic(semantic_plan, registry_ref=registry_ref)
+
+    def build_bound_execution_phases_from_semantic(
+        self,
+        semantic_plan: dict,
+        registry_ref: str | None = None,
+    ) -> dict:
+        """從已存在的 semantic plan 建立 bound execution phases。"""
+        binding = self.bind_semantic_plan(semantic_plan, registry_ref=registry_ref)
         binding_by_step = {step["step_id"]: step for step in binding["steps"]}
         governance = semantic_plan.get("governance", {})
         phase_limit = self._governance_phase_limit(semantic_plan)
@@ -295,6 +306,17 @@ class RuntimeBinder:
             "phases": phases,
             "standby_steps": standby_steps + deferred_steps,
         }
+
+    def build_bound_execution_phases_from_workflow(
+        self,
+        workflow_data: dict,
+        registry_ref: str | None = None,
+        source_path: str = "<compiled>",
+    ) -> dict:
+        """從 inline workflow data 建立 semantic / bound execution plan。"""
+        workflow = self.loader.normalize_workflow_data(workflow_data, source_path)
+        semantic_plan = self.loader.build_semantic_plan_from_workflow(workflow)
+        return self.build_bound_execution_phases_from_semantic(semantic_plan, registry_ref=registry_ref)
 
     @staticmethod
     def _governance_phase_limit(semantic_plan: dict) -> int | None:

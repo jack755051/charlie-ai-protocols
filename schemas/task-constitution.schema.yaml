@@ -1,0 +1,96 @@
+# Task Constitution Schema (draft v1)
+#
+# 定義單次任務在 workflow 編譯前的治理基準。
+
+schema_version: 1
+
+fields:
+  task_id:
+    type: string
+    required: true
+
+  source_request:
+    type: string
+    required: true
+
+  goal:
+    type: string
+    required: true
+
+  scope:
+    type: string[]
+    required: false
+
+  non_goals:
+    type: string[]
+    required: false
+
+  success_criteria:
+    type: string[]
+    required: true
+
+  constraints:
+    type: string[]
+    required: false
+
+  risk_profile:
+    type: string
+    required: false
+    enum: [low, medium, high, unknown]
+
+  goal_stage:
+    type: string
+    required: true
+    enum:
+      - informal_planning
+      - formal_specification
+      - implementation_preparation
+      - implementation_and_verification
+
+  allowed_fallbacks:
+    type: string[]
+    required: false
+    description: 允許的 unresolved policy，例如 fallback / pending / re_scope / manual
+
+  stop_conditions:
+    type: string[]
+    required: false
+
+  required_questions:
+    type: string[]
+    required: false
+
+  output_expectations:
+    type: string[]
+    required: false
+
+  inferred_context:
+    type: object
+    required: false
+    fields:
+      project_kind:
+        type: string
+      need_ui:
+        type: boolean
+      need_persistence:
+        type: boolean
+      need_api_contract:
+        type: boolean
+      planning_only:
+        type: boolean
+      unknown_domains:
+        type: string[]
+      requested_deliverables:
+        type: string[]
+
+  unresolved_policy:
+    type: object
+    required: false
+    fields:
+      default_action:
+        type: string
+        enum: [fallback, pending, re_scope, manual, generate_agent]
+      high_risk_action:
+        type: string
+        enum: [pending, re_scope, manual]
+
