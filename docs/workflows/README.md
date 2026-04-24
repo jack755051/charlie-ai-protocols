@@ -32,6 +32,12 @@ workflow 的目的，是把固定順序的工作流從 agent prompt 中抽離，
   - 定義 workflow YAML 的最小欄位與語意
 - `../../schemas/workflows/*.yaml`
   - 各具體 workflow 模板
+- `~/.cap/projects/<project_id>/compiled-workflows/`
+  - 單次任務由 compiler 動態生成的 compiled workflow bundle
+- `~/.cap/projects/<project_id>/constitutions/`
+  - task constitution snapshot
+- `~/.cap/projects/<project_id>/bindings/`
+  - binding report snapshot
 
 ## 4. 執行模型
 
@@ -54,6 +60,12 @@ workflow 不負責決定最終 agent，只負責宣告：
 - 會產出哪些 artifact
 
 實際綁定關係應由 capability registry 或 runtime 設定提供。
+
+補充：
+
+- repo 內 `schemas/workflows/*.yaml` 是 **模板**
+- `cap workflow compile / run-task` 產生的 task-scoped workflow 是 **runtime artifact**
+- runtime artifact 應寫入 `.cap`，不應混入主程式 repo
 
 ## 6. Workflow List
 

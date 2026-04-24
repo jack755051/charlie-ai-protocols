@@ -54,6 +54,10 @@ LOG_DIR="${PROJECT_STORE}/logs"
 DRAFT_DIR="${PROJECT_STORE}/drafts"
 HANDOFF_DIR="${PROJECT_STORE}/handoffs"
 REPORT_DIR="${PROJECT_STORE}/reports"
+WORKFLOW_REPORT_DIR="${REPORT_DIR}/workflows"
+CONSTITUTION_DIR="${PROJECT_STORE}/constitutions"
+COMPILED_WORKFLOW_DIR="${PROJECT_STORE}/compiled-workflows"
+BINDING_DIR="${PROJECT_STORE}/bindings"
 CACHE_DIR="${PROJECT_STORE}/cache"
 SESSION_DIR="${PROJECT_STORE}/sessions"
 
@@ -66,6 +70,10 @@ ensure_dirs() {
     "${DRAFT_DIR}" \
     "${HANDOFF_DIR}" \
     "${REPORT_DIR}" \
+    "${WORKFLOW_REPORT_DIR}" \
+    "${CONSTITUTION_DIR}" \
+    "${COMPILED_WORKFLOW_DIR}" \
+    "${BINDING_DIR}" \
     "${CACHE_DIR}" \
     "${SESSION_DIR}"
 }
@@ -81,6 +89,10 @@ get_key() {
     draft_dir) printf '%s\n' "${DRAFT_DIR}" ;;
     handoff_dir) printf '%s\n' "${HANDOFF_DIR}" ;;
     report_dir) printf '%s\n' "${REPORT_DIR}" ;;
+    workflow_report_dir) printf '%s\n' "${WORKFLOW_REPORT_DIR}" ;;
+    constitution_dir) printf '%s\n' "${CONSTITUTION_DIR}" ;;
+    compiled_workflow_dir) printf '%s\n' "${COMPILED_WORKFLOW_DIR}" ;;
+    binding_dir) printf '%s\n' "${BINDING_DIR}" ;;
     cache_dir) printf '%s\n' "${CACHE_DIR}" ;;
     session_dir) printf '%s\n' "${SESSION_DIR}" ;;
     *)
@@ -101,6 +113,10 @@ log_dir=${LOG_DIR}
 draft_dir=${DRAFT_DIR}
 handoff_dir=${HANDOFF_DIR}
 report_dir=${REPORT_DIR}
+workflow_report_dir=${WORKFLOW_REPORT_DIR}
+constitution_dir=${CONSTITUTION_DIR}
+compiled_workflow_dir=${COMPILED_WORKFLOW_DIR}
+binding_dir=${BINDING_DIR}
 cache_dir=${CACHE_DIR}
 session_dir=${SESSION_DIR}
 EOF

@@ -30,7 +30,7 @@ CAP 解決的核心問題是：當多位 AI Agent 共同參與軟體開發流程
 | Capabilities | `schemas/capabilities.yaml` | capability 契約 SSOT |
 | Engine | `engine/` | CrewAI 與 workflow loader |
 | CLI Scripts | `scripts/` | `cap` 子命令與 wrapper |
-| Runtime Storage | `~/.cap/projects/<project_id>/` | traces、drafts、reports、sessions |
+| Runtime Storage | `~/.cap/projects/<project_id>/` | constitutions、compiled-workflows、bindings、reports、traces |
 
 架構細節請看 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 Skill marketplace 與 runtime binding 草案請看 [docs/SKILL-MARKETPLACE-RUNTIME-DRAFT.md](docs/SKILL-MARKETPLACE-RUNTIME-DRAFT.md)。
@@ -159,6 +159,28 @@ Workflow 與 Agent Skills 是並存的兩種使用方式：
 - [schemas/task-constitution.schema.yaml](schemas/task-constitution.schema.yaml)
 - [schemas/workflow-run-state.schema.yaml](schemas/workflow-run-state.schema.yaml)
 
+## Workflow Storage Model
+
+workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo：
+
+- `schemas/workflows/*.yaml`
+  - 內建 workflow 模板與固定流程範本
+  - 屬於 repo 內的可版本化定義
+- `~/.cap/projects/<project_id>/constitutions/`
+  - 一句話需求推導出的 task constitution snapshot
+- `~/.cap/projects/<project_id>/compiled-workflows/`
+  - `run-task` 或 `compile` 產生的 task-scoped compiled workflow bundle
+- `~/.cap/projects/<project_id>/bindings/`
+  - `bind / run / run-task` 實際用到的 binding report snapshot
+- `~/.cap/projects/<project_id>/reports/workflows/`
+  - 每次執行的 artifact、handoff、runtime state、watchdog log
+
+這代表：
+
+- 主 repo 保留模板、schema、engine、CLI
+- 單次任務的 constitution / compiled workflow / binding / run output 都進 `.cap`
+- 只有真正要長期維護的 custom workflow，才應升級成 repo 內檔案
+
 ## Project Structure
 
 ```text
@@ -180,6 +202,18 @@ charlie-ai-protocols/
 └── .cap.agents.json
 ```
 
+執行期資料會寫到：
+
+```text
+~/.cap/projects/<project_id>/
+├── constitutions/
+├── compiled-workflows/
+├── bindings/
+├── reports/workflows/
+├── traces/
+└── sessions/
+```
+
 ## Dependencies
 
 - Python `>= 3.10`
@@ -198,6 +232,8 @@ charlie-ai-protocols/
 
 - 最新 release：`v0.5.0`
 - 同一份 `docs/agent-skills/` 供 CrewAI、Claude Code、Codex 共用
+- `schemas/workflows/` 只保留內建模板，不承載 task-scoped runtime workflow
+- `cap workflow constitution / compile / run-task` 會把 task constitution、compiled workflow、binding report 寫入 `.cap`
 - Workflow 定義位於 `schemas/workflows/`，不會同步成 `.agents/skills/` alias
 - Trace 預設雙寫到 `~/.cap/projects/<project_id>/traces/`
 - 正式產物應進 repo；執行中產物預設留在 CAP storage

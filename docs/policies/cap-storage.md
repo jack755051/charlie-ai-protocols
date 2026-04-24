@@ -24,6 +24,9 @@
 
 ```text
 ~/.cap/projects/<project_id>/
+├── constitutions/
+├── compiled-workflows/
+├── bindings/
 ├── traces/
 ├── logs/
 ├── drafts/
@@ -34,6 +37,9 @@
 ```
 
 用途如下：
+- `constitutions/`：task constitution snapshot
+- `compiled-workflows/`：task-scoped compiled workflow bundle、bound plan
+- `bindings/`：workflow binding report 與 registry 決策快照
 - `traces/`：結構化執行軌跡、session trace
 - `logs/`：較長期或程序級 log
 - `drafts/`：草稿與一次性中間產物
@@ -41,6 +47,12 @@
 - `reports/`：Lighthouse、Analytics、Audit 等報告
 - `cache/`：索引、掃描結果、暫存 metadata
 - `sessions/`：CLI / GUI / OpenClaw session state
+
+補充邊界：
+
+- `schemas/workflows/*.yaml` 只放 **內建模板 workflow**
+- `constitutions/`、`compiled-workflows/`、`bindings/` 都是 **runtime workspace**
+- 不應把單次任務編譯出來的 workflow 直接回寫到主程式 repo
 
 ### 2.3 Promote 機制
 - **正式交付才進 repo**

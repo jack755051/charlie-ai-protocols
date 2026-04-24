@@ -119,6 +119,16 @@
 
 本次真正要執行的最小 workflow。它是編譯結果，不是預先寫死的模板。
 
+### 5. Runtime Storage Placement
+
+- 內建模板 workflow 留在 `schemas/workflows/*.yaml`
+- task constitution snapshot 寫入 `~/.cap/projects/<project_id>/constitutions/`
+- compiled workflow bundle 寫入 `~/.cap/projects/<project_id>/compiled-workflows/`
+- binding report 寫入 `~/.cap/projects/<project_id>/bindings/`
+- 每次執行的 artifact / runtime state / watchdog log 寫入 `~/.cap/projects/<project_id>/reports/workflows/`
+
+這樣主 repo 只承載模板、schema、engine 與 driver，不承載單次任務的 runtime workspace。
+
 ## 為什麼這比固定 workflow 更好
 
 ### 1. 避免過早展開
