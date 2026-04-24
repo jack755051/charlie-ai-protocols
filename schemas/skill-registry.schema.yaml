@@ -1,8 +1,9 @@
-# Skill Registry Schema (draft v1)
+# Skill Registry Schema (v2)
 #
 # 定義目前 runtime 可用的 agent-skill 清單。
+# v2: 合併原 skill-manifest.schema.yaml 的欄位，不再需要獨立 manifest 檔。
 
-schema_version: 1
+schema_version: 2
 
 fields:
   default_provider:
@@ -24,25 +25,54 @@ fields:
     type: object[]
     required: true
     item_fields:
+
+      # ── 識別與版本 ──
       skill_id:
         type: string
-      manifest_ref:
+        required: true
+        description: skill 的穩定識別碼
+      skill_version:
         type: string
+        required: false
+        description: skill 本身的版本
       agent_alias:
         type: string
       provider:
         type: string
-      enabled:
-        type: boolean
-      priority:
-        type: integer
+        description: "builtin / local / marketplace / langgraph"
+
+      # ── 執行入口 ──
       prompt_file:
         type: string
       cli:
         type: string
+      runtime:
+        type: string
+        required: false
+        description: 非 CLI 執行時的 runtime 類型
+
+      # ── 啟用與優先序 ──
+      enabled:
+        type: boolean
+      priority:
+        type: integer
+
+      # ── Capability 綁定 ──
       compatible_workflow_versions:
         type: integer[]
       provided_capabilities:
         type: string[]
       fallback_roles:
         type: string[]
+
+      # ── 選填 metadata ──
+      metadata:
+        type: object
+        required: false
+        fields:
+          title:
+            type: string
+          description:
+            type: string
+          owner:
+            type: string

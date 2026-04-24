@@ -56,6 +56,21 @@ class RuntimeBinder:
         return self.bind_semantic_plan(semantic_plan, registry_ref=registry_ref)
 
     def bind_semantic_plan(self, semantic_plan: dict, registry_ref: str | None = None) -> dict:
+        """Bind semantic plan to skill registry, return binding report.
+
+        Return structure (formerly unresolved-binding.schema.yaml):
+            workflow_id: str
+            workflow_version: int
+            binding_status: ready | degraded | blocked
+            summary: {total_steps, resolved_steps, fallback_steps,
+                      unresolved_required_steps, unresolved_optional_steps}
+            steps: [{step_id, phase, capability, optional,
+                     resolution_status (resolved | fallback_available |
+                       required_unresolved | optional_unresolved | incompatible),
+                     selected_skill_id, selected_provider, selected_agent_alias,
+                     selected_prompt_file, selected_cli,
+                     binding_mode, missing_policy, reason}]
+        """
         registry = self.load_skill_registry(registry_ref)
         defaults = registry.get("binding_defaults", {})
 

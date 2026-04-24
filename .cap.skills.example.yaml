@@ -8,7 +8,7 @@ binding_defaults:
 
 skills:
   - skill_id: builtin-supervisor
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: supervisor
     provider: builtin
     enabled: true
@@ -23,7 +23,7 @@ skills:
       - supervisor
 
   - skill_id: builtin-techlead
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: techlead
     provider: builtin
     enabled: true
@@ -38,7 +38,7 @@ skills:
       - reviewer
 
   - skill_id: builtin-ba
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: ba
     provider: builtin
     enabled: true
@@ -52,7 +52,7 @@ skills:
       - reviewer
 
   - skill_id: builtin-dba
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: dba
     provider: builtin
     enabled: true
@@ -66,7 +66,7 @@ skills:
       - implementer
 
   - skill_id: builtin-ui
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: ui
     provider: builtin
     enabled: true
@@ -80,7 +80,7 @@ skills:
       - implementer
 
   - skill_id: builtin-figma
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: figma
     provider: builtin
     enabled: true
@@ -94,7 +94,7 @@ skills:
       - implementer
 
   - skill_id: builtin-analytics
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: analytics
     provider: builtin
     enabled: true
@@ -109,7 +109,7 @@ skills:
       - reviewer
 
   - skill_id: builtin-frontend
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: frontend
     provider: builtin
     enabled: true
@@ -123,7 +123,7 @@ skills:
       - implementer
 
   - skill_id: builtin-backend
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: backend
     provider: builtin
     enabled: true
@@ -137,7 +137,7 @@ skills:
       - implementer
 
   - skill_id: builtin-watcher
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: watcher
     provider: builtin
     enabled: true
@@ -152,7 +152,7 @@ skills:
       - reviewer
 
   - skill_id: builtin-security
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: security
     provider: builtin
     enabled: true
@@ -166,7 +166,7 @@ skills:
       - reviewer
 
   - skill_id: builtin-qa
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: qa
     provider: builtin
     enabled: true
@@ -180,7 +180,7 @@ skills:
       - reviewer
 
   - skill_id: builtin-troubleshoot
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: troubleshoot
     provider: builtin
     enabled: true
@@ -194,7 +194,7 @@ skills:
       - reviewer
 
   - skill_id: builtin-sre
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: sre
     provider: builtin
     enabled: true
@@ -208,7 +208,7 @@ skills:
       - reviewer
 
   - skill_id: builtin-devops
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: devops
     provider: builtin
     enabled: true
@@ -224,7 +224,7 @@ skills:
       - implementer
 
   - skill_id: builtin-logger
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: logger
     provider: builtin
     enabled: true
@@ -238,7 +238,7 @@ skills:
       - logger
 
   - skill_id: builtin-readme
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: readme
     provider: builtin
     enabled: true
@@ -252,7 +252,7 @@ skills:
       - implementer
 
   - skill_id: generic-supervisor
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: generic-supervisor
     provider: builtin
     enabled: true
@@ -265,7 +265,7 @@ skills:
       - supervisor
 
   - skill_id: generic-reviewer
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: generic-reviewer
     provider: builtin
     enabled: true
@@ -278,7 +278,7 @@ skills:
       - reviewer
 
   - skill_id: generic-logger
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: generic-logger
     provider: builtin
     enabled: true
@@ -291,7 +291,7 @@ skills:
       - logger
 
   - skill_id: generic-implementer
-    manifest_ref: schemas/skill-manifest.schema.yaml
+
     agent_alias: generic-implementer
     provider: builtin
     enabled: true

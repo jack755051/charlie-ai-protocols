@@ -64,7 +64,8 @@ charlie-ai-protocols/
 ├── schemas/
 │   ├── workflows/
 │   ├── capabilities.yaml
-│   └── handoff-ticket.schema.yaml
+│   ├── skill-registry.schema.yaml
+│   └── task-constitution.schema.yaml
 ├── engine/
 ├── scripts/
 ├── AGENTS.md

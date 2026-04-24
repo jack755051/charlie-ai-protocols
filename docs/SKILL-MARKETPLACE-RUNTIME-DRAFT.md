@@ -17,9 +17,7 @@
 - **draft 路徑**
   - `.cap.skills.yaml`
   - `.cap.skills.example.yaml`
-  - `schemas/skill-manifest.schema.yaml`
-  - `schemas/skill-registry.schema.yaml`
-  - `schemas/unresolved-binding.schema.yaml`
+  - `schemas/skill-registry.schema.yaml`（v2，已合併原 skill-manifest 欄位）
   - 遠端 marketplace / LangGraph backend
 
 ## 核心原則
@@ -150,10 +148,8 @@ CAP 目前與 LangGraph 的主要差距在兩處，可借鑑其概念補強：
 ## 本 repo 內的 draft 檔案
 
 - `.cap.skills.example.yaml`
-- `schemas/skill-manifest.schema.yaml`
-- `schemas/skill-registry.schema.yaml`
-- `schemas/unresolved-binding.schema.yaml`
-- `engine/runtime_binder.py`
+- `schemas/skill-registry.schema.yaml`（v2，含原 manifest 欄位）
+- `engine/runtime_binder.py`（binding report 結構已內化為 docstring）
 
 ## 本地試跑方式
 

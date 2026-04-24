@@ -1,8 +1,8 @@
-# Handoff Ticket Schema (v1)
-#
-# 定義任務交接單的標準欄位。
-# 此格式供 workflow orchestrator 產生交接單時使用。
-# Agent prompt 不再內嵌此模板；需要時引用本檔。
+# Handoff Ticket 概念參考 (v1)
+
+> **狀態：概念參考文件。** 本檔案定義任務交接單的欄位語意，供 agent prompt 引用。
+> Engine 尚未實例化此結構；實際交接由 task_scoped_compiler 與 executor 的 runtime-state 處理。
+> 原路徑：`schemas/handoff-ticket.schema.yaml`
 
 schema_version: 1
 
