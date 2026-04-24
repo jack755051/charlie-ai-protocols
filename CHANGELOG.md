@@ -6,6 +6,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.10.3] - 2026-04-24
+
+### Fixed
+
+- workflow executor 的 `printf` 修正 ANSI escape codes 未正確渲染的問題
+
+### Changed
+
+- workflow run 終端輸出格式改善，提升可讀性
+
 ## [v0.10.2] - 2026-04-24
 
 ### Fixed
