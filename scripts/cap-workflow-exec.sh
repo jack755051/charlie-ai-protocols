@@ -526,7 +526,8 @@ def intrinsic_context(artifact: str) -> str:
         for line in changed.splitlines():
             if not line.strip():
                 continue
-            path = line[3:] if len(line) >= 4 else line.strip()
+            parts = line.split(maxsplit=1)
+            path = parts[1] if len(parts) == 2 else line.strip()
             if " -> " in path:
                 path = path.split(" -> ", 1)[1]
             paths.append(path)
@@ -712,6 +713,25 @@ print(
     )
 )
 PY
+}
+
+current_git_branch() {
+  git branch --show-current 2>/dev/null || true
+}
+
+step_requires_attached_branch() {
+  local capability="$1"
+  local inputs="$2"
+
+  if [ "${capability}" = "version_control_commit" ]; then
+    return 0
+  fi
+
+  if [ "${capability}" = "version_control_tag" ] && [[ ",${inputs}," == *",commit_result,"* ]]; then
+    return 0
+  fi
+
+  return 1
 }
 
 register_step_runtime_state() {
@@ -1021,6 +1041,18 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "missing_input_artifact" "" "" ""
     break
   fi
+
+  if step_requires_attached_branch "${capability}" "${inputs}"; then
+    CURRENT_BRANCH="$(current_git_branch)"
+    if [ -z "${CURRENT_BRANCH}" ]; then
+      step_status "block" "${step_id}" "0"
+      printf "  ${RED}│ blocked_detached_head: version control step requires an attached branch${RESET}\n"
+      FAILED=$((FAILED + 1))
+      register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "detached_head" "" "" ""
+      break
+    fi
+  fi
+
   append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "phase:${phase_num} step:${step_id} capability:${capability} cli:${effective_cli} action:start" "running"
   RESOLVED_INPUT_CONTEXT="$(resolve_step_input_context "${PLAN_JSON}" "${step_id}" "${input_mode:-summary}" "${RUNTIME_STATE_JSON}")"
   STEP_CONTRACT_CONTEXT="$(resolve_step_contract_context "${PLAN_JSON}" "${step_id}")"
