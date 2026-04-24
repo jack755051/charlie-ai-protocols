@@ -1349,14 +1349,18 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 printf "  ${BOLD}Done${RESET} in %ss  |  ✓ %s  ✗ %s  ⊘ %s\n" "${TOTAL_DURATION}" "${COMPLETED}" "${FAILED}" "${SKIPPED}"
 echo ""
-printf "  ${DIM}%s/${RESET}\n" "${WORKFLOW_OUTPUT_DIR}"
-printf "    ├── %s\n" "$(basename "${ARTIFACT_INDEX}")"
-printf "    ├── %s\n" "$(basename "${WORKFLOW_LOG}")"
-printf "    ├── %s\n" "$(basename "${RUN_SUMMARY}")"
-for f in "${WORKFLOW_OUTPUT_DIR}/"*-*.md; do
-  [ -f "${f}" ] && printf "    ├── %s\n" "$(basename "${f}")"
+CAP_SHORT="~/.cap"
+RUN_SHORT="${WORKFLOW_OUTPUT_DIR/#${HOME}\/.cap/${CAP_SHORT}}"
+printf "  ${DIM}base${RESET} %s/\n" "${RUN_SHORT}"
+# Collect unique filenames, skip duplicates
+_LISTED=""
+for f in "${ARTIFACT_INDEX}" "${WORKFLOW_LOG}" "${RUN_SUMMARY}" "${WORKFLOW_OUTPUT_DIR}/"*-*.md "${WORKFLOW_OUTPUT_DIR}/"*-*.raw.log "${RUNTIME_STATE_JSON}"; do
+  [ -f "${f}" ] || continue
+  _FNAME="$(basename "${f}")"
+  case "${_LISTED}" in *"|${_FNAME}|"*) continue ;; esac
+  _LISTED="${_LISTED}|${_FNAME}|"
+  printf "    %s\n" "${_FNAME}"
 done
-printf "    └── %s\n" "$(basename "${RUNTIME_STATE_JSON}")"
 echo ""
 
 FINAL_STATE="completed"
