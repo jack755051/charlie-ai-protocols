@@ -853,7 +853,13 @@ ${continue_reason}
 
 ${structured_sections}
 
-完成後，請輸出交接摘要（agent_id, task_summary, output_paths, result）。
+⚠️ 絕對強制：無論你執行了什麼工具操作（git、檔案讀寫等），最後一定要在 stdout 輸出至少包含以下內容的純文字交接摘要，否則 executor 會判定本步驟失敗：
+
+## 交接摘要
+- agent_id: （你的 agent 編號）
+- task_summary: （本步驟做了什麼）
+- output_paths: （產出的檔案路徑）
+- result: success / failure / needs_data
 EOF
 }
 
