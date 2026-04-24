@@ -67,49 +67,34 @@ workflow 不負責決定最終 agent，只負責宣告：
 - `cap workflow compile / run-task` 產生的 task-scoped workflow 是 **runtime artifact**
 - runtime artifact 應寫入 `.cap`，不應混入主程式 repo
 
-## 6. Workflow List
+## 6. Active Workflows
 
-### `readme-to-devops.yaml`
+目前 repo 只保留收斂後的現役 workflow，避免 runtime 在高耦合模板上持續分散維護成本。
+
+### A. 核心流程
+
+#### `workflow-smoke-test.yaml`
+
+- 用途：測試 `cap workflow` 工具鏈是否正常
+- 為何必留：它是 `list / show / plan / run`、phase 拆分、capability binding 的最小回歸基線
+- 主要步驟：
+  - `readme_normalization`
+  - `version_control_commit`
+
+#### `readme-to-devops.yaml`
 
 - 用途：先完成 repo intake / README 治理，再交由 DevOps 建立交付基線
-- 適用情境：新 repo onboarding、README 治理、交付前基線整理
+- 為何必留：它代表最小跨角色 workflow，可驗證從治理到交付基線的 handoff 是否成立
 - 主要步驟：
   - `readme_normalization`
   - `technical_review`（可選）
   - `devops_delivery`
   - `technical_logging`（可選）
 
-### `feature-delivery.yaml`
-
-- 用途：完整功能開發流水線
-- 適用情境：從需求、分析設計、實作、品質門禁到部署歸檔的一般開發流程
-- 主要步驟：
-  - PRD / Tech Plan / BA / DBA-API / UI / Analytics
-  - Frontend / Backend
-  - Watcher + Security gate
-  - QA / Troubleshoot / SRE / DevOps / Logger
-
-### `small-tool-planning.yaml`
-
-- 用途：非正式小工具開發前置流程，先產出可交接規格，不直接進入實作
-- 適用情境：side project、小工具、技術方向未定、想先整理需求與規格再決定是否開發
-- 預設主線：
-  - PRD / Tech Plan
-- opt-in 延伸：
-  - BA / DBA-API / UI / Watcher Audit / Archive
-- 治理特性：
-  - `goal_stage: informal_planning`
-  - `context_mode: summary_first`
-  - `max_primary_phases: 2`
-- 刻意不包含：
-  - Frontend implementation (`04`)
-  - DevOps delivery (`06`)
-  - QA execution (`07`)
-
-### `version-control-private.yaml`
+#### `version-control-private.yaml`
 
 - 用途：私人專案的完整版本控制流程
-- 適用情境：個人 repo、side project、portfolio repo
+- 為何必留：它承載目前最重要的收尾場景，已包含 README 治理、tag 判定、release 文件同步、commit、tag 與歸檔
 - 主要步驟：
   - `readme_normalization` — README 治理與 repo metadata 補齊
   - `version_control_tag` — 先做 tag 判定、CHANGELOG/README 更新
@@ -117,26 +102,23 @@ workflow 不負責決定最終 agent，只負責宣告：
   - `version_control_tag` — commit 後依既有判定建立與推送 tag
   - `technical_logging` — 歸檔（optional）
 
-### `version-control-company.yaml`
+### B. 補充流程
+
+#### `version-control-company.yaml`
 
 - 用途：公司專案的最小版本控制流程
 - 適用情境：公司既有 repo、只需整理 commit 的場景
+- 保留理由：若產品要同時支援 private/company 兩種版控模式，它是必要分流；若近期只聚焦私人 repo，可暫時降級維護優先度
 - 主要步驟：
-  - `version_control_commit`
-
-### `workflow-smoke-test.yaml`
-
-- 用途：測試 `cap workflow` 工具鏈是否正常
-- 適用情境：驗證 list / show / plan / run、phase 拆分與 capability binding
-- 主要步驟：
-  - `readme_normalization`
   - `version_control_commit`
 
 ## 7. 使用建議
 
 - 如果你是逐步手動操作：直接用 `$skill` 呼叫單一 agent
-- 如果你要固定順序、可重複交付：選擇對應 workflow
+- 如果你要固定順序、可重複交付：優先從 `version-control-private.yaml`、`readme-to-devops.yaml` 與 `workflow-smoke-test.yaml` 之間選擇最小可行流程
 - 如果目前 schema 尚未支援條件分支，優先拆成兩條明確 workflow，而不是在單一檔案裡混入情境判斷
+- 若你想處理的是「最後收尾、核對、補文件、提交與 release」：先強化既有 `version-control-private`，不要先新增命名模糊的「收斂 workflow」
+- 只有在「收斂」本身有獨立產物、獨立驗收條件、且步驟序列明顯不同於版控流程時，才新增新的 workflow，例如 `release-convergence.yaml`
 
 ## 8. 對應檔案
 

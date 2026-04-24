@@ -143,7 +143,7 @@ CAP 目前與 LangGraph 的主要差距在兩處，可借鑑其概念補強：
 
 - **現狀**：`cap workflow run` 中斷後無法從已完成的 phase 繼續
 - **目標**：每個 phase 完成後將 state 序列化到 `~/.cap/projects/<id>/checkpoints/`，恢復時從最後 checkpoint 繼續
-- **效益**：長流程（如 feature-delivery 14 steps）不再因中途斷線而全部重來
+- **效益**：較長的多階段 workflow 不再因中途斷線而全部重來
 
 > 這兩項加上後，CAP 即為「帶 governance 的 LangGraph」。governance 層是目前 LangGraph 生態沒有的差異化優勢，應持續由 CAP schema 維持 SSOT。
 

@@ -195,14 +195,14 @@ Workflow 與 Agent Skills 是並存的兩種使用方式：
 - Agent Skill：描述單一角色能做什麼
 - Workflow：描述多步驟流程怎麼串接
 
-目前內建 workflow 包含：
+目前保留中的 workflow 為：
 
-- `feature-delivery.yaml`：完整功能交付流程
-- `small-tool-planning.yaml`：非正式小工具開發前置規劃流程
-- `readme-to-devops.yaml`：README 治理到 DevOps 基線
-- `version-control-private.yaml`：私人專案版本控制流程（先判定 tag 與同步 README/CHANGELOG，再 commit，最後建立 tag）
-- `version-control-company.yaml`：公司專案最小版本控制流程
 - `workflow-smoke-test.yaml`：workflow CLI 與 capability binding 的煙霧測試
+- `readme-to-devops.yaml`：README 治理到 DevOps 基線
+- `version-control-private.yaml`：私人專案版本控制主流程
+- `version-control-company.yaml`：公司專案最小版本控制流程
+
+其中 `version-control-private.yaml` 是目前收尾主流程：先判定 tag 並同步 `README.md` / `CHANGELOG.md`，再 commit，最後建立 tag。
 
 相關入口：
 
@@ -258,7 +258,7 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 
 ## Notes
 
-- 最新已驗證 tag：`v0.9.0`；目前 `version-control-private` 會先判斷 tag 需求並同步 `README.md` / `CHANGELOG.md`，再進行 commit 與 tag
+- 最新已驗證 tag：`v0.10.0`；目前 `version-control-private` 會先判斷 tag 需求並同步 `README.md` / `CHANGELOG.md`，再進行 commit 與 tag
 - 同一份 `docs/agent-skills/` 供 CrewAI、Claude Code、Codex 共用
 - `schemas/workflows/` 只保留內建模板，不承載 task-scoped runtime workflow
 - `cap workflow constitution / compile / run-task` 會把 task constitution、compiled workflow、binding report 寫入 `.cap`

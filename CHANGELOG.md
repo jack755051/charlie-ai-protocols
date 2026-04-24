@@ -6,6 +6,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.10.0] - 2026-04-24
+
+### Changed
+
+- workflow 產品組合收斂為 `workflow-smoke-test`、`readme-to-devops`、`version-control-private` 與 `version-control-company` 四條現役模板
+- `README.md`、workflow 文件與架構說明改為只描述現役 workflow，移除已淘汰模板的正式入口與引用
+- supervisor 啟動提示不再在缺少 workflow 時預設套用大型流程，改為先選擇最小可行 workflow
+
+### Removed
+
+- 移除 `schemas/workflows/feature-delivery.yaml`
+- 移除 `schemas/workflows/small-tool-planning.yaml`
+
 ## [v0.9.0] - 2026-04-24
 
 ### Added

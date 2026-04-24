@@ -306,7 +306,7 @@ Runtime 必須扮演治理者，至少要能判斷：
 
 依本文件 v0.1 草案，以下行為應立即視為不建議：
 
-- `small-tool-planning` 預設自動展開 `prd → tech_plan → ba → dba_api → ui → audit`
+- 不應在未明確授權下自動展開大型或多階段 workflow
 - `ui` 在非正式規劃階段直接 inline 輸出 Tokens JSON / Screens JSON / Prototype HTML
 - 任一步將完整上游四份以上文檔直接灌入 prompt
 
