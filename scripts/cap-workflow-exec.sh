@@ -221,9 +221,10 @@ phase_header() {
   local agents="$4"
   local bar
   bar="$(phase_bar "${phase_num}" "${total}")"
-  printf "\n${BOLD}▶ Phase %s/%s${RESET}  ${GREEN}%s${RESET}\n" "${phase_num}" "${total}" "${bar}"
-  printf "  ${DIM}%s → %s${RESET}\n" "${step_ids}" "${agents}"
-  printf "${DIM}──────────────────────────────────────────────────${RESET}\n"
+  echo ""
+  printf "${GREEN}%s${RESET}\n" "${bar}"
+  printf "${BOLD}  Phase %s/%s${RESET}  ${DIM}%s${RESET}  →  ${BOLD}%s${RESET}\n" "${phase_num}" "${total}" "${step_ids}" "${agents}"
+  printf "${DIM}  ─────────────────────────────────────────────${RESET}\n"
 }
 
 phase_bar() {
@@ -299,14 +300,26 @@ format_activity_status() {
   local section_done="$7"
   local section_total="$8"
   local stall_note="$9"
-  local signal="waiting for first output"
 
+  local signal="${YELLOW}◌ waiting${RESET}"
   if [ "${bytes}" -gt 0 ]; then
-    signal="receiving output (${bytes}B)"
+    local kb=$(( bytes / 1024 ))
+    if [ "${kb}" -gt 0 ]; then
+      signal="${GREEN}● ${kb}KB${RESET}"
+    else
+      signal="${GREEN}● ${bytes}B${RESET}"
+    fi
   fi
 
-  printf "\r\033[K  ${YELLOW}%s${RESET} ${DIM}%s │ section=%s/%s │ %ss │ silent=%ss │ timeout=%ss%s │ %s${RESET}" \
-    "${spin}" "${step_id}" "${section_done}" "${section_total}" "${elapsed}" "${silent}" "${timeout}" "${stall_note}" "${signal}"
+  local time_color="${DIM}"
+  if [ "${elapsed}" -ge "${timeout}" ] 2>/dev/null; then
+    time_color="${RED}"
+  elif [ "${elapsed}" -ge $(( timeout * 3 / 4 )) ] 2>/dev/null; then
+    time_color="${YELLOW}"
+  fi
+
+  printf "\r\033[K  ${YELLOW}%s${RESET} %s  %s[%ss]${RESET}  ${DIM}[%s/%s]${RESET}%s" \
+    "${spin}" "${signal}" "${time_color}" "${elapsed}" "${section_done}" "${section_total}" "${stall_note}"
 }
 
 step_status() {
@@ -1086,8 +1099,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   SECTION_TOTAL="$(section_total_for_capability "${capability}")"
   LAST_SECTION_DONE=0
 
-  printf "  ${BOLD}%s${RESET} ${DIM}(%s / %s via %s)${RESET}\n" "${step_id}" "${agent_alias}" "${capability}" "${effective_cli}"
-  printf "  ${DIM}live signal: 完整內容會寫入 step artifact，終端只顯示章節進度${RESET}\n"
+  printf "  ${BOLD}%s${RESET}  ${DIM}%s · %s · %s${RESET}\n" "${step_id}" "${agent_alias}" "${capability}" "${effective_cli}"
 
   # Run step in background, show live output chunks plus watchdog state.
   run_step "${effective_cli}" "${step_prompt}" > "${STEP_TMP}" 2>&1 &
@@ -1335,10 +1347,16 @@ TOTAL_DURATION="$(( $(date '+%s') - START_TOTAL ))"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-printf "  Done in %ss  |  ✓ %s  ✗ %s  ⊘ %s\n" "${TOTAL_DURATION}" "${COMPLETED}" "${FAILED}" "${SKIPPED}"
-printf "  Artifacts: %s\n" "${WORKFLOW_OUTPUT_DIR}"
-printf "  Index: %s\n" "${ARTIFACT_INDEX}"
-printf "  Log: %s\n" "${WORKFLOW_LOG}"
+printf "  ${BOLD}Done${RESET} in %ss  |  ✓ %s  ✗ %s  ⊘ %s\n" "${TOTAL_DURATION}" "${COMPLETED}" "${FAILED}" "${SKIPPED}"
+echo ""
+printf "  ${DIM}%s/${RESET}\n" "${WORKFLOW_OUTPUT_DIR}"
+printf "    ├── %s\n" "$(basename "${ARTIFACT_INDEX}")"
+printf "    ├── %s\n" "$(basename "${WORKFLOW_LOG}")"
+printf "    ├── %s\n" "$(basename "${RUN_SUMMARY}")"
+for f in "${WORKFLOW_OUTPUT_DIR}/"*-*.md; do
+  [ -f "${f}" ] && printf "    ├── %s\n" "$(basename "${f}")"
+done
+printf "    └── %s\n" "$(basename "${RUNTIME_STATE_JSON}")"
 echo ""
 
 FINAL_STATE="completed"
