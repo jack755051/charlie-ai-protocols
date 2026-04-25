@@ -248,7 +248,7 @@ Workflow 與 Agent Skills 是並存的兩種使用方式：
 - `version-control-quick.yaml`
   - commit / push 為主，不做 tag、CHANGELOG、README release 同步
 - `version-control-private.yaml`
-  - 正式治理版，適合 release、tag、CHANGELOG、README 版本同步
+  - 私人專案治理版，採 shell quick path + AI fallback；正式 release 文件同步應由 governed/release 流程明確處理
 
 `cap workflow run --mode auto version-control-private "版本更新"` 會由 runtime selector 自動分流；目前 selector 是規則式，不會額外多叫一個 router agent。
 
@@ -313,7 +313,7 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 
 ## Notes
 
-- 最新已驗證 tag：`v0.12.0`；`version-control-private` 以單一 step 完成 tag 判定、changelog 同步、commit 與 tag
+- 最新已驗證 tag：`v0.13.0`；`version-control-private` v4 採 shell quick path 優先，語意不明或 git 操作失敗時回流 AI fallback
 - 同一份 `docs/agent-skills/` 供 CrewAI、Claude Code、Codex 共用
 - `schemas/workflows/` 只保留內建模板，不承載 task-scoped runtime workflow
 - `cap workflow constitution / compile / run-task` 會把 task constitution、compiled workflow、binding report 寫入 `.cap`

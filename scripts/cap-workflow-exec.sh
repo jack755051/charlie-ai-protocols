@@ -155,6 +155,50 @@ run_step() {
   esac
 }
 
+resolve_shell_script_path() {
+  local script_ref="$1"
+
+  case "${script_ref}" in
+    scripts/workflows/*.sh) ;;
+    *)
+      echo "shell step script 必須位於 scripts/workflows/*.sh：${script_ref}" >&2
+      return 1
+      ;;
+  esac
+
+  local script_path="${CAP_ROOT}/${script_ref}"
+  if [ ! -f "${script_path}" ]; then
+    echo "找不到 shell step script：${script_ref}" >&2
+    return 1
+  fi
+  if [ ! -x "${script_path}" ]; then
+    echo "shell step script 不可執行：${script_ref}" >&2
+    return 1
+  fi
+
+  printf '%s\n' "${script_path}"
+}
+
+run_shell_step() {
+  local script_ref="$1"
+  local step_id="$2"
+  local output_path="$3"
+  local artifact_index="$4"
+  local input_context="$5"
+  local contract_context="$6"
+  local user_prompt="$7"
+  local script_path
+
+  script_path="$(resolve_shell_script_path "${script_ref}")" || return 30
+  CAP_WORKFLOW_STEP_ID="${step_id}" \
+  CAP_WORKFLOW_OUTPUT_PATH="${output_path}" \
+  CAP_WORKFLOW_ARTIFACT_INDEX="${artifact_index}" \
+  CAP_WORKFLOW_INPUT_CONTEXT="${input_context}" \
+  CAP_WORKFLOW_CONTRACT_CONTEXT="${contract_context}" \
+  CAP_WORKFLOW_USER_PROMPT="${user_prompt}" \
+  bash "${script_path}" 2>&1
+}
+
 resolve_step_cli() {
   local step_cli="$1"
   if [ -n "${CLI_NAME}" ]; then
@@ -166,6 +210,31 @@ resolve_step_cli() {
     return
   fi
   printf '%s\n' "claude"
+}
+
+shell_exit_condition() {
+  local code="$1"
+  case "${code}" in
+    10) printf '%s\n' "no_changes" ;;
+    20) printf '%s\n' "ambiguous_change_type" ;;
+    21) printf '%s\n' "mixed_change_type" ;;
+    30) printf '%s\n' "policy_blocked" ;;
+    40) printf '%s\n' "git_operation_failed" ;;
+    50) printf '%s\n' "sensitive_file_risk" ;;
+    *)  printf '%s\n' "shell_exit_nonzero" ;;
+  esac
+}
+
+fallback_condition_allowed() {
+  local condition="$1"
+  local fallback_when="$2"
+
+  [ -n "${fallback_when}" ] || return 1
+  case ",${fallback_when}," in
+    *",${condition},"*) return 0 ;;
+    *",shell_exit_nonzero,"*) [ "${condition}" != "sensitive_file_risk" ] && return 0 ;;
+  esac
+  return 1
 }
 
 # ── Progress display ──
@@ -355,6 +424,11 @@ write_file_or_fail() {
 output_has_executor_fallback_marker() {
   local path="$1"
   [ -f "${path}" ] && grep -q 'Executor fallback: agent did not write the required output file' "${path}" 2>/dev/null
+}
+
+output_has_failure_result_marker() {
+  local path="$1"
+  [ -f "${path}" ] && grep -qiE '(^|[[:space:]-])result:[[:space:]]*`?(blocked|blocked_by_|failed|failure|error)|(^|[[:space:]-])(commit_result|tag_result|push_result):[[:space:]]*`?(failed|not_created|not_attempted)' "${path}" 2>/dev/null
 }
 
 append_workflow_log() {
@@ -611,12 +685,12 @@ write_file_or_fail "${RUNTIME_STATE_JSON}" '{"artifacts": {}, "steps": {}}' || e
 echo "  Output dir: ${WORKFLOW_OUTPUT_DIR}"
 
 # Flatten phases into step lines:
-# phase_num|total|step_ids|agents|step_id|capability|agent_alias|prompt_file|step_cli|inputs|optional|resolution_status|timeout_seconds|stall_seconds|stall_action|input_mode|output_tier|continue_reason
+# phase_num|total|step_ids|agents|step_id|capability|agent_alias|prompt_file|step_cli|inputs|optional|resolution_status|timeout_seconds|stall_seconds|stall_action|input_mode|output_tier|continue_reason|executor|script|fallback_executor|fallback_when
 STEP_LINES="$("${PYTHON_BIN}" "${STEP_PY}" flatten-steps "${PLAN_JSON}")"
 
 PREV_PHASE=""
 
-while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id capability agent_alias prompt_file step_cli inputs optional resolution_status timeout_seconds stall_seconds stall_action input_mode output_tier continue_reason <&3; do
+while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id capability agent_alias prompt_file step_cli inputs optional resolution_status timeout_seconds stall_seconds stall_action input_mode output_tier continue_reason executor script_ref fallback_executor fallback_when <&3; do
 
   # Show phase header once per phase
   if [ "${phase_num}" != "${PREV_PHASE}" ]; then
@@ -648,7 +722,15 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     continue
   fi
 
-  if [ -z "${agent_alias}" ] || [ -z "${prompt_file}" ]; then
+  effective_executor="${executor:-ai}"
+  if [ "${effective_executor}" != "ai" ] && [ "${effective_executor}" != "shell" ]; then
+    echo "  ${RED}│ step ${step_id} executor 不支援：${effective_executor}${RESET}"
+    FAILED=$((FAILED + 1))
+    register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "unsupported_executor" "" "" ""
+    break
+  fi
+
+  if { [ "${effective_executor}" = "ai" ] || [ "${fallback_executor}" = "ai" ]; } && { [ -z "${agent_alias}" ] || [ -z "${prompt_file}" ]; }; then
     echo "  ${RED}│ step ${step_id} 缺少 agent_alias 或 prompt_file，無法執行${RESET}"
     FAILED=$((FAILED + 1))
     register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "unresolved_binding" "" "" ""
@@ -656,10 +738,18 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   fi
 
   effective_cli="$(resolve_step_cli "${step_cli}")"
-  check_cli "${effective_cli}" || {
+  if [ "${effective_executor}" = "ai" ] || [ "${fallback_executor}" = "ai" ]; then
+    check_cli "${effective_cli}" || {
+      FAILED=$((FAILED + 1))
+      break
+    }
+  fi
+
+  if [ "${effective_executor}" = "shell" ] && ! resolve_shell_script_path "${script_ref}" >/dev/null; then
     FAILED=$((FAILED + 1))
+    register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "invalid_shell_script" "" "" ""
     break
-  }
+  fi
 
   STEP_OUTPUT_PATH="${WORKFLOW_OUTPUT_DIR}/${phase_num}-${step_id}.md"
   STEP_HANDOFF_PATH="${WORKFLOW_OUTPUT_DIR}/${phase_num}-${step_id}.handoff.md"
@@ -727,10 +817,18 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   SECTION_TOTAL="$(section_total_for_capability "${capability}")"
   LAST_SECTION_DONE=0
 
-  printf "  ${BOLD}%s${RESET}  ${DIM}%s · %s · %s${RESET}\n" "${step_id}" "${agent_alias}" "${capability}" "${effective_cli}"
+  if [ "${effective_executor}" = "shell" ]; then
+    printf "  ${BOLD}%s${RESET}  ${DIM}%s · %s · %s${RESET}\n" "${step_id}" "shell" "${capability}" "${script_ref}"
+  else
+    printf "  ${BOLD}%s${RESET}  ${DIM}%s · %s · %s${RESET}\n" "${step_id}" "${agent_alias}" "${capability}" "${effective_cli}"
+  fi
 
   # Run step in background, show live output chunks plus watchdog state.
-  run_step "${effective_cli}" "${step_prompt}" > "${STEP_TMP}" 2>&1 &
+  if [ "${effective_executor}" = "shell" ]; then
+    run_shell_step "${script_ref}" "${step_id}" "${STEP_OUTPUT_PATH}" "${ARTIFACT_INDEX}" "${RESOLVED_INPUT_CONTEXT}" "${STEP_CONTRACT_CONTEXT}" "${USER_PROMPT}" > "${STEP_TMP}" 2>&1 &
+  else
+    run_step "${effective_cli}" "${step_prompt}" > "${STEP_TMP}" 2>&1 &
+  fi
   STEP_PID=$!
 
   SPIN='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
@@ -801,6 +899,42 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} temp_output_missing:${STEP_TMP}" "失敗"
   fi
   rm -f "${STEP_TMP}"
+
+  if [ "${effective_executor}" = "shell" ] && [ "${exit_code}" -ne 0 ] && [ -z "${STOP_REASON}" ]; then
+    SHELL_CONDITION="$(shell_exit_condition "${exit_code}")"
+    if fallback_condition_allowed "${SHELL_CONDITION}" "${fallback_when}"; then
+      FALLBACK_TMP="$(mktemp)"
+      FALLBACK_PROMPT="${step_prompt}
+
+Shell executor fallback context:
+- shell_script: ${script_ref}
+- shell_exit_code: ${exit_code}
+- shell_condition: ${SHELL_CONDITION}
+- shell_output:
+${output}
+
+Git evidence:
+$(git status --short 2>/dev/null || true)
+$(git diff --stat 2>/dev/null || true)
+
+請接手處理此 shell step 未能安全自動完成的情境。若涉及 sensitive_file_risk，必須停止並回報，不得自行加入或推送敏感檔案。"
+
+      printf "  ${YELLOW}│ shell exit %s (%s)，切換 AI fallback${RESET}\n" "${exit_code}" "${SHELL_CONDITION}"
+      START_FALLBACK="$(date '+%s')"
+      set +e
+      run_step "${effective_cli}" "${FALLBACK_PROMPT}" > "${FALLBACK_TMP}" 2>&1
+      fallback_exit_code=$?
+      set -e
+      fallback_output="$(cat "${FALLBACK_TMP}" 2>/dev/null || true)"
+      rm -f "${FALLBACK_TMP}"
+      output="${fallback_output}"
+      exit_code="${fallback_exit_code}"
+      effective_executor="ai"
+      script_ref="${script_ref} -> ai_fallback:${SHELL_CONDITION}"
+      DURATION="$(( $(date '+%s') - START_STEP ))"
+    fi
+  fi
+
   DURATION="$(( $(date '+%s') - START_STEP ))"
   SHOULD_HALT=0
   OUTPUT_SOURCE=""
@@ -827,6 +961,17 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
 
   if [ "${SHOULD_HALT}" -eq 1 ]; then
     :
+  elif output_has_failure_result_marker "${STEP_OUTPUT_PATH}"; then
+    STEP_STATUS="reported_failure"
+    FINAL_STEP_STATE="hard_fail"
+    step_status "fail" "${step_id}" "${DURATION}"
+    FAILED=$((FAILED + 1))
+    ERROR_TYPE="artifact_reported_failure"
+    ERROR_HINT="  step stdout/artifact 回報 blocked 或 failed 結果，executor 已判定為 hard_fail，避免只產文件卻被標記成功。"
+    bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} capability:${capability} cli:${effective_cli}" "失敗" >/dev/null 2>&1 || true
+    append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s error:${ERROR_TYPE}" "失敗"
+    printf "%s\n" "${ERROR_HINT}"
+    SHOULD_HALT=1
   elif [ -n "${STOP_REASON}" ]; then
     STEP_STATUS="${STOP_REASON}"
     FINAL_STEP_STATE="$(printf '%s' "${STOP_REASON}" | tr '[:upper:]' '[:lower:]')"
@@ -851,6 +996,13 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     fi
     printf "%s\n" "${ERROR_HINT}"
     SHOULD_HALT=1
+  elif [ "${executor:-ai}" = "shell" ] && [ "${exit_code}" -eq 10 ]; then
+    STEP_STATUS="no_changes"
+    FINAL_STEP_STATE="validated"
+    step_status "ok" "${step_id}" "${DURATION}"
+    COMPLETED=$((COMPLETED + 1))
+    bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} capability:${capability} executor:shell result:no_changes" "成功" >/dev/null 2>&1 || true
+    append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s output:${STEP_OUTPUT_PATH} source:${OUTPUT_SOURCE} result:no_changes" "成功"
   elif [ "${exit_code}" -eq 0 ]; then
     if [ "${OUTPUT_SOURCE}" = "empty_capture" ]; then
       STEP_STATUS="missing_output"
@@ -882,8 +1034,21 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     ERROR_HINT=""
     output_lower="$(echo "${output}" | tr '[:upper:]' '[:lower:]')"
 
+    if [ "${executor:-ai}" = "shell" ]; then
+      ERROR_TYPE="$(shell_exit_condition "${exit_code}")"
+      case "${exit_code}" in
+        20|21|40)
+          ERROR_HINT="  shell step 回報 ${ERROR_TYPE}，但 workflow 未允許此條件走 AI fallback，或 fallback 執行後仍失敗。"
+          ;;
+        30)
+          ERROR_HINT="  shell step 因 policy_blocked 停止。只有 workflow 明確允許 policy_blocked fallback 時才會交給 AI。"
+          ;;
+        50)
+          ERROR_HINT="  shell step 偵測到 sensitive_file_risk，executor 已強制 halt，不會交給 AI fallback。"
+          ;;
+      esac
     # Auth / login errors
-    if echo "${output_lower}" | grep -qE 'not logged in|not authenticated|unauthorized|authentication required|login required|sign in|no api key|invalid.*api.?key|ANTHROPIC_API_KEY|OPENAI_API_KEY'; then
+    elif echo "${output_lower}" | grep -qE 'not logged in|not authenticated|unauthorized|authentication required|login required|sign in|no api key|invalid.*api.?key|ANTHROPIC_API_KEY|OPENAI_API_KEY'; then
       ERROR_TYPE="auth"
       case "${effective_cli}" in
         claude) ERROR_HINT="  請先登入：執行 'claude' 啟動互動 session 完成認證。" ;;

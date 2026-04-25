@@ -453,6 +453,11 @@ def flatten_steps(plan_json: str) -> None:
             input_mode = str(step.get("input_mode") or "")
             output_tier = str(step.get("output_tier") or "")
             continue_reason = str(step.get("continue_reason") or "").replace("|", "/")
+            executor = str(step.get("executor") or "ai")
+            script = str(step.get("script") or "").replace("|", "/")
+            fallback = step.get("fallback") or {}
+            fallback_executor = str(fallback.get("executor") or "")
+            fallback_when = ",".join(fallback.get("when") or [])
             print("|".join([
                 str(pnum), str(total), ids_joined, agents_joined,
                 step["step_id"], step["capability"],
@@ -462,6 +467,7 @@ def flatten_steps(plan_json: str) -> None:
                 inputs, opt, resolution_status,
                 timeout_seconds, stall_seconds, stall_action,
                 input_mode, output_tier, continue_reason,
+                executor, script, fallback_executor, fallback_when,
             ]))
 
 

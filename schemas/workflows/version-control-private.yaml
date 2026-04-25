@@ -1,7 +1,7 @@
 workflow_id: version-control-private
-version: 3
+version: 4
 name: Private Project Version Control
-summary: 私人專案版本控制：單一 DevOps session 完成 scan → branch → commit → tag 判定 → CHANGELOG/README → push。
+summary: 私人專案版本控制：shell quick path 優先完成 scan → commit → push；明確發版時同步 CHANGELOG / README、建立 tag 並推送，語意不明或 git 失敗時才回流 AI。
 owner: supervisor
 triggers:
   - manual
@@ -9,9 +9,10 @@ triggers:
   - private-project
 
 artifacts:
+  commit_message: 版本控制提交訊息
   commit_result: 版本控制提交結果
   tag_result: Tag 建立與推送結果（若有）
-  changelog_update: CHANGELOG.md 更新內容（若有）
+  changelog_update: CHANGELOG.md / README.md 發版同步結果（若有）
 
 governance:
   watcher_mode: final_only
@@ -22,28 +23,40 @@ governance:
 
 steps:
   - id: version_control
-    name: Full Version Control
+    name: Hybrid Private Version Control
     capability: version_control_commit
+    executor: shell
+    script: scripts/workflows/version-control-private.sh
+    fallback:
+      executor: ai
+      when:
+        - ambiguous_change_type
+        - mixed_change_type
+        - git_operation_failed
     inputs:
       - repo_changes
+      - commit_scope
       - project_context
     outputs:
+      - commit_message
       - commit_result
       - tag_result
       - changelog_update
     done_when:
-      - 已掃描 git status / diff / log，判定變更範圍與類型
-      - 已依 git-workflow.md 決定分支策略（情境 A 直接 commit 或情境 B 開分支）
-      - 已完成 commit，訊息符合 Conventional Commits 規範
-      - 已判定是否需要 tag（feat=minor, fix=patch, docs/chore/style=通常不需要）
-      - 若需要 tag：已更新 CHANGELOG.md（Keep a Changelog 格式）與 README.md 版本引用
-      - 若需要 tag：tag 已建立，合併回 main 並推送至遠端
-      - 若不需要 tag：已說明原因，僅推送 commit
+      - 已掃描 git status / diff，判定變更範圍與類型
+      - 可安全自動化時，shell quick path 已完成 commit，訊息符合 Conventional Commits 規範
+      - 若使用者明確要求正式發版 / release / tag / CHANGELOG / README，同步 CHANGELOG.md 與 README.md、建立 tag 並推送
+      - 若沒有變更，已以 no_changes no-op 成功回報
+      - 若變更類型 ambiguous / mixed 或 git 操作失敗，已依 fallback.when 回流 AI
+      - 若偵測 sensitive_file_risk，已直接 halt，不交給 AI fallback
+      - 已依可用 upstream 推送，或明確回報未設定 upstream
     on_fail: halt
-    timeout_seconds: 300
+    timeout_seconds: 120
     notes:
-      - 所有操作在單一 agent session 中完成，不拆分多個 step
-      - 預設由 06-devops-agent 執行
+      - shell step 遵守 docs/policies/workflow-executor-exit-codes.md
+      - happy path 不啟動 AI，以降低時間與 token 成本
+      - 明確發版意圖下，mixed change type 由 shell 選擇最高影響 type（feat > fix > docs/test/chore）作為 release 判定，不回流 AI
+      - AI fallback 只處理 ambiguous_change_type、mixed_change_type、git_operation_failed
+      - policy_blocked 預設 halt；sensitive_file_risk 永遠 halt
       - 推送前須確認無敏感檔案混入
-      - "本 step 在非互動模式（claude -p）下執行，agent 無法暫停等使用者確認。請依最佳判斷直接執行，不要輸出 Pre-action Checklist 等待回覆。"
-      - "執行完所有 git 操作後，必須在 stdout 輸出完整的版本控制報告，包含：掃描結果、分支決策、commit 清單、tag 判定、推送結果。若 stdout 為空，executor 會判定為失敗。"
+      - "若進入 AI fallback，agent 必須根據 shell stdout/stderr、git status 與 diff stat 接手，不得重新擴大 scope。"

@@ -97,6 +97,9 @@ class WorkflowLoader:
                     "outputs": step.get("outputs", []),
                     "optional": step.get("optional", False),
                     "on_fail": step.get("on_fail", "halt"),
+                    "executor": step.get("executor", "ai"),
+                    "script": step.get("script"),
+                    "fallback": step.get("fallback"),
                 }
             )
 
@@ -143,6 +146,9 @@ class WorkflowLoader:
                 "notes": step.get("notes", []),
                 "optional": step.get("optional", False),
                 "on_fail": step.get("on_fail", "halt"),
+                "executor": step.get("executor", "ai"),
+                "script": step.get("script"),
+                "fallback": step.get("fallback"),
                 "parallel_with": step.get("parallel_with", []),
                 "gate": step.get("gate"),
                 "on_fail_route": step.get("on_fail_route", []),
@@ -200,6 +206,9 @@ class WorkflowLoader:
                 "notes": step.get("notes", []),
                 "optional": step.get("optional", False),
                 "on_fail": step.get("on_fail", "halt"),
+                "executor": step.get("executor", "ai"),
+                "script": step.get("script"),
+                "fallback": step.get("fallback"),
                 "parallel_with": step.get("parallel_with", []),
                 "gate": step.get("gate"),
                 "on_fail_route": step.get("on_fail_route", []),
@@ -275,6 +284,9 @@ class WorkflowLoader:
                 "needs": step.get("needs", []),
                 "done_when": step.get("done_when", []),
                 "on_fail": step.get("on_fail", "halt"),
+                "executor": step.get("executor", "ai"),
+                "script": step.get("script"),
+                "fallback": step.get("fallback"),
                 "on_fail_route": step.get("on_fail_route", []),
                 "gate": step.get("gate"),
                 "optional": step.get("optional", False),
@@ -461,6 +473,15 @@ class WorkflowLoader:
                     raise ValueError(f"{workflow_path} 的 step 缺少必要欄位: {field}")
             if step["id"] in seen_ids:
                 raise ValueError(f"{workflow_path} 出現重複的 step id: {step['id']}")
+            executor = step.get("executor", "ai")
+            if executor not in {"ai", "shell"}:
+                raise ValueError(
+                    f"{workflow_path} 的 step {step['id']} executor 不支援: {executor}"
+                )
+            if executor == "shell" and not step.get("script"):
+                raise ValueError(
+                    f"{workflow_path} 的 shell step {step['id']} 必須提供 script"
+                )
             seen_ids.add(step["id"])
 
         governance = workflow.get("governance", {})

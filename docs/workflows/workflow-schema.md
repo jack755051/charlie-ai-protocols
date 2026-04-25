@@ -77,6 +77,25 @@ workflow schema 用來描述：
 | `input_mode` | string | no | 預設下游讀取模式：`summary` 或 `full` |
 | `output_tier` | string | no | 輸出層級，例如 `planning_artifact`, `full_artifact`, `handoff_summary` |
 | `continue_reason` | string | no | 此 step 在主線中繼續執行的理由；供 runtime 治理與審計使用 |
+| `executor` | string | no | step 執行器：`ai`（預設）或 `shell` |
+| `script` | string | no | `executor: shell` 時必填；必須引用 repo 內白名單 script，例如 `scripts/workflows/*.sh` |
+| `fallback` | object | no | shell step 失敗或語意不明時的回流設定 |
+| `fallback.executor` | string | no | fallback 執行器，目前支援 `ai` |
+| `fallback.when` | string[] | no | 允許 fallback 的條件，例如 `ambiguous_change_type`, `mixed_change_type`, `git_operation_failed` |
+
+### 3.3 shell executor exit code contract
+
+`executor: shell` 的退出碼語意統一由 `docs/policies/workflow-executor-exit-codes.md` 定義。核心契約如下：
+
+| Code | Condition | Executor 行為 |
+|---:|---|---|
+| `0` | `success` | 登記 artifact，繼續下一步 |
+| `10` | `no_changes` | 視為成功 no-op |
+| `20` | `ambiguous_change_type` | 若 `fallback.when` 允許，交給 AI；否則 halt |
+| `21` | `mixed_change_type` | 若 `fallback.when` 允許，交給 AI 拆 commit 或選主要 type；否則 halt |
+| `30` | `policy_blocked` | 預設 halt；只有明確允許才 fallback |
+| `40` | `git_operation_failed` | 若 `fallback.when` 允許，交給 AI 診斷或重試；否則 halt |
+| `50` | `sensitive_file_risk` | 直接 halt，不得 fallback |
 
 ## 4. 範例
 

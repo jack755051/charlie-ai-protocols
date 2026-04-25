@@ -6,6 +6,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.13.0] - 2026-04-25
+
+### Added
+
+- 新增 `executor: shell` workflow step metadata、script 白名單與 AI fallback 設定，支援 hybrid executor 流程
+- 新增 `docs/policies/workflow-executor-exit-codes.md`，定義 shell executor 與 workflow runtime 的退出碼契約
+- 新增 `scripts/workflows/version-control-private.sh` 與 `schemas/workflows/test/version-control-test.yaml`，作為私人版控 quick path 與 hybrid executor fixture
+
+### Changed
+
+- `version-control-private` 升級為 v4，改為 shell quick path 優先，僅在語意不明、混合變更或 git 操作失敗時回流 DevOps AI
+- `WorkflowLoader`、`RuntimeBinder`、`step_runtime` 與 `cap-workflow-exec.sh` 同步保留並執行 shell executor / fallback metadata
+- workflow 文件與核心協議補齊 shell executor 治理、fallback 與 sensitive risk halt 規則
+
 ## [v0.12.0] - 2026-04-24
 
 ### Added

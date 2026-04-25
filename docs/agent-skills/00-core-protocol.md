@@ -60,3 +60,4 @@
 - **Watcher (90)** 預設採 `milestone_gate`：於規格定版、實作完成、品質門禁與交付前等里程碑執行一致性稽核。
 - **Logger (99)** 預設採 `milestone_log`：記錄 phase 切換、異常路由、gate 決策與結案摘要，維持可追溯的執行鏈。
 - 若 workflow 明確標示 `always_on`，Watcher / Logger 必須視為常駐監管軌；若標示 `final_only`，則至少在結案前執行一次最終治理檢查或歸檔。
+- 使用非 AI executor（例如 shell）執行 workflow step 時，必須遵守可審計、可回流的執行契約；具體退出碼、fallback 與 sensitive risk halt 規則以 `docs/policies/workflow-executor-exit-codes.md` 為準。
