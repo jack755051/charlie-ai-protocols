@@ -96,6 +96,7 @@ binding_policy:
     binding_mode: fallback_allowed
     missing_policy: manual
   allowed_capabilities:
+    - project_constitution
     - prd_generation
     - workflow_orchestration
     - technical_planning

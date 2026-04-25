@@ -45,6 +45,22 @@ capabilities:
     done_when:
       - 所有 step 已依 workflow 定義執行或正確路由
 
+  project_constitution:
+    description: 從使用者想法、偏好與專案上下文產生 Project Constitution，作為後續 repo 建立與 task workflow compile 的治理基礎
+    default_agent: supervisor
+    allowed_agents: [supervisor, techlead]
+    inputs:
+      - user_requirement
+      - project_context
+    outputs:
+      - project_constitution
+      - project_constitution_json
+      - execution_policy
+    done_when:
+      - 已整理專案目標、限制、使用者規範與風險邊界
+      - 已定義 executor_policy、allowed_agents、artifact policy 與後續 workflow 建議
+      - 已輸出可保存的 Markdown 與 JSON constitution
+
   # ── 分析與設計 ──
 
   technical_planning:

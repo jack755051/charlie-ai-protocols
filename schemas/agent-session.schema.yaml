@@ -1,0 +1,106 @@
+schema_version: 1
+title: CAP Agent Session Schema
+description: 一次性 agent worker session 的 runtime state contract，供 Claude / Codex / 其他 provider adapter 共用。
+
+required:
+  - session_id
+  - run_id
+  - role
+  - capability
+  - provider
+  - executor
+  - lifecycle
+  - inputs
+  - outputs
+
+properties:
+  session_id:
+    type: string
+    description: workflow run 內唯一 session id，例如 run_xxx.frontend
+  run_id:
+    type: string
+    description: 所屬 workflow run id
+  parent_session_id:
+    type: string
+    nullable: true
+    description: 若由另一 session 派生，記錄 parent id
+  role:
+    type: string
+    description: agent alias，例如 supervisor、frontend、backend
+  capability:
+    type: string
+    description: 對應 schemas/capabilities.yaml 的 capability
+  provider:
+    type: string
+    enum:
+      - codex
+      - claude
+      - crewai
+      - langgraph
+      - shell
+      - builtin
+  executor:
+    type: string
+    enum:
+      - ai
+      - shell
+      - graph
+  prompt_file:
+    type: string
+    nullable: true
+    description: 使用的 agent prompt file
+  lifecycle:
+    type: string
+    enum:
+      - planned
+      - running
+      - completed
+      - failed
+      - cancelled
+      - recycled
+  inputs:
+    type: array
+    items:
+      type: object
+      properties:
+        artifact:
+          type: string
+        path:
+          type: string
+        mode:
+          type: string
+          enum: [summary, full, metadata]
+  outputs:
+    type: array
+    items:
+      type: object
+      properties:
+        artifact:
+          type: string
+        path:
+          type: string
+        promoted:
+          type: boolean
+  scratch_paths:
+    type: array
+    items:
+      type: string
+    description: 可回收的暫存路徑
+  result:
+    type: string
+    enum:
+      - success
+      - blocked
+      - failed
+      - partial
+      - cancelled
+      - pending
+  recycle_policy:
+    type: object
+    properties:
+      keep_raw_logs:
+        type: boolean
+      keep_prompts:
+        type: boolean
+      delete_scratch_on_success:
+        type: boolean

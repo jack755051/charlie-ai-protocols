@@ -313,7 +313,7 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 
 ## Notes
 
-- 最新已驗證 tag：`v0.13.2`；`version-control-private` v4 採 shell quick path 優先，語意不明或 git 操作失敗時回流 AI fallback
+- 最新已驗證 tag：`v0.14.0`；`version-control-private` v4 採 shell quick path 優先，語意不明或 git 操作失敗時回流 AI fallback
 - 同一份 `docs/agent-skills/` 供 CrewAI、Claude Code、Codex 共用
 - `schemas/workflows/` 只保留內建模板，不承載 task-scoped runtime workflow
 - `cap workflow constitution / compile / run-task` 會把 task constitution、compiled workflow、binding report 寫入 `.cap`

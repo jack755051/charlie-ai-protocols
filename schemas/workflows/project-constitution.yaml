@@ -1,0 +1,49 @@
+workflow_id: project-constitution
+version: 1
+name: Project Constitution Generation
+summary: 從使用者想法與偏好產生 Project Constitution，作為後續 repo 建立與 task workflow compile 的治理基礎。
+owner: supervisor
+triggers:
+  - manual
+  - new-project
+  - constitution
+
+artifacts:
+  project_constitution: Project Constitution Markdown
+  project_constitution_json: Project Constitution JSON
+  execution_policy: Executor selection and lifecycle policy
+
+governance:
+  watcher_mode: final_only
+  logger_mode: final_only
+  watcher_checkpoints: [draft_constitution]
+  logger_checkpoints: [draft_constitution]
+  halt_on_missing_handoff: false
+  context_mode: summary_first
+
+steps:
+  - id: draft_constitution
+    name: Draft Project Constitution
+    capability: project_constitution
+    executor: ai
+    inputs:
+      - user_requirement
+      - project_context
+    outputs:
+      - project_constitution
+      - project_constitution_json
+      - execution_policy
+    done_when:
+      - 已整理使用者想法、專案目標、限制與偏好
+      - 已定義 executor_policy，遵守 deterministic-first、AI-on-ambiguity、halt-on-risk
+      - 已列出 allowed_agents、建議 workflows 與 artifact 保存策略
+      - 已明確標示哪些後續工作需要 compile 成一次性 task workflow
+      - 已輸出 Markdown 與 JSON 兩種 constitution 形態
+    on_fail: halt
+    timeout_seconds: 180
+    input_mode: summary
+    output_tier: planning_artifact
+    notes:
+      - 本 workflow 只產生 constitution，不直接建立 repo 或啟動開發 agent sessions
+      - 後續 repo 建立應由 constitution 編譯出的 task workflow 執行
+      - sub agent 應視為 CAP agent session，不綁死 Claude 或 Codex 專屬能力

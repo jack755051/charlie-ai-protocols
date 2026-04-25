@@ -91,6 +91,13 @@ workflow 不負責決定最終 agent，只負責宣告：
   - `devops_delivery`
   - `technical_logging`（可選）
 
+#### `project-constitution.yaml`
+
+- 用途：從一個產品想法或新 repo 方向產生 Project Constitution
+- 設計理由：constitution 是後續 task workflow compile、agent session 啟動與 artifact 保存策略的治理基礎；此 workflow 只產生規範，不直接開發 repo
+- 主要步驟：
+  - `project_constitution` — 產出 Project Constitution Markdown / JSON 與 executor policy
+
 #### `version-control-private.yaml`
 
 - 用途：私人專案版本控制治理流程（hybrid executor）

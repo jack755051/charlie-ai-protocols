@@ -19,6 +19,7 @@ skills:
     provided_capabilities:
       - prd_generation
       - workflow_orchestration
+      - project_constitution
     fallback_roles:
       - supervisor
 
