@@ -3,6 +3,7 @@ version: 2
 name: Version Control Hybrid Executor Fixture
 summary: 測試用 workflow fixture：驗證 shell executor、exit code contract 與 AI fallback metadata 是否可被 runtime 載入。
 owner: supervisor
+# status: test_fixture 為本 fixture 引入；cap runtime 對此值的處理 TBD
 status: test_fixture
 triggers:
   - test
@@ -49,3 +50,4 @@ steps:
     notes:
       - 本檔保留於 schemas/workflows/test/，作為 hybrid executor contract 的回歸測試 fixture
       - 不列為現役 workflow；正式私人專案入口是 schemas/workflows/version-control-private.yaml
+      - "fallback.when 三項觸發詞與 exit code 20/21/40 的對應映射 TBD（候選方案見 memory/cap-hybrid-executor-contract.md 待定義段）"

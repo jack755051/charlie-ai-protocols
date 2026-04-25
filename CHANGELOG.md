@@ -6,6 +6,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+
+## [v0.13.2] - 2026-04-25
+
+### Changed
+- update schemas workflow assets
 ## [v0.13.0] - 2026-04-25
 
 ### Added
