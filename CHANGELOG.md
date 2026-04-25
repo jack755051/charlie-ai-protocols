@@ -18,11 +18,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 - 更新 DevOps agent 版本控制規範，要求 release fallback 先掃描 `git status`、`git diff --stat` 與 `git diff`，再同步 `CHANGELOG.md` / `README.md`、建立 annotated tag 並依 upstream 推送
 - 調整私人版控 shell executor：偵測到明確 release / tag / CHANGELOG / README 意圖時只回報掃描證據與建議 tag，交由 AI fallback 完成發版語意判讀
 
-
-## [v0.14.0] - 2026-04-25
-
-### Added
-- update workflow workflow assets
 ## [v0.13.2] - 2026-04-25
 
 ### Changed
