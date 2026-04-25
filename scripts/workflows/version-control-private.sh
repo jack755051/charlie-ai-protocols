@@ -67,6 +67,25 @@ is_release_requested() {
   printf '%s' "${user_prompt}" | grep -qiE 'release|tag|changelog|readme|發版|版本|正式'
 }
 
+explicit_release_tag() {
+  printf '%s' "${user_prompt}" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | tail -n 1
+}
+
+request_ai_release_review() {
+  local paths="$1"
+  local types="$2"
+  local next_tag="$3"
+
+  printf 'condition: ambiguous_change_type\n'
+  printf 'reason: release_requires_ai_semantic_review\n'
+  printf 'requested_release: true\n'
+  printf 'suggested_next_tag: %s\n' "${next_tag}"
+  printf 'detected_types:\n%s\n' "${types}"
+  printf 'changed_paths:\n%s\n' "${paths}"
+  printf '\nAI fallback required: inspect git diff, choose an accurate Conventional Commit message, update CHANGELOG.md / README.md if appropriate, create the release tag, and push according to project policy.\n'
+  exit 20
+}
+
 highest_impact_type() {
   local types="$1"
   if printf '%s\n' "${types}" | grep -qx 'feat'; then
@@ -219,9 +238,11 @@ tag_result="not_requested"
 next_tag=""
 
 if is_release_requested; then
-  next_tag="$(next_version_for_type "${commit_type}")"
-  update_release_docs "${next_tag}" "${commit_type}" "${subject}"
-  tag_result="pending"
+  next_tag="$(explicit_release_tag)"
+  if [ -z "${next_tag}" ]; then
+    next_tag="$(next_version_for_type "${commit_type}")"
+  fi
+  request_ai_release_review "${paths}" "${types}" "${next_tag}"
 fi
 
 printf 'commit_message: %s\n\n' "${commit_message}"

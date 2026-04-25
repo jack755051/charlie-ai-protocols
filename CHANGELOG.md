@@ -7,6 +7,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 ---
 
 
+## [v0.13.3] - 2026-04-25
+
+### Added
+
+- `version-control-private` 明確發版時改由 DevOps AI fallback 進行 diff 語意審查，避免 shell 自動產生機械式 commit message 與 release notes
+
+### Changed
+
+- 更新 DevOps agent 版本控制規範，要求 release fallback 先掃描 `git status`、`git diff --stat` 與 `git diff`，再同步 `CHANGELOG.md` / `README.md`、建立 annotated tag 並依 upstream 推送
+- 調整私人版控 shell executor：偵測到明確 release / tag / CHANGELOG / README 意圖時只回報掃描證據與建議 tag，交由 AI fallback 完成發版語意判讀
+
 
 ## [v0.14.0] - 2026-04-25
 

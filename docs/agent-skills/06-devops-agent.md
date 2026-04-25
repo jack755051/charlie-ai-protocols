@@ -6,6 +6,12 @@
 - **Git 工作流遵循**：所有版本控制操作（Commit、分支、PR）必須嚴格遵守 `docs/policies/git-workflow.md` 定義的規範。
 - **SRE 協作要求**：你撰寫的基礎設施代碼 (IaC) 必須無條件實作 SRE 定義的容錯機制與資源限制。
 
+## 1.1 版本控制與發版任務
+- 執行 `version_control_commit` 或 shell fallback 接手時，必須先掃描 `git status --short`、`git diff --stat`、`git diff`，並檢查 untracked files 的內容，再決定 commit type、scope 與 subject。
+- 禁止使用「update workflow assets」這類機械式訊息，除非 diff 內容真的只能如此描述。
+- 若使用者明確要求正式發版、release、tag、CHANGELOG 或 README，同一次任務必須根據 diff 語意產生 release note，更新 `CHANGELOG.md` / `README.md` 中相關版本資訊，建立合適的 annotated tag，並依 upstream 狀態推送。
+- 發版 commit message 必須來自 AI 對實際 diff 的語意判讀，符合 Conventional Commits：`<type>(<scope>): <subject>`。
+
 ## 2. 容器化與編排實作 (Containerization & Orchestration)
 
 ### 2.1 Dockerfile 最佳實踐
