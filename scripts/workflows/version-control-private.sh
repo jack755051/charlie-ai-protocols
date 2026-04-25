@@ -153,7 +153,7 @@ update_release_docs() {
 
   if [ -f README.md ]; then
     tmp="$(mktemp)"
-    sed -E "s/最新已驗證 tag：`v[0-9]+\\.[0-9]+\\.[0-9]+`/最新已驗證 tag：`${next_tag}`/g" README.md > "${tmp}" && mv "${tmp}" README.md
+    sed -E 's/最新已驗證 tag：`v[0-9]+\.[0-9]+\.[0-9]+`/最新已驗證 tag：`'"${next_tag}"'`/g' README.md > "${tmp}" && mv "${tmp}" README.md
   fi
 }
 
