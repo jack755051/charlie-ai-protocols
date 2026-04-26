@@ -52,6 +52,7 @@ capabilities:
     inputs:
       - user_requirement
       - project_context
+      - platform_defaults
     outputs:
       - project_constitution
       - project_constitution_json
@@ -60,6 +61,46 @@ capabilities:
       - 已整理專案目標、限制、使用者規範與風險邊界
       - 已定義 executor_policy、allowed_agents、artifact policy 與後續 workflow 建議
       - 已輸出可保存的 Markdown 與 JSON constitution
+
+  bootstrap_platform_defaults:
+    description: 從 capabilities.yaml、project-constitution schema 與 repo 結構推導 Project Constitution bootstrap 所需的平台預設值（必填欄位、allowed_capabilities、source_of_truth、runtime_workspace），供 draft step 在 repo 尚無 .cap.constitution.yaml 時消化
+    default_agent: shell
+    allowed_agents: [shell]
+    inputs:
+      - project_context
+    outputs:
+      - platform_defaults
+    done_when:
+      - 已輸出 schema 必填欄位清單
+      - 已輸出 allowed_capabilities 全名單
+      - 已輸出 runtime_workspace 預設 stores 與 root 模板
+
+  constitution_validation:
+    description: 用 jsonschema 對照 schemas/project-constitution.schema.yaml 驗證 draft constitution JSON；schema fail 時 halt（不允許 AI fallback）
+    default_agent: shell
+    allowed_agents: [shell]
+    inputs:
+      - project_constitution
+      - project_constitution_json
+    outputs:
+      - constitution_validation_report
+    done_when:
+      - 已從 draft artifact 抓取 constitution JSON 區段
+      - 驗證通過時輸出 validation_report；失敗時 halt 並列出 schema 錯誤
+
+  constitution_persistence:
+    description: 把驗證通過的 Project Constitution JSON 寫成 repo 級 .cap.constitution.yaml 與 ~/.cap/projects/&lt;id&gt;/constitutions/ 快照，完成 bootstrap 收尾
+    default_agent: shell
+    allowed_agents: [shell]
+    inputs:
+      - project_constitution_json
+      - constitution_validation_report
+    outputs:
+      - constitution_persisted_paths
+    done_when:
+      - 已寫入 repo 級 .cap.constitution.yaml
+      - 已寫入 runtime workspace 的 timestamped JSON 快照
+      - 已輸出寫入路徑供下游 compile 使用
 
   # ── 分析與設計 ──
 

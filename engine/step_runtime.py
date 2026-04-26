@@ -723,6 +723,116 @@ def registry_get(registry_file: str, alias: str) -> None:
 
 
 # ─────────────────────────────────────────────────────────
+# 13. validate-constitution
+# ─────────────────────────────────────────────────────────
+
+def validate_constitution(constitution_path: str, schema_path: str) -> None:
+    """Validate a Project Constitution JSON against the project-constitution schema.
+
+    Output: JSON ``{"ok": bool, "errors": [...]}`` to stdout.
+    Exit 0 on pass, exit 1 on fail (including missing files).
+
+    Schema YAML is a JSON-Schema-style document (required + properties + type +
+    enum). When jsonschema 4.x is installed we delegate to it; otherwise we fall
+    back to a minimal required-field + type checker so the workflow does not
+    break in degraded environments.
+    """
+    try:
+        import yaml  # type: ignore[import]
+    except ImportError:
+        print(
+            json.dumps(
+                {"ok": False, "errors": ["pyyaml is required for validate-constitution"]},
+                ensure_ascii=False,
+            )
+        )
+        sys.exit(1)
+
+    cpath = Path(constitution_path)
+    spath = Path(schema_path)
+    if not cpath.is_file():
+        print(
+            json.dumps(
+                {"ok": False, "errors": [f"constitution file not found: {cpath}"]},
+                ensure_ascii=False,
+            )
+        )
+        sys.exit(1)
+    if not spath.is_file():
+        print(
+            json.dumps(
+                {"ok": False, "errors": [f"schema file not found: {spath}"]},
+                ensure_ascii=False,
+            )
+        )
+        sys.exit(1)
+
+    try:
+        with cpath.open("r", encoding="utf-8") as fh:
+            constitution = json.load(fh)
+    except Exception as exc:
+        print(
+            json.dumps(
+                {"ok": False, "errors": [f"constitution JSON parse error: {exc}"]},
+                ensure_ascii=False,
+            )
+        )
+        sys.exit(1)
+
+    try:
+        with spath.open("r", encoding="utf-8") as fh:
+            schema = yaml.safe_load(fh) or {}
+    except Exception as exc:
+        print(
+            json.dumps(
+                {"ok": False, "errors": [f"schema YAML parse error: {exc}"]},
+                ensure_ascii=False,
+            )
+        )
+        sys.exit(1)
+
+    errors: list[str] = []
+    try:
+        from jsonschema import Draft202012Validator  # type: ignore[import]
+
+        validator = Draft202012Validator(schema)
+        for err in sorted(validator.iter_errors(constitution), key=lambda e: list(e.absolute_path)):
+            loc = "/".join(str(p) for p in err.absolute_path) or "<root>"
+            errors.append(f"{loc}: {err.message}")
+    except ImportError:
+        required = schema.get("required") or []
+        for key in required:
+            if key not in constitution:
+                errors.append(f"<root>: missing required field '{key}'")
+        properties = schema.get("properties") or {}
+        type_map = {
+            "string": str,
+            "integer": int,
+            "number": (int, float),
+            "boolean": bool,
+            "array": list,
+            "object": dict,
+        }
+        for key, spec in properties.items():
+            if key not in constitution or not isinstance(spec, dict):
+                continue
+            expected = spec.get("type")
+            py_type = type_map.get(expected) if isinstance(expected, str) else None
+            if py_type is not None and not isinstance(constitution[key], py_type):
+                errors.append(
+                    f"{key}: expected type '{expected}', got '{type(constitution[key]).__name__}'"
+                )
+            enum = spec.get("enum")
+            if isinstance(enum, list) and constitution[key] not in enum:
+                errors.append(f"{key}: value '{constitution[key]}' not in enum {enum}")
+
+    ok = not errors
+    print(json.dumps({"ok": ok, "errors": errors}, ensure_ascii=False))
+    if not ok:
+        sys.exit(1)
+
+
+# ─────────────────────────────────────────────────────────
 # CLI entry point
 # ─────────────────────────────────────────────────────────
 
@@ -818,6 +928,14 @@ def _build_parser() -> argparse.ArgumentParser:
     p_rg.add_argument("registry_file")
     p_rg.add_argument("alias")
 
+    # 13. validate-constitution
+    p_vc = sub.add_parser(
+        "validate-constitution",
+        help="用 jsonschema 對照 project-constitution schema 驗證 constitution JSON",
+    )
+    p_vc.add_argument("constitution_path")
+    p_vc.add_argument("schema_path")
+
     return parser
 
 
@@ -893,6 +1011,8 @@ def main(argv: list[str] | None = None) -> None:
             registry_list(args.registry_file)
         case "registry-get":
             registry_get(args.registry_file, args.alias)
+        case "validate-constitution":
+            validate_constitution(args.constitution_path, args.schema_path)
 
 
 if __name__ == "__main__":

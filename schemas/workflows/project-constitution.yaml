@@ -1,54 +1,141 @@
 workflow_id: project-constitution
-version: 1
+version: 3
 name: Project Constitution Generation
-summary: 從使用者想法與偏好產生 Project Constitution，作為後續 repo 建立與 task workflow compile 的治理基礎。
+summary: 從使用者描述的 prompt 與 repo 結構推導出可保存、可被下游讀回的 Project Constitution。流程為 bootstrap(shell) → draft(AI) → validate(shell) → persist(shell)，最終寫入 .cap.constitution.yaml 與 ~/.cap/projects/<id>/constitutions/ 快照。
 owner: supervisor
 triggers:
   - manual
   - new-project
-  - constitution
+  - project-constitution
 
 artifacts:
+  platform_defaults: Deterministic platform defaults (required schema fields, allowed_capabilities, source_of_truth, runtime_workspace) emitted by bootstrap step
   project_constitution: Project Constitution Markdown
   project_constitution_json: Project Constitution JSON
   execution_policy: Executor selection and lifecycle policy
+  constitution_validation_report: Schema validation result for the drafted constitution
+  constitution_persisted_paths: Resolved repo target and snapshot paths after persistence
 
 governance:
   watcher_mode: final_only
-  logger_mode: final_only
+  logger_mode: milestone_log
   watcher_checkpoints: [draft_constitution]
-  logger_checkpoints: [draft_constitution]
+  logger_checkpoints: [bootstrap_constitution_defaults, draft_constitution, validate_constitution, persist_constitution]
   halt_on_missing_handoff: false
   context_mode: summary_first
   goal_stage: informal_planning
 
 steps:
+  - id: bootstrap_constitution_defaults
+    name: Emit Platform Defaults for Constitution Bootstrap
+    capability: bootstrap_platform_defaults
+    executor: shell
+    script: scripts/workflows/bootstrap-constitution-defaults.sh
+    inputs:
+      - project_context
+    outputs:
+      - platform_defaults
+    done_when:
+      - 已從 schemas/project-constitution.schema.yaml 抽出 required 欄位清單
+      - 已從 schemas/capabilities.yaml 抽出完整 allowed_capabilities
+      - 已附上 source_of_truth / runtime_workspace / binding_policy / workflow_policy 預設模板
+    on_fail: halt
+    fallback:
+      when: []
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+    notes:
+      - 本 step 是 bootstrap 流程的「平台預設值產生器」，給下游 AI 抄寫，不要求使用者手填治理欄位。
+      - 純 deterministic；不讀使用者 prompt，避免 prompt 內容污染預設值。
+      - exit code 契約見 docs/policies/workflow-executor-exit-codes.md；本 step 只會 exit 0（pass）或 exit 40（schema/capabilities 檔案缺失）。
+
   - id: draft_constitution
     name: Draft Project Constitution
     capability: project_constitution
     executor: ai
+    needs:
+      - bootstrap_constitution_defaults
     inputs:
       - user_requirement
       - project_context
+      - platform_defaults
     outputs:
       - project_constitution
       - project_constitution_json
       - execution_policy
     done_when:
       - 已整理使用者想法、專案目標、限制與偏好
-      - 已依據 schemas/project-constitution.schema.yaml 的必要欄位輸出 Project Constitution JSON
-      - 已定義 executor_policy，遵守 deterministic-first、AI-on-ambiguity、halt-on-risk
-      - 已列出 allowed_agents、建議 workflows 與 artifact 保存策略
-      - 已明確標示哪些後續工作需要 compile 成一次性 task workflow
+      - 已依據 platform_defaults 中列出的 required 欄位輸出 Project Constitution JSON（嚴禁省略 schema_version / constitution_id / project_id / name / summary / source_of_truth / runtime_workspace / binding_policy / workflow_policy）
+      - 已將 platform_defaults 中的 source_of_truth / runtime_workspace / binding_policy / workflow_policy / executor_policy 區塊原樣轉成 JSON 嵌入 constitution，不得擅自修改 stores 列表或 allowed_capabilities
+      - 已依使用者 prompt 推導 name / summary / project_goal / constitution_id / project_id（kebab-case）
+      - 已列出 allowed_agents、stop_conditions 與 artifact 保存策略
       - 已輸出 Markdown 與 JSON 兩種 constitution 形態
+      - "JSON 必須包覆於 <<<CONSTITUTION_JSON_BEGIN>>> 與 <<<CONSTITUTION_JSON_END>>> 之間（**唯一合法格式**）；artifact 內若另外存在 ```json 標記的 fenced code block 僅供示例用途，validator 在偵測到多個 ```json 區塊時會 halt"
     on_fail: halt
+    fallback:
+      when: []
     timeout_seconds: 180
-    input_mode: summary
+    input_mode: full
     output_tier: planning_artifact
     notes:
       - 本 workflow 只產生 constitution，不直接建立 repo 或啟動開發 agent sessions
-      - Project Constitution JSON 應對齊 schemas/project-constitution.schema.yaml；schema validator 落地前由 Supervisor 在交接摘要中自檢必要欄位
+      - "Project Constitution JSON 必須對齊 schemas/project-constitution.schema.yaml；下游 validate_constitution step 會用 jsonschema 自動驗證，schema fail 將導致整條 workflow halt（無 AI fallback）"
       - 後續 repo 建立應由 constitution 編譯出的 task workflow 執行
       - sub agent 應視為 CAP agent session，不綁死 Claude 或 Codex 專屬能力
+      - "input_mode 採用 full 是因為 AI 必須讀完 platform_defaults 全文才能正確抄寫治理欄位；platform_defaults 體積極小，不會違反 workflow-constitution §4.3。"
       - "命名澄清：本 workflow 是「產出 Project Constitution 文件」的具體流程；docs/policies/workflow-constitution.md 是 runtime 編排層的元憲法（規範所有 workflow 應遵守的 phase 上限、summary-first handoff、artifact tiering 等）。兩者不同層級——本 workflow 自己也必須遵守 workflow-constitution.md 的所有立法規則。詳細層級對照見 docs/workflows/project-constitution-memo.md §術語對照。"
       - "對齊 workflow-constitution §10：goal_stage=informal_planning 表示這是規劃階段（建 constitution），runtime 不得從此 workflow 自動展開 BA / DBA / UI / QA 等實作 step。"
+
+  - id: validate_constitution
+    name: Validate Constitution Against Schema
+    capability: constitution_validation
+    executor: shell
+    script: scripts/workflows/validate-constitution.sh
+    needs:
+      - draft_constitution
+    inputs:
+      - project_constitution
+      - project_constitution_json
+    outputs:
+      - constitution_validation_report
+    done_when:
+      - 已從 draft_constitution artifact 抓取 constitution JSON 區段
+      - 已用 jsonschema 對照 schemas/project-constitution.schema.yaml 完成驗證
+      - 驗證通過時輸出 constitution_validation_report；失敗時 halt 並列出 schema 錯誤
+    on_fail: halt
+    fallback:
+      when: []
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+    notes:
+      - 此 step 顯式以 fallback.when=[] 鎖死所有 AI fallback。schema 失敗代表 draft 階段的 supervisor prompt 或 AI 輸出有缺漏，必須由使用者重跑 workflow 修正，不該由其他 AI 自動補齊。
+      - exit code 契約見 docs/policies/workflow-executor-exit-codes.md；本 step 只會 exit 0（pass）或 exit 40（schema fail / 抓不到 JSON 區段 / fence 多重）。
+      - "TODO：當 docs/policies/workflow-executor-exit-codes.md 新增 60: schema_validation_failed 時，本 step 應改用 60 而非借用 40，以區隔語意。"
+
+  - id: persist_constitution
+    name: Persist Validated Constitution to Repo SSOT and Runtime Snapshot
+    capability: constitution_persistence
+    executor: shell
+    script: scripts/workflows/persist-constitution.sh
+    needs:
+      - validate_constitution
+    inputs:
+      - project_constitution_json
+      - constitution_validation_report
+    outputs:
+      - constitution_persisted_paths
+    done_when:
+      - 已寫入 repo 級 .cap.constitution.yaml（若已存在則 skip，除非 CAP_CONSTITUTION_OVERWRITE=1）
+      - 已寫入 ~/.cap/projects/<project_id>/constitutions/<timestamp>.json 快照
+      - 已輸出兩個寫入路徑與 project_id 供下游 compile / status 命令讀回
+    on_fail: halt
+    fallback:
+      when: []
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+    notes:
+      - 此 step 完成 bootstrap 收尾。若 repo 已有 .cap.constitution.yaml，預設不覆寫（避免平台自身 constitution 被誤改）；若使用者明確要重置，需設定 CAP_CONSTITUTION_OVERWRITE=1。
+      - exit 40 條件：缺少 draft artifact、JSON parse 失敗、寫入失敗、上游 validation_report 含失敗標記。

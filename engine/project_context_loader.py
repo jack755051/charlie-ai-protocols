@@ -22,6 +22,7 @@ class ProjectContextLoader:
         constitution_path = Path(constitution_ref)
         if not constitution_path.is_absolute():
             constitution_path = self.base_dir / constitution_path
+        constitution_exists = constitution_path.exists()
         constitution = self._load_yaml(constitution_path)
 
         return {
@@ -36,6 +37,7 @@ class ProjectContextLoader:
             "agent_registry_path": str(self._resolve_optional_path(project_config.get("agent_registry"))),
             "project_config": project_config,
             "project_constitution": constitution,
+            "_bootstrap": not constitution_exists,
         }
 
     def build_runtime_summary(self) -> dict:
@@ -59,6 +61,7 @@ class ProjectContextLoader:
             "generation_pipeline": ((constitution.get("generation_pipeline") or {}).get("order", [])),
             "binding_policy": constitution.get("binding_policy", {}),
             "workflow_policy": constitution.get("workflow_policy", {}),
+            "_bootstrap": context["_bootstrap"],
         }
 
     def _resolve_optional_path(self, raw_path: str | None) -> str | None:
