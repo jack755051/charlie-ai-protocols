@@ -279,16 +279,21 @@ Workflow 與 Agent Skills 是並存的兩種使用方式：
 
 - `workflow-smoke-test.yaml`：workflow CLI 與 capability binding 的煙霧測試
 - `readme-to-devops.yaml`：README 治理到 DevOps 基線
-- `version-control-private.yaml`：私人專案版本控制治理流程
-- `version-control-quick.yaml`：私人專案快速版控流程
-- `version-control-company.yaml`：公司專案最小版本控制流程
+- `version-control-private.yaml`：私人專案版本控制治理流程（三段 pipeline + lint 守門）
+- `version-control-quick.yaml`：私人專案快速版控流程（commit-only，不發版）
+- `version-control-company.yaml`：公司專案版本控制流程（pipeline + 嚴格 governance）
 
-其中版本控制 family 現在分成兩條：
+版本控制 family 統一採三段 pipeline：
 
-- `version-control-quick.yaml`
-  - commit / push 為主，不做 tag、CHANGELOG、README release 同步
-- `version-control-private.yaml`
-  - 私人專案治理版，採 shell quick path + AI fallback；明確 release / tag / CHANGELOG / README 意圖會回流 AI 完成語意審查、release notes 與文件同步
+- `vc_scan` (shell, `scripts/workflows/vc-scan.sh`)：scan + 守門 + 輸出結構化 evidence pack
+- `vc_compose` (AI, devops agent)：純語意工作；根據 evidence 產出 commit envelope JSON
+- `vc_apply` (shell, `scripts/workflows/vc-apply.sh`)：lint envelope（subject 必含 path token、禁止抽象主動詞、annotation/changelog 條目過 lint），通過後執行 git ops
+
+差異：
+
+- `version-control-quick`：`vc_compose` 強制 `release.perform_release=false`；不做 tag / CHANGELOG / README 同步
+- `version-control-private`：依 `release_intent` 自然走 release 或 commit-only；發版時 amend CHANGELOG / README 並建立 annotated tag
+- `version-control-company`：governance 嚴格（watcher milestone_gate + halt_on_missing_handoff）；compose 對重大變更要求 body 敘述影響範圍
 
 `cap workflow run --mode auto version-control-private "版本更新"` 會由 runtime selector 自動分流；目前 selector 是規則式，不會額外多叫一個 router agent。
 
@@ -354,7 +359,7 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 
 ## Notes
 
-- 最新已驗證 tag：`v0.15.0`；`version-control-private` v4 採 shell quick path 優先，明確發版、governed mode、語意不明或 git 操作失敗時回流 AI fallback
+- 最新已驗證 tag：`v0.13.5`；`version-control-private` v4 採 shell quick path 優先，明確發版、governed mode、語意不明或 git 操作失敗時回流 AI fallback
 - `cap release-check` 可檢查最近或全部 release metadata，阻擋 `Release vX.Y.Z`、單純版本號與泛用 CHANGELOG 條目留在正式發版紀錄中
 - 同一份 `docs/agent-skills/` 供 CrewAI、Claude Code、Codex 共用
 - CAP 的目標 sub-agent 抽象是 CAP Agent Session，不綁死 Codex 或 Claude 的原生 subagent 能力

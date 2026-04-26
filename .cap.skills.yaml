@@ -216,7 +216,7 @@ skills:
     priority: 100
     prompt_file: 06-devops-agent.md
     cli: codex
-    compatible_workflow_versions: [1, 2, 3, 4]
+    compatible_workflow_versions: [1, 2, 3, 4, 5, 6]
     provided_capabilities:
       - devops_delivery
       - version_control_commit

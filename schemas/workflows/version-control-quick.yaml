@@ -1,7 +1,7 @@
 workflow_id: version-control-quick
-version: 1
+version: 2
 name: Quick Version Control
-summary: 私人專案快速版控：單一 DevOps session 完成 scan → commit → push，不做 tag / CHANGELOG / README release 同步。
+summary: 私人專案快速版控 pipeline：scan(shell) → compose(AI) → apply(shell)。與 private 共用 step，但禁止 release path；compose 必須產出 perform_release=false 的 envelope，apply 即使 evidence.release_intent=true 也只做 commit + push，不建 tag、不寫 CHANGELOG。
 owner: supervisor
 triggers:
   - manual
@@ -10,8 +10,9 @@ triggers:
   - quick
 
 artifacts:
-  commit_message: 版本控制提交訊息
-  commit_result: 版本控制提交結果
+  vc_evidence_pack: scan 階段輸出的結構化 evidence
+  commit_envelope: compose 階段輸出的 commit 結構化 JSON（perform_release 強制 false）
+  commit_result: apply 階段執行 git ops 的結果
 
 governance:
   watcher_mode: final_only
@@ -21,25 +22,61 @@ governance:
   halt_on_missing_handoff: false
 
 steps:
-  - id: commit_changes
-    name: Quick Commit Changes
+  - id: vc_scan
+    name: Scan repo and emit evidence pack
     capability: version_control_commit
+    executor: shell
+    script: scripts/workflows/vc-scan.sh
     inputs:
       - repo_changes
       - commit_scope
       - project_context
     outputs:
-      - commit_message
-      - commit_result
+      - vc_evidence_pack
     done_when:
-      - 已掃描 git status / diff，確認本次 commit 範圍
-      - 已依 git-workflow.md 決定是否直接 commit 或先開分支
-      - 已完成 commit，訊息符合 Conventional Commits 規範
-      - 已依需要推送 commit，或明確回報阻塞原因
+      - 已偵測 git work tree 與分支狀態
+      - no_changes 直接 exit 10 結束 workflow
+      - 已輸出 evidence pack
+    on_fail: halt
+    timeout_seconds: 60
+
+  - id: vc_compose
+    name: Compose commit-only envelope (no release)
+    capability: version_control_commit
+    needs:
+      - vc_scan
+    inputs:
+      - vc_evidence_pack
+    outputs:
+      - commit_envelope
+    done_when:
+      - 已讀取 evidence pack（不得重跑 git）
+      - 已產出 envelope JSON，且 release.perform_release=false
+      - subject 命中至少一個 path_token，且未使用禁止主動詞
     on_fail: halt
     timeout_seconds: 180
     notes:
-      - 這是 quick path，不做 tag 判定、CHANGELOG.md 更新與 README.md release 同步
-      - 所有操作在單一 agent session 中完成，不拆分多個 AI step
-      - "本 step 在非互動模式（claude -p）下執行，agent 無法暫停等使用者確認。請依最佳判斷直接執行，不要輸出 Pre-action Checklist 等待回覆。"
-      - "執行完所有 git 操作後，必須在 stdout 輸出完整的 quick version-control 報告，包含：掃描結果、分支決策、commit 訊息、推送結果。若 stdout 為空，executor 會判定為失敗。"
+      - "Quick path 嚴禁發版：envelope.release.perform_release 必須為 false，即使 evidence.release_intent=true 也不得產 tag/CHANGELOG 內容"
+      - "subject 規則：動詞開頭、≤72 字、必須引用 evidence.path_tokens 任一個、避開禁止主動詞清單"
+      - "禁止主動詞清單：enforce/sync/refine/unify/streamline/consolidate/clarify/harden/strengthen/establish/introduce/govern/finalize/polish/adjust/tweak/optimize/enhance"
+      - "若使用者要求發版，請在 stdout 提示應改用 version-control-private workflow，不要在本流程強行 release"
+
+  - id: vc_apply
+    name: Lint envelope and execute commit + push
+    capability: version_control_commit
+    executor: shell
+    script: scripts/workflows/vc-apply.sh
+    needs:
+      - vc_compose
+    inputs:
+      - vc_evidence_pack
+      - commit_envelope
+    outputs:
+      - commit_result
+    done_when:
+      - lint 通過
+      - 已 commit 並依 upstream 推送
+    on_fail: halt
+    timeout_seconds: 90
+    notes:
+      - quick path 不會執行 tag / CHANGELOG / README 同步邏輯（envelope.release.perform_release=false 時 vc-apply.sh 自然跳過該段）

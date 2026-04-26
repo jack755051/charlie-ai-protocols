@@ -7,25 +7,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 ---
 
 
-## [v0.15.0] - 2026-04-26
 
-### Added
-
-- 新增 `cap release-check` / `make release-check`，可掃描最近或全部 `v*` tag，檢查 annotated tag、commit subject 與 CHANGELOG 條目是否仍含低訊號發版文字。
+## [v0.13.5] - 2026-04-26
 
 ### Changed
-
-- `version-control-private` 在 governed mode 或明確發版意圖下會先回流 DevOps AI fallback 進行 diff 語意審查，再產生具體 Conventional Commit、release notes 與 annotated tag。
-- `cap version` 會避開 `Release vX.Y.Z`、單純版本號與低訊號 summary，必要時依 tag 內變更路徑推導較具體的 release 摘要。
-- Git workflow 與 DevOps agent 規範補齊低訊號 commit、tag annotation 與 CHANGELOG 條目的禁止規則，避免正式發版只留下泛用描述。
-
-
-
-
-## [v0.14.0] - 2026-04-26
-
-### Added
-- update docs workflow assets
+- version-control-private / -quick / -company 改為 vc_scan(shell) → vc_compose(AI) → vc_apply(shell) 三段 pipeline，shell 不再猜 commit 語意、AI 不再重跑 git。
+- vc-apply.sh 出口 lint 守門：subject 必須引用至少一個 changed path token（如 vc-scan、agent-skills、workflows），禁用 enforce / sync / refine / unify / streamline / consolidate / clarify / harden / strengthen / establish / introduce / govern / finalize / polish / adjust / tweak / optimize / enhance 等抽象主動詞，update / improve / refactor 後必須接具體名詞。
+- vc-apply.sh 強制 annotation 採 `<tag> — <summary>` 格式，summary 也必須引用 path token；compose 擅自宣告 perform_release=true 但 scan release_intent=false 時直接 halt。
+- 06-devops-agent.md §1.1 重寫為 vc_compose 工作規範：禁止重跑 git、必須讀 evidence pack、產出符合 envelope schema 的 JSON。
+- 刪除 scripts/workflows/version-control-private.sh（401 行 grep 規則樹），改由 vc-scan.sh + vc-apply.sh 取代。
+- 保留 cap release-check / cap version（原 v0.15.0 工作項）作為發版 sanity 工具，未來在 vc-apply 之外的 release 流程引用。
 ## [v0.13.4] - 2026-04-26
 
 ### Changed

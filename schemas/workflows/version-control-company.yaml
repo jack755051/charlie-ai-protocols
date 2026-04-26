@@ -1,7 +1,7 @@
 workflow_id: version-control-company
-version: 1
+version: 2
 name: Company Project Version Control
-summary: 公司專案直接執行版本控制提交，不額外插入 README 治理步驟。
+summary: 公司專案版本控制 pipeline：與 private 共用 scan → compose → apply 三段；governance 較嚴格，watcher 在 apply checkpoint 介入結構稽核。
 owner: supervisor
 triggers:
   - manual
@@ -9,30 +9,68 @@ triggers:
   - company-project
 
 artifacts:
-  commit_message: 版本控制提交訊息
-  commit_result: 版本控制提交結果
+  vc_evidence_pack: scan 階段輸出的結構化 evidence
+  commit_envelope: compose 階段輸出的 commit 結構化 JSON
+  commit_result: apply 階段執行 git ops 的結果
 
 governance:
-  watcher_mode: final_only
-  logger_mode: final_only
-  watcher_checkpoints: [commit_changes]
-  logger_checkpoints: [commit_changes]
+  watcher_mode: milestone_gate
+  logger_mode: milestone_log
+  watcher_checkpoints: [vc_apply]
+  logger_checkpoints: [vc_compose, vc_apply]
   halt_on_missing_handoff: true
 
 steps:
-  - id: commit_changes
-    name: Commit Changes
+  - id: vc_scan
+    name: Scan repo and emit evidence pack
     capability: version_control_commit
+    executor: shell
+    script: scripts/workflows/vc-scan.sh
     inputs:
       - repo_changes
       - commit_scope
       - project_context
     outputs:
-      - commit_message
+      - vc_evidence_pack
+    done_when:
+      - 已掃描並產出 evidence pack；no_changes / sensitive / detached_head 直接 halt
+    on_fail: halt
+    timeout_seconds: 60
+
+  - id: vc_compose
+    name: Compose commit envelope from evidence
+    capability: version_control_commit
+    needs:
+      - vc_scan
+    inputs:
+      - vc_evidence_pack
+    outputs:
+      - commit_envelope
+    done_when:
+      - envelope 結構齊備、subject / annotation 通過 lint 規範
+      - 涉及多模組變更時，body 必須說明跨模組影響
+    on_fail: halt
+    timeout_seconds: 240
+    notes:
+      - 公司專案要求 body 對重大變更（破壞性 / 跨模組）必須敘述影響範圍與遷移步驟
+      - 其餘規則同 version-control-private（subject 動詞 + path_token、禁止主動詞、release 必須由 evidence.release_intent 授權）
+
+  - id: vc_apply
+    name: Lint envelope and execute git ops
+    capability: version_control_commit
+    executor: shell
+    script: scripts/workflows/vc-apply.sh
+    needs:
+      - vc_compose
+    inputs:
+      - vc_evidence_pack
+      - commit_envelope
+    outputs:
       - commit_result
     done_when:
-      - 已完成 commit 或明確回報阻塞原因
-      - commit 訊息符合版本控制規範
+      - lint 通過
+      - commit / tag / push 已依 envelope 與 upstream 狀態完成
     on_fail: halt
+    timeout_seconds: 180
     notes:
-      - 適用於公司既有 repo 流程，避免在版本控制前額外更動 README 治理
+      - 公司專案的 push 失敗、CI 觸發異常都應在 stdout 標明，由 watcher 在 apply checkpoint 確認治理結果

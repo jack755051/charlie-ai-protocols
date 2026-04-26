@@ -100,17 +100,19 @@ workflow 不負責決定最終 agent，只負責宣告：
 
 #### `version-control-private.yaml`
 
-- 用途：私人專案版本控制治理流程（hybrid executor）
-- 設計理由：日常交付先走 shell quick path，避免每次 commit 都消耗 AI session；commit 訊息需由 changed paths 與 git diff 訊號產生，只有 ambiguous / mixed change type、低信心 subject、發版語意或 git 操作失敗時才回流 DevOps AI
+- 用途：私人專案版本控制治理流程（三段 pipeline）
+- 設計理由：shell 不再猜語意（避免低訊號 subject / 機械模板），AI 不再重跑 git（避免空燒 token）；改為清楚切分 `vc_scan` (shell) → `vc_compose` (AI) → `vc_apply` (shell)，由 `vc_apply` 出口 lint 守住 commit 品質
 - 主要步驟：
-  - `version_control_commit` — shell 優先完成 scan、commit、push；必要時 AI fallback
+  - `vc_scan` (shell) — 掃描 git 狀態、敏感檔、變更類型，輸出結構化 evidence pack（含 `path_tokens` / `release_intent` / `next_tag_candidate` / `diff_excerpt`）
+  - `vc_compose` (AI / devops) — 純語意工作：根據 evidence 產出 commit envelope JSON，禁止重跑 git
+  - `vc_apply` (shell) — lint envelope（subject 必含 path token、禁止抽象主動詞、annotation 與 changelog 條目皆過 lint），通過後執行 git ops（commit / 視 release_intent 決定 tag + CHANGELOG amend + push）
 
 #### `version-control-quick.yaml`
 
-- 用途：私人專案快速版控
-- 設計理由：日常「版本更新 / 幫我 commit / 整理這次變更」不該走完整 release 治理鏈；quick path 只做 scan → commit → push
+- 用途：私人專案快速版控（commit-only，不發版）
+- 設計理由：與 private 共用三段 pipeline 與 lint 守門；差異是 `vc_compose` 強制 `release.perform_release=false`，`vc_apply` 不會走 tag / CHANGELOG / README 同步路徑
 - 主要步驟：
-  - `version_control_commit` — 快速完成 scan、commit、push
+  - `vc_scan` → `vc_compose` (commit-only 限制) → `vc_apply` (commit + push)
 
 ### B. 補充流程
 
@@ -141,18 +143,18 @@ workflow 不負責決定最終 agent，只負責宣告：
 
 #### `version-control-company.yaml`
 
-- 用途：公司專案的最小版本控制流程
-- 適用情境：公司既有 repo、只需整理 commit 的場景
-- 保留理由：若產品要同時支援 private/company 兩種版控模式，它是必要分流；若近期只聚焦私人 repo，可暫時降級維護優先度
+- 用途：公司專案版本控制（三段 pipeline + 較嚴的 governance）
+- 適用情境：公司既有 repo、需保留 watcher / logger 治理軌跡的版控場景
+- 設計理由：與 private 共用 `vc_scan` → `vc_compose` → `vc_apply` 三段；差異在 `governance.watcher_mode=milestone_gate`、`logger_mode=milestone_log`、`halt_on_missing_handoff=true`，且 `vc_compose` 對重大變更要求在 body 列出影響範圍與遷移步驟
 - 主要步驟：
-  - `version_control_commit`
+  - `vc_scan` → `vc_compose` (含跨模組影響說明) → `vc_apply` (watcher 在 apply checkpoint 介入)
 
 ## 7. 使用建議
 
 - 如果你是逐步手動操作：直接用 `$skill` 呼叫單一 agent
 - 如果你要固定順序、可重複交付：優先從 `version-control-private.yaml`、`readme-to-devops.yaml` 與 `workflow-smoke-test.yaml` 之間選擇最小可行流程
 - 若是日常 commit：優先走 `version-control-quick.yaml`
-- 若是私人專案交付且希望使用 shell quick path + AI fallback：走 `version-control-private.yaml`
+- 若是私人專案交付且需要 release / tag / CHANGELOG 同步：走 `version-control-private.yaml`（pipeline 內含 lint 守門）
 - 若包含 tag / release / CHANGELOG / README 同步：後續應拆成 release 專用 workflow 或擴充 `version_control_tag` step，不應塞回日常 commit quick path
 - `cap workflow run --mode auto version-control-private "版本更新"` 會由 runtime selector 自動落到 quick 或 governed 路徑
 - 如果目前 schema 尚未支援條件分支，優先拆成兩條明確 workflow，而不是在單一檔案裡混入情境判斷
