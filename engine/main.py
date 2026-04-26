@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from crewai import Crew, Process, Task
 from dotenv import load_dotenv
@@ -7,6 +8,21 @@ from factory import AgentFactory
 from runtime_binder import RuntimeBinder
 
 load_dotenv()
+
+
+def _list_available_workflows() -> str:
+    """從 schemas/workflows/ 動態列出當前可用的 workflow yaml 名稱。
+
+    用於 supervisor prompt 的「最小可行流程」清單，避免每次新增 workflow
+    都要改 prompt hardcode 名單。
+    """
+    workflows_dir = Path(__file__).resolve().parent.parent / "schemas" / "workflows"
+    if not workflows_dir.is_dir():
+        return "（找不到 schemas/workflows/ 目錄）"
+    names = sorted(p.name for p in workflows_dir.glob("*.yaml") if p.is_file())
+    if not names:
+        return "（schemas/workflows/ 目前沒有 workflow yaml）"
+    return "、".join(f"`{name}`" for name in names)
 
 
 def print_workflow_plan(plan):
@@ -120,6 +136,7 @@ def main():
         workflow_context = "\n".join(lines)
 
     # 3. 建立「初始啟動任務」，並直接指派給 PM (01)
+    available_workflows = _list_available_workflows()
     kickoff_task = Task(
         description=f"""
         人類使用者的原始需求：{user_input}
@@ -128,7 +145,7 @@ def main():
         請嚴格根據你的 `01-supervisor-agent.md` 規範執行：
         1. 進行需求拆解，產出具備技術細節的 PRD 摘要。
         2. 若 workflow execution plan 已提供，依該 plan 的 capability、step 順序與產物要求進行編排。
-        3. 若無 workflow，不得預設套用大型流程；請先依使用者意圖從 `workflow-smoke-test.yaml`、`readme-to-devops.yaml` 或 `version-control.yaml` 中選擇最小可行流程，若仍不足再明確說明原因。
+        3. 若無 workflow，不得預設套用大型流程；請先依使用者意圖從以下 schemas/workflows/ 現役 yaml 中選擇最小可行流程：{available_workflows}；若仍不足再明確說明原因。
         4. 編排決策依據 `schemas/capabilities.yaml`；交接單欄位語意參考 `docs/cap/ARCHITECTURE.md` 的「Handoff Ticket 欄位參考」段落。
         5. 你必須明確執行 workflow governance：依 `governance.watcher_mode/logger_mode` 安排 Watcher/Logger 的介入節點。
         6. 正式派工時必須組裝結構化 handoff ticket，至少補齊 workflow_context、acceptance_criteria、route_back_to、governance 與 artifact 路徑。

@@ -79,15 +79,7 @@ Skill runtime 架構與 marketplace draft 請看 [docs/cap/SKILL-RUNTIME-ARCHITE
 可選的本地 skill registry 範例請看 [.cap.skills.example.yaml](.cap.skills.example.yaml)。
 平台自身的 repo 級憲法範例請看 [.cap.constitution.yaml](.cap.constitution.yaml)。
 
-目前狀態：
-
-- `cap workflow plan / bind / run` 已共用 `RuntimeBinder`
-- `.cap.skills.yaml` 是 workflow binding 的優先輸入；若缺席，會自動 fallback 到 `.cap.agents.json` legacy adapter
-- `cap-workflow-exec.sh` 已可逐 step 呼叫 Codex / Claude CLI，並保存 artifact、handoff 與 runtime state
-- `cap workflow compile / run-task` 已可從 prompt 產生 task-scoped workflow
-- `project-constitution.yaml` 目前是目標 workflow 模板；完整 Project Constitution runner 與 Supervisor orchestration 尚未完成
-- sub-agent 目前仍是 step-level CLI invocation；executor 已會產出 `agent-sessions.json`，但尚未升級為完整 AgentSessionRunner
-- skill marketplace schema 與遠端 provider 仍屬 draft / 下一階段設計
+目前狀態：完成度與待辦項以 [TODOLIST.md](TODOLIST.md) 為單一索引；該檔再指向 [docs/cap/IMPLEMENTATION-ROADMAP.md](docs/cap/IMPLEMENTATION-ROADMAP.md) 各 phase 的細節，避免三處（README / TODOLIST / ROADMAP）同時維護同樣的進度清單。
 
 ## Project Constitution Model
 
