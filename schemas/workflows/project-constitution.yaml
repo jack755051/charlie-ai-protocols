@@ -20,6 +20,7 @@ governance:
   logger_checkpoints: [draft_constitution]
   halt_on_missing_handoff: false
   context_mode: summary_first
+  goal_stage: informal_planning
 
 steps:
   - id: draft_constitution
@@ -49,3 +50,5 @@ steps:
       - Project Constitution JSON 應對齊 schemas/project-constitution.schema.yaml；schema validator 落地前由 Supervisor 在交接摘要中自檢必要欄位
       - 後續 repo 建立應由 constitution 編譯出的 task workflow 執行
       - sub agent 應視為 CAP agent session，不綁死 Claude 或 Codex 專屬能力
+      - "命名澄清：本 workflow 是「產出 Project Constitution 文件」的具體流程；docs/policies/workflow-constitution.md 是 runtime 編排層的元憲法（規範所有 workflow 應遵守的 phase 上限、summary-first handoff、artifact tiering 等）。兩者不同層級——本 workflow 自己也必須遵守 workflow-constitution.md 的所有立法規則。詳細層級對照見 docs/workflows/project-constitution-memo.md §術語對照。"
+      - "對齊 workflow-constitution §10：goal_stage=informal_planning 表示這是規劃階段（建 constitution），runtime 不得從此 workflow 自動展開 BA / DBA / UI / QA 等實作 step。"

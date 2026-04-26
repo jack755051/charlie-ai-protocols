@@ -19,6 +19,11 @@
   - 非正式規劃被誤跑成完整規格流水線
   - 下游被不必要全文上下文污染
 
+> **命名澄清（避免與 `schemas/workflows/project-constitution.yaml` 混淆）**：
+> 本文件管「runtime 跑 workflow 應遵守哪些規則」，是元憲法層；
+> `schemas/workflows/project-constitution.yaml` 是一條具體的 workflow，**用來產出 repo 級 Project Constitution 文件**，本身受本文件約束。
+> 兩者不同層級。詳細的 5 個 constitution 相關檔職責對照見 `docs/workflows/project-constitution-memo.md` §術語對照。
+
 ### 1.2 權威順序
 
 若規則發生衝突，權威順序如下：
