@@ -74,27 +74,206 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 - [ ] repo-specific workflow / skill source resolver 尚未完整
 - [ ] promote / publish 流程尚未閉環
 
-## Phase 進度索引
+## 完整實現流程摘要
 
-> 詳細設計、完成標準、checklist 內每一條目以 [docs/cap/IMPLEMENTATION-ROADMAP.md](docs/cap/IMPLEMENTATION-ROADMAP.md) 為**單一事實來源**。本節只保留人類可讀的進度摘要，避免兩處重複維護同樣的 `[ ]/[x]` 清單。要更新某個 phase 的具體狀態，請改 ROADMAP 對應段落。
+詳細設計、完成標準與最終 checklist 以 [docs/cap/IMPLEMENTATION-ROADMAP.md](docs/cap/IMPLEMENTATION-ROADMAP.md) 為準；本節保留可勾選的開發追蹤清單，是實際動工時的工作介面。
 
-| Phase | 主題 | 摘要狀態 | ROADMAP 對應 |
-|---|---|---|---|
-| 0 | Baseline Cleanup | ✅ 已完成（見上節） | — |
-| 1 | Contracts Complete | 9 份契約有 4 已建（capabilities / project-constitution / task-constitution / agent-session）；缺 capability-graph / compiled-workflow / binding-report / supervisor-orchestration / workflow-result / gate-result | §3 |
-| 2 | Project Storage and Identity | `cap paths` / `.cap.project.yaml` / git root fallback ✅；`cap project init / status / doctor`、id collision、storage health 待補 | §4 |
-| 3 | Project Constitution Runner | 全未開工（task constitution 入口已混用，需語意拆分） | §5 |
-| 4 | Supervisor Structured Orchestration | 全未開工（runtime 仍接受純自然語言派工） | §6 |
-| 5 | Compiled Workflow and Binding Pipeline | 等 Phase 1 schema 補齊後再做 validation / source priority / preflight report | §7 |
-| 6 | AgentSessionRunner | executor-level `agent-sessions.json` ledger ✅；ProviderAdapter / AgentSessionRunner 抽象、prompt snapshot、recycle 待補 | §8 |
-| 7 | Artifact / Handoff / Validation | runtime-state / artifact-index / handoff fallback / failure marker ✅；artifact registry / lineage / schema validator 待補 | §9 |
-| 8 | Result Report and Run Archive | `result.md` 雛形 ✅；report builder、failure summary、promote candidates、`cap workflow inspect` 待補 | §10 |
-| 9 | Governance Gates | 全未開工（watcher / security / qa / logger gate runner、gate result schema、fail route） | §11 |
-| 10 | Repo-specific Source Resolver | 全未開工 | §12 |
-| 11 | Promote / Publish | 全未開工 | §13 |
-| 12 | Background Runtime | 全未開工（`cap workflow run -d`、ps / inspect / cancel） | §14 |
-| 13 | CLI Final Shape | 等 Phase 2 / 3 / 6 完成後再正式收束 cap project / task / session 命令族 | §15 |
-| 14 | Test Matrix | 全未開工（fake provider 驅動的回歸測試） | §16 |
+### Phase 1: Contracts Complete
+
+- [x] 定義 `schemas/project-constitution.schema.yaml`
+- [x] 定義 `schemas/task-constitution.schema.yaml`
+- [x] 定義 `schemas/agent-session.schema.yaml`
+- [x] 定義 `schemas/capabilities.yaml`
+- [ ] 定義 `schemas/capability-graph.schema.yaml`
+- [ ] 定義 `schemas/compiled-workflow.schema.yaml`
+- [ ] 定義 `schemas/binding-report.schema.yaml`
+- [ ] 定義 `schemas/supervisor-orchestration.schema.yaml`
+- [ ] 定義 `schemas/workflow-result.schema.yaml`
+- [ ] 定義 `schemas/gate-result.schema.yaml`
+
+### Phase 2: Project Storage and Identity
+
+- [x] `cap paths` 顯示 project storage
+- [x] `.cap.project.yaml` 作為 project identity source
+- [x] git root basename fallback
+- [ ] 支援非 git folder 的 project id 策略
+- [ ] 處理 project id collision
+- [ ] 記錄 storage version / migration metadata
+- [ ] 實作 storage health check
+- [ ] 新增 `cap project status`
+- [ ] 新增 `cap project init`
+- [ ] 新增 `cap project doctor`
+
+### Phase 3: Project Constitution Runner
+
+- [ ] 明確區分 Project Constitution 與 Task Constitution
+- [ ] 調整 `schemas/workflows/project-constitution.yaml` 的輸出契約
+- [ ] 讓 Project Constitution workflow 產出 Markdown 與 JSON
+- [ ] 實作 Project Constitution validator
+- [ ] 實作 agent output JSON extraction
+- [ ] 對 Project Constitution JSON 做 schema validation
+- [ ] validation failure 時 halt
+- [ ] 將通過驗證的 Project Constitution snapshot 保存到 CAP storage
+- [ ] 實作 constitution snapshot versioning
+- [ ] 提供 promote 或 init 路徑，將正式 Project Constitution 寫回 repo
+
+- [ ] 決定 `cap workflow constitution` 是否保留為 task constitution 入口
+- [ ] 新增或規劃 `cap project constitution "<prompt>"`
+- [ ] 新增 `cap project constitution --promote`
+- [ ] 新增 `cap project constitution --dry-run`
+- [ ] 新增 `cap project constitution --from-file`
+- [ ] 文件化 `constitution / compile / run-task / run` 的差異
+- [ ] 更新 CLI help，避免 Project Constitution 與 Task Constitution 混用
+
+### Phase 4: Supervisor Structured Orchestration
+
+- [ ] 定義 Supervisor orchestration output schema
+- [ ] 實作 `SupervisorOrchestrator`
+- [ ] 實作 supervisor prompt builder
+- [ ] Supervisor 讀取 Project Constitution、user prompt、repo context
+- [ ] Supervisor 產出 task constitution
+- [ ] Supervisor 產出 capability graph
+- [ ] Supervisor 產出 compiled workflow draft
+- [ ] Supervisor 標註 Watcher / Security / QA / Logger checkpoint
+- [ ] 實作 structured output parser
+- [ ] runtime 驗證 Supervisor 輸出，不接受純自然語言派工
+- [ ] invalid output 時 retry / halt
+- [ ] 保存 orchestration snapshot
+
+### Phase 5: Compiled Workflow and Binding Pipeline
+
+- [ ] 實作 compiled workflow schema validation
+- [ ] 實作 binding report schema validation
+- [ ] 強化 compiled workflow normalization
+- [ ] 實作 project / shared / builtin / legacy source priority
+- [ ] enforce allowed capabilities
+- [ ] enforce allowed workflow source roots
+- [ ] enforce fallback policy
+- [ ] 強化 unresolved handling
+- [ ] 產出 preflight report
+- [ ] 強化 dry-run inspection
+
+### Phase 6: AgentSessionRunner
+
+- [x] 定義 `schemas/agent-session.schema.yaml` 的 runtime 實例欄位
+- [x] 在每個實際執行的 workflow step 前建立 `session_id`
+- [x] 記錄 `run_id / workflow_id / step_id / capability / agent_alias / prompt_file / provider_cli`
+- [x] 記錄 input mode 與 output artifact
+- [x] 記錄 handoff path
+- [x] 記錄 status 與 failure reason
+- [x] 每次 run 產出 `agent-sessions.json`
+- [ ] 實作 `AgentSessionRunner`
+- [ ] 定義 `ProviderAdapter` interface
+- [ ] 實作 `CodexAdapter`
+- [ ] 實作 `ClaudeAdapter`
+- [ ] 實作 `ShellAdapter`
+- [ ] 補 provider-native session id
+- [ ] 補 prompt snapshot / prompt hash
+- [ ] 捕捉 provider stdout / stderr
+- [ ] 整合 timeout / stall
+- [ ] 支援 parent / child session relation
+- [ ] workflow 結束後將 session 標記為 `completed / failed / cancelled / recycled`
+- [ ] 新增 `cap session inspect`
+
+### Phase 7: Artifact, Handoff and Validation
+
+- [x] `runtime-state.json` 雛形
+- [x] `artifact-index.md` 雛形
+- [x] handoff summary fallback
+- [x] failure marker detection
+- [ ] 實作 artifact registry
+- [ ] 實作 artifact lineage
+- [ ] 實作 handoff schema validator
+- [ ] 實作 required output check
+- [ ] 實作 JSON extraction / validation
+- [ ] 實作 Markdown required section validation
+- [ ] 實作 capability-specific validators
+- [ ] 實作 route_back_to handling
+
+### Phase 8: Result Report and Run Archive
+
+- [x] 每次 run 產出初版 `result.md`
+- [ ] 實作 result report builder
+- [ ] `result.md` 彙整 constitution、compiled workflow、binding、sessions、artifacts、failures
+- [ ] 明確區分 `runtime-state.json` 與人類可讀 result report
+- [ ] 補 failure summary
+- [ ] 補 promote candidates
+- [ ] 補 final archive 規則，讓 Logger (99) 可接手整理結案摘要
+- [ ] `cap workflow inspect <run-id>` 讀取 result
+
+### Phase 9: Governance Gates
+
+- [ ] 實作 watcher checkpoint runner
+- [ ] 實作 security checkpoint runner
+- [ ] 實作 qa checkpoint runner
+- [ ] 實作 logger milestone runner
+- [ ] 定義 gate result schema
+- [ ] 實作 fail route handling
+- [ ] 支援 rerun failed gate
+- [ ] enforce halt-on-risk
+
+### Phase 10: Repo-specific Source Resolver
+
+- [ ] 支援 repo-local workflow source roots
+- [ ] 支援 repo-local skill registry
+- [ ] 明確區分 builtin / project / shared skill source
+- [ ] 套用 Project Constitution 的 allowed source roots
+- [ ] 實作 shared registry resolver
+- [ ] 實作 source validation
+- [ ] 實作 conflict detection
+- [ ] binding report 顯示每個 step 使用的 source layer
+
+### Phase 11: Promote / Publish
+
+- [ ] 定義 runtime artifact promote 回 repo 的規則
+- [ ] 定義 project skill / workflow publish 到 shared registry 的規則
+- [ ] 實作 `cap promote inspect <artifact>`
+- [ ] 實作 `cap promote project-constitution <snapshot-id>`
+- [ ] 實作 `cap promote workflow <compiled-workflow-id>`
+- [ ] 實作 overwrite protection
+- [ ] 實作 diff preview
+- [ ] 實作 validation after promote
+- [ ] 補 `cap promote` 文件與範例
+- [ ] 避免 `.cap` runtime snapshot 被誤當正式 source of truth
+
+### Phase 12: Background Runtime
+
+- [ ] 設計 detached run 的 process model
+- [ ] 讓 `cap workflow run -d` 真正執行背景任務
+- [ ] `cap workflow ps` 顯示 running / completed / failed
+- [ ] `cap workflow inspect <run-id>` 顯示 session、artifact 與 failure 摘要
+- [ ] 實作 pid file
+- [ ] 實作 log streaming
+- [ ] 實作 cancellation
+- [ ] 實作 orphan detection
+- [ ] 實作 recovery
+
+### Phase 13: CLI Final Shape
+
+- [ ] `cap project init`
+- [ ] `cap project status`
+- [ ] `cap project constitution "<prompt>"`
+- [ ] `cap task plan "<prompt>"`
+- [ ] `cap task compile "<prompt>"`
+- [ ] `cap task run "<prompt>"`
+- [ ] `cap session list <run-id>`
+- [ ] `cap session inspect <session-id>`
+
+### Phase 14: Test Matrix
+
+- [ ] schema parse tests
+- [ ] Project Constitution validation tests
+- [ ] Task Constitution compiler tests
+- [ ] Supervisor structured output parser tests
+- [ ] RuntimeBinder tests
+- [ ] source resolver tests
+- [ ] AgentSessionRunner fake provider tests
+- [ ] shell provider tests
+- [ ] artifact materialization tests
+- [ ] result report tests
+- [ ] promote tests
+- [ ] background run tests
+- [ ] failure / blocked / skipped case tests
 
 ## 優先順序
 
