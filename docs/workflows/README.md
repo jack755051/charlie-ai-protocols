@@ -101,7 +101,7 @@ workflow 不負責決定最終 agent，只負責宣告：
 #### `version-control-private.yaml`
 
 - 用途：私人專案版本控制治理流程（hybrid executor）
-- 設計理由：日常交付先走 shell quick path，避免每次 commit 都消耗 AI session；只有 ambiguous / mixed change type 或 git 操作失敗時才回流 DevOps AI
+- 設計理由：日常交付先走 shell quick path，避免每次 commit 都消耗 AI session；commit 訊息需由 changed paths 與 git diff 訊號產生，只有 ambiguous / mixed change type、低信心 subject、發版語意或 git 操作失敗時才回流 DevOps AI
 - 主要步驟：
   - `version_control_commit` — shell 優先完成 scan、commit、push；必要時 AI fallback
 

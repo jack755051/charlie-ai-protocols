@@ -28,16 +28,37 @@ detect_sensitive_files() {
 }
 
 changed_paths() {
-  git status --short | awk '
-    {
-      path=$0
-      sub(/^.../, "", path)
-      if (path ~ / -> /) {
-        sub(/^.* -> /, "", path)
-      }
-      print path
-    }
-  '
+  git status --short | while IFS= read -r line; do
+    code="${line:0:2}"
+    path="${line:3}"
+    if printf '%s' "${path}" | grep -q ' -> '; then
+      path="${path##* -> }"
+    fi
+    if [ "${code}" = "??" ] && [ -d "${path}" ]; then
+      git ls-files --others --exclude-standard -- "${path}"
+    else
+      printf '%s\n' "${path}"
+    fi
+  done
+}
+
+diff_summary() {
+  git diff --unified=0 -- 2>/dev/null
+  git diff --cached --unified=0 -- 2>/dev/null
+  git ls-files --others --exclude-standard | while IFS= read -r path; do
+    if [ -f "${path}" ] && grep -Iq . "${path}" 2>/dev/null; then
+      printf 'diff --git a/%s b/%s\n' "${path}" "${path}"
+      printf '%s\n' '--- /dev/null'
+      printf '+++ b/%s\n' "${path}"
+      sed -n '1,120p' "${path}" | sed 's/^/+/'
+    fi
+  done
+}
+
+has_path() {
+  local paths="$1"
+  local pattern="$2"
+  printf '%s\n' "${paths}" | grep -Eq "${pattern}"
 }
 
 infer_type_for_path() {
@@ -54,12 +75,90 @@ infer_scope() {
   local paths="$1"
   local first
   first="$(printf '%s\n' "${paths}" | head -n 1)"
+  if has_path "${paths}" '(^schemas/workflows/|^scripts/workflows/|^scripts/cap-workflow|^engine/workflow_|^engine/step_runtime\.py|^engine/runtime_binder\.py)'; then
+    printf 'workflow\n'
+    return
+  fi
   case "${first}" in
-    docs/*|*.md) printf 'docs\n' ;;
+    docs/agent-skills/*) printf 'agent-skills\n' ;;
+    docs/policies/*) printf 'policies\n' ;;
+    docs/workflows/*) printf 'workflow-docs\n' ;;
+    CHANGELOG.md|README.md|docs/*|*.md) printf 'docs\n' ;;
     schemas/*) printf 'schemas\n' ;;
     engine/*) printf 'engine\n' ;;
     scripts/*) printf 'scripts\n' ;;
     *) printf 'workflow\n' ;;
+  esac
+}
+
+infer_type_from_diff() {
+  local path_type="$1"
+  local diff="$2"
+
+  case "${path_type}" in
+    docs|test)
+      printf '%s\n' "${path_type}"
+      return
+      ;;
+  esac
+
+  if printf '%s' "${diff}" | grep -qiE '(^\+.*(fix|bug|regression|escape|quote|fail|failure|error|blocked|crash|broken|incorrect|wrong))|(^-.*bug)|(^\+.*修正)'; then
+    printf 'fix\n'
+    return
+  fi
+  if printf '%s' "${diff}" | grep -qiE '(^\+.*(refactor|extract|rename|split|consolidate|deduplicate|cleanup|simplify))|(^\+.*重構)'; then
+    printf 'refactor\n'
+    return
+  fi
+  printf '%s\n' "${path_type}"
+}
+
+subject_from_diff() {
+  local commit_type="$1"
+  local scope="$2"
+  local paths="$3"
+  local diff="$4"
+
+  if printf '%s' "${diff}" | grep -qiE 'release_requires_ai_semantic_review|semantic release review|AI fallback required'; then
+    printf 'require semantic release review'
+  elif printf '%s' "${diff}" | grep -qiE 'update .* workflow assets|subject=.*workflow assets|commit_message=.*workflow assets|infer_subject|subject_from_diff|diff_summary'; then
+    printf 'derive commit messages from diff signals'
+  elif printf '%s' "${diff}" | grep -qiE 'fallback\.when|ambiguous_change_type|mixed_change_type|git_operation_failed|fallback'; then
+    printf 'tighten workflow fallback routing'
+  elif printf '%s' "${diff}" | grep -qiE 'CHANGELOG|README|release notes|latest verified tag|最新已驗證 tag'; then
+    printf 'sync release documentation'
+  elif printf '%s' "${diff}" | grep -qiE 'sensitive_file_risk|credential|private key|\\.env'; then
+    printf 'tighten sensitive file guard'
+  elif has_path "${paths}" '^schemas/workflows/'; then
+    printf 'update workflow contract rules'
+  elif has_path "${paths}" '^scripts/workflows/'; then
+    printf 'update workflow shell executor'
+  elif has_path "${paths}" '^scripts/cap-workflow|^engine/workflow_|^engine/step_runtime\.py|^engine/runtime_binder\.py'; then
+    printf 'update workflow runtime handling'
+  elif has_path "${paths}" '^docs/agent-skills/'; then
+    printf 'clarify agent operating policy'
+  elif has_path "${paths}" '^docs/policies/'; then
+    printf 'clarify governance policy'
+  elif has_path "${paths}" '^docs/workflows/'; then
+    printf 'clarify workflow guidance'
+  elif has_path "${paths}" '(^README\.md$|^CHANGELOG\.md$|^docs/)'; then
+    printf 'update project documentation'
+  elif [ "${commit_type}" = "test" ]; then
+    printf 'update workflow regression coverage'
+  else
+    printf 'update %s automation rules' "${scope}"
+  fi
+}
+
+is_low_signal_subject() {
+  local subject="$1"
+  case "${subject}" in
+    "update workflow automation rules"|"update scripts automation rules"|"update schemas automation rules"|"update engine automation rules")
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
   esac
 }
 
@@ -206,6 +305,7 @@ if [ -n "${sensitive}" ]; then
 fi
 
 paths="$(changed_paths)"
+diff="$(diff_summary)"
 types="$(while IFS= read -r path; do infer_type_for_path "${path}"; done <<< "${paths}" | sort -u)"
 type_count="$(printf '%s\n' "${types}" | sed '/^$/d' | wc -l | tr -d ' ')"
 printf '### Diff Stat\n\n```text\n'
@@ -232,7 +332,14 @@ if [ -z "${commit_type}" ]; then
 fi
 
 scope="$(infer_scope "${paths}")"
-subject="update ${scope} workflow assets"
+commit_type="$(infer_type_from_diff "${commit_type}" "${diff}")"
+subject="$(subject_from_diff "${commit_type}" "${scope}" "${paths}" "${diff}")"
+if is_low_signal_subject "${subject}"; then
+  printf 'condition: ambiguous_change_type\n'
+  printf 'reason: low_signal_commit_subject\n'
+  printf 'changed_paths:\n%s\n' "${paths}"
+  exit 20
+fi
 commit_message="${commit_type}(${scope}): ${subject}"
 tag_result="not_requested"
 next_tag=""

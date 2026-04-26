@@ -1,7 +1,7 @@
 workflow_id: version-control-private
-version: 4
+version: 5
 name: Private Project Version Control
-summary: 私人專案版本控制：shell quick path 優先完成低語意 scan → commit → push；明確發版時回流 AI 掃描 diff 後同步 CHANGELOG / README、建立 tag 並推送。
+summary: 私人專案版本控制：shell quick path 優先用 git status / diff 訊號產生語意化 commit；只有發版、混合語意、低信心 subject 或 git 操作失敗時回流 AI。
 owner: supervisor
 triggers:
   - manual
@@ -44,19 +44,19 @@ steps:
       - changelog_update
     done_when:
       - 已掃描 git status / diff，判定變更範圍與類型
-      - 可安全自動化時，shell quick path 已完成 commit，訊息符合 Conventional Commits 規範
+      - 可安全自動化時，shell quick path 已依 changed paths 與 diff 訊號產生 commit message，並完成 commit
       - 若使用者明確要求正式發版 / release / tag / CHANGELOG / README，必須回流 AI 掃描 diff 後產生 commit message / release notes，再同步 CHANGELOG.md 與 README.md、建立 tag 並推送
       - 若沒有變更，已以 no_changes no-op 成功回報
-      - 若變更類型 ambiguous / mixed 或 git 操作失敗，已依 fallback.when 回流 AI
+      - 若變更類型 ambiguous / mixed、subject 只能產生低訊號泛用文字，或 git 操作失敗，已依 fallback.when 回流 AI
       - 若偵測 sensitive_file_risk，已直接 halt，不交給 AI fallback
       - 已依可用 upstream 推送，或明確回報未設定 upstream
     on_fail: halt
     timeout_seconds: 120
     notes:
       - shell step 遵守 docs/policies/workflow-executor-exit-codes.md
-      - 非發版 happy path 不啟動 AI，以降低時間與 token 成本
+      - 非發版 happy path 不啟動 AI，以降低時間與 token 成本；但 commit subject 必須來自 changed paths 與 git diff 訊號，不得使用固定模板
       - 明確發版意圖下，shell 只提供掃描證據與建議 tag，必須以 ambiguous_change_type 回流 AI，避免機械式 commit message / changelog
-      - AI fallback 處理 ambiguous_change_type、mixed_change_type、git_operation_failed；其中 ambiguous_change_type 也涵蓋 release_requires_ai_semantic_review
+      - AI fallback 處理 ambiguous_change_type、mixed_change_type、git_operation_failed；其中 ambiguous_change_type 也涵蓋 release_requires_ai_semantic_review 與 low_signal_commit_subject
       - policy_blocked 預設 halt；sensitive_file_risk 永遠 halt
       - 推送前須確認無敏感檔案混入
       - "若進入 AI fallback，agent 必須根據 shell stdout/stderr、git status 與 diff stat 接手，不得重新擴大 scope。"
