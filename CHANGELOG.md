@@ -7,6 +7,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 ---
 
 
+
+## [v0.13.4] - 2026-04-26
+
+### Changed
+- update docs workflow assets
 ## [v0.13.3] - 2026-04-25
 
 ### Added
