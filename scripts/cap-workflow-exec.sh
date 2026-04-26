@@ -661,9 +661,10 @@ EOF
 
 # ── Main execution loop ──
 
-WORKFLOW_NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["name"])' "${PLAN_JSON}")"
-WORKFLOW_ID="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["workflow_id"])' "${PLAN_JSON}")"
-TOTAL_PHASES="$(python3 -c 'import json,sys; print(len(json.loads(sys.argv[1])["phases"]))' "${PLAN_JSON}")"
+# 一次取得 workflow_id / workflow_name / total_phases（取代散落的 inline json.loads）
+IFS='|' read -r WORKFLOW_ID WORKFLOW_NAME TOTAL_PHASES <<EOF
+$("${PYTHON_BIN}" "${STEP_PY}" plan-meta "${PLAN_JSON}")
+EOF
 
 on_exit() {
   if [ -n "${RUN_ID}" ]; then
@@ -829,9 +830,9 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   STEP_STATUS="running"
   AGENT_SKILL="${agent_alias}:${prompt_file}"
   INPUT_CHECK_JSON="$(validate_step_inputs "${PLAN_JSON}" "${step_id}" "${RUNTIME_STATE_JSON}")"
-  INPUT_OK="$(printf '%s' "${INPUT_CHECK_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["ok"])')"
+  # 將 validate-inputs JSON 解析成兩行（ok / missing-csv）給 shell 直接讀
+  { read -r INPUT_OK; read -r MISSING_INPUTS; } < <(printf '%s' "${INPUT_CHECK_JSON}" | "${PYTHON_BIN}" "${STEP_PY}" parse-input-check)
   if [ "${INPUT_OK}" != "True" ]; then
-    MISSING_INPUTS="$(printf '%s' "${INPUT_CHECK_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(", ".join(json.load(sys.stdin)["missing"]))')"
     if [ "${optional}" = "True" ]; then
       step_status "skip" "${step_id}" "0"
       printf "  ${YELLOW}│ optional step skipped: missing inputs -> %s${RESET}\n" "${MISSING_INPUTS}"

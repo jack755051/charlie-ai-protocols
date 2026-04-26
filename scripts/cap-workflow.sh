@@ -303,6 +303,11 @@ case "${1:-}" in
     RUN_CLI="${CAP_DEFAULT_AGENT_CLI:-auto}"
     CLI_OVERRIDE=0
     REGISTRY_REF=""
+    # task-scoped runs do not consume --mode, but cap-workflow-exec 仍會讀
+    # CAP_WORKFLOW_{REQUESTED,SELECTED}_MODE 環境變數；預設為 auto，避免 set -u 下
+    # 在 line 370/372 引用未定義的 EXECUTION_MODE / SELECTED_MODE。
+    EXECUTION_MODE="auto"
+    SELECTED_MODE="auto"
     while [ "$#" -gt 0 ]; do
       case "$1" in
         -d) DETACH=1; shift ;;

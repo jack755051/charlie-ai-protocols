@@ -603,6 +603,86 @@ def flatten_steps(plan_json: str) -> None:
 
 
 # ─────────────────────────────────────────────────────────
+# 9. plan-meta
+# ─────────────────────────────────────────────────────────
+
+def plan_meta(plan_json: str) -> None:
+    """從 plan JSON 抽出 workflow_id / workflow_name / total_phases，pipe-delimited。
+
+    給 cap-workflow-exec.sh 之類的 shell 端用 `IFS='|' read` 拆解，
+    取代散落多處的 ``python3 -c 'json.loads(...)'`` heredoc。
+    """
+    plan: dict[str, Any] = json.loads(plan_json)
+    workflow_id = plan.get("workflow_id", "")
+    workflow_name = plan.get("name", "")
+    total_phases = len(plan.get("phases", []))
+    print(f"{workflow_id}|{workflow_name}|{total_phases}")
+
+
+# ─────────────────────────────────────────────────────────
+# 10. parse-input-check
+# ─────────────────────────────────────────────────────────
+
+def parse_input_check() -> None:
+    """從 stdin 讀 validate-inputs JSON，輸出 shell 友善兩行格式。
+
+    輸出範例（用 newline 分隔）::
+
+        True
+        artifact_a, artifact_b
+
+    第一行是 ok flag（``True`` 或 ``False``），第二行是 missing 清單以 ``", "`` 連接。
+    """
+    payload = json.load(sys.stdin)
+    print("True" if payload.get("ok") else "False")
+    missing = payload.get("missing", []) or []
+    print(", ".join(missing))
+
+
+# ─────────────────────────────────────────────────────────
+# 11. registry-list / registry-get
+# ─────────────────────────────────────────────────────────
+
+def registry_list(registry_file: str) -> None:
+    """列出 .cap.agents.json 內所有 agent，tab-delimited 行。
+
+    取代 cap-registry.sh 內的 heredoc Python。
+    """
+    with open(registry_file, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+    default_cli = data.get("default_cli", "codex")
+    for alias, meta in sorted(data.get("agents", {}).items()):
+        provider = meta.get("provider", "unknown")
+        prompt_file = meta.get("prompt_file", "")
+        cli = meta.get("cli", default_cli)
+        print(f"{alias}\t{provider}\t{prompt_file}\t{cli}")
+
+
+def registry_get(registry_file: str, alias: str) -> None:
+    """取得指定 alias 的 agent metadata，輸出 JSON。
+
+    缺 alias 時 exit 1（與原 cap-registry.sh 行為相同）。
+    """
+    with open(registry_file, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+    meta = data.get("agents", {}).get(alias)
+    if not meta:
+        sys.exit(1)
+    default_cli = data.get("default_cli", "codex")
+    print(
+        json.dumps(
+            {
+                "alias": alias,
+                "provider": meta.get("provider", "builtin"),
+                "prompt_file": meta.get("prompt_file", ""),
+                "cli": meta.get("cli", default_cli),
+            },
+            ensure_ascii=False,
+        )
+    )
+
+
+# ─────────────────────────────────────────────────────────
 # CLI entry point
 # ─────────────────────────────────────────────────────────
 
@@ -679,6 +759,25 @@ def _build_parser() -> argparse.ArgumentParser:
     p_fs = sub.add_parser("flatten-steps", help="展平 plan JSON 為 pipe-delimited 記錄")
     p_fs.add_argument("plan_json")
 
+    # 9. plan-meta
+    p_pm = sub.add_parser("plan-meta", help="抽 plan JSON 的 workflow_id / name / phase 數")
+    p_pm.add_argument("plan_json")
+
+    # 10. parse-input-check
+    sub.add_parser(
+        "parse-input-check",
+        help="從 stdin 讀 validate-inputs JSON，輸出 shell 友善兩行格式",
+    )
+
+    # 11. registry-list
+    p_rl = sub.add_parser("registry-list", help="列出 .cap.agents.json 所有 agent")
+    p_rl.add_argument("registry_file")
+
+    # 12. registry-get
+    p_rg = sub.add_parser("registry-get", help="取得指定 alias 的 agent metadata（JSON）")
+    p_rg.add_argument("registry_file")
+    p_rg.add_argument("alias")
+
     return parser
 
 
@@ -746,6 +845,14 @@ def main(argv: list[str] | None = None) -> None:
             )
         case "flatten-steps":
             flatten_steps(args.plan_json)
+        case "plan-meta":
+            plan_meta(args.plan_json)
+        case "parse-input-check":
+            parse_input_check()
+        case "registry-list":
+            registry_list(args.registry_file)
+        case "registry-get":
+            registry_get(args.registry_file, args.alias)
 
 
 if __name__ == "__main__":
