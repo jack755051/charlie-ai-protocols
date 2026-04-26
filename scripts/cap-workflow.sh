@@ -20,10 +20,11 @@ Usage:
   cap workflow constitution <request...>
   cap workflow compile <request...> [--registry path]
   cap workflow run-task [--dry-run] [--cli codex|claude] [--registry path] <request...>
-  cap workflow run [--dry-run] [--cli codex|claude] [--mode quick|governed|auto] <id> [prompt...]
+  cap workflow run [--dry-run] [--cli codex|claude] [--strategy fast|governed|strict|auto] <id> [prompt...]
   cap workflow <id> "<prompt>"            (run 的簡寫)
 
 Default CLI: claude (可用 --cli codex 覆寫，或設定 CAP_DEFAULT_AGENT_CLI 環境變數)
+Legacy --mode remains as an alias for --strategy.
 EOF
   exit 1
 }
@@ -46,6 +47,12 @@ CLI_PY="${CAP_ROOT}/engine/workflow_cli.py"
 resolve_workflow_ref() {
   local raw_ref="${1:-}"
   [ -n "${raw_ref}" ] || return 1
+
+  case "${raw_ref}" in
+    version-control-private|version-control-quick|version-control-company)
+      raw_ref="version-control"
+      ;;
+  esac
 
   if [ -f "${raw_ref}" ]; then
     printf '%s\n' "${raw_ref}"
@@ -303,11 +310,6 @@ case "${1:-}" in
     RUN_CLI="${CAP_DEFAULT_AGENT_CLI:-auto}"
     CLI_OVERRIDE=0
     REGISTRY_REF=""
-    # task-scoped runs do not consume --mode, but cap-workflow-exec 仍會讀
-    # CAP_WORKFLOW_{REQUESTED,SELECTED}_MODE 環境變數；預設為 auto，避免 set -u 下
-    # 在 line 370/372 引用未定義的 EXECUTION_MODE / SELECTED_MODE。
-    EXECUTION_MODE="auto"
-    SELECTED_MODE="auto"
     while [ "$#" -gt 0 ]; do
       case "$1" in
         -d) DETACH=1; shift ;;
@@ -372,9 +374,9 @@ case "${1:-}" in
     bash "${SCRIPT_DIR}/trace-log.sh" append "Workflow" "compiled_workflow:${WORKFLOW_ID} run:${RUN_ID} 啟動 (${WORKFLOW_NAME})" "成功" >/dev/null 2>&1 || true
     "${PYTHON_BIN}" "${CLI_PY}" print-compile-start "${COMPILE_SNAPSHOT_JSON}" "${RUN_ID}"
     if [ "${CLI_OVERRIDE}" -eq 1 ]; then
-      CAP_WORKFLOW_REQUESTED_MODE="${EXECUTION_MODE}" CAP_WORKFLOW_SELECTED_MODE="${SELECTED_MODE}" exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --cli "${RUN_CLI}" --run-id "${RUN_ID}"
+      CAP_WORKFLOW_REQUESTED_STRATEGY="auto" CAP_WORKFLOW_SELECTED_STRATEGY="fixed" CAP_WORKFLOW_REQUESTED_MODE="auto" CAP_WORKFLOW_SELECTED_MODE="fixed" exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --cli "${RUN_CLI}" --run-id "${RUN_ID}"
     fi
-    CAP_WORKFLOW_REQUESTED_MODE="${EXECUTION_MODE}" CAP_WORKFLOW_SELECTED_MODE="${SELECTED_MODE}" exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --run-id "${RUN_ID}"
+    CAP_WORKFLOW_REQUESTED_STRATEGY="auto" CAP_WORKFLOW_SELECTED_STRATEGY="fixed" CAP_WORKFLOW_REQUESTED_MODE="auto" CAP_WORKFLOW_SELECTED_MODE="fixed" exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --run-id "${RUN_ID}"
     ;;
   run)
     shift || true
@@ -383,31 +385,41 @@ case "${1:-}" in
     DRY_RUN=0
     RUN_CLI="${CAP_DEFAULT_AGENT_CLI:-auto}"
     CLI_OVERRIDE=0
-    EXECUTION_MODE="auto"
+    EXECUTION_STRATEGY="auto"
     while [ "$#" -gt 0 ]; do
       case "$1" in
         -d)       DETACH=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         --cli)    RUN_CLI="$2"; CLI_OVERRIDE=1; shift 2 ;;
-        --mode)   EXECUTION_MODE="$2"; shift 2 ;;
+        --strategy) EXECUTION_STRATEGY="$2"; shift 2 ;;
+        --mode)   EXECUTION_STRATEGY="$2"; shift 2 ;;
         *)        break ;;
       esac
     done
 
     [ "$#" -ge 1 ] || {
-      echo "Usage: cap workflow run [--dry-run] [-d] [--cli codex|claude] [--mode quick|governed|auto] <workflow> [prompt...]" >&2
+      echo "Usage: cap workflow run [--dry-run] [-d] [--cli codex|claude] [--strategy fast|governed|strict|auto] <workflow> [prompt...]" >&2
       exit 1
     }
-    case "${EXECUTION_MODE}" in
-      quick|governed|auto) ;;
+    case "${EXECUTION_STRATEGY}" in
+      fast|quick|governed|strict|company|auto) ;;
       *)
-        echo "不支援的 --mode：${EXECUTION_MODE}。可用值：quick | governed | auto" >&2
+        echo "不支援的 --strategy：${EXECUTION_STRATEGY}。可用值：fast | governed | strict | auto" >&2
         exit 1
         ;;
     esac
 
-    WORKFLOW_REF="$(resolve_workflow_ref "$1")" || {
-      echo "找不到 workflow：$1" >&2
+    WORKFLOW_ARG="$1"
+    if [ "${EXECUTION_STRATEGY}" = "auto" ]; then
+      case "${WORKFLOW_ARG}" in
+        version-control-quick) EXECUTION_STRATEGY="fast" ;;
+        version-control-private) EXECUTION_STRATEGY="governed" ;;
+        version-control-company) EXECUTION_STRATEGY="strict" ;;
+      esac
+    fi
+
+    WORKFLOW_REF="$(resolve_workflow_ref "${WORKFLOW_ARG}")" || {
+      echo "找不到 workflow：${WORKFLOW_ARG}" >&2
       exit 1
     }
     shift
@@ -428,12 +440,12 @@ case "${1:-}" in
       fi
     fi
 
-    MODE_RESOLUTION_JSON="$(resolve_run_execution_mode "${WORKFLOW_REF}" "${EXECUTION_MODE}" "${USER_PROMPT}")"
-    SELECTOR_APPLIED="$(printf '%s' "${MODE_RESOLUTION_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["selector_applied"])')"
-    SELECTED_MODE="$(printf '%s' "${MODE_RESOLUTION_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["selected_mode"])')"
-    MODE_REASON="$(printf '%s' "${MODE_RESOLUTION_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["reason"])')"
-    MODE_CONFIDENCE="$(printf '%s' "${MODE_RESOLUTION_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["confidence"])')"
-    SELECTED_WORKFLOW_REF="$(printf '%s' "${MODE_RESOLUTION_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["selected_workflow_ref"])')"
+    STRATEGY_RESOLUTION_JSON="$(resolve_run_execution_mode "${WORKFLOW_REF}" "${EXECUTION_STRATEGY}" "${USER_PROMPT}")"
+    SELECTOR_APPLIED="$(printf '%s' "${STRATEGY_RESOLUTION_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["selector_applied"])')"
+    SELECTED_STRATEGY="$(printf '%s' "${STRATEGY_RESOLUTION_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["selected_strategy"])')"
+    STRATEGY_REASON="$(printf '%s' "${STRATEGY_RESOLUTION_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["reason"])')"
+    STRATEGY_CONFIDENCE="$(printf '%s' "${STRATEGY_RESOLUTION_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["confidence"])')"
+    SELECTED_WORKFLOW_REF="$(printf '%s' "${STRATEGY_RESOLUTION_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["selected_workflow_ref"])')"
     if [ "${SELECTOR_APPLIED}" = "True" ]; then
       WORKFLOW_REF="${SELECTED_WORKFLOW_REF}"
       PLAN_JSON="$("${PYTHON_BIN}" "${CLI_PY}" build-bound-plan "${CAP_ROOT}" "${WORKFLOW_REF}")"
@@ -454,9 +466,9 @@ case "${1:-}" in
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       echo ""
       if [ "${SELECTOR_APPLIED}" = "True" ]; then
-        echo "  Mode: ${SELECTED_MODE} (${EXECUTION_MODE})"
-        echo "  Reason: ${MODE_REASON}"
-        echo "  Confidence: ${MODE_CONFIDENCE}"
+        echo "  Strategy: ${SELECTED_STRATEGY} (${EXECUTION_STRATEGY})"
+        echo "  Reason: ${STRATEGY_REASON}"
+        echo "  Confidence: ${STRATEGY_CONFIDENCE}"
         echo ""
       fi
       "${PYTHON_BIN}" "${CLI_PY}" print-workflow-plan "${PLAN_JSON}"
@@ -477,8 +489,8 @@ case "${1:-}" in
       echo "WORKFLOW PREFLIGHT BLOCKED — ${WORKFLOW_NAME}"
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       if [ "${SELECTOR_APPLIED}" = "True" ]; then
-        echo "mode: ${SELECTED_MODE} (${EXECUTION_MODE})"
-        echo "reason: ${MODE_REASON}"
+        echo "strategy: ${SELECTED_STRATEGY} (${EXECUTION_STRATEGY})"
+        echo "reason: ${STRATEGY_REASON}"
         echo ""
       fi
       "${PYTHON_BIN}" "${CLI_PY}" print-binding-blocked "${BINDING_JSON}" "${BINDING_SNAPSHOT_JSON}"
@@ -492,8 +504,8 @@ case "${1:-}" in
       echo "WORKFLOW PREFLIGHT DEGRADED — ${WORKFLOW_NAME}"
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       if [ "${SELECTOR_APPLIED}" = "True" ]; then
-        echo "mode: ${SELECTED_MODE} (${EXECUTION_MODE})"
-        echo "reason: ${MODE_REASON}"
+        echo "strategy: ${SELECTED_STRATEGY} (${EXECUTION_STRATEGY})"
+        echo "reason: ${STRATEGY_REASON}"
         echo ""
       fi
       "${PYTHON_BIN}" "${CLI_PY}" print-binding-degraded "${BINDING_JSON}" "${BINDING_SNAPSHOT_JSON}"
@@ -513,15 +525,15 @@ case "${1:-}" in
     RUN_ID="$(create_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "executing" "foreground_start" "foreground" "${RUN_CLI}" "${USER_PROMPT}")"
     bash "${SCRIPT_DIR}/trace-log.sh" append "Workflow" "workflow:${WORKFLOW_ID} run:${RUN_ID} 啟動 (${WORKFLOW_NAME})" "成功" >/dev/null 2>&1 || true
     if [ "${SELECTOR_APPLIED}" = "True" ]; then
-      echo "  Mode: ${SELECTED_MODE} (${EXECUTION_MODE})"
-      echo "  Reason: ${MODE_REASON}"
-      echo "  Confidence: ${MODE_CONFIDENCE}"
+      echo "  Strategy: ${SELECTED_STRATEGY} (${EXECUTION_STRATEGY})"
+      echo "  Reason: ${STRATEGY_REASON}"
+      echo "  Confidence: ${STRATEGY_CONFIDENCE}"
     fi
     "${PYTHON_BIN}" "${CLI_PY}" print-binding-start "${BINDING_SNAPSHOT_JSON}" "${RUN_ID}"
     if [ "${CLI_OVERRIDE}" -eq 1 ]; then
-      exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --cli "${RUN_CLI}" --run-id "${RUN_ID}"
+      CAP_WORKFLOW_REQUESTED_STRATEGY="${EXECUTION_STRATEGY}" CAP_WORKFLOW_SELECTED_STRATEGY="${SELECTED_STRATEGY}" CAP_WORKFLOW_REQUESTED_MODE="${EXECUTION_STRATEGY}" CAP_WORKFLOW_SELECTED_MODE="${SELECTED_STRATEGY}" exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --cli "${RUN_CLI}" --run-id "${RUN_ID}"
     fi
-    exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --run-id "${RUN_ID}"
+    CAP_WORKFLOW_REQUESTED_STRATEGY="${EXECUTION_STRATEGY}" CAP_WORKFLOW_SELECTED_STRATEGY="${SELECTED_STRATEGY}" CAP_WORKFLOW_REQUESTED_MODE="${EXECUTION_STRATEGY}" CAP_WORKFLOW_SELECTED_MODE="${SELECTED_STRATEGY}" exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --run-id "${RUN_ID}"
     ;;
   update-run-status)
     [ "$#" -eq 4 ] || usage

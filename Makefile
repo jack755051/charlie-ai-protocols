@@ -42,8 +42,8 @@ help: ## 列出所有可用指令
 	@echo "  cap agent frontend \"幫我檢查 auth module\""
 	@echo "  cap workflow list"
 	@echo "  cap workflow ps"
-	@echo "  cap workflow version-control-private \"請針對目前變更建立 commit\""
-	@echo "  cap workflow run --cli codex version-control-private \"prompt\""
+	@echo "  cap workflow version-control \"請針對目前變更建立 commit\""
+	@echo "  cap workflow run --cli codex version-control \"prompt\""
 
 setup: $(VENV)/bin/activate ## 建立 venv 並安裝依賴（首次執行）
 	@echo "✅ 虛擬環境就緒：$(VENV)"

@@ -17,6 +17,7 @@ set -u
 step_id="${CAP_WORKFLOW_STEP_ID:-vc_apply}"
 input_context="${CAP_WORKFLOW_INPUT_CONTEXT:-}"
 user_prompt="${CAP_WORKFLOW_USER_PROMPT:-}"
+selected_strategy="${CAP_WORKFLOW_SELECTED_STRATEGY:-${CAP_WORKFLOW_SELECTED_MODE:-}}"
 
 # ── 工具：紅字標記 lint 失敗原因，但不影響 stdout 結構 ──
 fail_with() {
@@ -322,17 +323,20 @@ done <<< "${parsed}"
 path_tokens_csv=""
 release_intent="false"
 latest_tag=""
+evidence_strategy="${selected_strategy}"
 if [ -n "${evidence_path}" ] && [ -f "${evidence_path}" ]; then
   release_intent="$(extract_evidence_field "${evidence_path}" 'release_intent')"
   latest_tag="$(extract_evidence_field "${evidence_path}" 'latest_tag')"
+  evidence_strategy="$(extract_evidence_field "${evidence_path}" 'strategy')"
   tokens="$(extract_evidence_list "${evidence_path}" 'path_tokens')"
   path_tokens_csv="$(printf '%s' "${tokens}" | tr '\n' ',' | sed 's/,$//')"
 fi
+evidence_strategy="${evidence_strategy:-${selected_strategy}}"
 
 printf 'commit_type=%s\nscope=%s\nsubject=%s\n' "${commit_type}" "${scope}" "${subject}"
 printf 'perform_release=%s tag=%s\n' "${perform_release}" "${tag}"
 printf 'annotation=%s\n' "${annotation}"
-printf 'release_intent_from_scan=%s latest_tag=%s\n' "${release_intent}" "${latest_tag}"
+printf 'release_intent_from_scan=%s latest_tag=%s strategy=%s\n' "${release_intent}" "${latest_tag}" "${evidence_strategy:-<unset>}"
 printf 'path_tokens=%s\n\n' "${path_tokens_csv}"
 
 # 5. lint
@@ -346,6 +350,10 @@ if ! printf '%s' "${scope}" | grep -qE '^[a-z][a-z0-9-]*$'; then
 fi
 
 lint_subject "${subject}" "${path_tokens_csv}"
+
+if [ "${evidence_strategy}" = "fast" ] && [ "${perform_release}" = "1" ]; then
+  fail_with "fast_strategy_release_blocked" "strategy=fast requires release.perform_release=false"
+fi
 
 if [ "${perform_release}" = "1" ]; then
   if [ "${release_intent}" != "true" ]; then

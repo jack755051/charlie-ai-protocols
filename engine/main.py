@@ -128,7 +128,7 @@ def main():
         請嚴格根據你的 `01-supervisor-agent.md` 規範執行：
         1. 進行需求拆解，產出具備技術細節的 PRD 摘要。
         2. 若 workflow execution plan 已提供，依該 plan 的 capability、step 順序與產物要求進行編排。
-        3. 若無 workflow，不得預設套用大型流程；請先依使用者意圖從 `workflow-smoke-test.yaml`、`readme-to-devops.yaml`、`version-control-private.yaml` 或 `version-control-company.yaml` 中選擇最小可行流程，若仍不足再明確說明原因。
+        3. 若無 workflow，不得預設套用大型流程；請先依使用者意圖從 `workflow-smoke-test.yaml`、`readme-to-devops.yaml` 或 `version-control.yaml` 中選擇最小可行流程，若仍不足再明確說明原因。
         4. 編排決策依據 `schemas/capabilities.yaml`；交接單欄位語意參考 `docs/cap/ARCHITECTURE.md` 的「Handoff Ticket 欄位參考」段落。
         5. 你必須明確執行 workflow governance：依 `governance.watcher_mode/logger_mode` 安排 Watcher/Logger 的介入節點。
         6. 正式派工時必須組裝結構化 handoff ticket，至少補齊 workflow_context、acceptance_criteria、route_back_to、governance 與 artifact 路徑。

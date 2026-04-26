@@ -6,16 +6,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [Unreleased]
+
+### Changed
+- 將版本控制模板收斂為單一 `version-control` workflow，原 quick / governed / company 差異改由 `strategy` contract 表達。
+- `cap workflow run` 新增 `--strategy fast|governed|strict|auto` 語意；舊版 workflow 名稱僅作相容 alias。
+
 
 
 ## [v0.13.5] - 2026-04-26
 
 ### Changed
-- version-control-private / -quick / -company 改為 vc_scan(shell) → vc_compose(AI) → vc_apply(shell) 三段 pipeline，shell 不再猜 commit 語意、AI 不再重跑 git。
+- 版本控制 workflow 改為 vc_scan(shell) → vc_compose(AI) → vc_apply(shell) 三段 pipeline，shell 不再猜 commit 語意、AI 不再重跑 git。
 - vc-apply.sh 出口 lint 守門：subject 必須引用至少一個 changed path token（如 vc-scan、agent-skills、workflows），禁用 enforce / sync / refine / unify / streamline / consolidate / clarify / harden / strengthen / establish / introduce / govern / finalize / polish / adjust / tweak / optimize / enhance 等抽象主動詞，update / improve / refactor 後必須接具體名詞。
 - vc-apply.sh 強制 annotation 採 `<tag> — <summary>` 格式，summary 也必須引用 path token；compose 擅自宣告 perform_release=true 但 scan release_intent=false 時直接 halt。
 - 06-devops-agent.md §1.1 重寫為 vc_compose 工作規範：禁止重跑 git、必須讀 evidence pack、產出符合 envelope schema 的 JSON。
-- 刪除 scripts/workflows/version-control-private.sh（401 行 grep 規則樹），改由 vc-scan.sh + vc-apply.sh 取代。
+- 刪除舊版單檔版本控制 shell executor（401 行 grep 規則樹），改由 vc-scan.sh + vc-apply.sh 取代。
 - 保留 cap release-check / cap version（原 v0.15.0 工作項）作為發版 sanity 工具，未來在 vc-apply 之外的 release 流程引用。
 ## [v0.13.4] - 2026-04-26
 
@@ -25,7 +31,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ### Added
 
-- `version-control-private` 明確發版時改由 DevOps AI fallback 進行 diff 語意審查，避免 shell 自動產生機械式 commit message 與 release notes
+- 版本控制 workflow 明確發版時改由 DevOps AI fallback 進行 diff 語意審查，避免 shell 自動產生機械式 commit message 與 release notes
 
 ### Changed
 
@@ -42,11 +48,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 - 新增 `executor: shell` workflow step metadata、script 白名單與 AI fallback 設定，支援 hybrid executor 流程
 - 新增 `docs/policies/workflow-executor-exit-codes.md`，定義 shell executor 與 workflow runtime 的退出碼契約
-- 新增 `scripts/workflows/version-control-private.sh` 與 `schemas/workflows/test/version-control-test.yaml`，作為私人版控 quick path 與 hybrid executor fixture
+- 新增早期版本控制 shell executor 與 `schemas/workflows/test/version-control-test.yaml`，作為私人版控 quick path 與 hybrid executor fixture
 
 ### Changed
 
-- `version-control-private` 升級為 v4，改為 shell quick path 優先，僅在語意不明、混合變更或 git 操作失敗時回流 DevOps AI
+- 版本控制 workflow 升級為 v4，改為 shell quick path 優先，僅在語意不明、混合變更或 git 操作失敗時回流 DevOps AI
 - `WorkflowLoader`、`RuntimeBinder`、`step_runtime` 與 `cap-workflow-exec.sh` 同步保留並執行 shell executor / fallback metadata
 - workflow 文件與核心協議補齊 shell executor 治理、fallback 與 sensitive risk halt 規則
 
@@ -94,7 +100,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ### Changed
 
-- `version-control-private` 精簡為單一 step，合併 tag 判定、changelog 同步與 commit/tag 操作
+- 版本控制 workflow 精簡為單一 step，合併 tag 判定、changelog 同步與 commit/tag 操作
 
 ## [v0.10.1] - 2026-04-24
 
@@ -106,7 +112,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ### Changed
 
-- workflow 產品組合收斂為 `workflow-smoke-test`、`readme-to-devops`、`version-control-private` 與 `version-control-company` 四條現役模板
+- workflow 產品組合收斂為 `workflow-smoke-test`、`readme-to-devops` 與版本控制相關現役模板
 - `README.md`、workflow 文件與架構說明改為只描述現役 workflow，移除已淘汰模板的正式入口與引用
 - supervisor 啟動提示不再在缺少 workflow 時預設套用大型流程，改為先選擇最小可行 workflow
 
@@ -119,7 +125,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ### Added
 
-- `version-control-private` 新增 `prepare_release_docs` 階段，將 tag 判定與 release 文件同步前移到 commit 之前
+- 版本控制 workflow 新增 `prepare_release_docs` 階段，將 tag 判定與 release 文件同步前移到 commit 之前
 - workflow executor 會在 step prompt 中注入 `repo_changes`、`project_context` 與 step contract 摘要，讓 summary 模式可直接消化必要 metadata
 
 ### Changed

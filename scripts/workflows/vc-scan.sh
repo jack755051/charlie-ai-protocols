@@ -11,14 +11,15 @@
 # 環境變數：
 #   CAP_WORKFLOW_STEP_ID         — runtime 注入（預設 vc_scan）
 #   CAP_WORKFLOW_USER_PROMPT     — 使用者原始指令，用於偵測 release intent
-#   CAP_WORKFLOW_SELECTED_MODE   — auto / governed / manual
+#   CAP_WORKFLOW_SELECTED_STRATEGY — fast / governed / strict
+#   CAP_WORKFLOW_SELECTED_MODE     — legacy alias for selected strategy
 #   VC_SCAN_DIFF_LINES           — diff_excerpt 取前 N 行（預設 240）
 
 set -u
 
 step_id="${CAP_WORKFLOW_STEP_ID:-vc_scan}"
 user_prompt="${CAP_WORKFLOW_USER_PROMPT:-}"
-selected_mode="${CAP_WORKFLOW_SELECTED_MODE:-}"
+selected_strategy="${CAP_WORKFLOW_SELECTED_STRATEGY:-${CAP_WORKFLOW_SELECTED_MODE:-}}"
 diff_lines="${VC_SCAN_DIFF_LINES:-240}"
 
 print_header() {
@@ -209,14 +210,15 @@ diff_excerpt="$(printf '%s\n' "${diff_excerpt_main}" | sed -n "1,${diff_lines}p"
 printf '### Diff Stat\n\n```text\n%s\n```\n\n' "${diff_stat}"
 printf '### Detected Types\n\n```text\n%s\n```\n\n' "${types}"
 printf '### Release Intent\n\n```text\nrelease_intent=%s explicit_tag=%s next_tag_candidate=%s mode=%s\n```\n\n' \
-  "${release_intent}" "${explicit_tag:-<none>}" "${next_tag}" "${selected_mode:-<unset>}"
+  "${release_intent}" "${explicit_tag:-<none>}" "${next_tag}" "${selected_strategy:-<unset>}"
 
 printf '<<<EVIDENCE_BEGIN>>>\n'
 printf 'schema_version: 1\n'
 printf 'branch: "%s"\n' "${branch}"
 printf 'head: "%s"\n' "${head_short}"
 printf 'latest_tag: "%s"\n' "${latest_tag}"
-printf 'mode: "%s"\n' "${selected_mode}"
+printf 'strategy: "%s"\n' "${selected_strategy}"
+printf 'mode: "%s"\n' "${selected_strategy}"
 printf 'release_intent: %s\n' "${release_intent}"
 printf 'explicit_tag: "%s"\n' "${explicit_tag}"
 printf 'next_tag_candidate: "%s"\n' "${next_tag}"

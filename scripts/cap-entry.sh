@@ -40,7 +40,7 @@ COMMAND                            DESCRIPTION
   cap workflow compile "<需求>"        從一句話需求編譯最小 workflow
   cap workflow run-task "<需求>"       從一句話需求直接 compile 並執行
   cap workflow run <id> [prompt]   前景執行（預設 CLI: claude）
-  cap workflow run --mode auto <id> [prompt]  自動分流 quick / governed
+  cap workflow run --strategy auto <id> [prompt]  自動選擇 fast / governed / strict strategy
   cap workflow run --cli codex <id> [prompt]  指定使用 codex 執行
   cap workflow run --dry-run <id> [prompt]  只顯示執行計畫，不真的執行
   cap workflow <id> "<prompt>"     run 的簡寫

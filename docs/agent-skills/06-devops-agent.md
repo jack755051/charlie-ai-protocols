@@ -73,10 +73,10 @@
   - 是否為 Breaking Change（若是，加 `BREAKING CHANGE:` 段，並建議 minor/major bump）
   - 必要的 migration 步驟（如使用者要做什麼）
 
-### 1.1.8 Quick / Private / Company 三流程的差異
-- `version-control-quick`：`release.perform_release` 必須為 false，即使 `release_intent=true` 也不得發版。若使用者要求發版，請在 stdout 提示改用 private workflow。
-- `version-control-private`：依 `release_intent` 自然走 release / commit-only path。
-- `version-control-company`：governance 較嚴；body 對重大變更必須敘述影響與遷移步驟，watcher 會在 apply checkpoint 稽核。
+### 1.1.8 Version Control Strategy 差異
+- `fast`：`release.perform_release` 必須為 false，即使 `release_intent=true` 也不得發版。若使用者要求發版，請在 stdout 提示改用 `--strategy governed`。
+- `governed`：依 `release_intent` 自然走 release / commit-only path。
+- `strict`：治理較嚴；body 對重大、跨模組、schema 或 CLI 變更必須敘述影響範圍與遷移步驟，watcher 可在 checkpoint 稽核。
 
 ## 2. 容器化與編排實作 (Containerization & Orchestration)
 

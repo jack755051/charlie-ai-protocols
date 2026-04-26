@@ -21,6 +21,8 @@ VENV_PYTHON="${CAP_ROOT}/.venv/bin/python"
 CLI_NAME="${CAP_DEFAULT_AGENT_CLI:-}"
 REQUESTED_MODE="${CAP_WORKFLOW_REQUESTED_MODE:-}"
 SELECTED_MODE="${CAP_WORKFLOW_SELECTED_MODE:-}"
+REQUESTED_STRATEGY="${CAP_WORKFLOW_REQUESTED_STRATEGY:-${REQUESTED_MODE}}"
+SELECTED_STRATEGY="${CAP_WORKFLOW_SELECTED_STRATEGY:-${SELECTED_MODE}}"
 PLAN_JSON=""
 USER_PROMPT=""
 RUN_ID=""
@@ -200,6 +202,8 @@ run_shell_step() {
   CAP_WORKFLOW_USER_PROMPT="${user_prompt}" \
   CAP_WORKFLOW_REQUESTED_MODE="${REQUESTED_MODE}" \
   CAP_WORKFLOW_SELECTED_MODE="${SELECTED_MODE}" \
+  CAP_WORKFLOW_REQUESTED_STRATEGY="${REQUESTED_STRATEGY}" \
+  CAP_WORKFLOW_SELECTED_STRATEGY="${SELECTED_STRATEGY}" \
   bash "${script_path}" 2>&1
 }
 
@@ -630,6 +634,10 @@ ${user_req}
 本步驟的輸入模式：
 ${input_mode}
 
+本次 version-control strategy：
+requested_strategy=${REQUESTED_STRATEGY:-<unset>}
+selected_strategy=${SELECTED_STRATEGY:-<unset>}
+
 本步驟的契約與完成條件：
 ${step_contract}
 
@@ -683,6 +691,9 @@ echo ""
 printf "${BOLD}WORKFLOW RUN — ${WORKFLOW_NAME}${RESET}\n"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 printf "  CLI: %s  |  Phases: %s  |  ID: %s\n" "${CLI_NAME:-auto}" "${TOTAL_PHASES}" "${WORKFLOW_ID}"
+if [ -n "${SELECTED_STRATEGY}" ]; then
+  printf "  Strategy: %s  |  Requested: %s\n" "${SELECTED_STRATEGY}" "${REQUESTED_STRATEGY:-auto}"
+fi
 
 FAILED=0
 COMPLETED=0

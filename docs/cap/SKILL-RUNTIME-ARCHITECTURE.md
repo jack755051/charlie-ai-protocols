@@ -161,8 +161,8 @@ cp .cap.skills.example.yaml .cap.skills.yaml
 2. 查看 workflow 的 semantic + binding 狀態：
 
 ```bash
-cap workflow plan version-control-private
-cap workflow bind version-control-private
+cap workflow plan version-control
+cap workflow bind version-control
 ```
 
 > 補充：若 `.cap.skills.yaml` 不存在，runtime binder 會自動把 `.cap.agents.json` 轉成 legacy adapter，讓 `plan / bind / run` 仍可維持 `ready / degraded / blocked` 判定。

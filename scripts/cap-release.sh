@@ -76,7 +76,7 @@ infer_release_summary_from_paths() {
     printf 'add CAP platform roadmap and agent session runtime records'
     return
   fi
-  if printf '%s\n' "${paths}" | grep -qE '(^scripts/cap-workflow|^scripts/workflows/version-control-private\.sh$|^scripts/cap-release\.sh$)'; then
+  if printf '%s\n' "${paths}" | grep -qE '(^scripts/cap-workflow|^scripts/workflows/vc-(scan|apply)\.sh$|^scripts/cap-release\.sh$)'; then
     printf 'tighten governed release fallback and version summaries'
     return
   fi

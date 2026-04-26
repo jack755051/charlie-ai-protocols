@@ -98,21 +98,18 @@ workflow 不負責決定最終 agent，只負責宣告：
 - 主要步驟：
   - `project_constitution` — 產出 Project Constitution Markdown / JSON 與 executor policy
 
-#### `version-control-private.yaml`
+#### `version-control.yaml`
 
-- 用途：私人專案版本控制治理流程（三段 pipeline）
-- 設計理由：shell 不再猜語意（避免低訊號 subject / 機械模板），AI 不再重跑 git（避免空燒 token）；改為清楚切分 `vc_scan` (shell) → `vc_compose` (AI) → `vc_apply` (shell)，由 `vc_apply` 出口 lint 守住 commit 品質
+- 用途：版本控制流程（三段 pipeline + strategy）
+- 設計理由：shell 不再猜語意（避免低訊號 subject / 機械模板），AI 不再重跑 git（避免空燒 token）；改為清楚切分 `vc_scan` (shell) → `vc_compose` (AI) → `vc_apply` (shell)，由 `vc_apply` 出口 lint 守住 commit 品質。fast / governed / strict 是策略，不再拆成多份 workflow YAML。
 - 主要步驟：
   - `vc_scan` (shell) — 掃描 git 狀態、敏感檔、變更類型，輸出結構化 evidence pack（含 `path_tokens` / `release_intent` / `next_tag_candidate` / `diff_excerpt`）
   - `vc_compose` (AI / devops) — 純語意工作：根據 evidence 產出 commit envelope JSON，禁止重跑 git
   - `vc_apply` (shell) — lint envelope（subject 必含 path token、禁止抽象主動詞、annotation 與 changelog 條目皆過 lint），通過後執行 git ops（commit / 視 release_intent 決定 tag + CHANGELOG amend + push）
-
-#### `version-control-quick.yaml`
-
-- 用途：私人專案快速版控（commit-only，不發版）
-- 設計理由：與 private 共用三段 pipeline 與 lint 守門；差異是 `vc_compose` 強制 `release.perform_release=false`，`vc_apply` 不會走 tag / CHANGELOG / README 同步路徑
-- 主要步驟：
-  - `vc_scan` → `vc_compose` (commit-only 限制) → `vc_apply` (commit + push)
+- 策略：
+  - `fast` — 日常 commit-only，禁止 release / tag / CHANGELOG path
+  - `governed` — 一般治理版控，允許依 `release_intent` 執行 release path
+  - `strict` — 高治理 / 公司場景，重大或跨模組變更必須說明影響與遷移
 
 ### B. 補充流程
 
@@ -141,24 +138,16 @@ workflow 不負責決定最終 agent，只負責宣告：
   - 目前主線先聚焦架構理解、熱點診斷、技術債與維護風險
   - 若未來要做測試性 / 安全性專項分析，較適合另外拆成 extension workflow，而不是硬塞進主線
 
-#### `version-control-company.yaml`
-
-- 用途：公司專案版本控制（三段 pipeline + 較嚴的 governance）
-- 適用情境：公司既有 repo、需保留 watcher / logger 治理軌跡的版控場景
-- 設計理由：與 private 共用 `vc_scan` → `vc_compose` → `vc_apply` 三段；差異在 `governance.watcher_mode=milestone_gate`、`logger_mode=milestone_log`、`halt_on_missing_handoff=true`，且 `vc_compose` 對重大變更要求在 body 列出影響範圍與遷移步驟
-- 主要步驟：
-  - `vc_scan` → `vc_compose` (含跨模組影響說明) → `vc_apply` (watcher 在 apply checkpoint 介入)
-
 ## 7. 使用建議
 
 - 如果你是逐步手動操作：直接用 `$skill` 呼叫單一 agent
-- 如果你要固定順序、可重複交付：優先從 `version-control-private.yaml`、`readme-to-devops.yaml` 與 `workflow-smoke-test.yaml` 之間選擇最小可行流程
-- 若是日常 commit：優先走 `version-control-quick.yaml`
-- 若是私人專案交付且需要 release / tag / CHANGELOG 同步：走 `version-control-private.yaml`（pipeline 內含 lint 守門）
-- 若包含 tag / release / CHANGELOG / README 同步：後續應拆成 release 專用 workflow 或擴充 `version_control_tag` step，不應塞回日常 commit quick path
-- `cap workflow run --mode auto version-control-private "版本更新"` 會由 runtime selector 自動落到 quick 或 governed 路徑
-- 如果目前 schema 尚未支援條件分支，優先拆成兩條明確 workflow，而不是在單一檔案裡混入情境判斷
-- 若你想處理的是「最後收尾、核對、補文件、提交與 release」：先強化既有 `version-control-private`，不要先新增命名模糊的「收斂 workflow」
+- 如果你要固定順序、可重複交付：優先從 `version-control.yaml`、`readme-to-devops.yaml` 與 `workflow-smoke-test.yaml` 之間選擇最小可行流程
+- 若是日常 commit：走 `cap workflow run --strategy fast version-control "..."`
+- 若需要 release / tag / CHANGELOG 同步：走 `cap workflow run --strategy governed version-control "..."`
+- 若是公司或高治理場景：走 `cap workflow run --strategy strict version-control "..."`
+- `cap workflow run --strategy auto version-control "版本更新"` 會由 runtime selector 自動選擇 strategy
+- 不再為 quick / company / private 拆多份 version-control YAML；差異應落在 strategy contract，而不是 workflow 檔名
+- 若你想處理的是「最後收尾、核對、補文件、提交與 release」：先強化既有 `version-control` strategy，不要先新增命名模糊的「收斂 workflow」
 - 只有在「收斂」本身有獨立產物、獨立驗收條件、且步驟序列明顯不同於版控流程時，才新增新的 workflow，例如 `release-convergence.yaml`
 
 ## 8. 對應檔案

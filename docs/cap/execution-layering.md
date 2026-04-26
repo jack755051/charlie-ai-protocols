@@ -28,7 +28,7 @@ CAP 是「本機 AI workflow runtime」，每一次 `cap workflow run` 都會經
 | 4. Shell deterministic step 層 | Shell | `scripts/workflows/vc-scan.sh`、`scripts/workflows/vc-apply.sh` | workflow step 內，直接做 git ops、檔案 scan、deterministic 守門（敏感檔、no_changes、lint） |
 | 5. AI step 層 | 由 workflow yaml `executor: ai` 決定 | provider 透過 `codex exec` / `claude -p` 執行 | 語意判讀、規格推導、commit envelope 產出、trade-off 決策 |
 
-層級之間的觸發關係不是固定「Shell 叫 Python」或「Python 叫 Shell」。`schemas/workflows/version-control-private.yaml` 就是混合：`vc_scan` 與 `vc_apply` 是 shell（第 4 層）、`vc_compose` 是 AI（第 5 層），由第 2 層 `cap-workflow-exec.sh` 依 step `executor` 欄位分派。
+層級之間的觸發關係不是固定「Shell 叫 Python」或「Python 叫 Shell」。`schemas/workflows/version-control.yaml` 就是混合：`vc_scan` 與 `vc_apply` 是 shell（第 4 層）、`vc_compose` 是 AI（第 5 層），由第 2 層 `cap-workflow-exec.sh` 依 step `executor` 欄位分派。
 
 ## 3. 邊界判準
 

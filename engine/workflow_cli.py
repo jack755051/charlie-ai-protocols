@@ -107,6 +107,12 @@ def _load_json_arg(raw: str) -> dict:
 
 def cmd_resolve_ref(workflows_dir: str, raw_ref: str) -> None:
     """Resolve a workflow reference to an absolute file path."""
+    legacy_aliases = {
+        "version-control-private": "version-control",
+        "version-control-quick": "version-control",
+        "version-control-company": "version-control",
+    }
+    raw_ref = legacy_aliases.get(raw_ref, raw_ref)
     wdir = Path(workflows_dir)
     for path in sorted(wdir.iterdir()):
         if not path.is_file() or path.suffix not in {".yaml", ".yml", ".json"}:
@@ -127,11 +133,11 @@ def cmd_resolve_ref(workflows_dir: str, raw_ref: str) -> None:
 def cmd_resolve_mode(
     cap_root: str,
     workflow_ref: str,
-    requested_mode: str,
+    requested_strategy: str,
     user_prompt: str,
     changed_files: str,
 ) -> None:
-    """Resolve execution mode for version-control workflow family."""
+    """Resolve execution strategy for the version-control workflow."""
     base_dir = Path(cap_root)
     workflow_path = Path(workflow_ref)
     changed = [line.strip() for line in changed_files.splitlines() if line.strip()]
@@ -139,16 +145,22 @@ def cmd_resolve_mode(
     workflow_data = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
     workflow_id = workflow_data.get("workflow_id", workflow_path.stem)
 
-    quick_path = base_dir / "schemas/workflows/version-control-quick.yaml"
-    governed_path = base_dir / "schemas/workflows/version-control-private.yaml"
-    family_ids = {"version-control-private", "version-control-quick"}
+    version_control_path = base_dir / "schemas/workflows/version-control.yaml"
+    family_ids = {
+        "version-control",
+        "version-control-private",
+        "version-control-quick",
+        "version-control-company",
+    }
 
     result: dict = {
         "selector_applied": False,
-        "requested_mode": requested_mode,
+        "requested_strategy": requested_strategy,
+        "selected_strategy": "fixed",
+        "requested_mode": requested_strategy,
         "selected_mode": "fixed",
         "confidence": "high",
-        "reason": "workflow family does not require mode routing",
+        "reason": "workflow does not require strategy routing",
         "selected_workflow_ref": str(workflow_path),
         "selected_workflow_id": workflow_id,
         "original_workflow_id": workflow_id,
@@ -176,45 +188,58 @@ def cmd_resolve_mode(
     explicit_governed = any(keyword in prompt for keyword in release_keywords)
     explicit_quick = any(keyword in prompt for keyword in quick_keywords)
 
-    if requested_mode == "quick":
-        selected_mode = "quick"
-        reason = "explicit --mode quick"
+    if requested_strategy in {"quick", "fast"}:
+        selected_strategy = "fast"
+        reason = "explicit fast strategy"
         confidence = "high"
-    elif requested_mode == "governed":
-        selected_mode = "governed"
-        reason = "explicit --mode governed"
+    elif requested_strategy == "governed":
+        selected_strategy = "governed"
+        reason = "explicit governed strategy"
+        confidence = "high"
+    elif requested_strategy in {"strict", "company"}:
+        selected_strategy = "strict"
+        reason = "explicit strict strategy"
         confidence = "high"
     elif workflow_id == "version-control-quick":
-        selected_mode = "quick"
-        reason = "quick workflow requested directly"
+        selected_strategy = "fast"
+        reason = "legacy quick workflow alias requested"
+        confidence = "high"
+    elif workflow_id == "version-control-company":
+        selected_strategy = "strict"
+        reason = "legacy company workflow alias requested"
+        confidence = "high"
+    elif workflow_id == "version-control-private":
+        selected_strategy = "governed"
+        reason = "legacy private workflow alias requested"
         confidence = "high"
     elif explicit_governed:
-        selected_mode = "governed"
+        selected_strategy = "governed"
         reason = "prompt includes release/tag/changelog/readme intent"
         confidence = "high"
     elif explicit_quick:
-        selected_mode = "quick"
-        reason = "prompt indicates quick commit-only intent"
+        selected_strategy = "fast"
+        reason = "prompt indicates commit-only intent"
         confidence = "high"
     elif release_file_touched:
-        selected_mode = "governed"
+        selected_strategy = "governed"
         reason = "release-related files changed (README.md / CHANGELOG.md / repo.manifest.yaml)"
         confidence = "medium"
     elif len(changed) <= 6:
-        selected_mode = "quick"
+        selected_strategy = "fast"
         reason = "auto default for lightweight version-control requests"
         confidence = "medium"
     else:
-        selected_mode = "governed"
-        reason = "change set is larger and no quick intent was detected"
+        selected_strategy = "governed"
+        reason = "change set is larger and no fast intent was detected"
         confidence = "medium"
 
-    selected_ref = quick_path if selected_mode == "quick" else governed_path
+    selected_ref = version_control_path
     selected_data = yaml.safe_load(selected_ref.read_text(encoding="utf-8"))
     result.update(
         {
             "selector_applied": True,
-            "selected_mode": selected_mode,
+            "selected_strategy": selected_strategy,
+            "selected_mode": selected_strategy,
             "confidence": confidence,
             "reason": reason,
             "selected_workflow_ref": str(selected_ref),

@@ -1,17 +1,44 @@
-workflow_id: version-control-private
-version: 6
-name: Private Project Version Control
-summary: 私人專案版本控制 pipeline：vc_scan(shell) 掃描並產 evidence pack；vc_compose(AI) 依 evidence 產 commit envelope JSON；vc_apply(shell) 過 lint 後執行 git ops。Shell 不再猜語意，AI 不再重跑 git。
+workflow_id: version-control
+version: 7
+name: Version Control
+summary: 版本控制 pipeline：vc_scan(shell) 掃描並產 evidence pack；vc_compose(AI) 依 evidence 產 commit envelope JSON；vc_apply(shell) 過 lint 後執行 git ops。Shell 不再猜語意，AI 不再重跑 git；fast / governed / strict 差異由 strategy 定義，不再拆成多份版本控制 YAML。
 owner: supervisor
 triggers:
   - manual
   - version-control
-  - private-project
 
 artifacts:
   vc_evidence_pack: scan 階段輸出的結構化 evidence（YAML in evidence block）
   commit_envelope: compose 階段輸出的 commit 結構化 JSON
   commit_result: apply 階段執行 git ops 的結果
+
+strategies:
+  fast:
+    summary: 日常 commit-only，體驗優先；禁止 release / tag / CHANGELOG path。
+    release_allowed: false
+    prompt_profile: compact
+    artifact_level: minimal
+    require_body: false
+    watcher_level: none
+    apply_policy: commit_only
+  governed:
+    summary: 一般治理版控；可依 release_intent 執行 tag / CHANGELOG / README 同步。
+    release_allowed: true
+    prompt_profile: standard
+    artifact_level: standard
+    require_body_for_cross_module: true
+    watcher_level: final
+    apply_policy: release_allowed
+  strict:
+    summary: 高治理 / 公司場景；重大、跨模組或 schema/CLI 變更必須說明影響與遷移。
+    release_allowed: true
+    prompt_profile: strict
+    artifact_level: full
+    require_body: true
+    require_impact_statement: true
+    require_migration_note_for_schema_or_cli: true
+    watcher_level: checkpoint
+    apply_policy: release_allowed
 
 governance:
   watcher_mode: final_only
@@ -42,6 +69,7 @@ steps:
     notes:
       - shell 嚴禁推斷 commit type / scope / subject；只負責 scan + 守門
       - release_intent 由使用者 prompt 偵測，未命中時 compose 不得擅自發版
+      - strategy 由 runtime 注入；fast 策略下 release path 必須關閉，strict 策略下語意輸出需更完整
       - exit code 契約見 docs/policies/workflow-executor-exit-codes.md
 
   - id: vc_compose
@@ -63,6 +91,9 @@ steps:
     timeout_seconds: 240
     notes:
       - "本 step 為純語意工作：根據 evidence 寫出可被 vc_apply lint 通過的 envelope"
+      - "strategy=fast：必須產出 release.perform_release=false，即使 evidence.release_intent=true 也不得發版"
+      - "strategy=governed：依 evidence.release_intent 自然走 release 或 commit-only path"
+      - "strategy=strict：重大、跨模組、schema 或 CLI 變更必須在 body 說明影響範圍、Breaking Change 與 migration notes"
       - "禁止使用 enforce/sync/refine/unify/streamline/consolidate/clarify/harden/strengthen/establish/introduce/govern/finalize/polish/adjust/tweak/optimize/enhance 作為 subject 或 annotation 的主動詞"
       - "subject 必須具體說明改了什麼（動詞 + 具體名詞），且必須引用至少一個 path_token（檔名或目錄段）"
       - "annotation_summary 必須以 '<tag> — ' 開頭，summary 部分同樣引用 path_token"
@@ -92,3 +123,4 @@ steps:
       - lint fail（subject 太短 / 主動詞被禁 / 不含 path_token / annotation 不合規）一律 halt，不退回 AI fallback
       - sensitive_file_risk 已在 vc_scan 擋下，這裡不重做
       - release path 會把 CHANGELOG/README amend 進同一個 commit，再建立 annotated tag
+      - fast strategy 下 envelope.release.perform_release 必須為 false；若不是，apply lint 應阻擋

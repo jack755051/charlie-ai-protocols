@@ -191,18 +191,18 @@ cap help
 cap skill list
 cap workflow list
 cap workflow ps
-cap workflow show version-control-private
+cap workflow show version-control
 cap version
 cap release-check --recent 10
-cap workflow bind version-control-private
-cap workflow plan version-control-private
-cap workflow run --mode auto version-control-private "版本更新"
-cap workflow run --mode governed version-control-private "正式發版並同步 CHANGELOG / README"
+cap workflow bind version-control
+cap workflow plan version-control
+cap workflow run --strategy auto version-control "版本更新"
+cap workflow run --strategy governed version-control "正式發版並同步 CHANGELOG / README"
 cap workflow constitution "用 Tauri 做個 AI 額度監控小工具，先不要直接實作"
 cap workflow compile "用 Tauri 做個 AI 額度監控小工具，先不要直接實作"
 cap workflow run-task --dry-run "用 Tauri 做個 AI 額度監控小工具，先不要直接實作"
 cap workflow run --dry-run workflow-smoke-test "test"
-cap workflow run version-control-private "請針對目前變更建立 commit"
+cap workflow run version-control "請針對目前變更建立 commit"
 ```
 
 測試與驗證：
@@ -237,10 +237,10 @@ cap agent troubleshoot "根據這段 log 找 root cause"
 cap workflow list
 cap workflow ps
 cap workflow wf_a4cfb7ad
-cap workflow plan version-control-private
-cap workflow run --mode auto version-control-private "版本更新"
+cap workflow plan version-control
+cap workflow run --strategy auto version-control "版本更新"
 cap workflow run --dry-run workflow-smoke-test "test"
-cap workflow run version-control-private "請針對目前變更建立 commit"
+cap workflow run version-control "請針對目前變更建立 commit"
 ```
 
 目前 `cap workflow` 支援：
@@ -254,7 +254,7 @@ cap workflow run version-control-private "請針對目前變更建立 commit"
 - `compile`：從一句話需求編譯最小 workflow
 - `run-task`：從一句話需求直接 compile 並執行
 - `run`：有 prompt 時進入前景執行；沒有 prompt 時會先詢問或只顯示 plan
-- `run --mode quick|governed|auto`：在同一 workflow family 中切換快速模式、治理模式或自動判斷
+- `run --strategy fast|governed|strict|auto`：在同一 workflow 中切換執行策略或自動判斷
 - `run --dry-run`：只顯示執行計畫，不真的執行 step
 
 Workflow 清單請看 [docs/workflows/README.md](docs/workflows/README.md)。
@@ -284,23 +284,21 @@ Workflow 與 Agent Skills 是並存的兩種使用方式：
 
 - `workflow-smoke-test.yaml`：workflow CLI 與 capability binding 的煙霧測試
 - `readme-to-devops.yaml`：README 治理到 DevOps 基線
-- `version-control-private.yaml`：私人專案版本控制治理流程（三段 pipeline + lint 守門）
-- `version-control-quick.yaml`：私人專案快速版控流程（commit-only，不發版）
-- `version-control-company.yaml`：公司專案版本控制流程（pipeline + 嚴格 governance）
+- `version-control.yaml`：版本控制流程（三段 pipeline + strategy + lint 守門）
 
-版本控制 family 統一採三段 pipeline：
+版本控制 workflow 統一採三段 pipeline：
 
 - `vc_scan` (shell, `scripts/workflows/vc-scan.sh`)：scan + 守門 + 輸出結構化 evidence pack
 - `vc_compose` (AI, devops agent)：純語意工作；根據 evidence 產出 commit envelope JSON
 - `vc_apply` (shell, `scripts/workflows/vc-apply.sh`)：lint envelope（subject 必含 path token、禁止抽象主動詞、annotation/changelog 條目過 lint），通過後執行 git ops
 
-差異：
+策略：
 
-- `version-control-quick`：`vc_compose` 強制 `release.perform_release=false`；不做 tag / CHANGELOG / README 同步
-- `version-control-private`：依 `release_intent` 自然走 release 或 commit-only；發版時 amend CHANGELOG / README 並建立 annotated tag
-- `version-control-company`：governance 嚴格（watcher milestone_gate + halt_on_missing_handoff）；compose 對重大變更要求 body 敘述影響範圍
+- `fast`：`vc_compose` 強制 `release.perform_release=false`；不做 tag / CHANGELOG / README 同步
+- `governed`：依 `release_intent` 自然走 release 或 commit-only；發版時 amend CHANGELOG / README 並建立 annotated tag
+- `strict`：高治理場景；compose 對重大、跨模組、schema 或 CLI 變更要求 body 敘述影響範圍與遷移步驟
 
-`cap workflow run --mode auto version-control-private "版本更新"` 會由 runtime selector 自動分流；目前 selector 是規則式，不會額外多叫一個 router agent。
+`cap workflow run --strategy auto version-control "版本更新"` 會由 runtime selector 自動選擇 strategy；目前 selector 是規則式，不會額外多叫一個 router agent。
 
 相關入口：
 
@@ -364,7 +362,7 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 
 ## Notes
 
-- 最新已驗證 tag：`v0.13.5`；`version-control-private` v6 拆為 `vc_scan` (shell) → `vc_compose` (AI / devops) → `vc_apply` (shell)，shell 不再猜 commit 語意、AI 不再重跑 git，`vc-apply.sh` 的出口 lint 強制 subject 引用 path token、禁用抽象主動詞、annotation 採 `<tag> — <summary>` 格式
+- 最新已驗證 tag：`v0.13.5`；`version-control` v7 收斂為單一 workflow + strategy，三段 pipeline 為 `vc_scan` (shell) → `vc_compose` (AI / devops) → `vc_apply` (shell)，shell 不再猜 commit 語意、AI 不再重跑 git，`vc-apply.sh` 的出口 lint 強制 subject 引用 path token、禁用抽象主動詞、annotation 採 `<tag> — <summary>` 格式
 - `cap release-check` 可檢查最近或全部 release metadata，阻擋 `Release vX.Y.Z`、單純版本號與泛用 CHANGELOG 條目留在正式發版紀錄中
 - 同一份 `docs/agent-skills/` 供 CrewAI、Claude Code、Codex 共用
 - CAP 的目標 sub-agent 抽象是 CAP Agent Session，不綁死 Codex 或 Claude 的原生 subagent 能力

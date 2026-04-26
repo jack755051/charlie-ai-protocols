@@ -97,9 +97,10 @@ workflow schema 用來描述：
 | v1 | 基礎欄位（id / name / capability / needs / inputs / outputs / done_when） | `readme-to-devops.yaml` |
 | v2 | 新增 `parallel_with` / `gate` / `on_fail_route` / `record_level` | （見 §4.2 範例） |
 | v3 | 引入 `input_mode` / `output_tier` / `continue_reason` / `goal_stage` / `step_count_budget` 等治理欄位 | `project-code-analysis.yaml` |
-| v4 | 引入 `executor: shell` / `script` / `fallback` 三欄位，支援 hybrid AI + shell 流程；首版 hybrid 採取 shell quick path 優先、ambiguous 時回流 AI 的單 step 設計 | （已被 v6 取代的 v4 `version-control-private`） |
+| v4 | 引入 `executor: shell` / `script` / `fallback` 三欄位，支援 hybrid AI + shell 流程；首版 hybrid 採取 shell quick path 優先、ambiguous 時回流 AI 的單 step 設計 | 已被 v6 取代的早期版本控制 workflow |
 | v5 | shell executor 強化：要求 commit subject 來自 git diff 訊號（不得用固定模板）、加入 low_signal_subject 等 fallback 條件 | （已被 v6 取代） |
-| v6 | 多 step pipeline 拆分：`vc_scan(shell) → vc_compose(ai) → vc_apply(shell)`，shell 只做掃描與守門，AI 只負責語意，apply 階段對 envelope 做出口 lint | `version-control-private.yaml` |
+| v6 | 多 step pipeline 拆分：`vc_scan(shell) → vc_compose(ai) → vc_apply(shell)`，shell 只做掃描與守門，AI 只負責語意，apply 階段對 envelope 做出口 lint | 已收斂為 `version-control.yaml` |
+| v7 | 將 version-control 的 quick / governed / company 差異收斂為 `strategies`，單一 workflow 透過 `--strategy fast|governed|strict|auto` 調整治理強度 | `version-control.yaml` |
 
 新版本只擴充欄位、不破壞舊 yaml；舊 v1 / v2 yaml 仍可被 RuntimeBinder 載入並執行。
 
