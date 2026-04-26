@@ -209,11 +209,51 @@ def _intrinsic_context(artifact: str) -> str:
             lines.extend(f"    {path}" for path in paths)
         return "\n".join(lines)
 
+    if artifact == "repo_files":
+        # 給需要看 repo 檔案結構的 step（如 readme_normalization、code analysis）
+        # 一份精簡的 file inventory，避免 agent 重新呼叫 find / ls。
+        # 來源：git ls-files（追蹤中）+ git ls-files --others --exclude-standard（未追蹤、非 ignore）。
+        # 為避免噪音，把節錄上限設為 400 條；超出時提示 agent 自行用 git ls-files 補查。
+        tracked = _run_git("ls-files")
+        untracked = _run_git("ls-files", "--others", "--exclude-standard")
+        files: list[str] = []
+        for chunk in (tracked, untracked):
+            if not chunk:
+                continue
+            for line in chunk.splitlines():
+                line = line.strip()
+                if line:
+                    files.append(line)
+        files = sorted(set(files))
+
+        max_listed = 400
+        truncated = len(files) > max_listed
+        listed = files[:max_listed]
+
+        lines = [
+            "intrinsic_repo_files",
+            f"  total_count: {len(files)}",
+            "  files:",
+        ]
+        lines.extend(f"    {path}" for path in listed)
+        if truncated:
+            lines.append(
+                f"  note: list truncated to first {max_listed} entries; "
+                "agent may call `git ls-files` for the full set"
+            )
+        return "\n".join(lines)
+
     return "intrinsic_unknown"
 
 
 _INTRINSIC_ARTIFACTS = frozenset(
-    {"user_requirement", "repo_changes", "project_context", "commit_scope"}
+    {
+        "user_requirement",
+        "repo_changes",
+        "project_context",
+        "commit_scope",
+        "repo_files",
+    }
 )
 
 
