@@ -1,7 +1,7 @@
 # CAP Platform Goal
 
 > 本文件定義 CAP 的產品目標、目標執行模型、目前完成度與後續重構方向。
-> 完整開發路線見 [CAP-IMPLEMENTATION-ROADMAP.md](CAP-IMPLEMENTATION-ROADMAP.md)。
+> 完整開發路線見 [IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md)。
 
 ## 1. 目標定位
 
@@ -217,32 +217,7 @@ deterministic-first, AI-on-ambiguity, halt-on-risk
 
 ## 8. 目前完成度
 
-已完成或接近完成：
-
-- 安裝流程會建立 `~/.cap/projects/`
-- 基礎 agent skills 已存在
-- workflow templates 已存在
-- `.cap.skills.yaml` 可作為 skill registry
-- `RuntimeBinder` 可將 capability 綁定到 agent skill / CLI
-- `cap workflow plan / bind / run` 已可使用 bound plan
-- `cap workflow compile / run-task` 已可從 prompt 產生 task-scoped workflow
-- `cap-workflow-exec.sh` 已能逐 step 呼叫 Codex / Claude CLI
-- workflow output 已能寫入 CAP storage
-- runtime state、artifact index、handoff summary 已有雛形
-- `agent-sessions.json` 已有 executor-level ledger 雛形
-- `result.md` 已有 human-readable run archive 雛形
-
-尚未完成：
-
-- Project Constitution 產生還未完全由 `project-constitution.yaml` + Supervisor agent 驅動
-- `cap workflow constitution` 目前偏 task constitution，不是完整 project constitution workflow runner
-- Supervisor 尚未真正成為 structured orchestration layer
-- sub-agent 目前仍是 step-level CLI invocation，尚未抽象成獨立 AgentSessionRunner
-- Agent Session Ledger 已有雛形，但尚未完整涵蓋 prompt snapshot、provider-native session id 與 recycle policy
-- background / detached run 尚未實作
-- Project Constitution schema 尚未正式化
-- repo-specific workflow / skill source resolver 尚未完整
-- promote / publish 流程尚未完整閉環
+完成度與待辦項目以 [IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md) §2「目前基線」與 §17「Milestone Rollup」為單一事實來源；本文件不重複列出，避免兩處狀態漂移。
 
 ## 9. 目標架構調整
 

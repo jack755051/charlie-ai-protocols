@@ -8,8 +8,8 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 
 安裝 CAP 並登入 Codex / Claude Code CLI 後，使用者應能在任一資料夾或 repo 中使用基礎 agent skills 與 workflows。CAP 會為該 project 建立 `~/.cap/projects/<project_id>/`，保存 constitution、compiled workflows、bindings、agent sessions、handoffs、reports、traces 與執行結果。
 
-完整目標文檔見 [docs/CAP-PLATFORM-GOAL.md](docs/CAP-PLATFORM-GOAL.md)。
-完整實現路線與開發備忘錄見 [docs/CAP-IMPLEMENTATION-ROADMAP.md](docs/CAP-IMPLEMENTATION-ROADMAP.md)。
+完整目標文檔見 [docs/cap/PLATFORM-GOAL.md](docs/cap/PLATFORM-GOAL.md)。
+完整實現路線與開發備忘錄見 [docs/cap/IMPLEMENTATION-ROADMAP.md](docs/cap/IMPLEMENTATION-ROADMAP.md)。
 
 ## 核心原則
 
@@ -62,7 +62,7 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 
 ## 完整實現流程摘要
 
-詳細設計、完成標準與最終 checklist 以 [docs/CAP-IMPLEMENTATION-ROADMAP.md](docs/CAP-IMPLEMENTATION-ROADMAP.md) 為準；本節只保留可追蹤 TODO。
+詳細設計、完成標準與最終 checklist 以 [docs/cap/IMPLEMENTATION-ROADMAP.md](docs/cap/IMPLEMENTATION-ROADMAP.md) 為準；本節只保留可追蹤 TODO。
 
 ### Phase 1: Contracts Complete
 

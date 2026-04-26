@@ -1,8 +1,8 @@
 # 架構設計與設計理念
 
 > 本文件說明 Charlie's AI Protocols 的架構決策與設計原則。
-> 使用手冊請見 [README.md](../README.md)。
-> 完整平台實現路線請見 [CAP-IMPLEMENTATION-ROADMAP.md](CAP-IMPLEMENTATION-ROADMAP.md)。
+> 使用手冊請見 [README.md](../../README.md)。
+> 完整平台實現路線請見 [IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md)。
 
 ---
 

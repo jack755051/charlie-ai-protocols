@@ -87,9 +87,12 @@ interfaces:
   cron: false
 
 docs:
-  architecture: docs/ARCHITECTURE.md
+  architecture: docs/cap/ARCHITECTURE.md
   readme: README.md
   workflows: docs/workflows/README.md
+  platform_goal: docs/cap/PLATFORM-GOAL.md
+  implementation_roadmap: docs/cap/IMPLEMENTATION-ROADMAP.md
+  skill_runtime: docs/cap/SKILL-RUNTIME-ARCHITECTURE.md
 
 runtime:
   python: ">=3.10"

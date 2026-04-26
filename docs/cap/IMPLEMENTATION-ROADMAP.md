@@ -1,7 +1,7 @@
 # CAP Complete Implementation Roadmap
 
 > 本文件是 CAP 從目前「workflow runtime + agent skill registry 雛形」走到完整本機 AI workflow runtime 平台的開發備忘錄。
-> 產品目標見 [CAP-PLATFORM-GOAL.md](CAP-PLATFORM-GOAL.md)。
+> 產品目標見 [PLATFORM-GOAL.md](PLATFORM-GOAL.md)。
 
 ## 1. 目標總圖
 

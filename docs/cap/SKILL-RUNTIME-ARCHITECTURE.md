@@ -1,24 +1,25 @@
-# Skill Marketplace 與 Runtime Binding 草案
+# Skill Runtime Architecture
 
-> 本文件是 CAP 下一階段的架構草案。
-> 目標是支援第三方匯入 / 匯出 agent-skill，同時避免 workflow 因 skill 缺失而失效。
+> 本文件描述 CAP 的 capability → skill 綁定模型與 runtime 行為，並標註仍在 draft 的下一階段擴充。
+> workflow 治理層的整體 roadmap 以 [IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md) 為主；本文件聚焦於 skill registry、RuntimeBinder 與 fallback 行為。
 
 ## 狀態標記
 
-- **正式 runtime 路徑**
-  - `engine/runtime_binder.py`
-  - `cap workflow plan`
-  - `cap workflow run`
-  - `cap workflow bind`
+- **正式 runtime（已實作並 ship）**
+  - `engine/runtime_binder.py` — capability → skill 綁定核心
+  - `.cap.skills.yaml` — workflow binding 的優先輸入
+  - `schemas/skill-registry.schema.yaml`（v2，已合併原 skill-manifest 欄位）
+  - `cap workflow plan` / `bind` / `run`
   - `scripts/cap-workflow-exec.sh` 消費 bound execution plan
 - **正式相容層**
-  - `.cap.agents.json`
+  - `.cap.agents.json`（legacy adapter）
   - `engine/workflow_loader.py::build_execution_phases()`（legacy loader，仍供舊路徑使用）
-- **draft 路徑**
-  - `.cap.skills.yaml`
-  - `.cap.skills.example.yaml`
-  - `schemas/skill-registry.schema.yaml`（v2，已合併原 skill-manifest 欄位）
-  - 遠端 marketplace / LangGraph backend
+- **仍在 draft（尚未實作，見 §「Draft 範圍」與 §「演進方向」）**
+  - 遠端 marketplace 拉取 / 安裝 / 升級
+  - LangGraph backend 實作
+  - 統一 State Container
+  - Checkpoint / 可恢復執行
+  - dispatch 前自動 materialize handoff ticket
 
 ## 核心原則
 
@@ -32,18 +33,16 @@
 - `capability` 是職缺
 - `agent-skill` 是可替換的人員
 
-## 為什麼要改
+## 為什麼分兩階段（build vs bind）
 
-舊版 runtime 偏向早綁定：在建 plan 時就把 capability 直接解析成固定 agent。
-
-這對固定團隊有效，但若未來 skill 可由其他使用者匯入 / 匯出，就會出現兩個問題：
+早期 runtime 偏向早綁定：在建 plan 時就把 capability 直接解析成固定 agent。這對固定團隊有效，但對「skill 可被第三方匯入 / 匯出」的場景會撞牆：
 
 1. 缺 skill 會導致 workflow 無法完整建 plan
-2. marketplace 的 skill 變動會直接影響 workflow 可讀性與可審核性
+2. registry 的 skill 變動會直接影響 workflow 可讀性與可審核性
 
-目前 `cap workflow plan / bind / run` 已改為共用 `RuntimeBinder`，把流程建構與 skill 綁定拆成兩階段。舊版 `build_execution_phases()` 只保留為相容 loader，不再是 workflow CLI 的主要路徑。
+`cap workflow plan / bind / run` 已改為共用 `RuntimeBinder`，把流程建構與 skill 綁定拆成兩階段；舊版 `build_execution_phases()` 只保留為相容 loader，不再是 workflow CLI 的主要路徑。
 
-## 未來執行模型
+## 執行模型（現況）
 
 ### 1. Build
 
@@ -145,9 +144,9 @@ CAP 目前與 LangGraph 的主要差距在兩處，可借鑑其概念補強：
 
 > 這兩項加上後，CAP 即為「帶 governance 的 LangGraph」。governance 層是目前 LangGraph 生態沒有的差異化優勢，應持續由 CAP schema 維持 SSOT。
 
-## 本 repo 內的 draft 檔案
+## 本 repo 內的 SSOT 檔案
 
-- `.cap.skills.example.yaml`
+- `.cap.skills.yaml` — 實際 skill registry（與 `.cap.skills.example.yaml` 內容已同步，後者僅作為新 repo 安裝範本）
 - `schemas/skill-registry.schema.yaml`（v2，含原 manifest 欄位）
 - `engine/runtime_binder.py`（binding report 結構已內化為 docstring）
 

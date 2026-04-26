@@ -72,7 +72,7 @@ infer_release_summary_from_paths() {
   local paths
   paths="$(run_git diff-tree --no-commit-id --name-only -r "${tag}" 2>/dev/null || true)"
 
-  if printf '%s\n' "${paths}" | grep -qE '(^docs/CAP-IMPLEMENTATION-ROADMAP\.md$|^schemas/project-constitution\.schema\.yaml$|^schemas/agent-session\.schema\.yaml$|^engine/step_runtime\.py$)'; then
+  if printf '%s\n' "${paths}" | grep -qE '(^docs/cap/IMPLEMENTATION-ROADMAP\.md$|^docs/CAP-IMPLEMENTATION-ROADMAP\.md$|^schemas/project-constitution\.schema\.yaml$|^schemas/agent-session\.schema\.yaml$|^engine/step_runtime\.py$)'; then
     printf 'add CAP platform roadmap and agent session runtime records'
     return
   fi

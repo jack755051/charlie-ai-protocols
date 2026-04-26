@@ -1,6 +1,7 @@
-# Workflow Schema (v2)
+# Workflow Schema (v2 base, with extensions through v6)
 
 > 本文件定義 `schemas/workflows/*.yaml` 的 schema 契約。
+> v2 是核心欄位定義；v3-v6 為向後相容的擴充版本，僅引入新欄位或新 fallback 條件，未破壞既有結構。
 
 ## 1. 目標
 
@@ -19,7 +20,7 @@ workflow schema 用來描述：
 | 欄位 | 型別 | 必填 | 說明 |
 |---|---|---|---|
 | `workflow_id` | string | yes | workflow 的穩定識別碼，建議 kebab-case |
-| `version` | integer | yes | schema 版本（`1` 或 `2`） |
+| `version` | integer | yes | schema 版本（目前範圍 `1` 至 `6`，見 §3.4 演進說明） |
 | `name` | string | yes | 人類可讀名稱 |
 | `summary` | string | yes | 一句話描述 workflow 目的 |
 | `owner` | string | no | 維護團隊或主要責任角色 |
@@ -83,7 +84,26 @@ workflow schema 用來描述：
 | `fallback.executor` | string | no | fallback 執行器，目前支援 `ai` |
 | `fallback.when` | string[] | no | 允許 fallback 的條件，例如 `ambiguous_change_type`, `mixed_change_type`, `git_operation_failed` |
 
-### 3.3 shell executor exit code contract
+### 3.3 Skill 相容性欄位（用於 binding）
+
+| 欄位 | 型別 | 必填 | 說明 |
+|---|---|---|---|
+| `compatible_workflow_versions` | integer[] | n/a | 不在 workflow yaml 內，但 `.cap.skills.yaml` 內的 skill entry 必須宣告它能服務哪些 workflow 版本，否則 RuntimeBinder 會 fallback 到其他 skill |
+
+### 3.4 版本演進說明
+
+| 版本 | 主要變動 | 範例 workflow |
+|---|---|---|
+| v1 | 基礎欄位（id / name / capability / needs / inputs / outputs / done_when） | `readme-to-devops.yaml` |
+| v2 | 新增 `parallel_with` / `gate` / `on_fail_route` / `record_level` | （見 §4.2 範例） |
+| v3 | 引入 `input_mode` / `output_tier` / `continue_reason` / `goal_stage` / `step_count_budget` 等治理欄位 | `project-code-analysis.yaml` |
+| v4 | 引入 `executor: shell` / `script` / `fallback` 三欄位，支援 hybrid AI + shell 流程；首版 hybrid 採取 shell quick path 優先、ambiguous 時回流 AI 的單 step 設計 | （已被 v6 取代的 v4 `version-control-private`） |
+| v5 | shell executor 強化：要求 commit subject 來自 git diff 訊號（不得用固定模板）、加入 low_signal_subject 等 fallback 條件 | （已被 v6 取代） |
+| v6 | 多 step pipeline 拆分：`vc_scan(shell) → vc_compose(ai) → vc_apply(shell)`，shell 只做掃描與守門，AI 只負責語意，apply 階段對 envelope 做出口 lint | `version-control-private.yaml` |
+
+新版本只擴充欄位、不破壞舊 yaml；舊 v1 / v2 yaml 仍可被 RuntimeBinder 載入並執行。
+
+### 3.5 shell executor exit code contract
 
 `executor: shell` 的退出碼語意統一由 `docs/policies/workflow-executor-exit-codes.md` 定義。核心契約如下：
 

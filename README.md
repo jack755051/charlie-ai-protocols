@@ -20,7 +20,7 @@ CAP 解決的核心問題是：當多位 AI Agent 共同參與軟體開發流程
 - Workflow Schema：把固定流程抽成可重複使用的結構化定義
 - CAP CLI：提供安裝、調用、workflow 檢視、trace 與版本管理
 
-CAP 的完整產品目標請看 [docs/CAP-PLATFORM-GOAL.md](docs/CAP-PLATFORM-GOAL.md)，完整實現路線請看 [docs/CAP-IMPLEMENTATION-ROADMAP.md](docs/CAP-IMPLEMENTATION-ROADMAP.md)。
+CAP 的完整產品目標請看 [docs/cap/PLATFORM-GOAL.md](docs/cap/PLATFORM-GOAL.md)，完整實現路線請看 [docs/cap/IMPLEMENTATION-ROADMAP.md](docs/cap/IMPLEMENTATION-ROADMAP.md)。
 
 ## Scope
 
@@ -72,10 +72,10 @@ intake
 | Runtime Storage | `~/.cap/projects/<project_id>/` | constitutions、compiled-workflows、bindings、reports、traces |
 | Agent Sessions | `~/.cap/projects/<project_id>/sessions/` | 目標中的一次性 sub-agent session ledger |
 
-平台目標請看 [docs/CAP-PLATFORM-GOAL.md](docs/CAP-PLATFORM-GOAL.md)。
-完整實現路線請看 [docs/CAP-IMPLEMENTATION-ROADMAP.md](docs/CAP-IMPLEMENTATION-ROADMAP.md)。
-架構細節請看 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)（含 Executor Watchdog、Task-Scoped Compiler、Handoff Ticket 參考）。
-Skill marketplace 與 runtime binding 草案請看 [docs/SKILL-MARKETPLACE-RUNTIME-DRAFT.md](docs/SKILL-MARKETPLACE-RUNTIME-DRAFT.md)。
+平台目標請看 [docs/cap/PLATFORM-GOAL.md](docs/cap/PLATFORM-GOAL.md)。
+完整實現路線請看 [docs/cap/IMPLEMENTATION-ROADMAP.md](docs/cap/IMPLEMENTATION-ROADMAP.md)。
+架構細節請看 [docs/cap/ARCHITECTURE.md](docs/cap/ARCHITECTURE.md)（含 Executor Watchdog、Task-Scoped Compiler、Handoff Ticket 參考）。
+Skill runtime 架構與 marketplace draft 請看 [docs/cap/SKILL-RUNTIME-ARCHITECTURE.md](docs/cap/SKILL-RUNTIME-ARCHITECTURE.md)。
 可選的本地 skill registry 範例請看 [.cap.skills.example.yaml](.cap.skills.example.yaml)。
 平台自身的 repo 級憲法範例請看 [.cap.constitution.yaml](.cap.constitution.yaml)。
 
@@ -130,7 +130,12 @@ charlie-ai-protocols/
 ├── docs/
 │   ├── agent-skills/
 │   ├── policies/
-│   └── ARCHITECTURE.md
+│   ├── workflows/
+│   └── cap/
+│       ├── ARCHITECTURE.md
+│       ├── PLATFORM-GOAL.md
+│       ├── IMPLEMENTATION-ROADMAP.md
+│       └── SKILL-RUNTIME-ARCHITECTURE.md
 ├── schemas/
 │   ├── workflows/
 │   ├── capabilities.yaml
@@ -373,9 +378,9 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 
 ## Links
 
-- 平台目標：[docs/CAP-PLATFORM-GOAL.md](docs/CAP-PLATFORM-GOAL.md)
-- 完整實現路線：[docs/CAP-IMPLEMENTATION-ROADMAP.md](docs/CAP-IMPLEMENTATION-ROADMAP.md)
-- 架構文件：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- 平台目標：[docs/cap/PLATFORM-GOAL.md](docs/cap/PLATFORM-GOAL.md)
+- 完整實現路線：[docs/cap/IMPLEMENTATION-ROADMAP.md](docs/cap/IMPLEMENTATION-ROADMAP.md)
+- 架構文件：[docs/cap/ARCHITECTURE.md](docs/cap/ARCHITECTURE.md)
 - Agent 清單：[AGENTS.md](AGENTS.md)
 - Workflow 清單：[docs/workflows/README.md](docs/workflows/README.md)
 - Portfolio: <https://jack755051.github.io/charlie_portfolio_frontend/portfolio>
