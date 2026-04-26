@@ -1,4 +1,4 @@
-.PHONY: help setup sync run install uninstall update version rollback list check-aliases workflow
+.PHONY: help setup sync run install uninstall update version release-check rollback list check-aliases workflow
 
 VENV      := .venv
 PIP       := $(VENV)/bin/pip
@@ -16,6 +16,7 @@ help: ## 列出所有可用指令
 	@echo "  cap install             # 全域安裝（跨 Repo 共用）"
 	@echo "  cap uninstall           # 移除全域安裝"
 	@echo "  cap version             # 顯示目前安裝版本與最新 release tag"
+	@echo "  cap release-check       # 檢查 release tag / commit / CHANGELOG 是否低訊號"
 	@echo "  cap update              # 更新到最新 release tag"
 	@echo "  cap update main         # 切到 main 並同步最新 HEAD"
 	@echo "  cap rollback v0.3.0     # 回退到指定 release tag"
@@ -61,6 +62,9 @@ install: sync ## 全域安裝 Agent 技能並註冊 cap / codex / claude shell w
 
 version: ## 顯示目前安裝版本與最新 release tag
 	@bash scripts/cap-release.sh version
+
+release-check: ## 檢查 release tag / commit / CHANGELOG 是否低訊號
+	@bash scripts/cap-release.sh release-check
 
 update: ## 更新到最新 release tag；可用 cap update <target>
 	@bash scripts/cap-release.sh update latest

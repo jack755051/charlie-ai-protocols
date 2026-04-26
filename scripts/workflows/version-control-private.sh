@@ -7,6 +7,8 @@ set -u
 
 step_id="${CAP_WORKFLOW_STEP_ID:-version_control}"
 user_prompt="${CAP_WORKFLOW_USER_PROMPT:-}"
+requested_mode="${CAP_WORKFLOW_REQUESTED_MODE:-}"
+selected_mode="${CAP_WORKFLOW_SELECTED_MODE:-}"
 
 print_header() {
   printf '# %s\n\n' "${step_id}"
@@ -163,6 +165,8 @@ is_low_signal_subject() {
 }
 
 is_release_requested() {
+  [ "${requested_mode}" = "governed" ] && return 0
+  [ "${selected_mode}" = "governed" ] && return 0
   printf '%s' "${user_prompt}" | grep -qiE 'release|tag|changelog|readme|發版|版本|正式'
 }
 
@@ -314,6 +318,18 @@ git diff --cached --stat
 printf '```\n\n'
 printf 'detected_types:\n%s\n\n' "${types}"
 
+if is_release_requested; then
+  release_type="$(highest_impact_type "${types}")"
+  if [ -z "${release_type}" ]; then
+    release_type="chore"
+  fi
+  next_tag="$(explicit_release_tag)"
+  if [ -z "${next_tag}" ]; then
+    next_tag="$(next_version_for_type "${release_type}")"
+  fi
+  request_ai_release_review "${paths}" "${types}" "${next_tag}"
+fi
+
 if [ "${type_count}" -gt 1 ] && ! is_release_requested; then
   printf 'condition: mixed_change_type\n'
   printf 'reason: changed paths map to multiple conventional commit types\n'
@@ -344,21 +360,13 @@ commit_message="${commit_type}(${scope}): ${subject}"
 tag_result="not_requested"
 next_tag=""
 
-if is_release_requested; then
-  next_tag="$(explicit_release_tag)"
-  if [ -z "${next_tag}" ]; then
-    next_tag="$(next_version_for_type "${commit_type}")"
-  fi
-  request_ai_release_review "${paths}" "${types}" "${next_tag}"
-fi
-
 printf 'commit_message: %s\n\n' "${commit_message}"
 git_or_fail add -A
 git_or_fail commit -m "${commit_message}"
 commit_hash="$(git rev-parse --short HEAD 2>/dev/null || true)"
 
 if [ -n "${next_tag}" ]; then
-  git_or_fail tag -a "${next_tag}" -m "Release ${next_tag}"
+  git_or_fail tag -a "${next_tag}" -m "${next_tag} — ${subject}"
   tag_result="created:${next_tag}"
 fi
 

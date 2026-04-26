@@ -7,6 +7,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 ---
 
 
+## [v0.15.0] - 2026-04-26
+
+### Added
+
+- 新增 `cap release-check` / `make release-check`，可掃描最近或全部 `v*` tag，檢查 annotated tag、commit subject 與 CHANGELOG 條目是否仍含低訊號發版文字。
+
+### Changed
+
+- `version-control-private` 在 governed mode 或明確發版意圖下會先回流 DevOps AI fallback 進行 diff 語意審查，再產生具體 Conventional Commit、release notes 與 annotated tag。
+- `cap version` 會避開 `Release vX.Y.Z`、單純版本號與低訊號 summary，必要時依 tag 內變更路徑推導較具體的 release 摘要。
+- Git workflow 與 DevOps agent 規範補齊低訊號 commit、tag annotation 與 CHANGELOG 條目的禁止規則，避免正式發版只留下泛用描述。
+
+
 
 
 ## [v0.14.0] - 2026-04-26

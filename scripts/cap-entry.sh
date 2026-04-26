@@ -19,6 +19,7 @@ COMMAND                            DESCRIPTION
   cap install                      全域安裝 Agent 技能並註冊 shell wrapper
   cap uninstall                    移除全域安裝與 shell wrapper
   cap version                      顯示版本、ref 與最新 release tag
+  cap release-check [--all|--recent N]  檢查 release metadata 是否低訊號
   cap update [target]              更新到 latest / main / 指定 tag 或 branch
 
 [Skill & Registry]
@@ -72,7 +73,7 @@ case "${COMMAND}" in
     shift
     exec bash "${SCRIPT_DIR}/cap-session.sh" claude "$@"
     ;;
-  version|update|rollback)
+  version|update|rollback|release-check)
     exec bash "${SCRIPT_DIR}/cap-release.sh" "$@"
     ;;
   skill)

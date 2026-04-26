@@ -12,6 +12,7 @@ usage() {
   cat <<'EOF' >&2
 Usage:
   bash scripts/cap-release.sh version
+  bash scripts/cap-release.sh release-check [--all|--recent N]
   bash scripts/cap-release.sh prepare [latest|main|<tag>|<branch>]
   bash scripts/cap-release.sh update [latest|main|<tag>|<branch>]
 EOF
@@ -48,6 +49,165 @@ fetch_remote() {
 
 latest_release_tag() {
   run_git tag --list 'v*' --sort=-version:refname | head -n 1
+}
+
+is_generic_release_summary() {
+  local tag="$1"
+  local summary="$2"
+  [ "${summary}" = "Release ${tag}" ] && return 0
+  [ "${summary}" = "${tag}" ] && return 0
+  return 1
+}
+
+is_low_signal_release_summary() {
+  local summary="$1"
+  printf '%s' "${summary}" | grep -qiE '^(feat|fix|docs|test|chore|refactor)\((docs|workflow|schemas|scripts|engine)\): update .* (assets|automation rules|documentation)$' && return 0
+  printf '%s' "${summary}" | grep -qiE '^update .* (assets|automation rules|documentation)$' && return 0
+  printf '%s' "${summary}" | grep -qiE '^sync release documentation$' && return 0
+  return 1
+}
+
+infer_release_summary_from_paths() {
+  local tag="$1"
+  local paths
+  paths="$(run_git diff-tree --no-commit-id --name-only -r "${tag}" 2>/dev/null || true)"
+
+  if printf '%s\n' "${paths}" | grep -qE '(^docs/CAP-IMPLEMENTATION-ROADMAP\.md$|^schemas/project-constitution\.schema\.yaml$|^schemas/agent-session\.schema\.yaml$|^engine/step_runtime\.py$)'; then
+    printf 'add CAP platform roadmap and agent session runtime records'
+    return
+  fi
+  if printf '%s\n' "${paths}" | grep -qE '(^scripts/cap-workflow|^scripts/workflows/version-control-private\.sh$|^scripts/cap-release\.sh$)'; then
+    printf 'tighten governed release fallback and version summaries'
+    return
+  fi
+  if printf '%s\n' "${paths}" | grep -qE '^schemas/workflows/'; then
+    printf 'update workflow contract behavior'
+    return
+  fi
+  if printf '%s\n' "${paths}" | grep -qE '^docs/'; then
+    printf 'update CAP documentation'
+    return
+  fi
+  printf 'release metadata needs semantic repair'
+}
+
+changelog_entry_for_tag() {
+  local tag="$1"
+  if ! [ -f "${CAP_ROOT}/CHANGELOG.md" ]; then
+    return
+  fi
+  awk -v tag="${tag}" '
+    $0 ~ "^## \\[" tag "\\]" { in_section=1; next }
+    in_section && /^## \[/ { exit }
+    in_section && /^-/ {
+      line=$0
+      sub(/^-+[[:space:]]*/, "", line)
+      print line
+      exit
+    }
+  ' "${CAP_ROOT}/CHANGELOG.md"
+}
+
+release_check_tags() {
+  local mode="${1:-recent}"
+  local count="${2:-10}"
+
+  case "${mode}" in
+    all)
+      run_git tag --list 'v*' --sort=-version:refname
+      ;;
+    recent)
+      run_git tag --list 'v*' --sort=-version:refname | head -n "${count}"
+      ;;
+    *)
+      echo "未知 release-check 模式：${mode}" >&2
+      exit 1
+      ;;
+  esac
+}
+
+check_release_metadata() {
+  ensure_git_repo
+
+  local mode="recent"
+  local count="10"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --all)
+        mode="all"
+        shift
+        ;;
+      --recent)
+        mode="recent"
+        count="${2:-10}"
+        shift 2
+        ;;
+      *)
+        echo "Usage: cap release-check [--all|--recent N]" >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  local tags
+  tags="$(release_check_tags "${mode}" "${count}")"
+  if [ -z "${tags}" ]; then
+    echo "release-check: no v* tags found"
+    return 0
+  fi
+
+  local issue_count=0
+  echo "RELEASE METADATA CHECK"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "${tags}" | while IFS= read -r tag; do
+    local annotation commit_subject changelog_entry tag_issues
+    annotation="$(run_git tag -l --format='%(contents:subject)' "${tag}" 2>/dev/null)"
+    commit_subject="$(run_git log -1 --format='%s' "${tag}" 2>/dev/null)"
+    changelog_entry="$(changelog_entry_for_tag "${tag}")"
+    tag_issues=0
+
+    if [ -z "${annotation}" ]; then
+      printf 'FAIL %-10s missing annotated tag message\n' "${tag}"
+      tag_issues=$((tag_issues + 1))
+    elif is_generic_release_summary "${tag}" "${annotation}" || is_low_signal_release_summary "${annotation}"; then
+      printf 'FAIL %-10s low-signal tag annotation: %s\n' "${tag}" "${annotation}"
+      tag_issues=$((tag_issues + 1))
+    fi
+
+    if is_low_signal_release_summary "${commit_subject}"; then
+      printf 'FAIL %-10s low-signal commit subject: %s\n' "${tag}" "${commit_subject}"
+      tag_issues=$((tag_issues + 1))
+    fi
+
+    if [ -z "${changelog_entry}" ]; then
+      printf 'FAIL %-10s missing CHANGELOG entry\n' "${tag}"
+      tag_issues=$((tag_issues + 1))
+    elif is_low_signal_release_summary "${changelog_entry}"; then
+      printf 'FAIL %-10s low-signal CHANGELOG entry: %s\n' "${tag}" "${changelog_entry}"
+      tag_issues=$((tag_issues + 1))
+    fi
+
+    if [ "${tag_issues}" -eq 0 ]; then
+      printf 'PASS %-10s %s\n' "${tag}" "${annotation:-${commit_subject}}"
+    fi
+
+    if [ "${tag_issues}" -gt 0 ]; then
+      issue_count=$((issue_count + tag_issues))
+    fi
+    printf '%s\n' "${issue_count}" > "${CAP_ROOT}/.release-check-count.tmp"
+  done
+
+  if [ -f "${CAP_ROOT}/.release-check-count.tmp" ]; then
+    issue_count="$(cat "${CAP_ROOT}/.release-check-count.tmp")"
+    rm -f "${CAP_ROOT}/.release-check-count.tmp"
+  fi
+
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  if [ "${issue_count}" -gt 0 ]; then
+    echo "release-check: failed (${issue_count} issue(s))"
+    return 1
+  fi
+  echo "release-check: passed"
 }
 
 resolve_target() {
@@ -153,9 +313,12 @@ show_version() {
     local date summary marker
     date="$(run_git log -1 --format='%cs' "${tag}" 2>/dev/null)"
     summary="$(run_git tag -l --format='%(contents:subject)' "${tag}" 2>/dev/null)"
-    # If no annotated tag message, use the commit message
-    if [ -z "${summary}" ]; then
+    # If no annotated tag message, or if annotation is generic, use the commit message.
+    if [ -z "${summary}" ] || is_generic_release_summary "${tag}" "${summary}" || is_low_signal_release_summary "${summary}"; then
       summary="$(run_git log -1 --format='%s' "${tag}" 2>/dev/null)"
+    fi
+    if is_low_signal_release_summary "${summary}"; then
+      summary="$(infer_release_summary_from_paths "${tag}")"
     fi
     # Mark current version
     marker=""
@@ -225,6 +388,10 @@ case "${1:-}" in
   version)
     [ "$#" -eq 1 ] || usage
     show_version
+    ;;
+  release-check|check)
+    shift || true
+    check_release_metadata "$@"
     ;;
   prepare)
     [ "$#" -le 2 ] || usage

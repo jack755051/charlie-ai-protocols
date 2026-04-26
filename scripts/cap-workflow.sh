@@ -367,9 +367,9 @@ case "${1:-}" in
     bash "${SCRIPT_DIR}/trace-log.sh" append "Workflow" "compiled_workflow:${WORKFLOW_ID} run:${RUN_ID} 啟動 (${WORKFLOW_NAME})" "成功" >/dev/null 2>&1 || true
     "${PYTHON_BIN}" "${CLI_PY}" print-compile-start "${COMPILE_SNAPSHOT_JSON}" "${RUN_ID}"
     if [ "${CLI_OVERRIDE}" -eq 1 ]; then
-      exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --cli "${RUN_CLI}" --run-id "${RUN_ID}"
+      CAP_WORKFLOW_REQUESTED_MODE="${EXECUTION_MODE}" CAP_WORKFLOW_SELECTED_MODE="${SELECTED_MODE}" exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --cli "${RUN_CLI}" --run-id "${RUN_ID}"
     fi
-    exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --run-id "${RUN_ID}"
+    CAP_WORKFLOW_REQUESTED_MODE="${EXECUTION_MODE}" CAP_WORKFLOW_SELECTED_MODE="${SELECTED_MODE}" exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --run-id "${RUN_ID}"
     ;;
   run)
     shift || true

@@ -187,6 +187,8 @@ cap skill list
 cap workflow list
 cap workflow ps
 cap workflow show version-control-private
+cap version
+cap release-check --recent 10
 cap workflow bind version-control-private
 cap workflow plan version-control-private
 cap workflow run --mode auto version-control-private "版本更新"
@@ -352,7 +354,8 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 
 ## Notes
 
-- 最新已驗證 tag：`v0.14.0`；`version-control-private` v4 採 shell quick path 優先，明確發版、語意不明或 git 操作失敗時回流 AI fallback
+- 最新已驗證 tag：`v0.15.0`；`version-control-private` v4 採 shell quick path 優先，明確發版、governed mode、語意不明或 git 操作失敗時回流 AI fallback
+- `cap release-check` 可檢查最近或全部 release metadata，阻擋 `Release vX.Y.Z`、單純版本號與泛用 CHANGELOG 條目留在正式發版紀錄中
 - 同一份 `docs/agent-skills/` 供 CrewAI、Claude Code、Codex 共用
 - CAP 的目標 sub-agent 抽象是 CAP Agent Session，不綁死 Codex 或 Claude 的原生 subagent 能力
 - `schemas/workflows/` 只保留內建模板，不承載 task-scoped runtime workflow

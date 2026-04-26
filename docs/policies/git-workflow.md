@@ -21,6 +21,9 @@
   - `test`: 新增或修改測試案例。
   - `chore`: 建置程序、輔助工具或套件管理 (如修改 `package.json`、`init-ai.sh`)。
 - **Subject 規範**：使用簡潔的英文描述（以動詞原形開頭），首字母小寫，句尾不加句號。長度應控制在 50 個字元以內。
+- **低訊號訊息禁止**：不得使用 `update docs workflow assets`、`update schemas workflow assets`、`update project documentation`、`sync release documentation` 這類無法說明實際變更的泛用 subject。若自動化流程只能產生這類 subject，必須停止並交由 AI 或人工根據 diff 重新判讀。
+- **Annotated Tag 規範**：正式發版 tag 必須使用 annotated tag，且 tag message 第一行必須是具體語意摘要，例如 `v0.14.1 — enforce governed release fallback and semantic tag summaries`。不得使用 `Release vX.Y.Z` 或單純版本號。
+- **CHANGELOG 規範**：發版條目必須描述實際功能、修正或治理變更；不得只寫泛用更新或重複 commit subject。
 
 ## 3. 分支決策邏輯 (Branching Decision Tree)
 

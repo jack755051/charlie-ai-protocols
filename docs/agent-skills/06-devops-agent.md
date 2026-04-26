@@ -11,6 +11,8 @@
 - 禁止使用「update workflow assets」這類機械式訊息，除非 diff 內容真的只能如此描述。
 - 若使用者明確要求正式發版、release、tag、CHANGELOG 或 README，同一次任務必須根據 diff 語意產生 release note，更新 `CHANGELOG.md` / `README.md` 中相關版本資訊，建立合適的 annotated tag，並依 upstream 狀態推送。
 - 發版 commit message 必須來自 AI 對實際 diff 的語意判讀，符合 Conventional Commits：`<type>(<scope>): <subject>`。
+- 發版 tag annotation 必須是具體語意摘要，格式建議為 `<tag> — <release summary>`；嚴禁使用 `Release <tag>`、單純版本號、`update docs workflow assets` 或任何無法說明實際變更的泛用文字。
+- `CHANGELOG.md` 的條目必須描述實際變更與使用者可感知的影響；嚴禁只寫 `update ... assets`、`sync release documentation` 或只有版本號的 release note。
 
 ## 2. 容器化與編排實作 (Containerization & Orchestration)
 

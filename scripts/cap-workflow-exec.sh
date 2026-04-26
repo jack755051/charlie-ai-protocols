@@ -19,6 +19,8 @@ PROTOCOL_FILE="${SKILLS_DIR}/00-core-protocol.md"
 VENV_PYTHON="${CAP_ROOT}/.venv/bin/python"
 
 CLI_NAME="${CAP_DEFAULT_AGENT_CLI:-}"
+REQUESTED_MODE="${CAP_WORKFLOW_REQUESTED_MODE:-}"
+SELECTED_MODE="${CAP_WORKFLOW_SELECTED_MODE:-}"
 PLAN_JSON=""
 USER_PROMPT=""
 RUN_ID=""
@@ -196,6 +198,8 @@ run_shell_step() {
   CAP_WORKFLOW_INPUT_CONTEXT="${input_context}" \
   CAP_WORKFLOW_CONTRACT_CONTEXT="${contract_context}" \
   CAP_WORKFLOW_USER_PROMPT="${user_prompt}" \
+  CAP_WORKFLOW_REQUESTED_MODE="${REQUESTED_MODE}" \
+  CAP_WORKFLOW_SELECTED_MODE="${SELECTED_MODE}" \
   bash "${script_path}" 2>&1
 }
 
@@ -1003,6 +1007,15 @@ $(git status --short 2>/dev/null || true)
 $(git diff --stat 2>/dev/null || true)
 
 請接手處理此 shell step 未能安全自動完成的情境。若涉及 sensitive_file_risk，必須停止並回報，不得自行加入或推送敏感檔案。"
+
+      if [ "${SHELL_CONDITION}" = "ambiguous_change_type" ]; then
+        FALLBACK_PROMPT="${FALLBACK_PROMPT}
+
+Release / governed-mode requirements:
+1. 你必須根據 git diff 與 changed paths 產生具體 Conventional Commit message，不得使用 update docs workflow assets、update project documentation、release vX.Y.Z 這類泛用文字。
+2. 若建立 annotated tag，tag message 的第一行必須是具體 release 摘要，例如「v0.14.1 — enforce governed release fallback and semantic tag summaries」，不得使用「Release vX.Y.Z」。
+3. CHANGELOG / README 的 release note 必須描述實際變更，不得只寫版本號或泛用 release 句。"
+      fi
 
       printf "  ${YELLOW}│ shell exit %s (%s)，切換 AI fallback${RESET}\n" "${exit_code}" "${SHELL_CONDITION}"
       START_FALLBACK="$(date '+%s')"
