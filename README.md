@@ -20,7 +20,7 @@ CAP 解決的核心問題是：當多位 AI Agent 共同參與軟體開發流程
 - Workflow Schema：把固定流程抽成可重複使用的結構化定義
 - CAP CLI：提供安裝、調用、workflow 檢視、trace 與版本管理
 
-CAP 的完整產品目標請看 [docs/CAP-PLATFORM-GOAL.md](docs/CAP-PLATFORM-GOAL.md)。
+CAP 的完整產品目標請看 [docs/CAP-PLATFORM-GOAL.md](docs/CAP-PLATFORM-GOAL.md)，完整實現路線請看 [docs/CAP-IMPLEMENTATION-ROADMAP.md](docs/CAP-IMPLEMENTATION-ROADMAP.md)。
 
 ## Scope
 
@@ -73,6 +73,7 @@ intake
 | Agent Sessions | `~/.cap/projects/<project_id>/sessions/` | 目標中的一次性 sub-agent session ledger |
 
 平台目標請看 [docs/CAP-PLATFORM-GOAL.md](docs/CAP-PLATFORM-GOAL.md)。
+完整實現路線請看 [docs/CAP-IMPLEMENTATION-ROADMAP.md](docs/CAP-IMPLEMENTATION-ROADMAP.md)。
 架構細節請看 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)（含 Executor Watchdog、Task-Scoped Compiler、Handoff Ticket 參考）。
 Skill marketplace 與 runtime binding 草案請看 [docs/SKILL-MARKETPLACE-RUNTIME-DRAFT.md](docs/SKILL-MARKETPLACE-RUNTIME-DRAFT.md)。
 可選的本地 skill registry 範例請看 [.cap.skills.example.yaml](.cap.skills.example.yaml)。
@@ -85,7 +86,7 @@ Skill marketplace 與 runtime binding 草案請看 [docs/SKILL-MARKETPLACE-RUNTI
 - `cap-workflow-exec.sh` 已可逐 step 呼叫 Codex / Claude CLI，並保存 artifact、handoff 與 runtime state
 - `cap workflow compile / run-task` 已可從 prompt 產生 task-scoped workflow
 - `project-constitution.yaml` 目前是目標 workflow 模板；完整 Project Constitution runner 與 Supervisor orchestration 尚未完成
-- sub-agent 目前仍是 step-level CLI invocation，尚未升級為正式 CAP Agent Session Ledger
+- sub-agent 目前仍是 step-level CLI invocation；executor 已會產出 `agent-sessions.json`，但尚未升級為完整 AgentSessionRunner
 - skill marketplace schema 與遠端 provider 仍屬 draft / 下一階段設計
 
 ## Project Constitution Model
@@ -134,6 +135,7 @@ charlie-ai-protocols/
 │   ├── workflows/
 │   ├── capabilities.yaml
 │   ├── skill-registry.schema.yaml
+│   ├── project-constitution.schema.yaml
 │   └── task-constitution.schema.yaml
 ├── engine/
 ├── scripts/
@@ -293,6 +295,7 @@ Workflow 與 Agent Skills 是並存的兩種使用方式：
 - [docs/workflows/README.md](docs/workflows/README.md)
 - [docs/workflows/workflow-schema.md](docs/workflows/workflow-schema.md)
 - [schemas/capabilities.yaml](schemas/capabilities.yaml)
+- [schemas/project-constitution.schema.yaml](schemas/project-constitution.schema.yaml)
 - [schemas/task-constitution.schema.yaml](schemas/task-constitution.schema.yaml)
 - [schemas/workflow-run-state.schema.yaml](schemas/workflow-run-state.schema.yaml)
 
@@ -316,7 +319,7 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 - `~/.cap/projects/<project_id>/bindings/`
   - `bind / run / run-task` 實際用到的 binding report snapshot
 - `~/.cap/projects/<project_id>/reports/workflows/`
-  - 每次執行的 artifact、handoff、runtime state、watchdog log
+  - 每次執行的 artifact、handoff、runtime state、agent sessions、result report、watchdog log
 
 這代表：
 
@@ -349,11 +352,12 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 
 ## Notes
 
-- 最新已驗證 tag：`v0.13.4`；`version-control-private` v4 採 shell quick path 優先，明確發版、語意不明或 git 操作失敗時回流 AI fallback
+- 最新已驗證 tag：`v0.14.0`；`version-control-private` v4 採 shell quick path 優先，明確發版、語意不明或 git 操作失敗時回流 AI fallback
 - 同一份 `docs/agent-skills/` 供 CrewAI、Claude Code、Codex 共用
 - CAP 的目標 sub-agent 抽象是 CAP Agent Session，不綁死 Codex 或 Claude 的原生 subagent 能力
 - `schemas/workflows/` 只保留內建模板，不承載 task-scoped runtime workflow
 - `cap workflow constitution / compile / run-task` 會把 task constitution、compiled workflow、binding report 寫入 `.cap`
+- `cap workflow run / run-task` 會在每次前景執行中產出 `agent-sessions.json` 與 `result.md`
 - Workflow 定義位於 `schemas/workflows/`，不會同步成 `.agents/skills/` alias
 - Trace 預設雙寫到 `~/.cap/projects/<project_id>/traces/`
 - 正式產物應進 repo；執行中產物預設留在 CAP storage
@@ -362,6 +366,7 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 ## Links
 
 - 平台目標：[docs/CAP-PLATFORM-GOAL.md](docs/CAP-PLATFORM-GOAL.md)
+- 完整實現路線：[docs/CAP-IMPLEMENTATION-ROADMAP.md](docs/CAP-IMPLEMENTATION-ROADMAP.md)
 - 架構文件：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Agent 清單：[AGENTS.md](AGENTS.md)
 - Workflow 清單：[docs/workflows/README.md](docs/workflows/README.md)

@@ -35,6 +35,7 @@ steps:
       - execution_policy
     done_when:
       - 已整理使用者想法、專案目標、限制與偏好
+      - 已依據 schemas/project-constitution.schema.yaml 的必要欄位輸出 Project Constitution JSON
       - 已定義 executor_policy，遵守 deterministic-first、AI-on-ambiguity、halt-on-risk
       - 已列出 allowed_agents、建議 workflows 與 artifact 保存策略
       - 已明確標示哪些後續工作需要 compile 成一次性 task workflow
@@ -45,5 +46,6 @@ steps:
     output_tier: planning_artifact
     notes:
       - 本 workflow 只產生 constitution，不直接建立 repo 或啟動開發 agent sessions
+      - Project Constitution JSON 應對齊 schemas/project-constitution.schema.yaml；schema validator 落地前由 Supervisor 在交接摘要中自檢必要欄位
       - 後續 repo 建立應由 constitution 編譯出的 task workflow 執行
       - sub agent 應視為 CAP agent session，不綁死 Claude 或 Codex 專屬能力

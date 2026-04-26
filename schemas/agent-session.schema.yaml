@@ -5,9 +5,12 @@ description: 一次性 agent worker session 的 runtime state contract，供 Cla
 required:
   - session_id
   - run_id
+  - workflow_id
+  - step_id
   - role
   - capability
   - provider
+  - provider_cli
   - executor
   - lifecycle
   - inputs
@@ -20,6 +23,16 @@ properties:
   run_id:
     type: string
     description: 所屬 workflow run id
+  workflow_id:
+    type: string
+    description: 所屬 workflow id
+  workflow_name:
+    type: string
+    nullable: true
+    description: workflow 顯示名稱
+  step_id:
+    type: string
+    description: 所屬 workflow step id
   parent_session_id:
     type: string
     nullable: true
@@ -39,6 +52,9 @@ properties:
       - langgraph
       - shell
       - builtin
+  provider_cli:
+    type: string
+    description: 實際使用的 provider CLI 或 adapter，例如 codex、claude、shell
   executor:
     type: string
     enum:
@@ -56,6 +72,7 @@ properties:
       - running
       - completed
       - failed
+      - blocked
       - cancelled
       - recycled
   inputs:
@@ -95,6 +112,19 @@ properties:
       - partial
       - cancelled
       - pending
+      - skipped
+  started_at:
+    type: string
+    nullable: true
+  completed_at:
+    type: string
+    nullable: true
+  duration_seconds:
+    type: integer
+    nullable: true
+  failure_reason:
+    type: string
+    nullable: true
   recycle_policy:
     type: object
     properties:

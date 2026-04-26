@@ -541,6 +541,62 @@ register_step_runtime_state() {
   "${PYTHON_BIN}" "${STEP_PY}" register-state "${plan_json}" "${registry_path}" "${step_id}" "${execution_state}" "${blocked_reason}" "${output_source}" "${output_path}" "${handoff_path}"
 }
 
+register_agent_session() {
+  local session_id="$1"
+  local step_id="$2"
+  local capability="$3"
+  local agent_alias="$4"
+  local prompt_file="$5"
+  local provider_cli="$6"
+  local executor="$7"
+  local lifecycle="$8"
+  local result="$9"
+  local input_mode="${10}"
+  local output_path="${11}"
+  local handoff_path="${12}"
+  local failure_reason="${13}"
+  local duration_seconds="${14}"
+
+  "${PYTHON_BIN}" "${STEP_PY}" upsert-session \
+    "${AGENT_SESSIONS_JSON}" \
+    "${RUN_LABEL}" \
+    "${WORKFLOW_ID}" \
+    "${WORKFLOW_NAME}" \
+    "${session_id}" \
+    "${step_id}" \
+    "${capability}" \
+    "${agent_alias}" \
+    "${prompt_file}" \
+    "${provider_cli}" \
+    "${executor}" \
+    "${lifecycle}" \
+    "${result}" \
+    "${input_mode}" \
+    "${output_path}" \
+    "${handoff_path}" \
+    "${failure_reason}" \
+    "${duration_seconds}" >/dev/null 2>&1 || true
+}
+
+session_lifecycle_for_state() {
+  local final_state="$1"
+  case "${final_state}" in
+    validated) printf '%s\n' "completed" ;;
+    blocked)   printf '%s\n' "blocked" ;;
+    *)         printf '%s\n' "failed" ;;
+  esac
+}
+
+session_result_for_state() {
+  local final_state="$1"
+  case "${final_state}" in
+    validated) printf '%s\n' "success" ;;
+    blocked)   printf '%s\n' "blocked" ;;
+    skipped)   printf '%s\n' "skipped" ;;
+    *)         printf '%s\n' "failed" ;;
+  esac
+}
+
 # ── Build step prompt ──
 
 build_step_prompt() {
@@ -637,8 +693,10 @@ WORKFLOW_OUTPUT_DIR="${WORKFLOW_REPORT_DIR}/${WORKFLOW_ID}/${RUN_LABEL}"
 PROJECT_DOCS_DIR="${PROJECT_ROOT}/docs"
 ARTIFACT_INDEX="${WORKFLOW_OUTPUT_DIR}/artifact-index.md"
 RUN_SUMMARY="${WORKFLOW_OUTPUT_DIR}/run-summary.md"
+RESULT_REPORT="${WORKFLOW_OUTPUT_DIR}/result.md"
 WORKFLOW_LOG="${WORKFLOW_OUTPUT_DIR}/workflow.log"
 RUNTIME_STATE_JSON="${WORKFLOW_OUTPUT_DIR}/runtime-state.json"
+AGENT_SESSIONS_JSON="${WORKFLOW_OUTPUT_DIR}/agent-sessions.json"
 ensure_dir_or_fail "${WORKFLOW_OUTPUT_DIR}" "workflow output directory" || exit 1
 ensure_dir_or_fail "${PROJECT_DOCS_DIR}" "project docs directory" || true
 
@@ -681,6 +739,16 @@ EOF
 )" || exit 1
 
 write_file_or_fail "${RUNTIME_STATE_JSON}" '{"artifacts": {}, "steps": {}}' || exit 1
+write_file_or_fail "${AGENT_SESSIONS_JSON}" "$(cat <<EOF
+{
+  "version": 1,
+  "run_id": "${RUN_LABEL}",
+  "workflow_id": "${WORKFLOW_ID}",
+  "workflow_name": "${WORKFLOW_NAME}",
+  "sessions": []
+}
+EOF
+)" || exit 1
 
 echo "  Output dir: ${WORKFLOW_OUTPUT_DIR}"
 
@@ -753,6 +821,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
 
   STEP_OUTPUT_PATH="${WORKFLOW_OUTPUT_DIR}/${phase_num}-${step_id}.md"
   STEP_HANDOFF_PATH="${WORKFLOW_OUTPUT_DIR}/${phase_num}-${step_id}.handoff.md"
+  SESSION_ID="${RUN_LABEL}.${phase_num}.${step_id}"
   STEP_STATUS="running"
   AGENT_SKILL="${agent_alias}:${prompt_file}"
   INPUT_CHECK_JSON="$(validate_step_inputs "${PLAN_JSON}" "${step_id}" "${RUNTIME_STATE_JSON}")"
@@ -822,6 +891,22 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   else
     printf "  ${BOLD}%s${RESET}  ${DIM}%s · %s · %s${RESET}\n" "${step_id}" "${agent_alias}" "${capability}" "${effective_cli}"
   fi
+
+  register_agent_session \
+    "${SESSION_ID}" \
+    "${step_id}" \
+    "${capability}" \
+    "${agent_alias}" \
+    "${prompt_file}" \
+    "${effective_cli}" \
+    "${effective_executor}" \
+    "running" \
+    "pending" \
+    "${input_mode:-summary}" \
+    "${STEP_OUTPUT_PATH}" \
+    "${STEP_HANDOFF_PATH}" \
+    "" \
+    ""
 
   # Run step in background, show live output chunks plus watchdog state.
   if [ "${effective_executor}" = "shell" ]; then
@@ -1104,6 +1189,28 @@ $(git diff --stat 2>/dev/null || true)
     "${STEP_OUTPUT_PATH}" \
     "${STEP_HANDOFF_PATH}"
 
+  SESSION_LIFECYCLE="$(session_lifecycle_for_state "${FINAL_STEP_STATE}")"
+  SESSION_RESULT="$(session_result_for_state "${FINAL_STEP_STATE}")"
+  SESSION_FAILURE_REASON=""
+  if [ "${SESSION_RESULT}" != "success" ]; then
+    SESSION_FAILURE_REASON="${STEP_STATUS}"
+  fi
+  register_agent_session \
+    "${SESSION_ID}" \
+    "${step_id}" \
+    "${capability}" \
+    "${agent_alias}" \
+    "${prompt_file}" \
+    "${effective_cli}" \
+    "${effective_executor}" \
+    "${SESSION_LIFECYCLE}" \
+    "${SESSION_RESULT}" \
+    "${input_mode:-summary}" \
+    "${STEP_OUTPUT_PATH}" \
+    "${STEP_HANDOFF_PATH}" \
+    "${SESSION_FAILURE_REASON}" \
+    "${DURATION}"
+
   {
     printf '\n### %s\n\n' "${step_id}"
     printf -- '- phase: %s\n' "${phase_num}"
@@ -1138,24 +1245,6 @@ done 3<<< "${STEP_LINES}"
 
 TOTAL_DURATION="$(( $(date '+%s') - START_TOTAL ))"
 
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-printf "  ${BOLD}Done${RESET} in %ss  |  ✓ %s  ✗ %s  ⊘ %s\n" "${TOTAL_DURATION}" "${COMPLETED}" "${FAILED}" "${SKIPPED}"
-echo ""
-CAP_SHORT="~/.cap"
-RUN_SHORT="${WORKFLOW_OUTPUT_DIR/#${HOME}\/.cap/${CAP_SHORT}}"
-printf "  ${DIM}base${RESET} %s/\n" "${RUN_SHORT}"
-# Collect unique filenames, skip duplicates
-_LISTED=""
-for f in "${ARTIFACT_INDEX}" "${WORKFLOW_LOG}" "${RUN_SUMMARY}" "${WORKFLOW_OUTPUT_DIR}/"*-*.md "${WORKFLOW_OUTPUT_DIR}/"*-*.raw.log "${RUNTIME_STATE_JSON}"; do
-  [ -f "${f}" ] || continue
-  _FNAME="$(basename "${f}")"
-  case "${_LISTED}" in *"|${_FNAME}|"*) continue ;; esac
-  _LISTED="${_LISTED}|${_FNAME}|"
-  printf "    %s\n" "${_FNAME}"
-done
-echo ""
-
 FINAL_STATE="completed"
 FINAL_RESULT="success"
 EXIT_CODE=0
@@ -1165,6 +1254,51 @@ if [ "${FAILED}" -gt 0 ]; then
   FINAL_RESULT="step_failed"
   EXIT_CODE=1
 fi
+
+write_file_or_fail "${RESULT_REPORT}" "$(cat <<EOF
+# Workflow Result
+
+- workflow_id: ${WORKFLOW_ID}
+- workflow_name: ${WORKFLOW_NAME}
+- run_id: ${RUN_LABEL}
+- final_state: ${FINAL_STATE}
+- final_result: ${FINAL_RESULT}
+- total_duration_seconds: ${TOTAL_DURATION}
+- completed: ${COMPLETED}
+- failed: ${FAILED}
+- skipped: ${SKIPPED}
+
+## Artifacts
+
+- artifact_index: ${ARTIFACT_INDEX}
+- run_summary: ${RUN_SUMMARY}
+- runtime_state: ${RUNTIME_STATE_JSON}
+- agent_sessions: ${AGENT_SESSIONS_JSON}
+- workflow_log: ${WORKFLOW_LOG}
+
+## Notes
+
+This result report is generated by CAP workflow executor as the human-readable run archive.
+EOF
+)" || true
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+printf "  ${BOLD}Done${RESET} in %ss  |  ✓ %s  ✗ %s  ⊘ %s\n" "${TOTAL_DURATION}" "${COMPLETED}" "${FAILED}" "${SKIPPED}"
+echo ""
+CAP_SHORT="~/.cap"
+RUN_SHORT="${WORKFLOW_OUTPUT_DIR/#${HOME}\/.cap/${CAP_SHORT}}"
+printf "  ${DIM}base${RESET} %s/\n" "${RUN_SHORT}"
+# Collect unique filenames, skip duplicates
+_LISTED=""
+for f in "${ARTIFACT_INDEX}" "${WORKFLOW_LOG}" "${RUN_SUMMARY}" "${RESULT_REPORT}" "${AGENT_SESSIONS_JSON}" "${WORKFLOW_OUTPUT_DIR}/"*-*.md "${WORKFLOW_OUTPUT_DIR}/"*-*.raw.log "${RUNTIME_STATE_JSON}"; do
+  [ -f "${f}" ] || continue
+  _FNAME="$(basename "${f}")"
+  case "${_LISTED}" in *"|${_FNAME}|"*) continue ;; esac
+  _LISTED="${_LISTED}|${_FNAME}|"
+  printf "    %s\n" "${_FNAME}"
+done
+echo ""
 
 append_workflow_log "${WORKFLOW_LOG}" "workflow" "workflow:${WORKFLOW_ID} duration:${TOTAL_DURATION}s completed:${COMPLETED} failed:${FAILED} skipped:${SKIPPED}" "${FINAL_RESULT}"
 

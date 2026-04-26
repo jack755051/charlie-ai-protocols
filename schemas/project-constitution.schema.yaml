@@ -1,0 +1,172 @@
+# Project Constitution Schema (draft v1)
+#
+# 定義 repo 長期治理憲法的最小結構。Project Constitution 是 repo 的
+# source of truth；runtime constitution snapshot 則保存於 CAP storage。
+
+schema_version: 1
+title: CAP Project Constitution Schema
+description: Repo-level governance contract for CAP project execution.
+
+required:
+  - schema_version
+  - constitution_id
+  - project_id
+  - name
+  - summary
+  - source_of_truth
+  - runtime_workspace
+  - binding_policy
+  - workflow_policy
+
+properties:
+  schema_version:
+    type: integer
+    enum: [1]
+
+  constitution_id:
+    type: string
+    description: Stable id for this project constitution.
+
+  project_id:
+    type: string
+    description: Stable CAP project id used under ~/.cap/projects/<project_id>/.
+
+  name:
+    type: string
+
+  summary:
+    type: string
+
+  inherits:
+    type: array
+    items:
+      type: string
+    description: Shared rules or protocol files inherited by this project.
+
+  project_goal:
+    type: string
+    description: Long-term goal of the repo or product.
+
+  constraints:
+    type: array
+    items:
+      type: string
+
+  allowed_agents:
+    type: array
+    items:
+      type: string
+    description: Agent aliases allowed by this project.
+
+  source_of_truth:
+    type: object
+    required:
+      - project_constitution
+      - project_config
+      - skill_registry
+    properties:
+      project_constitution:
+        type: string
+      project_config:
+        type: string
+      skill_registry:
+        type: string
+      agent_registry:
+        type: string
+      builtin_workflows_dir:
+        type: string
+      builtin_capabilities:
+        type: string
+
+  project_asset_policy:
+    type: object
+    properties:
+      principles:
+        type: array
+        items:
+          type: string
+      required_repo_assets:
+        type: array
+        items:
+          type: string
+      allowed_repo_paths:
+        type: object
+
+  runtime_workspace:
+    type: object
+    required:
+      - root
+      - stores
+    properties:
+      root:
+        type: string
+      stores:
+        type: array
+        items:
+          type: string
+      does_not_store_as_only_source:
+        type: array
+        items:
+          type: string
+
+  binding_policy:
+    type: object
+    required:
+      - defaults
+      - allowed_capabilities
+    properties:
+      defaults:
+        type: object
+        properties:
+          binding_mode:
+            type: string
+            enum: [strict, fallback_allowed]
+          missing_policy:
+            type: string
+            enum: [halt, manual, skip]
+      allowed_capabilities:
+        type: array
+        items:
+          type: string
+
+  workflow_policy:
+    type: object
+    required:
+      - enforce_allowed_source_roots
+      - allowed_source_roots
+    properties:
+      enforce_allowed_source_roots:
+        type: boolean
+      allowed_source_roots:
+        type: array
+        items:
+          type: string
+
+  artifact_policy:
+    type: object
+    properties:
+      promote_required_for_formal_outputs:
+        type: boolean
+      runtime_snapshot_only_paths:
+        type: array
+        items:
+          type: string
+
+  executor_policy:
+    type: object
+    properties:
+      deterministic_first:
+        type: boolean
+      ai_on_ambiguity:
+        type: boolean
+      halt_on_risk:
+        type: boolean
+      allowed_providers:
+        type: array
+        items:
+          type: string
+
+  stop_conditions:
+    type: array
+    items:
+      type: string

@@ -1,6 +1,7 @@
 # CAP Platform Goal
 
 > 本文件定義 CAP 的產品目標、目標執行模型、目前完成度與後續重構方向。
+> 完整開發路線見 [CAP-IMPLEMENTATION-ROADMAP.md](CAP-IMPLEMENTATION-ROADMAP.md)。
 
 ## 1. 目標定位
 
@@ -228,14 +229,16 @@ deterministic-first, AI-on-ambiguity, halt-on-risk
 - `cap-workflow-exec.sh` 已能逐 step 呼叫 Codex / Claude CLI
 - workflow output 已能寫入 CAP storage
 - runtime state、artifact index、handoff summary 已有雛形
+- `agent-sessions.json` 已有 executor-level ledger 雛形
+- `result.md` 已有 human-readable run archive 雛形
 
 尚未完成：
 
 - Project Constitution 產生還未完全由 `project-constitution.yaml` + Supervisor agent 驅動
 - `cap workflow constitution` 目前偏 task constitution，不是完整 project constitution workflow runner
 - Supervisor 尚未真正成為 structured orchestration layer
-- sub-agent 目前只是 step-level CLI invocation，尚未有正式 Agent Session Ledger
-- `agent-sessions.json` 尚未落地
+- sub-agent 目前仍是 step-level CLI invocation，尚未抽象成獨立 AgentSessionRunner
+- Agent Session Ledger 已有雛形，但尚未完整涵蓋 prompt snapshot、provider-native session id 與 recycle policy
 - background / detached run 尚未實作
 - Project Constitution schema 尚未正式化
 - repo-specific workflow / skill source resolver 尚未完整
@@ -250,8 +253,8 @@ deterministic-first, AI-on-ambiguity, halt-on-risk
 3. 將 `cap workflow constitution` 的語意改清楚，避免和 task constitution 混用
 4. 建立 Supervisor structured orchestration output
 5. 將 current step execution 升級為 Agent Session Runner
-6. 新增 `agent-sessions.json`
-7. 將 run result 明確歸檔為 `result.md`
+6. 擴充 `agent-sessions.json`，補 provider-native session id、prompt snapshot 與 recycle state
+7. 擴充 `result.md`，納入 constitution、binding 與 failure summary
 8. 補 project initializer
 9. 補 repo-specific source resolver
 10. 補 promote / publish workflow

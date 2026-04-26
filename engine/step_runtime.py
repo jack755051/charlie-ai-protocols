@@ -13,6 +13,7 @@ Subcommands:
     resolve-contract   解析 step 契約與完成條件
     validate-inputs    驗證 step 輸入是否齊備
     register-state     註冊 step 執行狀態至 registry
+    upsert-session     註冊或更新 CAP agent session ledger
     flatten-steps      將 plan JSON 展平為 pipe-delimited 記錄
 """
 
@@ -426,7 +427,137 @@ def register_state(
 
 
 # ─────────────────────────────────────────────────────────
-# 7. flatten-steps
+# 7. upsert-session
+# ─────────────────────────────────────────────────────────
+
+def _load_session_ledger(path: Path, run_id: str, workflow_id: str, workflow_name: str) -> dict[str, Any]:
+    if path.exists():
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(payload, dict) and isinstance(payload.get("sessions"), list):
+            return payload
+    return {
+        "version": 1,
+        "run_id": run_id,
+        "workflow_id": workflow_id,
+        "workflow_name": workflow_name,
+        "sessions": [],
+    }
+
+
+def _provider_from_cli(provider_cli: str, executor: str) -> str:
+    if executor == "shell":
+        return "shell"
+    if provider_cli in {"codex", "claude"}:
+        return provider_cli
+    return "builtin"
+
+
+def upsert_session(
+    sessions_path: str,
+    run_id: str,
+    workflow_id: str,
+    workflow_name: str,
+    session_id: str,
+    step_id: str,
+    capability: str,
+    agent_alias: str,
+    prompt_file: str,
+    provider_cli: str,
+    executor: str,
+    lifecycle: str,
+    result: str,
+    input_mode: str,
+    output_path: str,
+    handoff_path: str,
+    failure_reason: str,
+    duration_seconds: str,
+) -> None:
+    """Upsert one CAP agent session into agent-sessions.json."""
+    path = Path(sessions_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = _load_session_ledger(path, run_id, workflow_id, workflow_name)
+    payload["run_id"] = run_id
+    payload["workflow_id"] = workflow_id
+    payload["workflow_name"] = workflow_name
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    sessions = payload.setdefault("sessions", [])
+    existing = None
+    for item in sessions:
+        if item.get("session_id") == session_id:
+            existing = item
+            break
+
+    if existing is None:
+        existing = {
+            "session_id": session_id,
+            "run_id": run_id,
+            "workflow_id": workflow_id,
+            "workflow_name": workflow_name,
+            "step_id": step_id,
+            "parent_session_id": None,
+            "role": agent_alias,
+            "capability": capability,
+            "provider": _provider_from_cli(provider_cli, executor),
+            "provider_cli": provider_cli,
+            "executor": executor,
+            "prompt_file": prompt_file or None,
+            "lifecycle": lifecycle,
+            "inputs": [],
+            "outputs": [],
+            "scratch_paths": [],
+            "result": result,
+            "started_at": now if lifecycle in {"planned", "running"} else None,
+            "completed_at": None,
+            "duration_seconds": None,
+            "failure_reason": None,
+            "recycle_policy": {
+                "keep_raw_logs": True,
+                "keep_prompts": False,
+                "delete_scratch_on_success": False,
+            },
+        }
+        sessions.append(existing)
+
+    existing.update(
+        {
+            "run_id": run_id,
+            "workflow_id": workflow_id,
+            "workflow_name": workflow_name,
+            "step_id": step_id,
+            "role": agent_alias,
+            "capability": capability,
+            "provider": _provider_from_cli(provider_cli, executor),
+            "provider_cli": provider_cli,
+            "executor": executor,
+            "prompt_file": prompt_file or None,
+            "lifecycle": lifecycle,
+            "result": result,
+        }
+    )
+
+    if input_mode:
+        existing["inputs"] = [{"artifact": "step_inputs", "path": "<resolved-context>", "mode": input_mode}]
+    if output_path:
+        outputs = [{"artifact": "step_output", "path": output_path, "promoted": False}]
+        if handoff_path:
+            outputs.append({"artifact": "handoff_summary", "path": handoff_path, "promoted": False})
+        existing["outputs"] = outputs
+    if lifecycle in {"completed", "failed", "blocked", "cancelled", "recycled"}:
+        existing["completed_at"] = now
+    if failure_reason:
+        existing["failure_reason"] = failure_reason
+    if duration_seconds:
+        try:
+            existing["duration_seconds"] = int(duration_seconds)
+        except ValueError:
+            existing["duration_seconds"] = None
+
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+# ─────────────────────────────────────────────────────────
+# 8. flatten-steps
 # ─────────────────────────────────────────────────────────
 
 def flatten_steps(plan_json: str) -> None:
@@ -524,6 +655,27 @@ def _build_parser() -> argparse.ArgumentParser:
     p_rs.add_argument("handoff_path")
 
     # 7. flatten-steps
+    p_usess = sub.add_parser("upsert-session", help="註冊或更新 CAP agent session ledger")
+    p_usess.add_argument("sessions_path")
+    p_usess.add_argument("run_id")
+    p_usess.add_argument("workflow_id")
+    p_usess.add_argument("workflow_name")
+    p_usess.add_argument("session_id")
+    p_usess.add_argument("step_id")
+    p_usess.add_argument("capability")
+    p_usess.add_argument("agent_alias")
+    p_usess.add_argument("prompt_file")
+    p_usess.add_argument("provider_cli")
+    p_usess.add_argument("executor")
+    p_usess.add_argument("lifecycle")
+    p_usess.add_argument("result")
+    p_usess.add_argument("input_mode")
+    p_usess.add_argument("output_path")
+    p_usess.add_argument("handoff_path")
+    p_usess.add_argument("failure_reason")
+    p_usess.add_argument("duration_seconds")
+
+    # 8. flatten-steps
     p_fs = sub.add_parser("flatten-steps", help="展平 plan JSON 為 pipe-delimited 記錄")
     p_fs.add_argument("plan_json")
 
@@ -570,6 +722,27 @@ def main(argv: list[str] | None = None) -> None:
                 args.output_source,
                 args.output_path,
                 args.handoff_path,
+            )
+        case "upsert-session":
+            upsert_session(
+                args.sessions_path,
+                args.run_id,
+                args.workflow_id,
+                args.workflow_name,
+                args.session_id,
+                args.step_id,
+                args.capability,
+                args.agent_alias,
+                args.prompt_file,
+                args.provider_cli,
+                args.executor,
+                args.lifecycle,
+                args.result,
+                args.input_mode,
+                args.output_path,
+                args.handoff_path,
+                args.failure_reason,
+                args.duration_seconds,
             )
         case "flatten-steps":
             flatten_steps(args.plan_json)
