@@ -110,7 +110,7 @@ get_status_store() {
   preferred="${cache_dir}/workflow-runs.json"
   fallback="${CAP_ROOT}/workspace/history/workflow-runs.json"
 
-  mkdir -p "$(dirname "${fallback}")" >/dev/null 2>&1 || true
+  mkdir -p "${cache_dir}" "$(dirname "${fallback}")" >/dev/null 2>&1 || true
 
   if [ -f "${fallback}" ]; then
     printf '%s\n' "${fallback}"
@@ -431,6 +431,13 @@ case "${1:-}" in
     WORKFLOW_NAME="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["name"])')"
     BINDING_JSON="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["binding"], ensure_ascii=False))')"
     BINDING_STATUS="$(printf '%s' "${BINDING_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["binding_status"])')"
+
+    WORKFLOW_PROJECT_ID_OVERRIDE=""
+    if [ "${WORKFLOW_ID}" = "project-constitution" ]; then
+      WORKFLOW_PROJECT_ID_OVERRIDE="project-constitution-bootstrap"
+    fi
+    export CAP_PROJECT_ID_OVERRIDE="${WORKFLOW_PROJECT_ID_OVERRIDE}"
+
     BINDING_SNAPSHOT_JSON="$(persist_binding_snapshot "${BINDING_JSON}" "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "${WORKFLOW_REF}" "run")"
 
     if [ -z "${USER_PROMPT}" ]; then
@@ -495,7 +502,7 @@ case "${1:-}" in
       fi
       "${PYTHON_BIN}" "${CLI_PY}" print-binding-blocked "${BINDING_JSON}" "${BINDING_SNAPSHOT_JSON}"
       echo ""
-      echo "Workflow 已停止，請先補齊 skill registry 或調整 binding policy。"
+      echo "Workflow 已停止，請先建立 Project Constitution，或補齊 skill registry / 調整 binding policy。"
       exit 2
     fi
 
@@ -531,9 +538,9 @@ case "${1:-}" in
     fi
     "${PYTHON_BIN}" "${CLI_PY}" print-binding-start "${BINDING_SNAPSHOT_JSON}" "${RUN_ID}"
     if [ "${CLI_OVERRIDE}" -eq 1 ]; then
-      CAP_WORKFLOW_REQUESTED_STRATEGY="${EXECUTION_STRATEGY}" CAP_WORKFLOW_SELECTED_STRATEGY="${SELECTED_STRATEGY}" CAP_WORKFLOW_REQUESTED_MODE="${EXECUTION_STRATEGY}" CAP_WORKFLOW_SELECTED_MODE="${SELECTED_STRATEGY}" exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --cli "${RUN_CLI}" --run-id "${RUN_ID}"
+      CAP_WORKFLOW_REQUESTED_STRATEGY="${EXECUTION_STRATEGY}" CAP_WORKFLOW_SELECTED_STRATEGY="${SELECTED_STRATEGY}" CAP_WORKFLOW_REQUESTED_MODE="${EXECUTION_STRATEGY}" CAP_WORKFLOW_SELECTED_MODE="${SELECTED_STRATEGY}" CAP_PROJECT_ID_OVERRIDE="${CAP_PROJECT_ID_OVERRIDE:-}" exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --cli "${RUN_CLI}" --run-id "${RUN_ID}"
     fi
-    CAP_WORKFLOW_REQUESTED_STRATEGY="${EXECUTION_STRATEGY}" CAP_WORKFLOW_SELECTED_STRATEGY="${SELECTED_STRATEGY}" CAP_WORKFLOW_REQUESTED_MODE="${EXECUTION_STRATEGY}" CAP_WORKFLOW_SELECTED_MODE="${SELECTED_STRATEGY}" exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --run-id "${RUN_ID}"
+    CAP_WORKFLOW_REQUESTED_STRATEGY="${EXECUTION_STRATEGY}" CAP_WORKFLOW_SELECTED_STRATEGY="${SELECTED_STRATEGY}" CAP_WORKFLOW_REQUESTED_MODE="${EXECUTION_STRATEGY}" CAP_WORKFLOW_SELECTED_MODE="${SELECTED_STRATEGY}" CAP_PROJECT_ID_OVERRIDE="${CAP_PROJECT_ID_OVERRIDE:-}" exec bash "${SCRIPT_DIR}/cap-workflow-exec.sh" "${PLAN_JSON}" "${USER_PROMPT}" --run-id "${RUN_ID}"
     ;;
   update-run-status)
     [ "$#" -eq 4 ] || usage

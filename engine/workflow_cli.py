@@ -925,7 +925,7 @@ def cmd_print_binding_blocked(binding_json: str, snapshot_json: str) -> None:
     print(f"binding_json: {snapshot['json_path']}")
     print("unresolved steps:")
     for step in binding["steps"]:
-        if step["resolution_status"] in {"required_unresolved", "incompatible"}:
+        if step["resolution_status"] in {"required_unresolved", "incompatible", "blocked_by_constitution"}:
             print(f"  - {step['step_id']} => {step['resolution_status']} / capability={step['capability']} / reason={step['reason']}")
 
 

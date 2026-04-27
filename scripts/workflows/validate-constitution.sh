@@ -67,21 +67,19 @@ fail_with() {
 extract_artifact_path() {
   local context="$1"
   local artifact_name="$2"
-  printf '%s' "${context}" \
-    | awk -v want="${artifact_name}" '
-        $0 ~ "^[[:space:]]*-[[:space:]]*"want":[[:space:]]*step=" {
-          if (match($0, /path=([^[:space:]]+)/, arr)) {
-            print arr[1]
-            exit
-          }
-        }
-        $0 ~ "^[[:space:]]*"want":[[:space:]]*step=" {
-          if (match($0, /path=([^[:space:]]+)/, arr)) {
-            print arr[1]
-            exit
-          }
-        }
-      '
+  printf '%s' "${context}" | "${PYTHON_BIN}" -c '
+import re
+import sys
+
+want = sys.argv[1]
+for line in sys.stdin.read().splitlines():
+    if want in line and "path=" in line:
+        m = re.search(r"path=([^\s]+)", line)
+        if m:
+            print(m.group(1))
+            raise SystemExit(0)
+print("")
+' "${artifact_name}"
 }
 
 fallback_first_artifact_path() {
@@ -99,8 +97,8 @@ check_constitution_fences() {
   local explicit_end_count
   local json_fence_count
 
-  explicit_begin_count="$(grep -c '<<<CONSTITUTION_JSON_BEGIN>>>' "${path}" 2>/dev/null || true)"
-  explicit_end_count="$(grep -c '<<<CONSTITUTION_JSON_END>>>' "${path}" 2>/dev/null || true)"
+  explicit_begin_count="$(grep -c '^<<<CONSTITUTION_JSON_BEGIN>>>[[:space:]]*$' "${path}" 2>/dev/null || true)"
+  explicit_end_count="$(grep -c '^<<<CONSTITUTION_JSON_END>>>[[:space:]]*$' "${path}" 2>/dev/null || true)"
   json_fence_count="$(grep -cE '^```json[[:space:]]*$' "${path}" 2>/dev/null || true)"
   : "${explicit_begin_count:=0}"
   : "${explicit_end_count:=0}"
@@ -119,8 +117,8 @@ extract_constitution_json() {
   if [ "${explicit_count}" -eq 1 ]; then
     awk '
       BEGIN { inside = 0 }
-      /<<<CONSTITUTION_JSON_BEGIN>>>/ { inside = 1; next }
-      /<<<CONSTITUTION_JSON_END>>>/   { inside = 0; next }
+      /^<<<CONSTITUTION_JSON_BEGIN>>>[[:space:]]*$/ { inside = 1; next }
+      /^<<<CONSTITUTION_JSON_END>>>[[:space:]]*$/   { inside = 0; next }
       inside == 1 { print }
     ' "${path}"
     return

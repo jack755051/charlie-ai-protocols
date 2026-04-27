@@ -129,6 +129,7 @@ steps:
     done_when:
       - 已寫入 repo 級 .cap.constitution.yaml（若已存在則 skip，除非 CAP_CONSTITUTION_OVERWRITE=1）
       - 已寫入 ~/.cap/projects/<project_id>/constitutions/<timestamp>.json 快照
+      - 已建立 ~/.cap/projects/<project_id>/workspace/ 骨架目錄，供後續開發 workflow 使用
       - 已輸出兩個寫入路徑與 project_id 供下游 compile / status 命令讀回
     on_fail: halt
     fallback:

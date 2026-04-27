@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import yaml
@@ -17,6 +18,8 @@ class ProjectContextLoader:
     def load(self) -> dict:
         project_config_path = self.base_dir / self.DEFAULT_PROJECT_CONFIG
         project_config = self._load_yaml(project_config_path)
+        project_id_override = os.getenv("CAP_PROJECT_ID_OVERRIDE", "").strip()
+        project_id = project_config.get("project_id", project_id_override or self.base_dir.name)
 
         constitution_ref = project_config.get("constitution_file", self.DEFAULT_PROJECT_CONSTITUTION)
         constitution_path = Path(constitution_ref)
@@ -26,7 +29,7 @@ class ProjectContextLoader:
         constitution = self._load_yaml(constitution_path)
 
         return {
-            "project_id": project_config.get("project_id", self.base_dir.name),
+            "project_id": project_id,
             "project_name": project_config.get("project_name", self.base_dir.name),
             "project_type": project_config.get("project_type", "application"),
             "project_root": str(self.base_dir),

@@ -27,6 +27,7 @@
 ├── constitutions/
 ├── compiled-workflows/
 ├── bindings/
+├── workspace/
 ├── traces/
 ├── logs/
 ├── drafts/
@@ -40,6 +41,7 @@
 - `constitutions/`：task constitution snapshot
 - `compiled-workflows/`：task-scoped compiled workflow bundle、bound plan
 - `bindings/`：workflow binding report 與 registry 決策快照
+- `workspace/`：新專案的本機骨架與開發工作區根目錄
 - `traces/`：結構化執行軌跡、session trace
 - `logs/`：較長期或程序級 log
 - `drafts/`：草稿與一次性中間產物

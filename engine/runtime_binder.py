@@ -21,6 +21,12 @@ class RuntimeBinder:
     DEFAULT_BINDING_MODE = "strict"
     DEFAULT_MISSING_POLICY = "halt"
     GENERIC_FALLBACK_PREFIX = "generic-"
+    BOOTSTRAP_WORKFLOW_ID = "project-constitution"
+    BOOTSTRAP_ALLOWED_CAPABILITIES = {
+        "bootstrap_platform_defaults",
+        "constitution_validation",
+        "constitution_persistence",
+    }
 
     def __init__(self, base_dir: Path | None = None):
         self.base_dir = Path(base_dir) if base_dir else Path(__file__).resolve().parents[1]
@@ -80,6 +86,8 @@ class RuntimeBinder:
         defaults = dict(registry.get("binding_defaults", {}))
         defaults.update(constitution_binding_policy.get("defaults", {}))
         allowed_capabilities = set(constitution_binding_policy.get("allowed_capabilities", []) or [])
+        bootstrap_mode = bool(project_context.get("_bootstrap", False))
+        bootstrap_workflow = semantic_plan.get("workflow_id") == self.BOOTSTRAP_WORKFLOW_ID
         self._assert_workflow_source_allowed(semantic_plan.get("source_path"), project_context)
 
         step_reports: list[dict] = []
@@ -93,11 +101,13 @@ class RuntimeBinder:
             optional = step["optional"]
             capability_contract = step.get("capability_contract") or {}
             preferred_agent_alias = capability_contract.get("default_agent")
+            executor = step.get("executor", "ai")
             binding_mode = self._get_binding_mode(step, defaults)
             missing_policy = self._get_missing_policy(step, defaults)
-            if allowed_capabilities and capability not in allowed_capabilities:
+
+            if bootstrap_mode and not bootstrap_workflow:
                 resolution_status = "blocked_by_constitution"
-                reason = "capability is not allowed by project constitution"
+                reason = "project constitution is missing; run project-constitution workflow first"
                 selected_skill_id = None
                 selected_provider = None
                 selected_agent_alias = None
@@ -126,6 +136,71 @@ class RuntimeBinder:
                     }
                 )
                 continue
+
+            if allowed_capabilities and capability not in allowed_capabilities:
+                if bootstrap_workflow and capability in self.BOOTSTRAP_ALLOWED_CAPABILITIES:
+                    pass
+                else:
+                    resolution_status = "blocked_by_constitution"
+                    reason = "capability is not allowed by project constitution"
+                    selected_skill_id = None
+                    selected_provider = None
+                    selected_agent_alias = None
+                    selected_prompt_file = None
+                    selected_cli = None
+                    if optional:
+                        unresolved_optional_steps += 1
+                    else:
+                        unresolved_required_steps += 1
+                    step_reports.append(
+                        {
+                            "step_id": step["step_id"],
+                            "phase": step["phase"],
+                            "capability": capability,
+                            "optional": optional,
+                            "resolution_status": resolution_status,
+                            "selected_skill_id": selected_skill_id,
+                            "selected_provider": selected_provider,
+                            "selected_agent_alias": selected_agent_alias,
+                            "selected_prompt_file": selected_prompt_file,
+                            "selected_cli": selected_cli,
+                            "binding_mode": binding_mode,
+                            "missing_policy": missing_policy,
+                            "reason": reason,
+                            "candidate_skill_ids": [],
+                        }
+                    )
+                    continue
+
+            if executor == "shell":
+                resolution_status = "resolved"
+                reason = "shell executor resolved directly"
+                resolved_steps += 1
+                selected_skill_id = "builtin-shell"
+                selected_provider = "builtin"
+                selected_agent_alias = "shell"
+                selected_prompt_file = None
+                selected_cli = None
+                step_reports.append(
+                    {
+                        "step_id": step["step_id"],
+                        "phase": step["phase"],
+                        "capability": capability,
+                        "optional": optional,
+                        "resolution_status": resolution_status,
+                        "selected_skill_id": selected_skill_id,
+                        "selected_provider": selected_provider,
+                        "selected_agent_alias": selected_agent_alias,
+                        "selected_prompt_file": selected_prompt_file,
+                        "selected_cli": selected_cli,
+                        "binding_mode": binding_mode,
+                        "missing_policy": missing_policy,
+                        "reason": reason,
+                        "candidate_skill_ids": [],
+                    }
+                )
+                continue
+
             candidates = self._find_candidates(
                 registry,
                 capability,
@@ -392,6 +467,8 @@ class RuntimeBinder:
     def _governance_phase_limit(semantic_plan: dict) -> int | None:
         governance = semantic_plan.get("governance", {})
         goal_stage = governance.get("goal_stage")
+        if semantic_plan.get("workflow_id") == RuntimeBinder.BOOTSTRAP_WORKFLOW_ID:
+            return None
         if goal_stage == "informal_planning":
             raw = governance.get("max_primary_phases", 2)
             if isinstance(raw, int) and raw > 0:

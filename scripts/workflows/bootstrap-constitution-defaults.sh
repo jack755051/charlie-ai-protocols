@@ -155,6 +155,7 @@ runtime_workspace:
     - constitutions
     - compiled-workflows
     - bindings
+    - workspace
     - traces
     - logs
     - reports

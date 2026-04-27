@@ -37,6 +37,11 @@ resolve_project_id() {
   local project_root="$1"
   local configured_id=""
 
+  if [ -n "${CAP_PROJECT_ID_OVERRIDE:-}" ]; then
+    sanitize_project_id "${CAP_PROJECT_ID_OVERRIDE}"
+    return
+  fi
+
   configured_id="$(read_project_id_from_config "${project_root}" || true)"
   if [ -n "${configured_id}" ]; then
     sanitize_project_id "${configured_id}"
@@ -58,6 +63,7 @@ WORKFLOW_REPORT_DIR="${REPORT_DIR}/workflows"
 CONSTITUTION_DIR="${PROJECT_STORE}/constitutions"
 COMPILED_WORKFLOW_DIR="${PROJECT_STORE}/compiled-workflows"
 BINDING_DIR="${PROJECT_STORE}/bindings"
+WORKSPACE_DIR="${PROJECT_STORE}/workspace"
 CACHE_DIR="${PROJECT_STORE}/cache"
 SESSION_DIR="${PROJECT_STORE}/sessions"
 
@@ -74,6 +80,7 @@ ensure_dirs() {
     "${CONSTITUTION_DIR}" \
     "${COMPILED_WORKFLOW_DIR}" \
     "${BINDING_DIR}" \
+    "${WORKSPACE_DIR}" \
     "${CACHE_DIR}" \
     "${SESSION_DIR}"
 }
@@ -93,6 +100,7 @@ get_key() {
     constitution_dir) printf '%s\n' "${CONSTITUTION_DIR}" ;;
     compiled_workflow_dir) printf '%s\n' "${COMPILED_WORKFLOW_DIR}" ;;
     binding_dir) printf '%s\n' "${BINDING_DIR}" ;;
+    workspace_dir) printf '%s\n' "${WORKSPACE_DIR}" ;;
     cache_dir) printf '%s\n' "${CACHE_DIR}" ;;
     session_dir) printf '%s\n' "${SESSION_DIR}" ;;
     *)
@@ -117,6 +125,7 @@ workflow_report_dir=${WORKFLOW_REPORT_DIR}
 constitution_dir=${CONSTITUTION_DIR}
 compiled_workflow_dir=${COMPILED_WORKFLOW_DIR}
 binding_dir=${BINDING_DIR}
+workspace_dir=${WORKSPACE_DIR}
 cache_dir=${CACHE_DIR}
 session_dir=${SESSION_DIR}
 EOF

@@ -79,7 +79,7 @@ get_status_store() {
   preferred="${cache_dir}/workflow-runs.json"
   fallback="${CAP_ROOT}/workspace/history/workflow-runs.json"
 
-  mkdir -p "$(dirname "${fallback}")" >/dev/null 2>&1 || true
+  mkdir -p "${cache_dir}" "$(dirname "${fallback}")" >/dev/null 2>&1 || true
 
   if [ -f "${fallback}" ]; then
     printf '%s\n' "${fallback}"
