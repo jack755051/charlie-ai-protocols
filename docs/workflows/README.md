@@ -98,6 +98,17 @@ workflow 不負責決定最終 agent，只負責宣告：
 - 主要步驟：
   - `project_constitution` — 產出 Project Constitution Markdown / JSON 與 executor policy
 
+#### `project-constitution-reconcile.yaml`
+
+- 用途：在既有 Project Constitution 基礎上吸收補充 prompt，產出修正版草案，再驗證與覆寫持久化
+- 設計理由：初版憲章應保持最小可行 SSOT；補充資訊應透過獨立 reconcile workflow 收斂，避免把待補充資訊直接混進憲法本體
+- 主要步驟：
+  - `constitution_reconciliation_inputs`
+  - `constitution_reconciliation`
+  - `constitution_validation`
+  - `constitution_persistence`
+- 補充輸入範本：`docs/workflows/project-constitution-addendum.example.md`
+
 #### `version-control.yaml`
 
 - 用途：版本控制流程（三段 pipeline + strategy）

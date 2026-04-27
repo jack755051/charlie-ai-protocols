@@ -20,6 +20,7 @@ skills:
       - prd_generation
       - workflow_orchestration
       - project_constitution
+      - constitution_reconciliation
     fallback_roles:
       - supervisor
 

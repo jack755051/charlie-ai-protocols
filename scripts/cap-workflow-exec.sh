@@ -209,6 +209,11 @@ run_shell_step() {
   local contract_context="$6"
   local user_prompt="$7"
   local script_path
+  local constitution_overwrite="0"
+
+  case "${step_id}" in
+    persist_reconciled_constitution) constitution_overwrite="1" ;;
+  esac
 
   script_path="$(resolve_shell_script_path "${script_ref}")" || return 30
   CAP_WORKFLOW_STEP_ID="${step_id}" \
@@ -217,6 +222,8 @@ run_shell_step() {
   CAP_WORKFLOW_INPUT_CONTEXT="${input_context}" \
   CAP_WORKFLOW_CONTRACT_CONTEXT="${contract_context}" \
   CAP_WORKFLOW_USER_PROMPT="${user_prompt}" \
+  CAP_PROJECT_CONSTITUTION_ADDENDUM_PATH="${CAP_PROJECT_CONSTITUTION_ADDENDUM_PATH:-}" \
+  CAP_CONSTITUTION_OVERWRITE="${constitution_overwrite}" \
   CAP_WORKFLOW_REQUESTED_MODE="${REQUESTED_MODE}" \
   CAP_WORKFLOW_SELECTED_MODE="${SELECTED_MODE}" \
   CAP_WORKFLOW_REQUESTED_STRATEGY="${REQUESTED_STRATEGY}" \

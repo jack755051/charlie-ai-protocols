@@ -24,6 +24,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 - _bootstrap flag in engine/project_context_loader.py to signal an absent .cap.constitution.yaml, enabling deterministic bootstrap detection
 ## [Unreleased]
 
+### Added
+- 新增 `project-constitution-reconcile` workflow，用來吸收補充 prompt 後一次性重構既有 Project Constitution，避免把 addendum 直接寫進憲法本體。
+- 新增 `constitution_reconciliation_inputs` 與 `constitution_reconciliation` capability，分別負責補充輸入整理與 AI 收斂草案。
+- 新增 `docs/workflows/project-constitution-addendum.example.md` 作為補充 prompt 的人工輸入範本。
+
 ### Changed
 - 將版本控制模板收斂為單一 `version-control` workflow，原 quick / governed / company 差異改由 `strategy` contract 表達。
 - `cap workflow run` 新增 `--strategy fast|governed|strict|auto` 語意；舊版 workflow 名稱僅作相容 alias。

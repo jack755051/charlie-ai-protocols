@@ -1,0 +1,131 @@
+workflow_id: project-constitution-reconcile
+version: 1
+name: Project Constitution Reconcile
+summary: 以既有 Project Constitution 為基底，吸收補充 prompt 後產出 schema-valid 的修正版草案，再驗證並持久化覆寫。
+owner: supervisor
+triggers:
+  - manual
+  - constitution-reconcile
+  - constitution-addendum
+
+artifacts:
+  constitution_reconcile_inputs: Current constitution plus supplemental prompt bundled for the AI reconciliation step
+  project_constitution: Reconciled Project Constitution Markdown
+  project_constitution_json: Reconciled Project Constitution JSON
+  execution_policy: Executor selection and lifecycle policy
+  constitution_validation_report: Schema validation result for the reconciled constitution
+  constitution_persisted_paths: Resolved repo target and snapshot paths after persistence
+
+governance:
+  watcher_mode: final_only
+  logger_mode: milestone_log
+  watcher_checkpoints: [reconcile_constitution]
+  logger_checkpoints: [load_reconcile_inputs, reconcile_constitution, validate_constitution, persist_reconciled_constitution]
+  halt_on_missing_handoff: false
+  context_mode: summary_first
+  goal_stage: informal_planning
+
+steps:
+  - id: load_reconcile_inputs
+    name: Load Existing Constitution And Supplemental Prompt
+    capability: constitution_reconciliation_inputs
+    executor: shell
+    script: scripts/workflows/load-constitution-reconcile-inputs.sh
+    inputs:
+      - user_requirement
+      - project_context
+    outputs:
+      - constitution_reconcile_inputs
+    done_when:
+      - 已讀取 repo 級 .cap.constitution.yaml
+      - 已將補充 prompt 或 addendum 檔案整理為 AI 可讀的上下文
+      - 已明確區分「外部補充輸入」與「憲法本體」
+    on_fail: halt
+    fallback:
+      when: []
+    timeout_seconds: 60
+    input_mode: full
+    output_tier: planning_artifact
+    notes:
+      - 補充 prompt 是 workflow 輸入，不是憲法的一部分
+      - 若補充檔不存在，workflow 仍可直接使用使用者當次 prompt
+
+  - id: reconcile_constitution
+    name: Reconcile Constitution From Existing Baseline And Addendum
+    capability: constitution_reconciliation
+    executor: ai
+    needs:
+      - load_reconcile_inputs
+    inputs:
+      - constitution_reconcile_inputs
+    outputs:
+      - project_constitution
+      - project_constitution_json
+      - execution_policy
+    done_when:
+      - 已讀取現有 Project Constitution 與 supplemental prompt
+      - 已保留 source_of_truth / runtime_workspace / binding_policy / workflow_policy / executor_policy 的治理邊界
+      - 已依補充內容做最小必要調整，不得擅自建立新的治理來源
+      - 已輸出 Markdown 與 JSON 雙形態的修正版 constitution
+      - JSON 必須包覆於 <<<CONSTITUTION_JSON_BEGIN>>> 與 <<<CONSTITUTION_JSON_END>>> 之間
+    on_fail: halt
+    fallback:
+      when: []
+    timeout_seconds: 240
+    input_mode: full
+    output_tier: planning_artifact
+    notes:
+      - 若補充內容與既有憲章衝突，優先維持較安全、較小範圍的變更，並在交接摘要說明取捨
+      - 這個 workflow 只允許一次重構，不應自動迴圈重跑
+
+  - id: validate_constitution
+    name: Validate Reconciled Constitution Against Schema
+    capability: constitution_validation
+    executor: shell
+    script: scripts/workflows/validate-constitution.sh
+    needs:
+      - reconcile_constitution
+    inputs:
+      - project_constitution
+      - project_constitution_json
+    outputs:
+      - constitution_validation_report
+    done_when:
+      - 已從 reconcile artifact 抓取 constitution JSON 區段
+      - 已用 jsonschema 對照 schemas/project-constitution.schema.yaml 完成驗證
+      - 驗證通過時輸出 constitution_validation_report；失敗時 halt 並列出 schema 錯誤
+    on_fail: halt
+    fallback:
+      when: []
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+    notes:
+      - reconcile 失敗代表 addendum 或 baseline 仍需人工修正，不進行 AI 自動迴圈
+
+  - id: persist_reconciled_constitution
+    name: Persist Reconciled Constitution To Repo SSOT And Runtime Snapshot
+    capability: constitution_persistence
+    executor: shell
+    script: scripts/workflows/persist-constitution.sh
+    needs:
+      - validate_constitution
+    inputs:
+      - project_constitution_json
+      - constitution_validation_report
+    outputs:
+      - constitution_persisted_paths
+    done_when:
+      - 已覆寫 repo 級 .cap.constitution.yaml
+      - 已寫入 ~/.cap/projects/<project_id>/constitutions/<timestamp>.json 快照
+      - 已建立或沿用 ~/.cap/projects/<project_id>/workspace/ 骨架目錄
+      - 已輸出寫入路徑與 project_id 供下游 workflow 讀回
+    on_fail: halt
+    fallback:
+      when: []
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+    notes:
+      - 這個 step 會以覆寫模式更新現有 constitution，讓補充 prompt 真正收斂成新的 SSOT
+      - 仍不得把 supplemental prompt 本身存入 constitution

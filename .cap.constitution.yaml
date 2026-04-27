@@ -97,6 +97,8 @@ binding_policy:
     missing_policy: manual
   allowed_capabilities:
     - project_constitution
+    - constitution_reconciliation
+    - constitution_reconciliation_inputs
     - prd_generation
     - workflow_orchestration
     - technical_planning

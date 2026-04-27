@@ -45,6 +45,7 @@
 - `traces/`：結構化執行軌跡、session trace
 - `logs/`：較長期或程序級 log
 - `drafts/`：草稿與一次性中間產物
+- `drafts/` 也可暫存補充 prompt / addendum 這類一次性輸入，但不得把它當成正式 constitution 產物回寫
 - `handoffs/`：任務交接單、修復建議單
 - `reports/`：Lighthouse、Analytics、Audit 等報告
 - `cache/`：索引、掃描結果、暫存 metadata
