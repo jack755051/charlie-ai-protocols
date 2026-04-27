@@ -7,6 +7,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 ---
 
 
+
+## [v0.16.0] - 2026-04-27
+
+### Added
+- Added input_mode: full to the vc_apply step in schemas/workflows/version-control.yaml so vc-scan handoff data can flow into the apply stage.
+- Added docs/policies/constitution-driven-execution.md to define the Mode C execution protocol and its planning and agent orchestration rules.
+- Restored executable permissions on scripts/workflows/bootstrap-constitution-defaults.sh, persist-constitution.sh, validate-constitution.sh, and vc-scan.sh so the workflow helpers remain runnable.
 ## [v0.15.0] - 2026-04-26
 
 ### Added

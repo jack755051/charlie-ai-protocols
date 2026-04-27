@@ -105,6 +105,7 @@ steps:
     capability: version_control_commit
     executor: shell
     script: scripts/workflows/vc-apply.sh
+    input_mode: full
     needs:
       - vc_compose
     inputs:
