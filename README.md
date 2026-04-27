@@ -277,6 +277,8 @@ Workflow 與 Agent Skills 是並存的兩種使用方式：
 - `workflow-smoke-test.yaml`：workflow CLI 與 capability binding 的煙霧測試
 - `readme-to-devops.yaml`：README 治理到 DevOps 基線
 - `version-control.yaml`：版本控制流程（三段 pipeline + strategy + lint 守門）
+- `project-constitution.yaml`：從一句話需求產出 Project Constitution（4-step bootstrap → draft → validate → persist）
+- `project-constitution-reconcile.yaml`：在既有 Project Constitution 基礎上吸收 addendum，一次性收斂出修正版並覆寫 SSOT；persist step 支援 `CAP_CONSTITUTION_DRY_RUN=1` 預覽 diff、覆寫前自動備份至 `.cap.constitution.yaml.backup-<TIMESTAMP>`
 
 版本控制 workflow 統一採三段 pipeline：
 
@@ -354,7 +356,8 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 
 ## Notes
 
-- 最新已驗證 tag：`v0.15.0`；`version-control` v7 收斂為單一 workflow + strategy，三段 pipeline 為 `vc_scan` (shell) → `vc_compose` (AI / devops) → `vc_apply` (shell)，shell 不再猜 commit 語意、AI 不再重跑 git，`vc-apply.sh` 的出口 lint 強制 subject 引用 path token、禁用抽象主動詞、annotation 採 `<tag> — <summary>` 格式
+- 最新已驗證 tag：`v0.17.0`；新增 `project-constitution-reconcile` workflow，用來吸收 addendum 後一次性重構既有 Project Constitution。persist step 支援 `CAP_CONSTITUTION_DRY_RUN=1` 預覽 diff、覆寫前自動備份至 `.cap.constitution.yaml.backup-<TIMESTAMP>`，watcher 升級為 `milestone_gate` 並對 reconcile / validate / persist 三個 checkpoint 設閘
+- `version-control` v7 收斂為單一 workflow + strategy，三段 pipeline 為 `vc_scan` (shell) → `vc_compose` (AI / devops) → `vc_apply` (shell)，shell 不再猜 commit 語意、AI 不再重跑 git，`vc-apply.sh` 的出口 lint 強制 subject 引用 path token、禁用抽象主動詞、annotation 採 `<tag> — <summary>` 格式
 - `cap release-check` 可檢查最近或全部 release metadata，阻擋 `Release vX.Y.Z`、單純版本號與泛用 CHANGELOG 條目留在正式發版紀錄中
 - 同一份 `docs/agent-skills/` 供 CrewAI、Claude Code、Codex 共用
 - CAP 的目標 sub-agent 抽象是 CAP Agent Session，不綁死 Codex 或 Claude 的原生 subagent 能力
