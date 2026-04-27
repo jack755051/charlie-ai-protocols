@@ -141,9 +141,26 @@ run_step_claude() {
   claude -p "${prompt}" 2>&1
 }
 
+# Codex stdout 包含 banner + prompt echo + response，需要清洗。
+# 策略：找到 Codex 的 response 起始標記（`assistant` 或第一個非 banner 行），
+# 剝離之前的所有內容。
+strip_codex_preamble() {
+  awk '
+    BEGIN { found = 0 }
+    # Codex banner 結尾是 "--------" 後接 "user" 行，response 從 "assistant" 開始
+    /^assistant$/ { found = 1; next }
+    found == 1 { print }
+    # 如果沒有 assistant 標記（舊版 codex），fallback：跳過前面的 banner
+    END { if (found == 0) exit 1 }
+  '
+}
+
 run_step_codex() {
   local prompt="$1"
-  codex exec "${prompt}" 2>&1
+  local raw
+  raw="$(codex exec "${prompt}" 2>&1)"
+  # 嘗試剝離 Codex preamble；若失敗（無 assistant 標記），保留原始輸出
+  printf '%s\n' "${raw}" | strip_codex_preamble 2>/dev/null || printf '%s\n' "${raw}"
 }
 
 run_step() {
