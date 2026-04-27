@@ -8,12 +8,28 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 
 
+## [v0.17.0] - 2026-04-27
+
+### Added
+- 新增 `project-constitution-reconcile` workflow，用來吸收補充 prompt 後一次性重構既有 Project Constitution，避免把 addendum 直接寫進憲法本體。
+- 新增 `constitution_reconciliation_inputs` 與 `constitution_reconciliation` capability，分別負責補充輸入整理與 AI 收斂草案。
+- 新增 `docs/workflows/project-constitution-addendum.example.md` 作為補充 prompt 的人工輸入範本。
+
+### Changed
+- `engine/runtime_binder.py` 新增 bootstrap override 路由，讓 project-constitution workflow 在 `.cap.constitution.yaml` 缺席時走專屬 bootstrap 路徑，避免無 SSOT 時誤觸常規 binding policy。
+- `scripts/workflows/persist-constitution.sh` 與 `validate-constitution.sh` 強化覆寫保存與 schema 驗證流程，支援 reconcile 後的覆寫式持久化。
+
 ## [v0.16.0] - 2026-04-27
 
 ### Added
 - Added input_mode: full to the vc_apply step in schemas/workflows/version-control.yaml so vc-scan handoff data can flow into the apply stage.
 - Added docs/policies/constitution-driven-execution.md to define the Mode C execution protocol and its planning and agent orchestration rules.
 - Restored executable permissions on scripts/workflows/bootstrap-constitution-defaults.sh, persist-constitution.sh, validate-constitution.sh, and vc-scan.sh so the workflow helpers remain runnable.
+
+### Changed
+- 將版本控制模板收斂為單一 `version-control` workflow，原 quick / governed / company 差異改由 `strategy` contract 表達。
+- `cap workflow run` 新增 `--strategy fast|governed|strict|auto` 語意；舊版 workflow 名稱僅作相容 alias。
+
 ## [v0.15.0] - 2026-04-26
 
 ### Added
@@ -23,17 +39,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 - scripts/workflows/bootstrap-constitution-defaults.sh, validate-constitution.sh, persist-constitution.sh shell steps with explicit fence contract and runtime snapshot writer
 - _bootstrap flag in engine/project_context_loader.py to signal an absent .cap.constitution.yaml, enabling deterministic bootstrap detection
 ## [Unreleased]
-
-### Added
-- 新增 `project-constitution-reconcile` workflow，用來吸收補充 prompt 後一次性重構既有 Project Constitution，避免把 addendum 直接寫進憲法本體。
-- 新增 `constitution_reconciliation_inputs` 與 `constitution_reconciliation` capability，分別負責補充輸入整理與 AI 收斂草案。
-- 新增 `docs/workflows/project-constitution-addendum.example.md` 作為補充 prompt 的人工輸入範本。
-
-### Changed
-- 將版本控制模板收斂為單一 `version-control` workflow，原 quick / governed / company 差異改由 `strategy` contract 表達。
-- `cap workflow run` 新增 `--strategy fast|governed|strict|auto` 語意；舊版 workflow 名稱僅作相容 alias。
-
-
 
 ## [v0.13.5] - 2026-04-26
 
