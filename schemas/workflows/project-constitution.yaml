@@ -81,7 +81,7 @@ steps:
     notes:
       - 本 workflow 只產生 constitution，不直接建立 repo 或啟動開發 agent sessions
       - "Project Constitution JSON 必須對齊 schemas/project-constitution.schema.yaml；下游 validate_constitution step 會用 jsonschema 自動驗證，schema fail 將導致整條 workflow halt（無 AI fallback）"
-      - 若初始 prompt 資訊不足，請改走 `project-constitution-reconcile` workflow 吸收補充 prompt；不要在此 workflow 內建立空白 additional prompt 檔或反覆重跑 draft。
+      - 若初始 prompt 資訊不足，請改走 `project-constitution-reconcile` workflow 吸收 addendum；不要在此 workflow 內建立空白 addendum 檔或反覆重跑 draft。
       - 後續 repo 建立應由 constitution 編譯出的 task workflow 執行
       - sub agent 應視為 CAP agent session，不綁死 Claude 或 Codex 專屬能力
       - "input_mode 採用 full 是因為 AI 必須讀完 platform_defaults 全文才能正確抄寫治理欄位；platform_defaults 體積極小，不會違反 workflow-constitution §4.3。"

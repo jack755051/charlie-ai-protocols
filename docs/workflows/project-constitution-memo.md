@@ -95,6 +95,6 @@ D. Result report / handoff
 - 不把 sub agent 綁死為 Claude 或 Codex 專屬功能。
 - 不讓「建立憲章」成為每個小任務的必經流程，避免 callback 地獄。
 - constitution workflow 只產生 B，不直接開發 repo。
-- 若 B 的初版資訊不足，補充內容應由 `project-constitution-reconcile` workflow 吸收，不要把 additional prompt 當成 constitution 本體的一部分。
+- 若 B 的初版資訊不足，補充內容應由 `project-constitution-reconcile` workflow 吸收，不要把 addendum 當成 constitution 本體的一部分。
 - 真正開發由 B 編譯出的 task workflow 負責。
 - 重複、可驗證的步驟優先 shell；語意不明才 AI；高風險直接 halt。

@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 #
 # load-constitution-reconcile-inputs.sh — Pipeline step:
-# collect the current Project Constitution plus an optional supplemental prompt
+# collect the current Project Constitution plus an optional addendum
 # for the reconcile workflow.
 #
 # Reads:
 #   - current repo .cap.constitution.yaml
 #   - CAP_PROJECT_CONSTITUTION_ADDENDUM_PATH (optional)
-#   - CAP_WORKFLOW_USER_PROMPT (fallback supplemental prompt)
+#   - CAP_WORKFLOW_USER_PROMPT (fallback addendum text from the workflow CLI prompt)
 #
 # Emits a markdown artifact that the reconcile AI step can consume without
-# treating the supplemental prompt as part of the constitution SSOT.
+# treating the addendum as part of the constitution SSOT.
 
 set -u
 
@@ -72,7 +72,7 @@ print(f"project_name: {project_name}")
 PY
 }
 
-read_supplemental_prompt() {
+read_addendum() {
   if [ -n "${ADDENDUM_PATH}" ] && [ -f "${ADDENDUM_PATH}" ]; then
     printf '%s\n' "${ADDENDUM_PATH}"
     return
@@ -96,11 +96,11 @@ if [ ! -f "${CONSTITUTION_PATH}" ]; then
 fi
 
 project_meta="$(read_project_meta)"
-supplemental_marker_and_text="$(read_supplemental_prompt)"
-supplemental_marker="$(printf '%s\n' "${supplemental_marker_and_text}" | head -n 1)"
+addendum_marker_and_text="$(read_addendum)"
+addendum_marker="$(printf '%s\n' "${addendum_marker_and_text}" | head -n 1)"
 
 printf 'constitution_path: %s\n' "${CONSTITUTION_PATH}"
-printf 'supplemental_prompt_source: %s\n' "${supplemental_marker}"
+printf 'addendum_source: %s\n' "${addendum_marker}"
 printf '\n## Project Meta\n\n'
 printf '%s\n' "${project_meta}" | sed 's/^/- /'
 
@@ -108,30 +108,30 @@ printf '\n## Current Constitution (verbatim)\n\n'
 cat "${CONSTITUTION_PATH}"
 printf '\n'
 
-printf '## Supplemental Prompt\n\n'
-case "${supplemental_marker}" in
+printf '## Addendum\n\n'
+case "${addendum_marker}" in
   __WORKFLOW_PROMPT__)
-    printf '%s\n' "${supplemental_marker_and_text}" | sed '1d'
+    printf '%s\n' "${addendum_marker_and_text}" | sed '1d'
     printf '\n'
     ;;
   __EMPTY__)
-    printf '_（未提供補充 prompt；本次 reconcile 只會依現有 constitution 重新整理）_\n\n'
+    printf '_（未提供 addendum；本次 reconcile 只會依現有 constitution 重新整理）_\n\n'
     ;;
   *)
-    if [ -f "${supplemental_marker}" ]; then
-      cat "${supplemental_marker}"
+    if [ -f "${addendum_marker}" ]; then
+      cat "${addendum_marker}"
       printf '\n'
     else
-      printf '_（找不到補充 prompt 檔案：%s）_\n\n' "${supplemental_marker}"
+      printf '_（找不到 addendum 檔案：%s）_\n\n' "${addendum_marker}"
     fi
     ;;
 esac
 
 printf '## Reconcile Rules\n\n'
 printf '%s\n' \
-  '- preserve existing stable identifiers unless the supplemental prompt explicitly requests a rename' \
+  '- preserve existing stable identifiers unless the addendum explicitly requests a rename' \
   '- keep source_of_truth / runtime_workspace / workflow_policy aligned with the existing constitution unless the addendum explicitly changes them' \
-  '- do not add an empty additional prompt file into the constitution; supplemental input stays external' \
+  '- do not add an empty addendum file into the constitution; addendum input stays external' \
   '- the reconcile step must emit one schema-valid constitution draft and then stop'
 
 exit 0

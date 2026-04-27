@@ -23,10 +23,21 @@
 #   - Emit a markdown report listing both written paths so downstream task
 #     workflows can resolve them.
 #
+# Overwrite / dry-run modes (env-driven):
+#   - CAP_CONSTITUTION_DRY_RUN=1 : compute and emit the unified diff between
+#       the existing repo SSOT and the new YAML, then exit 0 without writing.
+#       Snapshot, scaffold and project-config writes still proceed because they
+#       target the runtime workspace, not the repo SSOT.
+#   - CAP_CONSTITUTION_OVERWRITE=1 : replace an existing
+#       .cap.constitution.yaml. Before writing the script copies the existing
+#       file to .cap.constitution.yaml.backup-<TIMESTAMP> for rollback.
+#   - default : if .cap.constitution.yaml exists and overwrite is not set, the
+#       repo write is skipped (snapshot still recorded).
+#
 # Exit codes:
-#   - 0  : success
+#   - 0  : success (write performed, write skipped, or dry-run completed)
 #   - 40 : git_operation_failed-class — missing input artifact, JSON parse
-#          error, write failure, or validation report indicates failure.
+#          error, write failure, backup failure, or validation report indicates failure.
 #
 # This step does NOT allow AI fallback; if persistence fails the workflow
 # must halt so the operator can investigate. The upstream draft is already
@@ -159,7 +170,8 @@ fi
 #    b) a markdown artifact with a fenced ```json block,
 #    c) a plain .json file.
 tmp_json="$(mktemp)"
-trap 'rm -f "${tmp_json}"' EXIT
+tmp_yaml="$(mktemp)"
+trap 'rm -f "${tmp_json}" "${tmp_yaml}"' EXIT
 
 case "${artifact_path}" in
   *.json)
@@ -241,21 +253,39 @@ with open(dst, "w", encoding="utf-8") as fh:
     fh.write("\n")
 ' "${tmp_json}" "${SNAPSHOT_PATH}" || fail_with "snapshot_write_failed" "${SNAPSHOT_PATH}"
 
-# 7. write repo-level YAML. We refuse to overwrite an existing
-#    .cap.constitution.yaml unless CAP_CONSTITUTION_OVERWRITE=1 is set, so the
-#    bootstrap path doesn't silently nuke the platform's own constitution.
-if [ -f "${REPO_TARGET}" ] && [ "${CAP_CONSTITUTION_OVERWRITE:-0}" != "1" ]; then
-  printf 'repo_target_skipped: %s (already exists; set CAP_CONSTITUTION_OVERWRITE=1 to replace)\n' "${REPO_TARGET}"
-  REPO_WRITTEN=0
-else
-  "${PYTHON_BIN}" -c '
+# 7. write repo-level YAML. Three paths:
+#    - default: skip if file exists and no overwrite flag set
+#    - overwrite (CAP_CONSTITUTION_OVERWRITE=1): backup existing, then write
+#    - dry-run (CAP_CONSTITUTION_DRY_RUN=1): compute diff only, no write
+#
+# Render new YAML to tmp_yaml first so we can diff against existing and back up.
+REPO_BACKUP_PATH=""
+REPO_DIFF=""
+"${PYTHON_BIN}" -c '
 import json, sys, yaml
 src, dst = sys.argv[1], sys.argv[2]
 with open(src, "r", encoding="utf-8") as fh:
     data = json.load(fh)
 with open(dst, "w", encoding="utf-8") as fh:
     yaml.safe_dump(data, fh, allow_unicode=True, sort_keys=False)
-' "${tmp_json}" "${REPO_TARGET}" || fail_with "repo_target_write_failed" "${REPO_TARGET}"
+' "${tmp_json}" "${tmp_yaml}" || fail_with "repo_target_render_failed" "${tmp_yaml}"
+
+if [ -f "${REPO_TARGET}" ]; then
+  REPO_DIFF="$(diff -u "${REPO_TARGET}" "${tmp_yaml}" 2>/dev/null | head -n 200 || true)"
+fi
+
+if [ "${CAP_CONSTITUTION_DRY_RUN:-0}" = "1" ]; then
+  REPO_WRITTEN=0
+  printf 'repo_target_dry_run: %s (no write performed; CAP_CONSTITUTION_DRY_RUN=1)\n' "${REPO_TARGET}"
+elif [ -f "${REPO_TARGET}" ] && [ "${CAP_CONSTITUTION_OVERWRITE:-0}" != "1" ]; then
+  REPO_WRITTEN=0
+  printf 'repo_target_skipped: %s (already exists; set CAP_CONSTITUTION_OVERWRITE=1 to replace)\n' "${REPO_TARGET}"
+else
+  if [ -f "${REPO_TARGET}" ]; then
+    REPO_BACKUP_PATH="${REPO_TARGET}.backup-${TIMESTAMP}"
+    cp "${REPO_TARGET}" "${REPO_BACKUP_PATH}" || fail_with "backup_write_failed" "${REPO_BACKUP_PATH}"
+  fi
+  cp "${tmp_yaml}" "${REPO_TARGET}" || fail_with "repo_target_write_failed" "${REPO_TARGET}"
   REPO_WRITTEN=1
 fi
 
@@ -303,7 +333,19 @@ printf 'repo_target: %s\n' "${REPO_TARGET}"
 printf 'repo_written: %s\n' "${REPO_WRITTEN}"
 printf 'project_root: %s\n' "${TARGET_PROJECT_ROOT}"
 printf 'workspace_dir: %s\n' "${WORKSPACE_DIR}"
-printf 'project_id: %s\n\n' "${project_id_from_json}"
+printf 'project_id: %s\n' "${project_id_from_json}"
+if [ -n "${REPO_BACKUP_PATH}" ]; then
+  printf 'repo_backup_path: %s\n' "${REPO_BACKUP_PATH}"
+fi
+if [ "${CAP_CONSTITUTION_DRY_RUN:-0}" = "1" ]; then
+  printf 'mode: dry_run\n'
+fi
+printf '\n'
+
+if [ -n "${REPO_DIFF}" ]; then
+  printf '## Repo Target Diff (existing vs new)\n\n'
+  printf '```diff\n%s\n```\n\n' "${REPO_DIFF}"
+fi
 
 printf '## 交接摘要\n\n'
 printf -- '- agent_id: shell-persist-constitution\n'

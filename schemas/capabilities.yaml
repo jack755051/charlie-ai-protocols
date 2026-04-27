@@ -103,7 +103,7 @@ capabilities:
       - 已輸出寫入路徑供下游 compile 使用
 
   constitution_reconciliation_inputs:
-    description: 載入既有 Project Constitution 與補充 prompt，整理成 reconciliation step 可讀的合併上下文
+    description: 載入既有 Project Constitution 與 addendum，整理成 reconciliation step 可讀的合併上下文
     default_agent: shell
     allowed_agents: [shell]
     inputs:
@@ -113,11 +113,11 @@ capabilities:
       - constitution_reconcile_inputs
     done_when:
       - 已讀取現有 .cap.constitution.yaml
-      - 已整理 supplemental prompt 或 addendum 檔案內容
+      - 已整理 addendum 檔案或當次補充 prompt
       - 已產出供 AI reconciliation step 使用的上下文 artifact
 
   constitution_reconciliation:
-    description: 依既有 Project Constitution 與補充 prompt 產出修正版草案，維持 SSOT 邊界並只做一次收斂
+    description: 依既有 Project Constitution 與 addendum 產出修正版草案，維持 SSOT 邊界並只做一次收斂
     default_agent: supervisor
     allowed_agents: [supervisor]
     inputs:
@@ -127,7 +127,7 @@ capabilities:
       - project_constitution_json
       - execution_policy
     done_when:
-      - 已吸收既有 constitution 與 supplemental prompt
+      - 已吸收既有 constitution 與 addendum
       - 已輸出單一修正版 constitution 草案
       - 未引入新的治理來源或自動迴圈
 

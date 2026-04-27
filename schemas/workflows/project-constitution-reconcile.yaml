@@ -9,7 +9,7 @@ triggers:
   - constitution-addendum
 
 artifacts:
-  constitution_reconcile_inputs: Current constitution plus supplemental prompt bundled for the AI reconciliation step
+  constitution_reconcile_inputs: Current constitution plus addendum bundled for the AI reconciliation step
   project_constitution: Reconciled Project Constitution Markdown
   project_constitution_json: Reconciled Project Constitution JSON
   execution_policy: Executor selection and lifecycle policy
@@ -17,9 +17,9 @@ artifacts:
   constitution_persisted_paths: Resolved repo target and snapshot paths after persistence
 
 governance:
-  watcher_mode: final_only
+  watcher_mode: milestone_gate
   logger_mode: milestone_log
-  watcher_checkpoints: [reconcile_constitution]
+  watcher_checkpoints: [reconcile_constitution, validate_constitution, persist_reconciled_constitution]
   logger_checkpoints: [load_reconcile_inputs, reconcile_constitution, validate_constitution, persist_reconciled_constitution]
   halt_on_missing_handoff: false
   context_mode: summary_first
@@ -38,7 +38,7 @@ steps:
       - constitution_reconcile_inputs
     done_when:
       - 已讀取 repo 級 .cap.constitution.yaml
-      - 已將補充 prompt 或 addendum 檔案整理為 AI 可讀的上下文
+      - 已將 addendum 檔案或當次補充 prompt 整理為 AI 可讀的上下文
       - 已明確區分「外部補充輸入」與「憲法本體」
     on_fail: halt
     fallback:
@@ -47,8 +47,8 @@ steps:
     input_mode: full
     output_tier: planning_artifact
     notes:
-      - 補充 prompt 是 workflow 輸入，不是憲法的一部分
-      - 若補充檔不存在，workflow 仍可直接使用使用者當次 prompt
+      - addendum 是 workflow 輸入，不是憲法的一部分
+      - 若 addendum 檔不存在，workflow 仍可直接使用使用者當次 prompt
 
   - id: reconcile_constitution
     name: Reconcile Constitution From Existing Baseline And Addendum
@@ -63,9 +63,9 @@ steps:
       - project_constitution_json
       - execution_policy
     done_when:
-      - 已讀取現有 Project Constitution 與 supplemental prompt
+      - 已讀取現有 Project Constitution 與 addendum
       - 已保留 source_of_truth / runtime_workspace / binding_policy / workflow_policy / executor_policy 的治理邊界
-      - 已依補充內容做最小必要調整，不得擅自建立新的治理來源
+      - 已依 addendum 內容做最小必要調整，不得擅自建立新的治理來源
       - 已輸出 Markdown 與 JSON 雙形態的修正版 constitution
       - JSON 必須包覆於 <<<CONSTITUTION_JSON_BEGIN>>> 與 <<<CONSTITUTION_JSON_END>>> 之間
     on_fail: halt
@@ -75,7 +75,7 @@ steps:
     input_mode: full
     output_tier: planning_artifact
     notes:
-      - 若補充內容與既有憲章衝突，優先維持較安全、較小範圍的變更，並在交接摘要說明取捨
+      - 若 addendum 內容與既有憲章衝突，優先維持較安全、較小範圍的變更，並在交接摘要說明取捨
       - 這個 workflow 只允許一次重構，不應自動迴圈重跑
 
   - id: validate_constitution
@@ -102,6 +102,7 @@ steps:
     output_tier: machine_metadata
     notes:
       - reconcile 失敗代表 addendum 或 baseline 仍需人工修正，不進行 AI 自動迴圈
+      - 本 step 已加入 watcher_checkpoints；通過後才允許進入 persist。
 
   - id: persist_reconciled_constitution
     name: Persist Reconciled Constitution To Repo SSOT And Runtime Snapshot
@@ -116,7 +117,8 @@ steps:
     outputs:
       - constitution_persisted_paths
     done_when:
-      - 已覆寫 repo 級 .cap.constitution.yaml
+      - 已覆寫 repo 級 .cap.constitution.yaml（或在 dry-run 模式下輸出 diff 並 skip）
+      - 已產出 .cap.constitution.yaml.backup-<TIMESTAMP> 副本以便回滾（覆寫路徑時）
       - 已寫入 ~/.cap/projects/<project_id>/constitutions/<timestamp>.json 快照
       - 已建立或沿用 ~/.cap/projects/<project_id>/workspace/ 骨架目錄
       - 已輸出寫入路徑與 project_id 供下游 workflow 讀回
@@ -127,5 +129,8 @@ steps:
     input_mode: full
     output_tier: machine_metadata
     notes:
-      - 這個 step 會以覆寫模式更新現有 constitution，讓補充 prompt 真正收斂成新的 SSOT
-      - 仍不得把 supplemental prompt 本身存入 constitution
+      - 這個 step 會以覆寫模式更新現有 constitution，讓 addendum 真正收斂成新的 SSOT。
+      - 仍不得把 addendum 本身存入 constitution。
+      - "Overwrite contract：cap-workflow-exec.sh 偵測 step_id=persist_reconciled_constitution 時自動注入 CAP_CONSTITUTION_OVERWRITE=1；非此 step 不應注入該 env，避免誤覆寫平台自身 constitution。"
+      - "Backup contract：覆寫前 persist-constitution.sh 會先把既有 .cap.constitution.yaml 複製為 .cap.constitution.yaml.backup-<TIMESTAMP>，提供基本回滾路徑。"
+      - "Dry-run contract：執行前若需先看 diff，可設 CAP_CONSTITUTION_DRY_RUN=1，本 step 將輸出 unified diff 並 exit 0，不寫入 repo SSOT；snapshot / scaffold 仍會記錄。"
