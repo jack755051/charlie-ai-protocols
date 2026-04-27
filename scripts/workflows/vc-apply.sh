@@ -47,14 +47,18 @@ extract_artifact_path() {
   printf '%s' "${context}" \
     | awk -v want="${artifact_name}" '
         $0 ~ "^[[:space:]]*-[[:space:]]*"want":[[:space:]]*step=" {
-          if (match($0, /path=([^[:space:]]+)/, arr)) {
-            print arr[1]
+          n = split($0, parts, "path=")
+          if (n > 1) {
+            split(parts[2], tail, /[[:space:]]+/)
+            print tail[1]
             exit
           }
         }
         $0 ~ "^[[:space:]]*"want":[[:space:]]*step=" {
-          if (match($0, /path=([^[:space:]]+)/, arr)) {
-            print arr[1]
+          n = split($0, parts, "path=")
+          if (n > 1) {
+            split(parts[2], tail, /[[:space:]]+/)
+            print tail[1]
             exit
           }
         }
@@ -73,13 +77,16 @@ fallback_extract_path_by_keyword() {
 }
 
 # ── parse envelope JSON 區段 ──
+# 抓最後一組 <<<COMMIT_ENVELOPE_BEGIN>>>...<<<COMMIT_ENVELOPE_END>>>，
+# 因為 Codex stdout 會包含 prompt 回顯，prompt 本身可能含有範例 envelope 文字。
 extract_envelope_json() {
   local path="$1"
   awk '
-    BEGIN { inside = 0 }
-    /<<<COMMIT_ENVELOPE_BEGIN>>>/ { inside = 1; next }
+    BEGIN { inside = 0; buf = "" }
+    /<<<COMMIT_ENVELOPE_BEGIN>>>/ { inside = 1; buf = ""; next }
     /<<<COMMIT_ENVELOPE_END>>>/   { inside = 0; next }
-    inside == 1 { print }
+    inside == 1 { buf = buf $0 "\n" }
+    END { printf "%s", buf }
   ' "${path}"
 }
 
