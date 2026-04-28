@@ -69,18 +69,20 @@ steps:
       - 已依據 platform_defaults 中列出的 required 欄位輸出 Project Constitution JSON（嚴禁省略 schema_version / constitution_id / project_id / name / summary / source_of_truth / runtime_workspace / binding_policy / workflow_policy）
       - 已將 platform_defaults 中的 source_of_truth / runtime_workspace / binding_policy / workflow_policy / executor_policy 區塊原樣轉成 JSON 嵌入 constitution，不得擅自修改 stores 列表或 allowed_capabilities
       - 已依使用者 prompt 推導 name / summary / project_goal / constitution_id / project_id（kebab-case）
+      - "scalar 型欄位嚴格鎖定（以 schemas/project-constitution.schema.yaml 為 SSOT）：name / summary / project_goal 必須是**單一字串**（type: string）；constraints 必須是 string 陣列。嚴禁把多層次目標、primary_capabilities、out_of_scope 等子結構塞進 project_goal——這些細節應拆分到 summary、constraints、stop_conditions 或在 Markdown 文件中表述。違反者會被 validate_constitution 直接 halt（無 AI fallback）。"
       - 已列出 allowed_agents、stop_conditions 與 artifact 保存策略
       - 已輸出 Markdown 與 JSON 兩種 constitution 形態
       - "JSON 必須包覆於 <<<CONSTITUTION_JSON_BEGIN>>> 與 <<<CONSTITUTION_JSON_END>>> 之間（**唯一合法格式**）；artifact 內若另外存在 ```json 標記的 fenced code block 僅供示例用途，validator 在偵測到多個 ```json 區塊時會 halt"
     on_fail: halt
     fallback:
       when: []
-    timeout_seconds: 180
+    timeout_seconds: 300
     input_mode: full
     output_tier: planning_artifact
     notes:
       - 本 workflow 只產生 constitution，不直接建立 repo 或啟動開發 agent sessions
       - "Project Constitution JSON 必須對齊 schemas/project-constitution.schema.yaml；下游 validate_constitution step 會用 jsonschema 自動驗證，schema fail 將導致整條 workflow halt（無 AI fallback）"
+      - "schema scalar 對齊提醒：project_goal 在 schema 中為 type: string（單一句、長期目標敘述）。若使用者 prompt 描述了多項能力或多層目標，請改寫為一句濃縮的 long-term goal，並把細部條列移到 summary、constraints 或 Markdown 段落，避免再次踩到『project_goal: expected type string, got dict』schema halt。"
       - 若初始 prompt 資訊不足，請改走 `project-constitution-reconcile` workflow 吸收 addendum；不要在此 workflow 內建立空白 addendum 檔或反覆重跑 draft。
       - 後續 repo 建立應由 constitution 編譯出的 task workflow 執行
       - sub agent 應視為 CAP agent session，不綁死 Claude 或 Codex 專屬能力
