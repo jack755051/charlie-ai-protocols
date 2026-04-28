@@ -98,6 +98,7 @@ binding_policy:
     - project_constitution
     - constitution_reconciliation
     - constitution_reconciliation_inputs
+    - prompt_outline_normalize
     - prd_generation
     - workflow_orchestration
     - technical_planning

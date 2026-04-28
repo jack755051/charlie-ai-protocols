@@ -45,6 +45,26 @@ capabilities:
     done_when:
       - 所有 step 已依 workflow 定義執行或正確路由
 
+  prompt_outline_normalize:
+    description: |
+      把使用者一段或一句的自由 prompt，依目標 schema 拆解成「scalar 欄位草稿 / array 欄位草稿 / object 欄位草稿 / Markdown 敘事補充」四個分流，避免下游 draft 階段把多層次資訊塞錯欄位（例如把多目標、能力清單、out-of-scope 全壓進 type:string 的 project_goal 而踩 schema halt）。
+      這是規劃型 workflow 的共用前置 capability：憲章、PRD、TechPlan 等都可以重用。本 capability 只暴露給 workflow runtime 使用，不在 cap CLI 開獨立呼叫入口（鎖死於 workflow，避免指令面膨脹）。
+    default_agent: supervisor
+    allowed_agents: [supervisor]
+    inputs:
+      - raw_user_prompt
+      - target_schema_path
+    outputs:
+      - normalized_outline
+      - schema_alignment_notes
+    done_when:
+      - 已讀取 target_schema_path 指向的 schema，並列出 required scalar / array / object 欄位
+      - 已將使用者 prompt 中的長期目標濃縮為單一字串草稿，對應 schema 中 type:string 的 north-star 欄位（如 project_goal）
+      - 已將清單型概念（限制、停機條件、out-of-scope）拆成 array 草稿
+      - 已將結構型政策（治理 / 安全 / artifact 策略）整理為 object 草稿
+      - 已標記敘事性內容應保留在 Markdown 主文，不要硬塞進 scalar 欄位
+      - 若使用者 prompt 對某個 schema required 欄位資訊不足，已標記為 needs_data 而非自行假設
+
   project_constitution:
     description: 從使用者想法、偏好與專案上下文產生 Project Constitution，作為後續 repo 建立與 task workflow compile 的治理基礎
     default_agent: supervisor
@@ -53,6 +73,7 @@ capabilities:
       - user_requirement
       - project_context
       - platform_defaults
+      - normalized_outline
     outputs:
       - project_constitution
       - project_constitution_json

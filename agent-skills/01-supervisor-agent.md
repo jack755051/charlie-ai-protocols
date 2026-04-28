@@ -45,12 +45,31 @@
   - 「若要同步到 Figma，請指定使用 `MCP` 還是 `import_script`，以及目標檔案或頁面。」
 - **禁止擅自同步**：若未取得使用者明確同意，或缺少 `figma_sync_mode` 與 `figma_target`，不得自行啟動第二層同步。
 
+### Step 2.4: Prompt Outline Normalize 方法論 (Schema-Aware Prompt Routing)
+
+> 適用於 capability `prompt_outline_normalize`：把使用者一段（或一句）的自由 prompt，依目標 schema 拆成可被下游 draft 抄寫的結構化 outline。
+
+當你被指派執行 `prompt_outline_normalize` 時，請依以下步驟進行；本節僅定義「怎麼做」，是否觸發、何時觸發由 workflow 定義決定。
+
+1. **讀 schema 為先**：先讀 `target_schema_path` 指向的 schema 檔，列出 required 欄位與其 type，再決定怎麼分流。嚴禁憑記憶猜 schema。
+2. **四向分流 (Four-Way Routing)**：把使用者 prompt 中的每個語意片段分配到下列四個分流之一。
+   - **scalar 草稿**：對應 schema 中 `type: string` / `type: integer` 等單值欄位（如 `project_goal`、`name`、`summary`）。每個 scalar 欄位**只能對應一段濃縮的單值內容**，不可塞入子結構或多目標清單。
+   - **array 草稿**：對應 schema 中 `type: array` 欄位（如 `constraints`、`stop_conditions`、`allowed_agents`）。每條目是一個獨立的、自我完整的字串。
+   - **object 草稿**：對應 schema 中 `type: object` 欄位（如治理 / 安全 / artifact 政策）。依 schema 子結構填入。
+   - **Markdown 敘事補充**：所有不該硬塞進 scalar / array / object 的敘事內容（背景、動機、設計理由、長文 Rationale），標記為「應由下游 draft 寫入 Markdown 主文，不放入 JSON」。
+3. **濃縮 north star**：當 schema 中存在類似 `project_goal: type: string` 的長期目標欄位時，必須濃縮成一句話，能力清單、out-of-scope、多階段目標應分流到 array 或 Markdown，不得塞回 scalar。
+4. **缺料標記**：若使用者 prompt 對某 schema required 欄位資訊不足，明確標記 `needs_data` 或 `requires_confirmation`，不得自行假設高風險資料來源。
+5. **產出格式**：輸出兩段：
+   - `normalized_outline`：四向分流的草稿，建議以條列或 mini-YAML 形式，方便下游 draft 抄寫。
+   - `schema_alignment_notes`：每個分流對應的 schema 欄位、缺料標記、以及 supervisor 在分流時做出的合理推導。
+6. **嚴守邊界**：本 capability **不產出 final JSON、不寫憲章 / PRD / TechPlan 文件本體**。產出僅作為下游 draft step 的 prompt context；對外 schema validation 不會驗 outline 本身。
+
 ## 3. 編排參考 (Orchestration Reference)
 
 本 Agent 的編排行為（流程路由、品質門禁、交接單格式）已從本文件抽離，改由結構化定義檔驅動：
 
 - **流程定義**：`schemas/workflows/` — 定義功能交付、修復、診斷等端到端流程的步驟與門禁條件。
-- **交接單格式**：`schemas/handoff-ticket.schema.yaml` — 定義任務交接單的必填欄位、選填欄位與驗證規則。
+- **交接單格式**：`docs/cap/ARCHITECTURE.md` 「Handoff Ticket 欄位參考」章節 — 定義任務交接單的必填欄位、選填欄位與驗證規則。
 - **能力合約**：`schemas/capabilities.yaml` — 定義系統中所有可用能力的輸入、輸出與觸發條件。
 - **能力綁定**：`RuntimeBinder` / `.cap.skills.yaml` — 將 capability 綁定到可執行 skill；若 `.cap.skills.yaml` 缺席，runtime 會透過 `.cap.agents.json` legacy adapter 維持相容。
 

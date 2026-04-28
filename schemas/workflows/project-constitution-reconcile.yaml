@@ -10,6 +10,8 @@ triggers:
 
 artifacts:
   constitution_reconcile_inputs: Current constitution plus addendum bundled for the AI reconciliation step
+  normalized_outline: Schema-aware outline that splits the addendum prompt into scalar / array / object / markdown buckets before reconcile
+  schema_alignment_notes: Notes on which addendum fragments map to which schema fields, plus needs_data markers
   project_constitution: Reconciled Project Constitution Markdown
   project_constitution_json: Reconciled Project Constitution JSON
   execution_policy: Executor selection and lifecycle policy
@@ -20,7 +22,7 @@ governance:
   watcher_mode: milestone_gate
   logger_mode: milestone_log
   watcher_checkpoints: [reconcile_constitution, validate_constitution, persist_reconciled_constitution]
-  logger_checkpoints: [load_reconcile_inputs, reconcile_constitution, validate_constitution, persist_reconciled_constitution]
+  logger_checkpoints: [load_reconcile_inputs, normalize_outline, reconcile_constitution, validate_constitution, persist_reconciled_constitution]
   halt_on_missing_handoff: false
   context_mode: summary_first
   goal_stage: informal_planning
@@ -50,14 +52,42 @@ steps:
       - addendum 是 workflow 輸入，不是憲法的一部分
       - 若 addendum 檔不存在，workflow 仍可直接使用使用者當次 prompt
 
-  - id: reconcile_constitution
-    name: Reconcile Constitution From Existing Baseline And Addendum
-    capability: constitution_reconciliation
+  - id: normalize_outline
+    name: Normalize Addendum Prompt Into Schema-Aligned Outline
+    capability: prompt_outline_normalize
     executor: ai
     needs:
       - load_reconcile_inputs
     inputs:
       - constitution_reconcile_inputs
+    outputs:
+      - normalized_outline
+      - schema_alignment_notes
+    done_when:
+      - 已對照 schemas/project-constitution.schema.yaml 的 type 結構，列出 addendum 應落腳的 scalar / array / object 欄位
+      - 已將 addendum 拆成 scalar 草稿（如 project_goal 一句話 north star 修正）、array 草稿（如新增的 constraints / stop_conditions 條目）、object 草稿（如治理 / 安全政策結構增修）與 Markdown 敘事補充四個分流
+      - 已在 schema_alignment_notes 標明各分流對應的 schema 欄位、與 baseline 的差異點，以及任何 needs_data / requires_confirmation 標記
+      - 嚴禁在本 step 直接重寫憲章 JSON；本 step 只產出供 reconcile_constitution 抄寫的結構化 outline
+    on_fail: halt
+    fallback:
+      when: []
+    timeout_seconds: 240
+    input_mode: full
+    output_tier: planning_artifact
+    notes:
+      - 本 step 是 reconcile_constitution 的前置防呆：把 addendum 預先對齊 schema 的 scalar / array / object 邊界，避免把多目標壓進單一 scalar 欄位而踩 schema halt。
+      - target_schema 鎖定為 schemas/project-constitution.schema.yaml；若未來重用本 capability 於其他 reconcile 流程，需在各自 workflow 注入對應 schema 路徑。
+
+  - id: reconcile_constitution
+    name: Reconcile Constitution From Existing Baseline And Addendum
+    capability: constitution_reconciliation
+    executor: ai
+    needs:
+      - normalize_outline
+    inputs:
+      - constitution_reconcile_inputs
+      - normalized_outline
+      - schema_alignment_notes
     outputs:
       - project_constitution
       - project_constitution_json

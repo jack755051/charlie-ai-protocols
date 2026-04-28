@@ -10,6 +10,8 @@ triggers:
 
 artifacts:
   platform_defaults: Deterministic platform defaults (required schema fields, allowed_capabilities, source_of_truth, runtime_workspace) emitted by bootstrap step
+  normalized_outline: Schema-aware outline that splits the user prompt into scalar / array / object / markdown buckets before draft
+  schema_alignment_notes: Notes on which prompt fragments map to which schema fields, plus needs_data markers
   project_constitution: Project Constitution Markdown
   project_constitution_json: Project Constitution JSON
   execution_policy: Executor selection and lifecycle policy
@@ -20,7 +22,7 @@ governance:
   watcher_mode: final_only
   logger_mode: milestone_log
   watcher_checkpoints: [draft_constitution]
-  logger_checkpoints: [bootstrap_constitution_defaults, draft_constitution, validate_constitution, persist_constitution]
+  logger_checkpoints: [bootstrap_constitution_defaults, normalize_outline, draft_constitution, validate_constitution, persist_constitution]
   halt_on_missing_handoff: false
   context_mode: summary_first
   goal_stage: informal_planning
@@ -50,9 +52,9 @@ steps:
       - 純 deterministic；不讀使用者 prompt，避免 prompt 內容污染預設值。
       - exit code 契約見 policies/workflow-executor-exit-codes.md；本 step 只會 exit 0（pass）或 exit 40（schema/capabilities 檔案缺失）。
 
-  - id: draft_constitution
-    name: Draft Project Constitution
-    capability: project_constitution
+  - id: normalize_outline
+    name: Normalize User Prompt Into Schema-Aligned Outline
+    capability: prompt_outline_normalize
     executor: ai
     needs:
       - bootstrap_constitution_defaults
@@ -60,6 +62,37 @@ steps:
       - user_requirement
       - project_context
       - platform_defaults
+    outputs:
+      - normalized_outline
+      - schema_alignment_notes
+    done_when:
+      - 已讀取 platform_defaults 中列出的 required 欄位，並對照 schemas/project-constitution.schema.yaml 的 type
+      - 已將使用者 prompt 拆分為 scalar 草稿（如 project_goal 一句話 north star）、array 草稿（如 constraints / stop_conditions 條列）、object 草稿（如治理 / 安全政策結構）與 Markdown 敘事補充四個分流
+      - 已在 schema_alignment_notes 標明各分流對應的 schema 欄位、以及任何 needs_data / requires_confirmation 標記
+      - 嚴禁在本 step 直接寫憲法 JSON；本 step 只產出供 draft_constitution 抄寫的結構化 outline
+    on_fail: halt
+    fallback:
+      when: []
+    timeout_seconds: 240
+    input_mode: full
+    output_tier: planning_artifact
+    notes:
+      - 本 step 是 draft_constitution 的前置防呆：把使用者 prompt 預先對齊 schema 的 scalar / array / object 邊界，避免 supervisor 在 draft 階段把多目標壓進單一 scalar 欄位。
+      - target_schema 鎖定為 schemas/project-constitution.schema.yaml；未來若同樣的 normalize capability 被 PRD / TechPlan workflow 重用，需在各自 workflow 注入對應 schema 路徑。
+      - "輸出僅作為下游 draft 的 prompt context；validate_constitution 不會驗證 outline 本身。outline 與 final constitution 之間的對齊由 supervisor 在 draft 階段負責。"
+
+  - id: draft_constitution
+    name: Draft Project Constitution
+    capability: project_constitution
+    executor: ai
+    needs:
+      - normalize_outline
+    inputs:
+      - user_requirement
+      - project_context
+      - platform_defaults
+      - normalized_outline
+      - schema_alignment_notes
     outputs:
       - project_constitution
       - project_constitution_json
