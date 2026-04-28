@@ -1,0 +1,86 @@
+# Design Source Templates (v1)
+#
+# 規範：當使用者透過 cap CLI 互動模式選擇設計來源時，CLI 會依此表把
+# 「儀式句前綴 + URL（與必要欄位）」附加到原始 prompt 結尾，再送入下游
+# workflow（如 project-constitution / project-constitution-reconcile）。
+#
+# SSOT 化的目的：
+#   - Anthropic / Figma 等供應商若更新 fetch / sync 儀式句，只改本檔。
+#   - 03-UI / 12-Figma agent 可讀回同一份模板，避免不同 agent 對「該怎麼
+#     呼叫設計檔」各說各話。
+#   - normalize_outline 看到 prompt 裡含本表已知 URL pattern 時，可路由
+#     到 constraints / Markdown 段落（憲章不會把外部資產壓進 scalar）。
+#
+# 本檔不對 cap workflow 做 binding；純 CLI prompt 拼裝層使用。
+
+schema_version: 1
+
+# 已知設計來源 URL 偵測規則。CLI 在偵測 prompt 是否「已含設計連結」時掃描。
+detection_patterns:
+  claude-design:
+    - 'https://api\.anthropic\.com/v1/design/h/[A-Za-z0-9_\-]+'
+    - 'https://claude\.design/[A-Za-z0-9_\-/]+'
+  figma:
+    - 'https://([a-z0-9-]+\.)?figma\.com/(file|design|proto|board)/[A-Za-z0-9_\-]+'
+
+# 各設計來源的 prompt 拼裝模板。
+# CLI 互動完成後，會以 jinja-style {url} / {figma_target} / {script_path} 替換。
+sources:
+
+  none:
+    label: 無設計稿
+    interactive_prompt: 沒有設計稿（純文字描述需求）
+    appended_block: ""   # CLI 不附加任何前綴；純文字 prompt 直接送下游
+    requires:
+      - none
+    notes:
+      - 預設選項；CI / 非互動環境且未指定 --design-source 時自動採用此項。
+
+  claude-design:
+    label: Claude Design
+    interactive_prompt: Claude Design（Anthropic 設計檔 API）
+    appended_block: |
+      設計來源：claude-design
+      Fetch this design file, read its readme, and implement the relevant aspects of the design. {url}
+    requires:
+      - url
+    url_examples:
+      - https://api.anthropic.com/v1/design/h/DJWF-557Me_q6isDarVehg
+    notes:
+      - "前綴 'Fetch this design file, read its readme, and implement the relevant aspects of the design.' 是 Anthropic Design API 的標準呼叫儀式句；若供應商日後改版，請只在本檔更新一處。"
+      - 認證憑證由下游 design_source_ingest capability 處理（尚未實作；目前憲章只記錄連結存在）。
+
+  figma-mcp:
+    label: Figma（透過 MCP）
+    interactive_prompt: Figma（透過 MCP；需要本機已配置 Figma MCP server）
+    appended_block: |
+      設計來源：figma
+      figma_sync_mode: mcp
+      figma_target: {figma_target}
+      Use Figma MCP to load this design file and implement the relevant aspects of the design. {url}
+    requires:
+      - url
+      - figma_target
+    url_examples:
+      - https://www.figma.com/design/abc123/Project-Name
+    notes:
+      - figma_target 可填 file_key / project_name / page_name，由 12-Figma agent 在 sync 階段消化。
+      - 不同步進去 Figma；只下載已存在內容並對齊。
+
+  figma-import-script:
+    label: Figma（透過 import script）
+    interactive_prompt: Figma（透過 import script；需要 repo 已備好匯入腳本）
+    appended_block: |
+      設計來源：figma
+      figma_sync_mode: import_script
+      figma_target: {figma_target}
+      figma_import_script: {script_path}
+      Run the configured figma-import-script against this design file and apply tokens / screens. {url}
+    requires:
+      - url
+      - figma_target
+      - script_path
+    url_examples:
+      - https://www.figma.com/design/abc123/Project-Name
+    notes:
+      - 適用於需要本地處理的 token / screen 匯入流程；script_path 為相對 repo root 的腳本路徑。

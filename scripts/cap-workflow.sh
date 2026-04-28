@@ -386,6 +386,11 @@ case "${1:-}" in
     RUN_CLI="${CAP_DEFAULT_AGENT_CLI:-auto}"
     CLI_OVERRIDE=0
     EXECUTION_STRATEGY="auto"
+    DESIGN_SOURCE=""
+    DESIGN_URL=""
+    DESIGN_FIGMA_TARGET=""
+    DESIGN_SCRIPT=""
+    DESIGN_NO=0
     while [ "$#" -gt 0 ]; do
       case "$1" in
         -d)       DETACH=1; shift ;;
@@ -393,12 +398,17 @@ case "${1:-}" in
         --cli)    RUN_CLI="$2"; CLI_OVERRIDE=1; shift 2 ;;
         --strategy) EXECUTION_STRATEGY="$2"; shift 2 ;;
         --mode)   EXECUTION_STRATEGY="$2"; shift 2 ;;
+        --design-source) DESIGN_SOURCE="$2"; shift 2 ;;
+        --design-url) DESIGN_URL="$2"; shift 2 ;;
+        --design-figma-target) DESIGN_FIGMA_TARGET="$2"; shift 2 ;;
+        --design-script) DESIGN_SCRIPT="$2"; shift 2 ;;
+        --no-design) DESIGN_NO=1; shift ;;
         *)        break ;;
       esac
     done
 
     [ "$#" -ge 1 ] || {
-      echo "Usage: cap workflow run [--dry-run] [-d] [--cli codex|claude] [--strategy fast|governed|strict|auto] <workflow> [prompt...]" >&2
+      echo "Usage: cap workflow run [--dry-run] [-d] [--cli codex|claude] [--strategy fast|governed|strict|auto] [--design-source TYPE] [--design-url URL] [--design-figma-target NAME] [--design-script PATH] [--no-design] <workflow> [prompt...]" >&2
       exit 1
     }
     case "${EXECUTION_STRATEGY}" in
@@ -424,6 +434,32 @@ case "${1:-}" in
     }
     shift
     USER_PROMPT="$*"
+
+    # Design-source augment (only effective for planning workflows; helper
+    # short-circuits with exit 10 for everything else and prints the prompt
+    # unchanged). exit 20 = user aborted interactive prompt; exit 30 = bad
+    # flag combination. Anything else passes through untouched.
+    DESIGN_TEMPLATES_PATH="${CAP_ROOT}/schemas/design-source-templates.yaml"
+    if [ -f "${DESIGN_TEMPLATES_PATH}" ]; then
+      DESIGN_AUGMENT_ARGS=( augment
+        --templates "${DESIGN_TEMPLATES_PATH}"
+        --workflow-id "${WORKFLOW_ARG}"
+        --prompt-stdin )
+      [ -n "${DESIGN_SOURCE}" ] && DESIGN_AUGMENT_ARGS+=( --design-source "${DESIGN_SOURCE}" )
+      [ -n "${DESIGN_URL}" ] && DESIGN_AUGMENT_ARGS+=( --design-url "${DESIGN_URL}" )
+      [ -n "${DESIGN_FIGMA_TARGET}" ] && DESIGN_AUGMENT_ARGS+=( --design-figma-target "${DESIGN_FIGMA_TARGET}" )
+      [ -n "${DESIGN_SCRIPT}" ] && DESIGN_AUGMENT_ARGS+=( --design-script "${DESIGN_SCRIPT}" )
+      [ "${DESIGN_NO}" -eq 1 ] && DESIGN_AUGMENT_ARGS+=( --no-design )
+
+      DESIGN_RC=0
+      DESIGN_OUT="$(printf '%s' "${USER_PROMPT}" | "${PYTHON_BIN}" "${CAP_ROOT}/engine/design_prompt.py" "${DESIGN_AUGMENT_ARGS[@]}")" || DESIGN_RC=$?
+      case "${DESIGN_RC}" in
+        0|10) USER_PROMPT="${DESIGN_OUT}" ;;
+        20) echo "[cap] 設計來源詢問已中止，未執行 workflow。" >&2; exit 20 ;;
+        30) echo "[cap] 設計來源旗標組合錯誤，請參考 cap workflow run 用法說明。" >&2; exit 30 ;;
+        *) echo "[cap] 設計來源處理意外失敗 (rc=${DESIGN_RC})，已沿用原始 prompt。" >&2 ;;
+      esac
+    fi
 
     PLAN_JSON="$("${PYTHON_BIN}" "${CLI_PY}" build-bound-plan "${CAP_ROOT}" "${WORKFLOW_REF}")"
 

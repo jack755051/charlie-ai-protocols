@@ -21,6 +21,7 @@ skills:
       - workflow_orchestration
       - project_constitution
       - constitution_reconciliation
+      - prompt_outline_normalize
     fallback_roles:
       - supervisor
 
