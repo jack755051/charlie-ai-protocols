@@ -46,6 +46,7 @@ echo "   ✓ 已切換至 ${CAP_VERSION}"
 echo ""
 echo "🗂 [2/4] 建立 CAP 本機儲存區..."
 mkdir -p "${CAP_STORAGE_HOME}/projects"
+mkdir -p "${CAP_STORAGE_HOME}/designs"
 echo "   ✓ 本機儲存根目錄就緒：${CAP_STORAGE_HOME}"
 
 # 3. 建立本地 symlink（不支援時自動 fallback 為 copy）
