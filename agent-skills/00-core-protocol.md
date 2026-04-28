@@ -42,7 +42,7 @@
 - 任一稽核結果為 FAIL 時，修復優先於推進。
 
 ### 5.3 交接產出格式 (Handoff Output)
-- 完成任務後，必須附上結構化交接摘要，格式依 `schemas/handoff-ticket.schema.yaml` 定義。
+- 完成任務後，必須附上結構化交接摘要，格式依 `docs/cap/ARCHITECTURE.md` 「Handoff Ticket 欄位參考」章節定義。
 - **最低必填欄位**：`agent_id`、`task_summary`、`output_paths`、`result`。
 - 各 Agent 的 `agent_id` 由其領域文件指定（如 `01-Supervisor`、`04-Frontend`）。若該角色有額外交接欄位（如 Figma 的 `figma_sync_mode`），在領域文件中補充。
 
