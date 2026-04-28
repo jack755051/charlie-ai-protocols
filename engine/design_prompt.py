@@ -63,30 +63,79 @@ def _prompt_already_has_design_url(prompt: str, detection_patterns: dict) -> str
     return None
 
 
+_TTY_HANDLE: object | None = None
+
+
+def _open_tty():
+    """Open /dev/tty for interactive read+write, cached for the process.
+
+    We can't rely on sys.stdin / sys.stderr because cap-workflow.sh feeds
+    the prompt via a shell pipeline, which leaves sys.stdin pointing at a
+    closed pipe even when the user is sitting in front of a real terminal.
+    Returns (read_handle, write_handle) or (None, None) if /dev/tty is not
+    available (CI / detached sessions).
+    """
+    global _TTY_HANDLE
+    if _TTY_HANDLE is False:
+        return None, None
+    if _TTY_HANDLE is not None:
+        return _TTY_HANDLE  # type: ignore[return-value]
+    try:
+        read_h = open("/dev/tty", "r", encoding="utf-8")
+        write_h = open("/dev/tty", "w", encoding="utf-8")
+        _TTY_HANDLE = (read_h, write_h)
+        return _TTY_HANDLE
+    except OSError:
+        _TTY_HANDLE = False  # type: ignore[assignment]
+        return None, None
+
+
 def _is_tty_interactive() -> bool:
-    return sys.stdin.isatty() and sys.stderr.isatty()
+    """True when we have any usable TTY (sys streams or /dev/tty fallback)."""
+    if sys.stdin.isatty() and sys.stderr.isatty():
+        return True
+    read_h, write_h = _open_tty()
+    return read_h is not None and write_h is not None
 
 
 def _ask(question: str) -> str:
+    """Prompt and read one line, preferring /dev/tty when sys streams are pipes."""
+    read_h, write_h = _open_tty()
+    if read_h is not None and write_h is not None:
+        write_h.write(question)
+        write_h.flush()
+        line = read_h.readline()
+        return line.strip()
     sys.stderr.write(question)
     sys.stderr.flush()
     return sys.stdin.readline().strip()
 
 
+def _notify(message: str) -> None:
+    """Write an informational message to whichever handle the user can see."""
+    _, write_h = _open_tty()
+    if write_h is not None:
+        write_h.write(message)
+        write_h.flush()
+        return
+    sys.stderr.write(message)
+    sys.stderr.flush()
+
+
 def _prompt_for_source(sources: dict) -> str:
-    sys.stderr.write("\n[cap] 是否有設計稿？\n")
+    _notify("\n[cap] 是否有設計稿？\n")
     keys = list(sources.keys())
     keys.sort(key=lambda k: 0 if k == "none" else 1)
     for idx, key in enumerate(keys, start=1):
         label = sources[key].get("interactive_prompt") or sources[key].get("label", key)
-        sys.stderr.write(f"  [{idx}] {label}\n")
+        _notify(f"  [{idx}] {label}\n")
     while True:
         ans = _ask(f"請選擇 [1-{len(keys)}]（直接 Enter 視為 1）：")
         if ans == "":
             return keys[0]
         if ans.isdigit() and 1 <= int(ans) <= len(keys):
             return keys[int(ans) - 1]
-        sys.stderr.write("無效輸入，請重新選擇。\n")
+        _notify("無效輸入，請重新選擇。\n")
 
 
 def _collect_required_fields(source: dict, preset: dict[str, str]) -> dict[str, str]:
@@ -107,7 +156,7 @@ def _collect_required_fields(source: dict, preset: dict[str, str]) -> dict[str, 
             if value:
                 fields[required] = value
                 break
-            sys.stderr.write("不可為空。\n")
+            _notify("不可為空。\n")
     return fields
 
 
