@@ -31,6 +31,7 @@ help: ## 列出所有可用指令
 	@echo "  cap workflow bind <id> [registry] # 顯示 skill binding report"
 	@echo "  cap workflow run <id> [prompt]  # 前景執行（預設 CLI: claude）"
 	@echo "  cap workflow run --cli codex <id> [prompt]  # 指定使用 codex"
+	@echo "  cap workflow run --design-source local-design --design-path ~/.cap/designs/<name> <id> [prompt]  # 使用全域設計稿 package"
 	@echo "  cap workflow run --dry-run <id>  # 只顯示執行計畫，不真的執行"
 	@echo "  cap workflow <id> \"<prompt>\"  # run 的簡寫"
 	@echo "  cap promote list        # 列出本機 drafts / reports"
@@ -46,7 +47,9 @@ help: ## 列出所有可用指令
 	@echo "  cap workflow run --cli codex version-control \"prompt\""
 
 setup: $(VENV)/bin/activate ## 建立 venv 並安裝依賴（首次執行）
+	@mkdir -p "$(HOME)/.cap/designs"
 	@echo "✅ 虛擬環境就緒：$(VENV)"
+	@echo "✅ 全域設計稿 package 目錄就緒：$(HOME)/.cap/designs"
 
 $(VENV)/bin/activate: engine/requirements.txt
 	python3 -m venv $(VENV)
@@ -57,6 +60,7 @@ sync: ## 重建本地 Agent Skills symlink（不支援時自動 fallback 為 cop
 	@bash scripts/mapper.sh
 
 install: sync ## 全域安裝 Agent 技能並註冊 cap / codex / claude shell wrapper
+	@mkdir -p "$(HOME)/.cap/designs"
 	@bash scripts/mapper.sh --global
 	@bash scripts/manage-cap-alias.sh install "$(CURDIR)"
 

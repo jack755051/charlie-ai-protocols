@@ -24,7 +24,7 @@ Usage:
   python design_prompt.py augment \
       --templates schemas/design-source-templates.yaml \
       --workflow-id project-constitution \
-      [--design-source TYPE] [--design-url URL] \
+      [--design-source TYPE] [--design-url URL] [--design-path PATH] \
       [--design-figma-target NAME] [--design-script PATH] \
       [--no-design] \
       --prompt-stdin
@@ -46,7 +46,8 @@ PLANNING_WORKFLOWS = {
     "project-constitution-reconcile",
 }
 
-VALID_SOURCES = {"none", "claude-design", "figma-mcp", "figma-import-script"}
+VALID_SOURCES = {"none", "local-design", "claude-design", "figma-mcp", "figma-import-script"}
+DEFAULT_DESIGNS_DIR = "~/.cap/designs"
 
 
 def _load_templates(path: Path) -> dict:
@@ -148,11 +149,14 @@ def _collect_required_fields(source: dict, preset: dict[str, str]) -> dict[str, 
             continue
         prompt_label = {
             "url": "請貼上設計檔 URL：",
+            "design_path": "請填寫本地設計稿 package 目錄（直接 Enter 使用 ~/.cap/designs）：",
             "figma_target": "請填寫 figma_target（file_key / project_name / page_name）：",
             "script_path": "請填寫 figma import script 相對路徑：",
         }.get(required, f"請填寫 {required}：")
         while True:
             value = _ask(prompt_label)
+            if required == "design_path" and value == "":
+                value = "~/.cap/designs"
             if value:
                 fields[required] = value
                 break
@@ -173,6 +177,82 @@ def _augment(prompt: str, ritual: str) -> str:
     if prompt.endswith("\n"):
         return f"{prompt}\n{ritual.strip()}\n"
     return f"{prompt}\n\n{ritual.strip()}\n"
+
+
+def _resolve_design_path(raw_path: str | None) -> Path:
+    path = Path(raw_path or DEFAULT_DESIGNS_DIR).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    return path.resolve()
+
+
+def _visible_children(path: Path) -> list[Path]:
+    try:
+        return sorted(
+            [child for child in path.iterdir() if not child.name.startswith(".")],
+            key=lambda p: p.name.lower(),
+        )
+    except OSError:
+        return []
+
+
+def _resolve_default_design_package() -> Path | None:
+    designs_dir = _resolve_design_path(DEFAULT_DESIGNS_DIR)
+    if not designs_dir.is_dir():
+        return None
+    children = _visible_children(designs_dir)
+    package_dirs = [child for child in children if child.is_dir()]
+    loose_files = [child for child in children if child.is_file()]
+    if len(package_dirs) == 1 and not loose_files:
+        return package_dirs[0]
+    if len(package_dirs) == 0 and loose_files:
+        return designs_dir
+    return None
+
+
+def _is_designs_library(path: Path) -> bool:
+    return path == _resolve_design_path(DEFAULT_DESIGNS_DIR)
+
+
+def _format_design_tree(root: Path, max_depth: int = 3) -> str:
+    if not root.exists():
+        return f"{root} (missing)"
+    if not root.is_dir():
+        return str(root)
+
+    lines = [f"{root.name}/"]
+    entries: list[tuple[Path, int]] = []
+    for path in sorted(root.rglob("*"), key=lambda p: str(p).lower()):
+        rel = path.relative_to(root)
+        depth = len(rel.parts)
+        if depth > max_depth:
+            continue
+        entries.append((path, depth))
+
+    for path, depth in entries:
+        indent = "  " * depth
+        suffix = "/" if path.is_dir() else ""
+        lines.append(f"{indent}{path.name}{suffix}")
+    return "\n".join(lines)
+
+
+def _display_design_path(path: Path) -> str:
+    home = Path.home().resolve()
+    try:
+        return "~/" + str(path.resolve().relative_to(home))
+    except ValueError:
+        try:
+            return os.path.relpath(path, Path.cwd())
+        except ValueError:
+            return str(path)
+
+
+def _local_design_exists(raw_path: str | None = None) -> bool:
+    path = _resolve_design_path(raw_path) if raw_path else (_resolve_default_design_package() or _resolve_design_path(raw_path))
+    try:
+        return path.is_dir() and any(path.iterdir())
+    except OSError:
+        return False
 
 
 def cmd_augment(args: argparse.Namespace) -> int:
@@ -212,6 +292,11 @@ def cmd_augment(args: argparse.Namespace) -> int:
         )
         return 30
 
+    auto_design_package = _resolve_default_design_package() if not args.design_path else None
+
+    if selected is None and (args.design_path and _local_design_exists(args.design_path) or auto_design_package is not None):
+        selected = "local-design"
+
     if selected is None and not _is_tty_interactive():
         sys.stderr.write(
             "[cap] 非互動環境且未指定 --design-source / --no-design；預設無設計稿。\n"
@@ -239,8 +324,16 @@ def cmd_augment(args: argparse.Namespace) -> int:
         sys.stdout.write(prompt)
         return 10
 
+    default_design_path = ""
+    if selected == "local-design":
+        if args.design_path and _local_design_exists(args.design_path):
+            default_design_path = args.design_path
+        elif auto_design_package is not None:
+            default_design_path = str(auto_design_package)
+
     preset = {
         "url": args.design_url or "",
+        "design_path": default_design_path,
         "figma_target": args.design_figma_target or "",
         "script_path": args.design_script or "",
     }
@@ -265,6 +358,36 @@ def cmd_augment(args: argparse.Namespace) -> int:
     except (KeyboardInterrupt, EOFError):
         sys.stderr.write("\n[cap] 使用者中止互動。\n")
         return 20
+
+    if selected == "local-design":
+        design_path = _resolve_design_path(fields.get("design_path"))
+        if _is_designs_library(design_path):
+            children = _visible_children(design_path)
+            package_dirs = [child for child in children if child.is_dir()]
+            if len(package_dirs) > 1:
+                names = ", ".join(child.name for child in package_dirs)
+                print(
+                    "[design_prompt] ~/.cap/designs contains multiple design packages; "
+                    f"specify one with --design-path ~/.cap/designs/<name>. Available: {names}",
+                    file=sys.stderr,
+                )
+                return 30
+            if len(package_dirs) == 1:
+                design_path = package_dirs[0]
+        if not design_path.is_dir():
+            print(
+                f"[design_prompt] local design path not found or not a directory: {design_path}",
+                file=sys.stderr,
+            )
+            return 30
+        if not _local_design_exists(str(design_path)):
+            print(
+                f"[design_prompt] local design path is empty: {design_path}",
+                file=sys.stderr,
+            )
+            return 30
+        fields["design_path"] = _display_design_path(design_path)
+        fields["design_tree"] = _format_design_tree(design_path)
 
     ritual = _render_block(source_def.get("appended_block", "") or "", fields)
     augmented = _augment(prompt, ritual)
@@ -303,6 +426,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--workflow-id", required=True)
     p.add_argument("--design-source", default=None)
     p.add_argument("--design-url", default=None)
+    p.add_argument("--design-path", default=None)
     p.add_argument("--design-figma-target", default=None)
     p.add_argument("--design-script", default=None)
     p.add_argument("--no-design", action="store_true")

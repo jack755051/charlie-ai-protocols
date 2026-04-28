@@ -1,7 +1,7 @@
 # Design Source Templates (v1)
 #
 # 規範：當使用者透過 cap CLI 互動模式選擇設計來源時，CLI 會依此表把
-# 「儀式句前綴 + URL（與必要欄位）」附加到原始 prompt 結尾，再送入下游
+# 「儀式句前綴 + URL / 本地路徑（與必要欄位）」附加到原始 prompt 結尾，再送入下游
 # workflow（如 project-constitution / project-constitution-reconcile）。
 #
 # SSOT 化的目的：
@@ -24,7 +24,8 @@ detection_patterns:
     - 'https://([a-z0-9-]+\.)?figma\.com/(file|design|proto|board)/[A-Za-z0-9_\-]+'
 
 # 各設計來源的 prompt 拼裝模板。
-# CLI 互動完成後，會以 jinja-style {url} / {figma_target} / {script_path} 替換。
+# CLI 互動完成後，會以 jinja-style {url} / {design_path} / {design_tree}
+# / {figma_target} / {script_path} 替換。
 sources:
 
   none:
@@ -35,6 +36,29 @@ sources:
       - none
     notes:
       - 預設選項；CI / 非互動環境且未指定 --design-source 時自動採用此項。
+
+  local-design:
+    label: 本地設計稿 package
+    interactive_prompt: 本地設計稿 package（讀取全域 ~/.cap/designs）
+    appended_block: |
+      設計來源：local-design
+      design_snapshot_path: {design_path}
+      design_snapshot_mutability: read_only
+      implementation_authority: reference_only
+      請讀取上述本地設計稿 package 目錄，將它作為 UI / interaction / layout 的參考來源；不得修改 ~/.cap/designs 內任何檔案。若設計稿內含 framework 或技術棧假設，僅視為 reference implementation，須由 TechLead / Supervisor 與 Project Constitution 對齊後才能採用。
+
+      design_tree:
+      ```text
+      {design_tree}
+      ```
+    requires:
+      - design_path
+    path_examples:
+      - ~/.cap/designs/token-monitor
+    notes:
+      - 適用於 Claude Design 等有時效性 URL 已由使用者手動下載的情境。
+      - "`~/.cap/designs` 是全域設計稿 package library；每個子目錄代表一份設計稿，例如 `~/.cap/designs/token-monitor/README.md`、`~/.cap/designs/token-monitor/chats/`、`~/.cap/designs/token-monitor/project/`。"
+      - "後續 agent 可在專案 `docs/design/` 產出整理後的摘要，但不得改寫 `~/.cap/designs` 下的 raw source。"
 
   claude-design:
     label: Claude Design
