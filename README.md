@@ -359,10 +359,11 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 
 ## Notes
 
-- 最新已驗證 tag：`v0.18.0`
+- 最新已驗證 tag：`v0.18.1`
 - v0.17.0：新增 `project-constitution-reconcile` workflow，用來吸收 addendum 後一次性重構既有 Project Constitution，避免把補充資訊直接混進憲法本體
 - v0.17.1：補上 reconcile 安全合約 — persist step 支援 `CAP_CONSTITUTION_DRY_RUN=1` 預覽 diff、覆寫前自動備份至 `.cap.constitution.yaml.backup-<TIMESTAMP>`、watcher 升級為 `milestone_gate` 並對 reconcile / validate / persist 三個 checkpoint 設閘
 - v0.18.0：新增 `prompt_outline_normalize` capability 與對應 step，把使用者 prompt 拆成 scalar / array / object / Markdown 四向分流送進憲章 / reconcile 之 draft，避免 schema halt；`cap workflow run` 加上 `--design-source / --design-url / --design-figma-target / --design-script / --no-design` 旗標與 TTY 反問機制（規劃型 workflow 限定），由 `schemas/design-source-templates.yaml` 提供 `claude-design / figma-mcp / figma-import-script` 儀式句模板；同步把 `agent-skills/`、`policies/`、`workflows/` 從 `docs/` 拆出成根目錄一級來源
+- v0.18.1：完成「設計來源 package 投放」管線 — `engine/design_prompt.py` 新增 `local-design` 來源、`--design-path` 旗標與 `DEFAULT_DESIGNS_DIR = "~/.cap/designs"` 常數；`schemas/design-source-templates.yaml` 補上 `local-design` 儀式句與 `design_path` 必填欄位；`install.sh` 在 storage setup 同時 mkdir `${CAP_HOME}/projects` 與 `${CAP_HOME}/designs`，老使用者跑 `cap update` 即可自動拿到目錄，與 `design_prompt.py` 只讀不建的契約形成完整鏈路
 - `version-control` v7 收斂為單一 workflow + strategy，三段 pipeline 為 `vc_scan` (shell) → `vc_compose` (AI / devops) → `vc_apply` (shell)，shell 不再猜 commit 語意、AI 不再重跑 git，`vc-apply.sh` 的出口 lint 強制 subject 引用 path token、禁用抽象主動詞、annotation 採 `<tag> — <summary>` 格式
 - `cap release-check` 可檢查最近或全部 release metadata，阻擋 `Release vX.Y.Z`、單純版本號與泛用 CHANGELOG 條目留在正式發版紀錄中
 - 同一份 `agent-skills/` 供 CrewAI、Claude Code、Codex 共用
