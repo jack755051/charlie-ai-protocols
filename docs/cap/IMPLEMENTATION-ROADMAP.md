@@ -67,6 +67,13 @@ install CAP
 - promote / publish 閉環尚未完整
 - detached / background runtime 尚未實作
 
+未來可選的外部方法論包：
+
+- `superpowers` 類型的方法論可在後續以「功能導向 workflow / capability pack」方式接入 CAP
+- 原則是保留 CAP 的憲章、binding、runtime storage 與 capability contract，不直接把外部 skill pack 改寫成核心角色定義
+- 可能的映射方向包括：`brainstorming`、`planning`、`execution`、`review`、`test-driven-development`
+- 這一層應作為使用體驗與工作法的增強，而不是治理模型的替代品
+
 ## 3. Phase 1: Contracts Complete
 
 目標：先把所有 runtime artifacts 的資料契約固定，避免後續 CLI 與 engine 實作互相漂移。
@@ -464,11 +471,10 @@ governance:
 ```text
 .cap.skills.yaml
 .cap.constitution.yaml
+agent-skills/
 workflows/
-docs/workflows/
 schemas/workflows/
 skills/
-docs/skills/
 ```
 
 來源層級：

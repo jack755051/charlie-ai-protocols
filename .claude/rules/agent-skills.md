@@ -1,6 +1,6 @@
 ---
 paths:
-  - "docs/agent-skills/**/*.md"
+  - "agent-skills/**/*.md"
 ---
 
 # Agent Skills Editing Rules
@@ -9,7 +9,7 @@ paths:
 - `00-core-protocol.md` is the only non-agent file — it is the shared constitution, NOT an agent.
 - `strategies/` files are framework-specific details, NOT agents. Do not rename them to `*-agent.md`.
 - When adding a new agent, also update:
-  - `docs/agent-skills/README.md` (architecture blueprint)
+  - `agent-skills/README.md` (architecture blueprint)
   - `README.md` (project directory structure)
 - Agent prompts must NOT contain orchestration logic (routing rules, trigger conditions, quality gates). These belong in `schemas/workflows/`. Agent prompts define ONLY capability, methodology, and output format.
 - Role key is parsed from filename: `{number}-{role_key}-agent.md` → `parts[1].upper()`.

@@ -30,7 +30,7 @@ CAP 的完整產品目標請看 [docs/cap/PLATFORM-GOAL.md](docs/cap/PLATFORM-GO
 ## Architecture
 
 CAP 採用 shared constitution + specialized agents + workflow schema 的多層架構。
-`docs/agent-skills/` 定義角色邊界，`schemas/workflows/` 定義流程契約，`engine/` 負責載入與執行，`scripts/` 提供 `cap` CLI 包裝與本機操作入口，執行期輸出則落到 `~/.cap/projects/<project_id>/`。
+`agent-skills/` 定義角色邊界，`schemas/workflows/` 定義流程契約，`engine/` 負責載入與執行，`scripts/` 提供 `cap` CLI 包裝與本機操作入口，執行期輸出則落到 `~/.cap/projects/<project_id>/`。
 
 同時，CAP 明確區分三種資產：
 
@@ -63,8 +63,8 @@ intake
 
 | 元件 | 位置 | 用途 |
 |---|---|---|
-| Agent Skills | `docs/agent-skills/` | 角色 prompt SSOT |
-| Policies | `docs/policies/` | Git、storage、README 治理等跨工具規範 |
+| Agent Skills | `agent-skills/` | 角色 prompt SSOT |
+| Policies | `policies/` | Git、storage、README 治理等跨工具規範 |
 | Workflows | `schemas/workflows/` | 固定流程定義與 workflow schema |
 | Capabilities | `schemas/capabilities.yaml` | capability 契約 SSOT |
 | Engine | `engine/` | CrewAI 與 workflow loader |
@@ -119,12 +119,15 @@ CAP 需要區分兩種 constitution：
 
 ```text
 charlie-ai-protocols/
+├── agent-skills/
+│   ├── strategies/
+│   └── *-agent.md
+├── policies/
+├── workflows/
 ├── docs/
-│   ├── agent-skills/
-│   ├── policies/
-│   ├── workflows/
 │   └── cap/
 │       ├── ARCHITECTURE.md
+│       ├── EXECUTION-LAYERING.md
 │       ├── PLATFORM-GOAL.md
 │       ├── IMPLEMENTATION-ROADMAP.md
 │       └── SKILL-RUNTIME-ARCHITECTURE.md
@@ -249,7 +252,7 @@ cap workflow run version-control "請針對目前變更建立 commit"
 - `run --strategy fast|governed|strict|auto`：在同一 workflow 中切換執行策略或自動判斷
 - `run --dry-run`：只顯示執行計畫，不真的執行 step
 
-Workflow 清單請看 [docs/workflows/README.md](docs/workflows/README.md)。
+Workflow 清單請看 [workflows/README.md](workflows/README.md)。
 
 ## Agent System
 
@@ -263,7 +266,7 @@ Workflow 清單請看 [docs/workflows/README.md](docs/workflows/README.md)。
 完整說明請看：
 
 - [AGENTS.md](AGENTS.md)
-- [docs/agent-skills/README.md](docs/agent-skills/README.md)
+- [agent-skills/README.md](agent-skills/README.md)
 
 ## Workflow System
 
@@ -296,12 +299,12 @@ Workflow 與 Agent Skills 是並存的兩種使用方式：
 
 相關入口：
 
-- [docs/workflows/README.md](docs/workflows/README.md)
-- [docs/workflows/workflow-schema.md](docs/workflows/workflow-schema.md)
+- [workflows/README.md](workflows/README.md)
+- [workflows/workflow-schema.md](workflows/workflow-schema.md)
 - [schemas/capabilities.yaml](schemas/capabilities.yaml)
 - [schemas/project-constitution.schema.yaml](schemas/project-constitution.schema.yaml)
 - [schemas/task-constitution.schema.yaml](schemas/task-constitution.schema.yaml)
-- [schemas/workflow-run-state.schema.yaml](schemas/workflow-run-state.schema.yaml)
+- [schemas/agent-session.schema.yaml](schemas/agent-session.schema.yaml)
 
 ## Workflow Storage Model
 
@@ -361,7 +364,7 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 - v0.17.1：補上 reconcile 安全合約 — persist step 支援 `CAP_CONSTITUTION_DRY_RUN=1` 預覽 diff、覆寫前自動備份至 `.cap.constitution.yaml.backup-<TIMESTAMP>`、watcher 升級為 `milestone_gate` 並對 reconcile / validate / persist 三個 checkpoint 設閘
 - `version-control` v7 收斂為單一 workflow + strategy，三段 pipeline 為 `vc_scan` (shell) → `vc_compose` (AI / devops) → `vc_apply` (shell)，shell 不再猜 commit 語意、AI 不再重跑 git，`vc-apply.sh` 的出口 lint 強制 subject 引用 path token、禁用抽象主動詞、annotation 採 `<tag> — <summary>` 格式
 - `cap release-check` 可檢查最近或全部 release metadata，阻擋 `Release vX.Y.Z`、單純版本號與泛用 CHANGELOG 條目留在正式發版紀錄中
-- 同一份 `docs/agent-skills/` 供 CrewAI、Claude Code、Codex 共用
+- 同一份 `agent-skills/` 供 CrewAI、Claude Code、Codex 共用
 - CAP 的目標 sub-agent 抽象是 CAP Agent Session，不綁死 Codex 或 Claude 的原生 subagent 能力
 - `schemas/workflows/` 只保留內建模板，不承載 task-scoped runtime workflow
 - `cap workflow constitution / compile / run-task` 會把 task constitution、compiled workflow、binding report 寫入 `.cap`
@@ -377,7 +380,7 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 - 完整實現路線：[docs/cap/IMPLEMENTATION-ROADMAP.md](docs/cap/IMPLEMENTATION-ROADMAP.md)
 - 架構文件：[docs/cap/ARCHITECTURE.md](docs/cap/ARCHITECTURE.md)
 - Agent 清單：[AGENTS.md](AGENTS.md)
-- Workflow 清單：[docs/workflows/README.md](docs/workflows/README.md)
+- Workflow 清單：[workflows/README.md](workflows/README.md)
 - Portfolio: <https://jack755051.github.io/charlie_portfolio_frontend/portfolio>
 
 ## License

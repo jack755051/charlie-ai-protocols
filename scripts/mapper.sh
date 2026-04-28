@@ -8,7 +8,7 @@
 #   bash mapper.sh --global     全域模式（~/.agents/skills/，絕對路徑）
 #   bash mapper.sh --uninstall  移除全域安裝
 #
-# SSOT 永遠是 docs/agent-skills/，此腳本預設建立 symlink；
+# SSOT 永遠是 agent-skills/，此腳本預設建立 symlink；
 # 若當前環境不支援 symlink，才 fallback 為 copy。
 # ==========================================
 
@@ -16,7 +16,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-SOURCE_DIR="${PROJECT_ROOT}/docs/agent-skills"
+SOURCE_DIR="${PROJECT_ROOT}/agent-skills"
 MANAGED_FILE_NAME=".cap-managed"
 
 MODE="${1:---local}"
@@ -216,7 +216,7 @@ for src in "${SOURCE_DIR}"/*-agent.md; do
   if [ "${USE_ABSOLUTE}" = true ]; then
     link_target="${SOURCE_DIR}/${filename}"
   else
-    link_target="../../docs/agent-skills/${filename}"
+    link_target="../../agent-skills/${filename}"
   fi
 
   # 長名 entry：07-qa-agent.md（供 factory.py glob *-agent.md）
@@ -254,7 +254,7 @@ ${SOURCE_DIR}/00-core-protocol.md
 
 ## Git Workflow
 
-${PROJECT_ROOT}/docs/policies/git-workflow.md
+${PROJECT_ROOT}/policies/git-workflow.md
 
 ## Conventions
 
@@ -280,7 +280,7 @@ AGENTS_EOF
 
 ## Git Workflow
 
-@${PROJECT_ROOT}/docs/policies/git-workflow.md
+@${PROJECT_ROOT}/policies/git-workflow.md
 
 ## Conventions
 

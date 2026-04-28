@@ -4,25 +4,25 @@ AI multi-agent collaboration system with specialized agents, powered by CrewAI.
 
 ## Core Protocol
 
-See `docs/agent-skills/00-core-protocol.md` for the global constitution that all agents must follow.
+See `agent-skills/00-core-protocol.md` for the global constitution that all agents must follow.
 
 ## Git Workflow
 
-See `docs/policies/git-workflow.md` for Conventional Commits, branching strategy, and PR conventions.
+See `policies/git-workflow.md` for Conventional Commits, branching strategy, and PR conventions.
 
 ## Project Structure
 
-- `docs/agent-skills/*-agent.md` — Agent system prompts (SSOT), picked up by `factory.py`.
-- `docs/agent-skills/00-core-protocol.md` — Global constitution (NOT an agent), injected as shared preamble.
-- `docs/agent-skills/strategies/` — Framework-specific tactics (NOT agents).
-- `docs/policies/` — Cross-tool policies, readable by any AI CLI.
+- `agent-skills/*-agent.md` — Agent system prompts (SSOT), picked up by `factory.py`.
+- `agent-skills/00-core-protocol.md` — Global constitution (NOT an agent), injected as shared preamble.
+- `agent-skills/strategies/` — Framework-specific tactics (NOT agents).
+- `policies/` — Cross-tool policies, readable by any AI CLI.
 - `schemas/` — Machine-readable contracts (workflows, capabilities, handoff schema).
 - `engine/` — Python 3.10+ CrewAI >= 1.14 execution engine.
 - `workspace/` — Gitignored agent output sandbox.
 
 ## Agent Skills
 
-Available agent skills in `.agents/skills/` (symlinked from `docs/agent-skills/`).
+Available agent skills in `.agents/skills/` (symlinked from `agent-skills/`).
 
 Each agent has two symlinks — a full name for CrewAI (`*-agent.md`) and a short alias for `$` invocation:
 

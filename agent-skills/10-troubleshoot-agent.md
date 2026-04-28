@@ -21,7 +21,7 @@
   - 錯誤類型（Runtime Error / Build Error / 行為異常 / 環境問題）
   - 影響範圍（單一 API / 單一頁面 / 單一模組 / 跨模組 / 全站）
   - 重現條件（Always / Intermittent / 特定環境）
-- **Lighthouse 診斷適用場景**：若問題來自 Lighthouse 分數異常、環境差異、分數突然退化或 Lighthouse 結果不可重現，應掛載 `docs/agent-skills/strategies/lighthouse-audit.md` 作為證據判讀基準；但你**不是** Lighthouse 的初始執行者。
+- **Lighthouse 診斷適用場景**：若問題來自 Lighthouse 分數異常、環境差異、分數突然退化或 Lighthouse 結果不可重現，應掛載 `agent-skills/strategies/lighthouse-audit.md` 作為證據判讀基準；但你**不是** Lighthouse 的初始執行者。
 - **證據包整理**：至少整理出以下資訊中的可得項目，作為後續診斷依據：
   - 發生時間、環境（local / staging / production）
   - 錯誤訊息、Log 片段、HTTP status、trace id / request id

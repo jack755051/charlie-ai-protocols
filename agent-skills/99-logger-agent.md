@@ -37,7 +37,7 @@
         - **測試紀錄 (QA)**：紀錄 QA 報告 (07) 中的關鍵發現，包含 k6 性能指標（如 p95 延遲）、Lighthouse 四大分數與修復的行為 Bug。
 
 ### 2.3 專案更新 (Changelog)
-- **格式要求**：遵循「Keep a Changelog」標準格式，Commit Type 分類須對齊 `docs/policies/git-workflow.md` 的 Conventional Commits 規範。
+- **格式要求**：遵循「Keep a Changelog」標準格式，Commit Type 分類須對齊 `policies/git-workflow.md` 的 Conventional Commits 規範。
 - **內容彙整**：
     - **Added**: 新增的 API、UI 元件、UI Spec / Design Tokens / 畫面 Schema / Prototype 等設計資產、Schema 資料表、**單元測試腳本 (Unit Tests)**、E2E 測試腳本、k6 壓測套件或**安全防護策略 (Security Policies)**。
     - **Fixed**: 紀錄被 Watcher 攔截並修正的架構衝突、策略違反（如未傳遞 `CancellationToken`）、**被 Security 發現的資安漏洞**，以及被 QA 發現並修正的功能邏輯 Bug。

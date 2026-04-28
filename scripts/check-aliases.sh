@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-SOURCE_DIR="${PROJECT_ROOT}/docs/agent-skills"
+SOURCE_DIR="${PROJECT_ROOT}/agent-skills"
 
 TARGET_DIR="${1:-${PROJECT_ROOT}/.agents/skills}"
 

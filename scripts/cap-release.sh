@@ -337,12 +337,12 @@ perform_install() {
 }
 
 count_agents() {
-  local dir="${CAP_ROOT}/docs/agent-skills"
+  local dir="${CAP_ROOT}/agent-skills"
   find "${dir}" -maxdepth 1 -name '*-agent.md' | wc -l | tr -d ' '
 }
 
 count_strategies() {
-  local dir="${CAP_ROOT}/docs/agent-skills/strategies"
+  local dir="${CAP_ROOT}/agent-skills/strategies"
   [ -d "${dir}" ] && find "${dir}" -name '*.md' | wc -l | tr -d ' ' || echo "0"
 }
 

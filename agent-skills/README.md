@@ -7,7 +7,7 @@
 > Agent 編號是穩定 ID，不完全等於流水線先後。下方先用「展示順序」說明誰通常先接手，再保留實際檔名編號作為穩定識別。
 
 ```text
-docs/agent-skills/
+agent-skills/
 ├── 00-core-protocol.md          (👑 全域憲法：第一優先讀取)
 ├── 01-supervisor-agent.md       (🧠 PM/大腦：負責拆解需求與任務發包)
 │

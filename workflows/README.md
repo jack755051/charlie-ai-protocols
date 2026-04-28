@@ -4,8 +4,8 @@
 
 ## 1. 定位
 
-- `docs/agent-skills/`：角色能力與邊界的單一事實來源
-- `docs/agent-skills/strategies/`：框架或工具層的戰術規範
+- `agent-skills/`：角色能力與邊界的單一事實來源
+- `agent-skills/strategies/`：框架或工具層的戰術規範
 - `schemas/workflows/`：跨 agent 的流程模板與 handoff 契約
 - `schemas/capabilities.yaml`：capability contract 定義
 
@@ -30,7 +30,7 @@ workflow 的目的，是把固定順序的工作流從 agent prompt 中抽離，
   - 給人類閱讀的 workflow 入口、使用方式與清單
 - `workflow-schema.md`
   - 定義 workflow YAML 的最小欄位與語意
-- `../../schemas/workflows/*.yaml`
+- `../schemas/workflows/*.yaml`
   - 各具體 workflow 模板
 - `~/.cap/projects/<project_id>/compiled-workflows/`
   - 單次任務由 compiler 動態生成的 compiled workflow bundle
@@ -107,7 +107,7 @@ workflow 不負責決定最終 agent，只負責宣告：
   - `constitution_reconciliation`
   - `constitution_validation`
   - `constitution_persistence`
-- 補充輸入範本：`docs/workflows/project-constitution-addendum.example.md`
+- 補充輸入範本：`workflows/project-constitution-addendum.example.md`
 
 #### `version-control.yaml`
 
@@ -163,7 +163,7 @@ workflow 不負責決定最終 agent，只負責宣告：
 
 ## 8. 對應檔案
 
-- workflow schema：`docs/workflows/workflow-schema.md`
+- workflow schema：`workflows/workflow-schema.md`
 - workflow templates：`schemas/workflows/*.yaml`
 - capability 契約：`schemas/capabilities.yaml`
 - agent binding：`.cap.agents.json`

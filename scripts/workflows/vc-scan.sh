@@ -2,7 +2,7 @@
 #
 # vc-scan.sh — Pipeline step 1: scan + guard + evidence pack.
 # 不做語意推斷、不寫 commit message。
-# Exit code contract: docs/policies/workflow-executor-exit-codes.md
+# Exit code contract: policies/workflow-executor-exit-codes.md
 #
 # Stdout 包含：
 #   - 人類可讀的 scan report

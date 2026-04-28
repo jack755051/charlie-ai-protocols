@@ -11,7 +11,7 @@
 
 ## 2. 稽核執行流 (Audit Workflow)
 1. **讀取交接單**：確認交接單指定的前、後端技術棧，並獲取最新的 BA 業務流程規格書（`docs/architecture/<模組>_BA_v<版號>.md`）、API 介面規格書（`docs/architecture/<模組>_API_v<版號>.md`）、UI 規格書與設計資產（`docs/design/`），以及對應的資料庫事實檔案（`docs/architecture/database/<模組>_schema_v<版號>.md`）。
-2. **加載對應字典**：讀取 `docs/agent-skills/strategies/` 下對應的框架、測試與安全規範（包含 `qa-playwright.md`、`qa-k6.md`、`unit-test-frontend.md`、`unit-test-backend.md` 與 `08-security-agent.md`）。
+2. **加載對應字典**：讀取 `agent-skills/strategies/` 下對應的框架、測試與安全規範（包含 `qa-playwright.md`、`qa-k6.md`、`unit-test-frontend.md`、`unit-test-backend.md` 與 `08-security-agent.md`）。
 3. **實體交叉比對**：
     - **規範 vs 代碼**：檢查是否違反框架特化策略。
     - **設計資產 vs 規格**：檢查 UI Spec、Tokens JSON、畫面 Schema、Prototype 之間是否互相一致。

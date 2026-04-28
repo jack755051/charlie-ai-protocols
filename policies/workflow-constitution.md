@@ -1,7 +1,7 @@
 # CAP Workflow Constitution (v0.1 Draft)
 
 > 本文件為 CAP 在 `workflow` 層級的最高治理原則（編排憲法）。
-> 它不取代 `docs/agent-skills/00-core-protocol.md`，而是與其互補：
+> 它不取代 `agent-skills/00-core-protocol.md`，而是與其互補：
 > - `00-core-protocol.md` 管 **單一 Agent 的角色邊界、行為紀律與品質底線**
 > - 本文件管 **多 Agent workflow 的編排深度、成本上限、交接密度與停止條件**
 
@@ -22,14 +22,14 @@
 > **命名澄清（避免與 `schemas/workflows/project-constitution.yaml` 混淆）**：
 > 本文件管「runtime 跑 workflow 應遵守哪些規則」，是元憲法層；
 > `schemas/workflows/project-constitution.yaml` 是一條具體的 workflow，**用來產出 repo 級 Project Constitution 文件**，本身受本文件約束。
-> 兩者不同層級。詳細的 5 個 constitution 相關檔職責對照見 `docs/workflows/project-constitution-memo.md` §術語對照。
+> 兩者不同層級。詳細的 5 個 constitution 相關檔職責對照見 `workflows/project-constitution-memo.md` §術語對照。
 
 ### 1.2 權威順序
 
 若規則發生衝突，權威順序如下：
 
 1. 使用者明確指令
-2. `docs/agent-skills/00-core-protocol.md`
+2. `agent-skills/00-core-protocol.md`
 3. 本文件 `workflow-constitution.md`
 4. `schemas/workflows/*.yaml`
 5. 個別 agent prompt / 局部策略文件

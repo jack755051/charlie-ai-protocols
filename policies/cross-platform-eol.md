@@ -150,7 +150,7 @@ git config --global core.autocrlf input
 
 建議做法：
 
-- 詳細版放 `docs/policies/`
+- 詳細版放 `policies/`
 - `README.md` 最多只保留一行入口連結，或完全不提
 - 若未來有更多開發環境規則，可再抽成獨立 `docs/runbooks/` 或 `docs/guides/`
 

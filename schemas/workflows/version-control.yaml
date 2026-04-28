@@ -70,7 +70,7 @@ steps:
       - shell 嚴禁推斷 commit type / scope / subject；只負責 scan + 守門
       - release_intent 由使用者 prompt 偵測，未命中時 compose 不得擅自發版
       - strategy 由 runtime 注入；fast 策略下 release path 必須關閉，strict 策略下語意輸出需更完整
-      - exit code 契約見 docs/policies/workflow-executor-exit-codes.md
+      - exit code 契約見 policies/workflow-executor-exit-codes.md
 
   - id: vc_compose
     name: Compose commit envelope from evidence

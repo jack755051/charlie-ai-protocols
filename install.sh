@@ -20,7 +20,7 @@ echo "=========================================="
 CAP_STORAGE_HOME="${CAP_HOME:-${HOME}/.cap}"
 
 agent_count() {
-  find "${CAP_DIR}/docs/agent-skills" -maxdepth 1 -type f -name '*-agent.md' | wc -l | tr -d ' '
+  find "${CAP_DIR}/agent-skills" -maxdepth 1 -type f -name '*-agent.md' | wc -l | tr -d ' '
 }
 
 # 1. Clone 或更新

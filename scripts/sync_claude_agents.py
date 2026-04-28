@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""將 docs/agent-skills/*-agent.md 轉換為 Claude Code 子代理格式。
+"""將 agent-skills/*-agent.md 轉換為 Claude Code 子代理格式。
 
-來源（唯讀）：docs/agent-skills/*-agent.md（CrewAI 角色定義）
+來源（唯讀）：agent-skills/*-agent.md（CrewAI 角色定義）
 產出：.claude/agents/*.md（Claude Code 子代理，帶 YAML frontmatter）
 
 預設輸出至專案 .claude/agents/（git 不追蹤），可用 --user 切到 ~/.claude/agents/。
@@ -69,7 +69,7 @@ def build_output(core_preamble: str, agent_content: str, name: str, description:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="將 docs/agent-skills/*-agent.md 同步為 Claude Code 子代理。"
+        description="將 agent-skills/*-agent.md 同步為 Claude Code 子代理。"
     )
     parser.add_argument(
         "--user",
@@ -92,7 +92,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     base_dir = Path(__file__).resolve().parents[1]
-    prompts_dir = base_dir / "docs" / "agent-skills"
+    prompts_dir = base_dir / "agent-skills"
 
     if not prompts_dir.exists():
         print(f"❌ 找不到來源目錄：{prompts_dir}", file=sys.stderr)

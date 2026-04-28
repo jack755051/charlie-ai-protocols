@@ -14,7 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CAP_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TRACE_LOG="${SCRIPT_DIR}/trace-log.sh"
 PATH_HELPER="${SCRIPT_DIR}/cap-paths.sh"
-SKILLS_DIR="${CAP_ROOT}/docs/agent-skills"
+SKILLS_DIR="${CAP_ROOT}/agent-skills"
 PROTOCOL_FILE="${SKILLS_DIR}/00-core-protocol.md"
 VENV_PYTHON="${CAP_ROOT}/.venv/bin/python"
 

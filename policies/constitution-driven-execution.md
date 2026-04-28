@@ -1,7 +1,7 @@
 # Constitution-Driven Execution Protocol (Mode C)
 
 > 本文件定義「從使用者需求出發，動態建立任務憲章、產出執行計畫、逐步 spawn 聚焦型 sub-agent 完成工作並保存一切」的完整執行協議。
-> 本協議繼承 `docs/agent-skills/00-core-protocol.md` 的所有行為準則，並受 `docs/policies/workflow-constitution.md` 的編排鐵律約束。
+> 本協議繼承 `agent-skills/00-core-protocol.md` 的所有行為準則，並受 `policies/workflow-constitution.md` 的編排鐵律約束。
 
 ---
 
@@ -157,7 +157,7 @@ stop_conditions: [...]
 
 #### Section B：角色技能
 
-完整嵌入對應的 `docs/agent-skills/{id}-{role}-agent.md`。不做裁剪，確保角色邊界與方法論完整。
+完整嵌入對應的 `agent-skills/{id}-{role}-agent.md`。不做裁剪，確保角色邊界與方法論完整。
 
 #### Section C：任務上下文
 

@@ -106,7 +106,7 @@ workflow schema 用來描述：
 
 ### 3.5 shell executor exit code contract
 
-`executor: shell` 的退出碼語意統一由 `docs/policies/workflow-executor-exit-codes.md` 定義。核心契約如下：
+`executor: shell` 的退出碼語意統一由 `policies/workflow-executor-exit-codes.md` 定義。核心契約如下：
 
 | Code | Condition | Executor 行為 |
 |---:|---|---|

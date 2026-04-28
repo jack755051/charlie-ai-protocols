@@ -189,4 +189,4 @@ tags:
 
 ## 8. 參考範本
 
-- Manifest 範本：`docs/policies/repo.manifest.example.yaml`
+- Manifest 範本：`policies/repo.manifest.example.yaml`

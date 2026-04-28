@@ -201,8 +201,8 @@ README 維持乾淨的人類導讀格式，**不加 front matter**：
 - README 或 manifest validator 規則
 - 多 repo README 改造建議清單
 
-> 正式治理規範請優先對齊：`docs/policies/readme-governance.md`
-> Manifest 範本請優先對齊：`docs/policies/repo.manifest.example.yaml`
+> 正式治理規範請優先對齊：`policies/readme-governance.md`
+> Manifest 範本請優先對齊：`policies/repo.manifest.example.yaml`
 
 ## 6. 標準輸出格式 (Response Contract)
 

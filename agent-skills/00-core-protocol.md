@@ -20,8 +20,8 @@
 - **動手前觀察**：修改前先確認目錄結構與命名現況，不憑空想像。
 - **路徑以現實為準**：尊重既有歷史與特殊慣例，除非收到明確重構指令，否則保持一致。
 - **禁止破壞性操作**：除非明確徵求同意，絕對禁止執行會遺失資料的操作（如 `git reset --hard`）。
-- **協議來源唯讀 (Protocol Source Read-Only)**：`charlie-ai-protocols` 儲存庫中的所有檔案（包括但不限於 `docs/agent-skills/`、`docs/policies/`、`schemas/`、`engine/`、`CLAUDE.md`）為**唯讀規則來源**。當你透過 `@` 引用載入這些檔案時，**絕對禁止**反向修改、刪除或重新命名這些來源檔案。若認為規則內容需要調整，應向使用者回報建議，由使用者自行決定是否修改。
-- **Git 工作流**：所有版本控制操作須遵守 `docs/policies/git-workflow.md`（Conventional Commits、分支策略、PR 規範）。
+- **協議來源唯讀 (Protocol Source Read-Only)**：`charlie-ai-protocols` 儲存庫中的所有檔案（包括但不限於 `agent-skills/`、`policies/`、`schemas/`、`engine/`、`CLAUDE.md`）為**唯讀規則來源**。當你透過 `@` 引用載入這些檔案時，**絕對禁止**反向修改、刪除或重新命名這些來源檔案。若認為規則內容需要調整，應向使用者回報建議，由使用者自行決定是否修改。
+- **Git 工作流**：所有版本控制操作須遵守 `policies/git-workflow.md`（Conventional Commits、分支策略、PR 規範）。
 
 ## 4. 自我反思迴圈 (Self-Reflection Loop)
 在生成最終產出（程式碼、架構圖、指令）前，你**必須**進行內部自我審查：
@@ -60,4 +60,4 @@
 - **Watcher (90)** 預設採 `milestone_gate`：於規格定版、實作完成、品質門禁與交付前等里程碑執行一致性稽核。
 - **Logger (99)** 預設採 `milestone_log`：記錄 phase 切換、異常路由、gate 決策與結案摘要，維持可追溯的執行鏈。
 - 若 workflow 明確標示 `always_on`，Watcher / Logger 必須視為常駐監管軌；若標示 `final_only`，則至少在結案前執行一次最終治理檢查或歸檔。
-- 使用非 AI executor（例如 shell）執行 workflow step 時，必須遵守可審計、可回流的執行契約；具體退出碼、fallback 與 sensitive risk halt 規則以 `docs/policies/workflow-executor-exit-codes.md` 為準。
+- 使用非 AI executor（例如 shell）執行 workflow step 時，必須遵守可審計、可回流的執行契約；具體退出碼、fallback 與 sensitive risk halt 規則以 `policies/workflow-executor-exit-codes.md` 為準。

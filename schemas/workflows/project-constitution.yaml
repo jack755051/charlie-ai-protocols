@@ -48,7 +48,7 @@ steps:
     notes:
       - 本 step 是 bootstrap 流程的「平台預設值產生器」，給下游 AI 抄寫，不要求使用者手填治理欄位。
       - 純 deterministic；不讀使用者 prompt，避免 prompt 內容污染預設值。
-      - exit code 契約見 docs/policies/workflow-executor-exit-codes.md；本 step 只會 exit 0（pass）或 exit 40（schema/capabilities 檔案缺失）。
+      - exit code 契約見 policies/workflow-executor-exit-codes.md；本 step 只會 exit 0（pass）或 exit 40（schema/capabilities 檔案缺失）。
 
   - id: draft_constitution
     name: Draft Project Constitution
@@ -85,7 +85,7 @@ steps:
       - 後續 repo 建立應由 constitution 編譯出的 task workflow 執行
       - sub agent 應視為 CAP agent session，不綁死 Claude 或 Codex 專屬能力
       - "input_mode 採用 full 是因為 AI 必須讀完 platform_defaults 全文才能正確抄寫治理欄位；platform_defaults 體積極小，不會違反 workflow-constitution §4.3。"
-      - "命名澄清：本 workflow 是「產出 Project Constitution 文件」的具體流程；docs/policies/workflow-constitution.md 是 runtime 編排層的元憲法（規範所有 workflow 應遵守的 phase 上限、summary-first handoff、artifact tiering 等）。兩者不同層級——本 workflow 自己也必須遵守 workflow-constitution.md 的所有立法規則。詳細層級對照見 docs/workflows/project-constitution-memo.md §術語對照。"
+      - "命名澄清：本 workflow 是「產出 Project Constitution 文件」的具體流程；policies/workflow-constitution.md 是 runtime 編排層的元憲法（規範所有 workflow 應遵守的 phase 上限、summary-first handoff、artifact tiering 等）。兩者不同層級——本 workflow 自己也必須遵守 workflow-constitution.md 的所有立法規則。詳細層級對照見 workflows/project-constitution-memo.md §術語對照。"
       - "對齊 workflow-constitution §10：goal_stage=informal_planning 表示這是規劃階段（建 constitution），runtime 不得從此 workflow 自動展開 BA / DBA / UI / QA 等實作 step。"
 
   - id: validate_constitution
@@ -112,8 +112,8 @@ steps:
     output_tier: machine_metadata
     notes:
       - 此 step 顯式以 fallback.when=[] 鎖死所有 AI fallback。schema 失敗代表 draft 階段的 supervisor prompt 或 AI 輸出有缺漏，必須由使用者重跑 workflow 修正，不該由其他 AI 自動補齊。
-      - exit code 契約見 docs/policies/workflow-executor-exit-codes.md；本 step 只會 exit 0（pass）或 exit 40（schema fail / 抓不到 JSON 區段 / fence 多重）。
-      - "TODO：當 docs/policies/workflow-executor-exit-codes.md 新增 60: schema_validation_failed 時，本 step 應改用 60 而非借用 40，以區隔語意。"
+      - exit code 契約見 policies/workflow-executor-exit-codes.md；本 step 只會 exit 0（pass）或 exit 40（schema fail / 抓不到 JSON 區段 / fence 多重）。
+      - "TODO：當 policies/workflow-executor-exit-codes.md 新增 60: schema_validation_failed 時，本 step 應改用 60 而非借用 40，以區隔語意。"
 
   - id: persist_constitution
     name: Persist Validated Constitution to Repo SSOT and Runtime Snapshot

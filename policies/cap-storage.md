@@ -90,7 +90,7 @@ CAP 依序用以下方式決定 `project_id`：
 - CLI、桌面應用與未來 OpenClaw 都應共用同一套 storage model
 - 前端介面只換「入口」與「runtime」，不換儲存結構
 - Agent mapping 應逐步走向 registry 化，而不是綁死在路徑判斷
-- `cap agent` 的 agent registry 以 `.cap.agents.json` 為入口；`cap workflow` 的 binding 入口是 `RuntimeBinder`，優先讀取 `.cap.skills.yaml`，缺席時轉接 `.cap.agents.json`。詳細格式見 `docs/policies/agent-registry.md`
+- `cap agent` 的 agent registry 以 `.cap.agents.json` 為入口；`cap workflow` 的 binding 入口是 `RuntimeBinder`，優先讀取 `.cap.skills.yaml`，缺席時轉接 `.cap.agents.json`。詳細格式見 `policies/agent-registry.md`
 
 ## 6. 安裝與初始化
 

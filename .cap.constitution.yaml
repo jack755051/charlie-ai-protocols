@@ -6,7 +6,7 @@ summary: >
   定義 CAP 作為平台時的正式來源分層、專案擴充邊界與 runtime storage 規則。
 
 inherits:
-  - docs/agent-skills/00-core-protocol.md
+  - agent-skills/00-core-protocol.md
 
 platform_role:
   type: platform
@@ -45,11 +45,10 @@ project_asset_policy:
       - docs/cap/constitution.md
     skills:
       - .cap.skills.yaml
+      - agent-skills/
       - skills/
-      - docs/skills/
     workflows:
       - workflows/
-      - docs/workflows/
       - schemas/workflows/
 
 runtime_workspace:
@@ -128,4 +127,3 @@ workflow_policy:
   allowed_source_roots:
     - schemas/workflows
     - workflows
-    - docs/workflows

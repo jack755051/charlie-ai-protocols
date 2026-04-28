@@ -48,7 +48,7 @@ entrypoints:
   engine: engine/main.py
   factory: engine/factory.py
   installer: install.sh
-  constitution: docs/agent-skills/00-core-protocol.md
+  constitution: agent-skills/00-core-protocol.md
   project_constitution: .cap.constitution.yaml
   agent_registry: .cap.agents.json
   skill_registry: .cap.skills.yaml
@@ -89,7 +89,7 @@ interfaces:
 docs:
   architecture: docs/cap/ARCHITECTURE.md
   readme: README.md
-  workflows: docs/workflows/README.md
+  workflows: workflows/README.md
   platform_goal: docs/cap/PLATFORM-GOAL.md
   implementation_roadmap: docs/cap/IMPLEMENTATION-ROADMAP.md
   skill_runtime: docs/cap/SKILL-RUNTIME-ARCHITECTURE.md

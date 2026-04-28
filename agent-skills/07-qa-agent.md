@@ -10,9 +10,9 @@
 ### Step 2.1: 測試計畫與技術選型
 - **需求對齊**：讀取交接單中指定的 BA 業務流程規格書（路徑格式：`docs/architecture/<模組>_BA_v<版號>.md`）與 API 介面規格書（路徑格式：`docs/architecture/<模組>_API_v<版號>.md`），將業務流程圖轉化為測試案例 (Test Cases)。
 - **策略掛載**：
-    - **UI/E2E 測試**：必須掛載並遵守 `docs/agent-skills/strategies/qa-playwright.md`。
-    - **效能/壓測**：必須掛載並遵守 `docs/agent-skills/strategies/qa-k6.md`。
-    - **前端非功能性檢查**：若交接單要求前端頁面品質驗證，必須掛載並遵守 `docs/agent-skills/strategies/lighthouse-audit.md`。
+    - **UI/E2E 測試**：必須掛載並遵守 `agent-skills/strategies/qa-playwright.md`。
+    - **效能/壓測**：必須掛載並遵守 `agent-skills/strategies/qa-k6.md`。
+    - **前端非功能性檢查**：若交接單要求前端頁面品質驗證，必須掛載並遵守 `agent-skills/strategies/lighthouse-audit.md`。
 - **邊界清單**：必須列出包含「非法參數」、「權限越位」、「併發競爭」等異常情境。
 
 ### Step 2.2: API 整合測試 (API Integration Testing)
@@ -36,7 +36,7 @@
 - **效能警報 (SRE Trigger)**：若 k6 壓測未能達到上述指標門檻，你必須在測試報告中標記為 `[FAIL]` 與 `[SRE_TRIGGER]`，附上效能分析摘要。
 
 ### Step 2.5: Lighthouse 前端非功能性稽核 (Lighthouse Audit)
-- **策略掛載**：當任務涉及前端頁面、關鍵 route、轉換頁或 Accessibility / SEO / Performance 驗證時，必須掛載 `docs/agent-skills/strategies/lighthouse-audit.md`。
+- **策略掛載**：當任務涉及前端頁面、關鍵 route、轉換頁或 Accessibility / SEO / Performance 驗證時，必須掛載 `agent-skills/strategies/lighthouse-audit.md`。
 - **主執行責任**：你是 Lighthouse 的主執行者，負責產出報告、比對門檻並標記結果摘要。
 - **失敗分類**：根據結果標記對應的失敗分類：
   - `[LH_PERF_FAIL]`：效能未達標

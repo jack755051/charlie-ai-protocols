@@ -13,7 +13,7 @@
 #   .cap.skills.yaml            — workflow binding 優先輸入（capability → skill / cli / fallback）
 #   .cap.agents.json            — agent binding 相容層（alias → prompt_file / provider / cli）
 #   schemas/workflows/*.yaml    — 流程編排（step 順序、依賴、失敗路由）
-#   docs/agent-skills/          — agent 定義 SSOT（完整 system prompt）
+#   agent-skills/          — agent 定義 SSOT（完整 system prompt）
 
 schema_version: 1
 

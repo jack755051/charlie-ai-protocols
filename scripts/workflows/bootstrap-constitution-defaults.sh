@@ -14,7 +14,7 @@
 # fenced sections so the AI can copy them verbatim into the constitution JSON
 # without re-deriving values.
 #
-# Exit code contract (docs/policies/workflow-executor-exit-codes.md):
+# Exit code contract (policies/workflow-executor-exit-codes.md):
 #   - 0  : success — defaults emitted
 #   - 40 : git_operation_failed (re-used: schema/capabilities file missing)
 #
@@ -182,7 +182,7 @@ workflow_policy:
   allowed_source_roots:
     - schemas/workflows
     - workflows
-    - docs/workflows
+    - workflows
 \`\`\`
 
 ### executor_policy (verbatim defaults)

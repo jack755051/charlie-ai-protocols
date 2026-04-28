@@ -22,7 +22,7 @@
 #     constitution validation — bad constitutions must surface, not be
 #     auto-rewritten).
 #
-# Exit codes follow docs/policies/workflow-executor-exit-codes.md.
+# Exit codes follow policies/workflow-executor-exit-codes.md.
 # TODO: when the exit-code policy gains a dedicated `60: schema_validation_failed`,
 #       migrate this script away from re-using 40.
 

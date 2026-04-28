@@ -72,4 +72,4 @@ CAP runtime 應遵守：
 
 也就是可重複、可驗證、低語意判斷的步驟優先交給 shell / script / parser；只有語意不明、跨檔推理、例外診斷或政策允許的 fallback 才交給 AI。
 
-具體選擇規則見 `docs/policies/workflow-executor-selection.md`。
+具體選擇規則見 `policies/workflow-executor-selection.md`。

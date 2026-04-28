@@ -49,7 +49,7 @@ repo 根目錄預設使用：
 ## 4. 現階段限制
 
 - v1 僅實作 `builtin` provider
-- `cap agent` 仍會以本地 `docs/agent-skills/*.md` 為實際 prompt 來源
+- `cap agent` 仍會以本地 `agent-skills/*.md` 為實際 prompt 來源
 - `provider != builtin` 的 runtime 切換保留給下一階段實作
 - `.cap.agents.json` 不承載 marketplace 級的 capability policy、version compatibility 與 fallback policy
 

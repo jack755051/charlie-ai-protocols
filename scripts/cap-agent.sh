@@ -35,7 +35,7 @@ build_prompt() {
 
   if [ -n "${user_prompt}" ]; then
     cat <<EOF
-請使用 \$${agent_alias} 載入對應 agent，並嚴格遵守目前專案的 AGENTS.md、核心協議與 [docs/agent-skills/${agent_file}] 中的規範。
+請使用 \$${agent_alias} 載入對應 agent，並嚴格遵守目前專案的 AGENTS.md、核心協議與 [agent-skills/${agent_file}] 中的規範。
 
 本次任務：
 ${user_prompt}
@@ -44,7 +44,7 @@ ${user_prompt}
 EOF
   else
     cat <<EOF
-請使用 \$${agent_alias} 載入對應 agent，並嚴格遵守目前專案的 AGENTS.md、核心協議與 [docs/agent-skills/${agent_file}] 中的規範。
+請使用 \$${agent_alias} 載入對應 agent，並嚴格遵守目前專案的 AGENTS.md、核心協議與 [agent-skills/${agent_file}] 中的規範。
 
 先進入對應角色並等待我的下一個指令。若本輪形成明確交付，請在結尾附上 logging handoff 摘要。
 EOF

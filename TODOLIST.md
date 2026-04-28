@@ -27,7 +27,7 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 
 ### 已完成
 
-- [x] 基礎 agent skills 已建立於 `docs/agent-skills/`
+- [x] 基礎 agent skills 已建立於 `agent-skills/`
 - [x] 全域 core protocol 已建立
 - [x] workflow templates 已建立於 `schemas/workflows/`
 - [x] capability contract 已建立於 `schemas/capabilities.yaml`
@@ -52,12 +52,12 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 
 - [x] version-control workflow 拆為三段 pipeline：`vc_scan` (shell) → `vc_compose` (AI) → `vc_apply` (shell)，shell 不猜語意、AI 不重跑 git，apply 階段做出口 lint
 - [x] 平台級 doc 收斂進 `docs/cap/`（ARCHITECTURE / PLATFORM-GOAL / IMPLEMENTATION-ROADMAP / SKILL-RUNTIME-ARCHITECTURE / execution-layering）
-- [x] Shell / Python / AI 五層分層明文化（`docs/cap/execution-layering.md`）
+- [x] Shell / Python / AI 五層分層明文化（`docs/cap/EXECUTION-LAYERING.md`）
 - [x] `cap-workflow-exec.sh` 與 `cap-registry.sh` 內 inline `python3 -c` heredoc 抽到 `engine/step_runtime.py` subcommand（`plan-meta` / `parse-input-check` / `registry-list` / `registry-get`）
 - [x] `cap-workflow.sh run-task` 分支 `EXECUTION_MODE` / `SELECTED_MODE` unbound vars 修復
 - [x] version-control private / quick / company 三變體 yaml 收斂為單一 `version-control.yaml` v7 + `--strategy fast/governed/strict/auto` flag
 - [x] `init-ai.sh` 補 `set -euo pipefail`，與其他 `cap-*.sh` 對齊
-- [x] dead agent archive (`docs/agent-skills/archive/`) 與 0-byte `.codex` 清除
+- [x] dead agent archive (`agent-skills/archive/`) 與 0-byte `.codex` 清除
 - [x] `workflow-schema.md` 補 v3-v7 演進說明與 `compatible_workflow_versions` 對 binding 影響
 
 ### 尚未完成

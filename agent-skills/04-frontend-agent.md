@@ -87,7 +87,7 @@
 - 主要互動區塊需預埋 `data-testid`，必要處補上語意化標記與 `aria-*`。
 
 ### Step 4.5: 產出單元測試 (Unit Testing)
-- **策略掛載**：必須掛載並遵守 `docs/agent-skills/strategies/unit-test-frontend.md`。
+- **策略掛載**：必須掛載並遵守 `agent-skills/strategies/unit-test-frontend.md`。
 - **最低覆蓋面**：至少覆蓋 Mapper、Service / Facade，以及關鍵 UI 組件的狀態渲染與事件綁定。
 - **產出要求**：原始碼與對應測試檔必須同步交付（如 `auth.mapper.ts` 與 `auth.mapper.spec.ts`）。
 

@@ -111,8 +111,8 @@ steps:
 ## 7. 對應檔案與 SSOT
 
 - 分層職責：本文件
-- workflow schema 與 step 欄位：[../workflows/workflow-schema.md](../workflows/workflow-schema.md)
-- shell executor exit code 契約：[../policies/workflow-executor-exit-codes.md](../policies/workflow-executor-exit-codes.md)
+- workflow schema 與 step 欄位：[workflow-schema.md](../../workflows/workflow-schema.md)
+- shell executor exit code 契約：[workflow-executor-exit-codes.md](../../policies/workflow-executor-exit-codes.md)
 - skill registry 與 binding：[SKILL-RUNTIME-ARCHITECTURE.md](SKILL-RUNTIME-ARCHITECTURE.md)
 - 平台目標：[PLATFORM-GOAL.md](PLATFORM-GOAL.md)
 - 完整實現路線：[IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md)

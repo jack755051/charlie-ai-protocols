@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types follow [Conventional Commits](https://www.conventionalcommits.org/) as defined in `docs/policies/git-workflow.md`.
+Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types follow [Conventional Commits](https://www.conventionalcommits.org/) as defined in `policies/git-workflow.md`.
 
 ---
 
@@ -24,7 +24,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 ### Added
 - 新增 `project-constitution-reconcile` workflow，用來吸收 addendum 後一次性重構既有 Project Constitution，避免把 addendum 直接寫進憲法本體。
 - 新增 `constitution_reconciliation_inputs` 與 `constitution_reconciliation` capability，分別負責補充輸入整理與 AI 收斂草案。
-- 新增 `docs/workflows/project-constitution-addendum.example.md` 作為 addendum 的人工輸入範本。
+- 新增 `workflows/project-constitution-addendum.example.md` 作為 addendum 的人工輸入範本。
 
 ### Changed
 - `engine/runtime_binder.py` 新增 bootstrap override 路由，讓 project-constitution workflow 在 `.cap.constitution.yaml` 缺席時走專屬 bootstrap 路徑，避免無 SSOT 時誤觸常規 binding policy。
@@ -34,7 +34,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ### Added
 - Added input_mode: full to the vc_apply step in schemas/workflows/version-control.yaml so vc-scan handoff data can flow into the apply stage.
-- Added docs/policies/constitution-driven-execution.md to define the Mode C execution protocol and its planning and agent orchestration rules.
+- Added policies/constitution-driven-execution.md to define the Mode C execution protocol and its planning and agent orchestration rules.
 - Restored executable permissions on scripts/workflows/bootstrap-constitution-defaults.sh, persist-constitution.sh, validate-constitution.sh, and vc-scan.sh so the workflow helpers remain runnable.
 
 ### Changed
@@ -50,6 +50,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 - scripts/workflows/bootstrap-constitution-defaults.sh, validate-constitution.sh, persist-constitution.sh shell steps with explicit fence contract and runtime snapshot writer
 - _bootstrap flag in engine/project_context_loader.py to signal an absent .cap.constitution.yaml, enabling deterministic bootstrap detection
 ## [Unreleased]
+
+### Changed
+- 將 `agent-skills/`、`policies/` 與 `workflows/` 從 `docs/` 拆出為 repo 根目錄的一級來源，讓 `docs/` 回歸 CAP 平台說明文件。
+- 更新 mapper、workflow executor、alias check、release scan、Claude/Codex 入口與 repo manifest，使 runtime 讀取新的一級路徑。
 
 ## [v0.13.5] - 2026-04-26
 
@@ -84,7 +88,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 ### Added
 
 - 新增 `executor: shell` workflow step metadata、script 白名單與 AI fallback 設定，支援 hybrid executor 流程
-- 新增 `docs/policies/workflow-executor-exit-codes.md`，定義 shell executor 與 workflow runtime 的退出碼契約
+- 新增 `policies/workflow-executor-exit-codes.md`，定義 shell executor 與 workflow runtime 的退出碼契約
 - 新增早期版本控制 shell executor 與 `schemas/workflows/test/version-control-test.yaml`，作為私人版控 quick path 與 hybrid executor fixture
 
 ### Changed
@@ -300,7 +304,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 - 短名 alias 機制（`qa.md` → `07-qa-agent.md`）供 `$qa` 指令快速呼叫
 - `install.sh` 一鍵安裝腳本 + `cap update` 遠端同步命令
 - Shell wrapper 函式（`cap` / `codex` / `claude`）自動注入 `~/.zshrc` 或 `~/.bashrc`
-- `docs/policies/git-workflow.md` 版本控制與 PR 規範
+- `policies/git-workflow.md` 版本控制與 PR 規範
 - `docs/ARCHITECTURE.md` 架構設計文件
 
 ### Changed

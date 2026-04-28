@@ -78,11 +78,11 @@ uninstall: ## 移除全域安裝與 CAP shell wrapper
 	@bash scripts/manage-cap-alias.sh uninstall
 
 skill-list: ## 列出所有可用的 Agent Skills（由 cap skill list 呼叫）
-	@echo "Agent Skills (docs/agent-skills/):"
+	@echo "Agent Skills (agent-skills/):"
 	@echo ""
 	@printf "  %-6s %-26s %-14s %s\n" "編號" "檔案" "\$$前綴" "角色"
 	@echo "  ------------------------------------------------------------------"
-	@for f in docs/agent-skills/*-agent.md; do \
+	@for f in agent-skills/*-agent.md; do \
 		name=$$(basename "$$f"); \
 		num=$$(echo "$$name" | sed 's/-.*//' ); \
 		case "$$name" in \
@@ -94,7 +94,7 @@ skill-list: ## 列出所有可用的 Agent Skills（由 cap skill list 呼叫）
 		printf "  %-6s %-26s \$$%-13s %s\n" "$$num" "$$name" "$$alias_name" "$$title"; \
 	done
 	@echo ""
-	@echo "共 $$(ls docs/agent-skills/*-agent.md | wc -l | tr -d ' ') 個 Agent"
+	@echo "共 $$(ls agent-skills/*-agent.md | wc -l | tr -d ' ') 個 Agent"
 
 check-aliases: sync ## 驗證本地 Agent alias 映射是否正確
 	@bash scripts/check-aliases.sh
