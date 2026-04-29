@@ -30,14 +30,36 @@ CAP 支援三種執行模式。本文件定義 Mode C。
 - 已有定義好的 workflow（version-control-private、readme-to-devops）→ Mode B
 - 變動不超過 20 行且不涉及多角色 → Mode A
 
+### 1.3 Mode C Conductor Binding（指揮綁定）
+
+Mode C 的「主控者」（conductor）依以下規則決定：
+
+| 條件 | Conductor | 說明 |
+|---|---|---|
+| 專案根目錄不存在 `.cap.constitution.yaml` | **cap runtime**（CLI / engine） | Ad-hoc 任務憲章，runtime 直接驅動 Phase 1–3。 |
+| 專案根目錄存在 `.cap.constitution.yaml` | **01-Supervisor** | Project-level constitution 已鎖定 scope/constraints/allowed_agents，需固定角色守住長期 governance。 |
+
+**綁定後的行為要求**：
+
+1. 01-Supervisor 取代 cap runtime 成為 Phase 1（task constitution 推導）與 Phase 2（sub-agent 派工）的主控者。
+2. 01-Supervisor 必須遵守 `01-supervisor-agent.md` §3.2「正式派工協議」、§3.3「Artifact Ledger」與 §3.5「異常與退件」的所有規範；本協議的 Phase 1/2/3 由其代為實施。
+3. 每次派工前須先讀取 project constitution，確認 `allowed_agents`、`allowed_capabilities`、`stop_conditions` 與 `executor_policy`，不得超出憲法授權範圍。
+4. Sub-agent prompt 模板（§3.1）、token 成本模型（§5）、跨 Runtime 適配（§6）與 handoff summary 格式維持不變；conductor 綁定只改變「誰下決策」，不改變「怎麼 spawn」。
+5. 01-Supervisor 自身不消耗 sub-agent 預算槽位；它是 conductor，不是 sub-agent。
+
+**綁定的理由**：
+
+- Project-level constitution 是長期治理單位，需要一個熟悉憲法語意的固定角色做跨 step 的一致判斷，避免 cap runtime 在動態決策時造成 scope drift。
+- cap runtime 主控仍適用於無 project constitution 的 ad-hoc 任務憲章，兩者並行不衝突。
+
 ---
 
 ## 2. Phase 1：建立 Task Constitution 與執行計畫
 
 ### 2.1 讀取專案上下文
 
-1. 若專案根目錄存在 `.cap.constitution.yaml` → 讀取 `inherits`、`allowed_agents`、`allowed_capabilities`、`binding_policy`
-2. 若不存在 → 以 `00-core-protocol.md` 為唯一行為基底，不限制可用 agent
+1. 若專案根目錄存在 `.cap.constitution.yaml` → 讀取 `inherits`、`allowed_agents`、`allowed_capabilities`、`binding_policy`，並依 §1.3 將 conductor 綁定至 01-Supervisor。
+2. 若不存在 → 以 `00-core-protocol.md` 為唯一行為基底，不限制可用 agent；conductor 維持 cap runtime。
 
 ### 2.2 推導 Task Constitution
 
@@ -349,7 +371,7 @@ for each step in execution_plan:
 | 現有文件 | 與本協議的關係 |
 |---|---|
 | `00-core-protocol.md` | 本協議繼承其所有行為準則；Section A 是其精簡提取 |
-| `01-supervisor-agent.md` | Mode C 不依賴 01 的硬編碼預設；01 是 Mode B 全棧交付的特化 supervisor |
+| `01-supervisor-agent.md` | Mode C 預設由 cap runtime 主控；當 `.cap.constitution.yaml` 存在時，conductor 改綁定至 01-Supervisor（見 §1.3）。01 同時也是 Mode B 全棧交付的特化 supervisor。 |
 | `workflow-constitution.md` | 本協議的 Phase 2 受其所有鐵律約束（最小充分、摘要傳遞、停止即成功） |
 | `task-constitution.schema.yaml` | Phase 1 的 constitution 輸出對齊此 schema |
 | `project-constitution.schema.yaml` | 若專案有 `.cap.constitution.yaml`，Phase 1 會讀取其治理邊界 |
