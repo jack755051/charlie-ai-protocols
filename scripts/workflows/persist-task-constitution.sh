@@ -1,19 +1,30 @@
 #!/usr/bin/env bash
 #
 # persist-task-constitution.sh — Pipeline step: validate the AI-drafted Task
-# Constitution JSON against schemas/task-constitution.schema.yaml and persist
-# it to the canonical runtime location.
+# Constitution JSON and persist it to the canonical runtime location.
 #
 # Reads:
 #   - task_constitution_draft artifact path (from CAP_WORKFLOW_INPUT_CONTEXT)
 #   - upstream draft must contain JSON either in a <<<TASK_CONSTITUTION_JSON_BEGIN>>>
 #     fence or in a ```json fenced block.
 #
+# Validation scope (minimal structural validation, NOT full JSON Schema):
+#   - JSON parses cleanly
+#   - Required fields present and non-empty: task_id, project_id, goal,
+#     goal_stage, success_criteria
+#   - goal_stage is one of: informal_planning / formal_specification /
+#     implementation_preparation / implementation_and_verification
+#   - execution_plan, if present, is a non-empty array; each entry has
+#     step_id and capability fields
+#   - governance, if present, is an object
+#   Full JSON Schema validation against schemas/task-constitution.schema.yaml
+#   is deferred until the engine ships a step_runtime helper paralleling
+#   constitution_validation; current scope is honest minimal validation.
+#
 # Behavior:
 #   - Locate the draft path from upstream context.
 #   - Extract the JSON payload.
-#   - Validate against schemas/task-constitution.schema.yaml (best-effort;
-#     warns on missing required fields, hard-fails on JSON parse errors).
+#   - Run minimal structural validation (above).
 #   - Persist to ~/.cap/projects/<project_id>/constitutions/task_<task_id>.json.
 #   - Emit a markdown report listing the persisted path so downstream
 #     handoff_ticket_emit step can resolve it.
@@ -136,6 +147,28 @@ goal_stage = data["goal_stage"]
 if goal_stage not in allowed_stages:
     sys.stderr.write(f"INVALID_GOAL_STAGE:{goal_stage}\n")
     raise SystemExit(4)
+
+# Optional structural checks for nested objects that downstream steps depend on.
+exec_plan = data.get("execution_plan")
+if exec_plan is not None:
+    if not isinstance(exec_plan, list) or not exec_plan:
+        sys.stderr.write("INVALID_EXECUTION_PLAN:must be non-empty array if present\n")
+        raise SystemExit(5)
+    for idx, entry in enumerate(exec_plan):
+        if not isinstance(entry, dict):
+            sys.stderr.write(f"INVALID_EXECUTION_PLAN_ENTRY:index={idx} not an object\n")
+            raise SystemExit(5)
+        for required_field in ("step_id", "capability"):
+            if not entry.get(required_field):
+                sys.stderr.write(
+                    f"INVALID_EXECUTION_PLAN_ENTRY:index={idx} missing {required_field}\n"
+                )
+                raise SystemExit(5)
+
+governance = data.get("governance")
+if governance is not None and not isinstance(governance, dict):
+    sys.stderr.write("INVALID_GOVERNANCE:must be object if present\n")
+    raise SystemExit(6)
 
 project_id = data["project_id"]
 task_id = data["task_id"]

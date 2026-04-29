@@ -8,6 +8,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ## [Unreleased]
 
+### Added
+- `scripts/workflows/persist-task-constitution.sh` 強化 task constitution 結構驗證：除既有 required field + goal_stage enum 外，新增 `execution_plan` 結構檢查（必須是非空 array，每個 entry 含 step_id + capability）、`governance` 必須為 object（如有）；validation rc 5 = invalid execution_plan、rc 6 = invalid governance；honest 註解明標為 minimal structural validation 而非 full JSON Schema。
+- `scripts/workflows/emit-handoff-ticket.sh` 新增 ticket 寫入前的 post-build 結構驗證：對齊 `schemas/handoff-ticket.schema.yaml` 的 12 個 top-level required fields（ticket_id / task_id / step_id / created_at / created_by / target_capability / task_objective / rules_to_load / context_payload / acceptance_criteria / output_expectations / failure_routing）+ `context_payload.{project_constitution_path, task_constitution_path}` + `output_expectations.{primary_artifacts, handoff_summary_path}` + `failure_routing.on_fail` 的存在性檢查；validation 失敗於寫檔前 halt（rc 4-7 對應不同層級缺失），避免產出結構不完整的 ticket 流入下游。
+
 ### Fixed
 - `scripts/workflows/persist-task-constitution.sh` 修四個影響執行的真實 bug：(1) Python f-string 內含 `\",\".join(...)` 的反斜線轉義在 Python <3.12 為 SyntaxError，改抽到區域變數 `missing_list = ",".join(missing)` 再 format；(2) 同函式另一處 `f"{data[\"project_id\"]}"` 同樣 invalid，改先 `project_id = data["project_id"]` 再 f-string；(3) 主流程的 `1>&3` 重導向但 FD 3 從未開啟導致 shell 直接 fail，改用 `mktemp` + `2>${tmp_err}` 捕捉 stderr 再讀；(4) 多處 `printf '- name=...'` 與 `printf 'condition: ...'` 改加 `--` 前綴避免某些 shell 把 `-` 開頭的 format 視為選項。本批修復後腳本經 smoke test 通過：valid task constitution draft 進入後 exit 0，產出 pretty-printed JSON 於 `~/.cap/projects/<id>/constitutions/<task_id>.json`。
 

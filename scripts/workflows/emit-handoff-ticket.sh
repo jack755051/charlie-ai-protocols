@@ -11,6 +11,22 @@
 #   - upstream handoff summaries (optional; from CAP_UPSTREAM_HANDOFFS env,
 #     newline-separated `step_id=path` pairs)
 #
+# Validation scope (minimal structural validation, NOT full JSON Schema):
+#   - target_step_id must exist in task_constitution.execution_plan
+#   - emitted ticket must have all required top-level fields per
+#     schemas/handoff-ticket.schema.yaml: ticket_id, task_id, step_id,
+#     created_at, created_by, target_capability, task_objective,
+#     rules_to_load, context_payload, acceptance_criteria,
+#     output_expectations, failure_routing
+#   - context_payload must include project_constitution_path and
+#     task_constitution_path
+#   - output_expectations must include primary_artifacts and
+#     handoff_summary_path
+#   - failure_routing must include on_fail
+#   Full JSON Schema validation is deferred until step_runtime ships a
+#   matching helper; current scope is honest minimal validation enforced
+#   as a post-build assertion before write.
+#
 # Behavior:
 #   - Load task constitution JSON.
 #   - Locate execution_plan[target_step_id].
@@ -19,6 +35,7 @@
 #     effort defaults), context_payload (with summary-first upstream handoffs),
 #     acceptance_criteria (from execution_plan entry), failure_routing
 #     defaults, and bookkeeping (created_at / created_by).
+#   - Validate the constructed ticket against required field set.
 #   - Write to ~/.cap/projects/<project_id>/handoffs/<step_id>.ticket.json.
 #   - If a prior ticket exists at that path, the new one is written with
 #     suffix `-<seq>.ticket.json` (per supervisor protocol §3.6 rule 2).
@@ -209,6 +226,45 @@ ticket = {
         "slot_index": seq,
     },
 }
+
+# Minimal structural validation against schemas/handoff-ticket.schema.yaml
+# (top-level required fields + key nested required fields). Honest scope:
+# this is field-presence checking, not full JSON Schema validation.
+required_top = [
+    "ticket_id", "task_id", "step_id", "created_at", "created_by",
+    "target_capability", "task_objective", "rules_to_load",
+    "context_payload", "acceptance_criteria", "output_expectations",
+    "failure_routing",
+]
+missing_top = [k for k in required_top if k not in ticket or ticket[k] in (None, "")]
+if missing_top:
+    print(f"ERROR:ticket_missing_top_required:{','.join(missing_top)}", file=sys.stderr)
+    raise SystemExit(4)
+
+context_payload = ticket["context_payload"]
+required_context = ["project_constitution_path", "task_constitution_path"]
+missing_context = [k for k in required_context if k not in context_payload or not context_payload[k]]
+if missing_context:
+    print(
+        f"ERROR:ticket_missing_context_required:{','.join(missing_context)}",
+        file=sys.stderr,
+    )
+    raise SystemExit(5)
+
+output_expectations = ticket["output_expectations"]
+required_output = ["primary_artifacts", "handoff_summary_path"]
+missing_output = [k for k in required_output if k not in output_expectations]
+if missing_output:
+    print(
+        f"ERROR:ticket_missing_output_required:{','.join(missing_output)}",
+        file=sys.stderr,
+    )
+    raise SystemExit(6)
+
+failure_routing = ticket["failure_routing"]
+if "on_fail" not in failure_routing or not failure_routing["on_fail"]:
+    print("ERROR:ticket_missing_failure_routing_on_fail", file=sys.stderr)
+    raise SystemExit(7)
 
 with ticket_path.open("w") as f:
     json.dump(ticket, f, ensure_ascii=False, indent=2, sort_keys=False)
