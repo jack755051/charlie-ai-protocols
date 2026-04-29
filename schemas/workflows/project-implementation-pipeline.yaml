@@ -3,7 +3,7 @@ version: 1
 name: Project Implementation Pipeline
 summary: |
   把已通過 project-spec-pipeline 的專案，從規格層推進到可部署的實作層。
-  流程依 goal_stage: implementation_and_verification 展開為 draft_task_constitution → persist_task_constitution → (frontend ∥ backend) → (qa_testing ∥ security_audit) → devops_packaging → impl_audit → archive 九步，
+  流程依 goal_stage: implementation_and_verification 展開為 draft_task_constitution → persist_task_constitution → (每個 sub-agent step 前插一個 emit_<step>_ticket shell step) → (frontend ∥ backend) → (qa_testing ∥ security_audit) → devops_packaging → impl_audit → archive 共 15 步，
   最終於 ~/.cap/projects/<id>/ 留下 frontend / backend codebase（含 unit tests）、qa 測試套件與報告、security 稽核報告、deployment artifacts 與 task archive。
   本 workflow 是 per-stage workflow 系列的第二條（前置：project-spec-pipeline；後續：project-qa-pipeline 視需要）；
   hard-依賴 spec-pipeline 的 11 個正式產出（PRD / TechPlan / BA / Schema / API / 6 設計資產），缺任一即拒絕啟動。
@@ -92,11 +92,30 @@ steps:
     notes:
       - 純 deterministic shell；不允許 AI fallback。
 
+  - id: emit_frontend_ticket
+    name: Emit Handoff Ticket for frontend
+    capability: handoff_ticket_emit
+    executor: shell
+    script: scripts/workflows/emit-handoff-ticket.sh
+    needs: [persist_task_constitution]
+    inputs:
+      - task_constitution
+    outputs:
+      - handoff_ticket
+    done_when:
+      - ticket 已寫入 ~/.cap/projects/<project_id>/handoffs/frontend.ticket.json
+    on_fail: halt
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+    notes:
+      - 平行於 emit_backend_ticket；兩者皆依賴 persist_task_constitution
+
   - id: frontend
     name: Frontend Implementation
     capability: frontend_implementation
     executor: ai
-    needs: [persist_task_constitution]
+    needs: [emit_frontend_ticket]
     inputs:
       - ui_spec
       - ui_design_assets
@@ -123,11 +142,28 @@ steps:
       - watcher milestone gate 在本 step 完成後觸發，重點稽核：分層邊界 / 設計資產對齊 / 單元測試存在性 / 框架特化合規。
       - 與 backend step 平行；兩者皆依賴 persist_task_constitution 但彼此無依賴。
 
+  - id: emit_backend_ticket
+    name: Emit Handoff Ticket for backend
+    capability: handoff_ticket_emit
+    executor: shell
+    script: scripts/workflows/emit-handoff-ticket.sh
+    needs: [persist_task_constitution]
+    inputs:
+      - task_constitution
+    outputs:
+      - handoff_ticket
+    done_when:
+      - ticket 已寫入 ~/.cap/projects/<project_id>/handoffs/backend.ticket.json
+    on_fail: halt
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+
   - id: backend
     name: Backend Implementation
     capability: backend_implementation
     executor: ai
-    needs: [persist_task_constitution]
+    needs: [emit_backend_ticket]
     inputs:
       - schema_ssot
       - api_contract
@@ -155,11 +191,28 @@ steps:
       - watcher milestone gate 在本 step 完成後觸發，重點稽核：DDD 邊界 / Unit of Work 邊界 / 樂觀併發 / 異常統一 / 單元測試 Mock 隔離。
       - 與 frontend step 平行。
 
+  - id: emit_qa_testing_ticket
+    name: Emit Handoff Ticket for qa_testing
+    capability: handoff_ticket_emit
+    executor: shell
+    script: scripts/workflows/emit-handoff-ticket.sh
+    needs: [frontend, backend]
+    inputs:
+      - task_constitution
+    outputs:
+      - handoff_ticket
+    done_when:
+      - ticket 已寫入 ~/.cap/projects/<project_id>/handoffs/qa_testing.ticket.json
+    on_fail: halt
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+
   - id: qa_testing
     name: QA Integration / E2E / Performance / Lighthouse
     capability: qa_testing
     executor: ai
-    needs: [frontend, backend]
+    needs: [emit_qa_testing_ticket]
     inputs:
       - frontend_codebase
       - backend_codebase
@@ -187,11 +240,28 @@ steps:
       - 嚴禁修改業務邏輯代碼；僅產測試腳本與報告。
       - SRE_TRIGGER 標記後，devops_packaging 仍可繼續，但 impl_audit 必須將其列為 NON-BLOCKING NOTES 帶入下一階段優化。
 
+  - id: emit_security_audit_ticket
+    name: Emit Handoff Ticket for security_audit
+    capability: handoff_ticket_emit
+    executor: shell
+    script: scripts/workflows/emit-handoff-ticket.sh
+    needs: [frontend, backend]
+    inputs:
+      - task_constitution
+    outputs:
+      - handoff_ticket
+    done_when:
+      - ticket 已寫入 ~/.cap/projects/<project_id>/handoffs/security_audit.ticket.json
+    on_fail: halt
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+
   - id: security_audit
     name: Security and Compliance Audit
     capability: security_audit
     executor: ai
-    needs: [frontend, backend]
+    needs: [emit_security_audit_ticket]
     inputs:
       - frontend_codebase
       - backend_codebase
@@ -218,11 +288,28 @@ steps:
       - 與 qa_testing step 平行。
       - CRITICAL / HIGH 漏洞必須先回流到 frontend / backend 修復後重審；不得進 devops_packaging。
 
+  - id: emit_devops_packaging_ticket
+    name: Emit Handoff Ticket for devops_packaging
+    capability: handoff_ticket_emit
+    executor: shell
+    script: scripts/workflows/emit-handoff-ticket.sh
+    needs: [qa_testing, security_audit]
+    inputs:
+      - task_constitution
+    outputs:
+      - handoff_ticket
+    done_when:
+      - ticket 已寫入 ~/.cap/projects/<project_id>/handoffs/devops_packaging.ticket.json
+    on_fail: halt
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+
   - id: devops_packaging
     name: Containerization and Deployment Artifacts
     capability: devops_delivery
     executor: ai
-    needs: [qa_testing, security_audit]
+    needs: [emit_devops_packaging_ticket]
     inputs:
       - frontend_codebase
       - backend_codebase
@@ -247,11 +334,28 @@ steps:
       - 本 step 為 sequential，必須等 qa + security 都過才啟動。
       - 若 qa_report 含 SRE_TRIGGER 但非 FAIL，devops 仍可進；僅在 impl_audit 帶入 NOTES。
 
+  - id: emit_impl_audit_ticket
+    name: Emit Handoff Ticket for impl_audit
+    capability: handoff_ticket_emit
+    executor: shell
+    script: scripts/workflows/emit-handoff-ticket.sh
+    needs: [devops_packaging]
+    inputs:
+      - task_constitution
+    outputs:
+      - handoff_ticket
+    done_when:
+      - ticket 已寫入 ~/.cap/projects/<project_id>/handoffs/impl_audit.ticket.json
+    on_fail: halt
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+
   - id: impl_audit
     name: Implementation-Layer Cross-Spec Consistency Audit
     capability: code_structure_audit
     executor: ai
-    needs: [devops_packaging]
+    needs: [emit_impl_audit_ticket]
     inputs:
       - prd_document
       - tech_plan_document

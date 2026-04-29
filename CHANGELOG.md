@@ -8,6 +8,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ## [Unreleased]
 
+### Changed
+- `scripts/workflows/emit-handoff-ticket.sh` 新增從 `CAP_WORKFLOW_STEP_ID` 自動 derive `target_step_id` 的 fallback：當該 step 命名為 `emit_<step>_ticket` 模式時，腳本自動把 `<step>` 抽出作為 target，免於每個 emit step 都得在 workflow YAML 注入 env var；明示 env var `CAP_TARGET_STEP_ID` 仍優先（顯式覆蓋 implicit derive）。
+- `schemas/workflows/project-spec-pipeline.yaml` / `project-implementation-pipeline.yaml` / `project-qa-pipeline.yaml` 三條 workflow 在每個 sub-agent step 前插入 `emit_<step>_ticket` 顯式 shell step（採 A 方案——cap CLI 觀察性最佳、無需動 engine）：spec-pipeline 從 9 → 15 步（補 emit_prd / emit_tech_plan / emit_ba / emit_dba_api / emit_ui / emit_spec_audit）、implementation-pipeline 從 9 → 15 步（補 emit_frontend / emit_backend / emit_qa_testing / emit_security_audit / emit_devops_packaging / emit_impl_audit）、qa-pipeline 從 6 → 9 步（補 emit_qa_testing / emit_security_audit / emit_qa_audit）；每個 emit step 有獨立 needs 銜接上游、產出 handoff_ticket artifact、有結構驗證 done_when 與 halt-on-fail；archive 由 supervisor in-line 不需 ticket 故不插 emit；`logger_checkpoints` 不含 emit step 以免 milestone log 過於密集。本變更讓 ticket emission 成為 dispatch 流程的可觀察一級事件而非工具，cap CLI 跑 workflow 時可看到每個派工點都有對應 ticket 落地。
+
 ### Added
 - `tests/scripts/` 新增 deterministic executor 的 fixture smoke 測試套件：`test-persist-task-constitution.sh`（5 cases / 13 assertions：happy path + malformed JSON + missing required + invalid goal_stage + invalid execution_plan entry）+ `test-emit-handoff-ticket.sh`（4 cases / 15 assertions：happy path + seq 遞增 1→2→3 且舊 ticket 保留 + missing target_step_id + step 不在 execution_plan）+ README 說明範圍與執行方式；測試使用 `mktemp -d` 隔離 sandbox 自動清理，無需外部測試框架，純 bash + python3 即可運行；本批為 cap CLI 整合測試（cap workflow bind / plan）之外的單元層補強，封住兩個 shell executor 的 regression 風險面。
 - `scripts/workflows/persist-task-constitution.sh` 強化 task constitution 結構驗證：除既有 required field + goal_stage enum 外，新增 `execution_plan` 結構檢查（必須是非空 array，每個 entry 含 step_id + capability）、`governance` 必須為 object（如有）；validation rc 5 = invalid execution_plan、rc 6 = invalid governance；honest 註解明標為 minimal structural validation 而非 full JSON Schema。

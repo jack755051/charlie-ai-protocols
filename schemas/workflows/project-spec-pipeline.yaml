@@ -3,7 +3,7 @@ version: 1
 name: Project Specification Pipeline
 summary: |
   把已有 .cap.constitution.yaml 的專案，從憲法骨架推進到完整可實作的規格層。
-  流程依 goal_stage: formal_specification 展開為 draft_task_constitution → persist_task_constitution → prd → tech_plan → ba → (dba_api ∥ ui) → spec_audit → archive 九步，
+  流程依 goal_stage: formal_specification 展開為 draft_task_constitution → persist_task_constitution → (每個 sub-agent step 前插一個 emit_<step>_ticket shell step) → prd → tech_plan → ba → (dba_api ∥ ui) → spec_audit → archive 共 15 步，
   最終於 ~/.cap/projects/<id>/ 留下 task constitution、5 份規格 + 6 份設計資產、2 份 watcher gate report 與 task archive。
   本 workflow 是 per-stage workflow 系列的第一條（後續：project-implementation-pipeline / project-qa-pipeline），
   用以把 supervisor 在 Mode C 中的派工迴圈固化為可被 cap CLI 顯示步驟與計時的執行單元。
@@ -31,6 +31,7 @@ governance:
   watcher_checkpoints: [tech_plan, spec_audit]
   logger_mode: milestone_log
   logger_checkpoints: [draft_task_constitution, persist_task_constitution, prd, tech_plan, ba, dba_api, ui, spec_audit, archive]
+  # emit_*_ticket steps 為 shell-only deterministic 派工單發行；不入 logger checkpoint 以免 milestone log 過於密集
   context_mode: summary_first
   goal_stage: formal_specification
   halt_on_missing_handoff: true
@@ -86,11 +87,32 @@ steps:
       - 純 deterministic shell；不允許 AI fallback。
       - 寫入失敗時整個 task halt，由操作者調查；上游 draft 仍保留於 workflow output dir 可重跑。
 
+  - id: emit_prd_ticket
+    name: Emit Handoff Ticket for prd
+    capability: handoff_ticket_emit
+    executor: shell
+    script: scripts/workflows/emit-handoff-ticket.sh
+    needs: [persist_task_constitution]
+    inputs:
+      - task_constitution
+    outputs:
+      - handoff_ticket
+    done_when:
+      - target_step_id 已從 step_id 模式 emit_<step>_ticket 自動 derive 為 prd
+      - ticket 已寫入 ~/.cap/projects/<project_id>/handoffs/prd.ticket.json
+      - ticket 通過結構驗證（12 個 top-level required + context_payload 必填路徑 + output_expectations 必填欄位 + failure_routing.on_fail）
+    on_fail: halt
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+    notes:
+      - 顯式 ticket 發行，讓 sub-agent step 在 spawn 前已有可審計的工作單在磁碟
+
   - id: prd
     name: Produce Product Requirements Document
     capability: prd_generation
     executor: ai
-    needs: [persist_task_constitution]
+    needs: [emit_prd_ticket]
     inputs:
       - task_constitution
       - project_constitution
@@ -110,11 +132,28 @@ steps:
       - PRD 由 supervisor 直接草擬（不消耗 sub-agent budget）；對應 .cap.skills.yaml / .cap.agents.json 中 prd_generation → supervisor 的 binding。
       - 設計交付模式（design_output_mode）預設 assets_only；若需 Figma 同步，須在 PRD 顯式寫成 assets_plus_figma 並在 task constitution 補 figma_sync_mode。
 
+  - id: emit_tech_plan_ticket
+    name: Emit Handoff Ticket for tech_plan
+    capability: handoff_ticket_emit
+    executor: shell
+    script: scripts/workflows/emit-handoff-ticket.sh
+    needs: [prd]
+    inputs:
+      - task_constitution
+    outputs:
+      - handoff_ticket
+    done_when:
+      - ticket 已寫入 ~/.cap/projects/<project_id>/handoffs/tech_plan.ticket.json
+    on_fail: halt
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+
   - id: tech_plan
     name: Technical Plan and Module Architecture
     capability: technical_planning
     executor: ai
-    needs: [prd]
+    needs: [emit_tech_plan_ticket]
     inputs:
       - prd_document
       - task_constitution
@@ -134,11 +173,28 @@ steps:
       - watcher milestone gate 在本 step 完成後觸發；若 watcher 標 FAIL，回流到本 step 修復後重審。
       - 不允許在 TechPlan 自行擴展 scope 超出 PRD 與憲法授權範圍。
 
+  - id: emit_ba_ticket
+    name: Emit Handoff Ticket for ba
+    capability: handoff_ticket_emit
+    executor: shell
+    script: scripts/workflows/emit-handoff-ticket.sh
+    needs: [tech_plan]
+    inputs:
+      - task_constitution
+    outputs:
+      - handoff_ticket
+    done_when:
+      - ticket 已寫入 ~/.cap/projects/<project_id>/handoffs/ba.ticket.json
+    on_fail: halt
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+
   - id: ba
     name: Business Analysis Specification
     capability: business_analysis
     executor: ai
-    needs: [tech_plan]
+    needs: [emit_ba_ticket]
     inputs:
       - tech_plan_document
       - prd_document
@@ -159,11 +215,28 @@ steps:
       - 後續 dba_api 與 ui 平行展開都依賴本 step 的 Bounded Context 與狀態流；本 step halt 即整個 spec layer halt。
       - 若 PRD / TechPlan 互相矛盾，halt 並回報 supervisor，不擅自選一份硬做。
 
+  - id: emit_dba_api_ticket
+    name: Emit Handoff Ticket for dba_api
+    capability: handoff_ticket_emit
+    executor: shell
+    script: scripts/workflows/emit-handoff-ticket.sh
+    needs: [ba]
+    inputs:
+      - task_constitution
+    outputs:
+      - handoff_ticket
+    done_when:
+      - ticket 已寫入 ~/.cap/projects/<project_id>/handoffs/dba_api.ticket.json
+    on_fail: halt
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+
   - id: dba_api
     name: Database Schema and API Contract
     capability: database_api_design
     executor: ai
-    needs: [ba]
+    needs: [emit_dba_api_ticket]
     inputs:
       - ba_spec
       - tech_plan_document
@@ -187,11 +260,28 @@ steps:
       - 本 step 與 ui step 平行；兩者皆依賴 ba 但彼此無依賴。
       - 落地路徑：~/.cap/projects/<id>/reports/workflows/<task_id>/database/<module>_schema_v0.1.md 與 <module>_API_v0.1.md。
 
+  - id: emit_ui_ticket
+    name: Emit Handoff Ticket for ui
+    capability: handoff_ticket_emit
+    executor: shell
+    script: scripts/workflows/emit-handoff-ticket.sh
+    needs: [ba]
+    inputs:
+      - task_constitution
+    outputs:
+      - handoff_ticket
+    done_when:
+      - ticket 已寫入 ~/.cap/projects/<project_id>/handoffs/ui.ticket.json
+    on_fail: halt
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+
   - id: ui
     name: UI Specification and Design Assets
     capability: ui_design
     executor: ai
-    needs: [ba]
+    needs: [emit_ui_ticket]
     inputs:
       - ba_spec
       - tech_plan_document
@@ -214,11 +304,28 @@ steps:
       - 設計稿來源（design_source）由 cap workflow run 啟動時透過 --design-source / --design-path 旗標或反問機制注入。
       - 若無設計稿來源，UI step 仍可執行但須在 UI Spec 中標明 no-design baseline。
 
+  - id: emit_spec_audit_ticket
+    name: Emit Handoff Ticket for spec_audit
+    capability: handoff_ticket_emit
+    executor: shell
+    script: scripts/workflows/emit-handoff-ticket.sh
+    needs: [dba_api, ui]
+    inputs:
+      - task_constitution
+    outputs:
+      - handoff_ticket
+    done_when:
+      - ticket 已寫入 ~/.cap/projects/<project_id>/handoffs/spec_audit.ticket.json
+    on_fail: halt
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+
   - id: spec_audit
     name: Cross-Spec Consistency Audit
     capability: code_structure_audit
     executor: ai
-    needs: [dba_api, ui]
+    needs: [emit_spec_audit_ticket]
     inputs:
       - prd_document
       - tech_plan_document

@@ -3,7 +3,7 @@ version: 1
 name: Project QA & Security Verification Pipeline
 summary: |
   針對已實作的專案，獨立執行品質保證與安全稽核循環。
-  流程依 goal_stage: implementation_and_verification（驗證子集）展開為 draft_task_constitution → persist_task_constitution → (qa_testing ∥ security_audit) → qa_audit → archive 六步，
+  流程依 goal_stage: implementation_and_verification（驗證子集）展開為 draft_task_constitution → persist_task_constitution → (每個 sub-agent step 前插一個 emit_<step>_ticket shell step) → (qa_testing ∥ security_audit) → qa_audit → archive 共 9 步，
   最終於 ~/.cap/projects/<id>/ 留下 QA 自動化測試套件、QA 報告、安全稽核報告、跨層稽核報告與 task archive。
   本 workflow 是 per-stage workflow 系列的第三條（前置：project-spec-pipeline、project-implementation-pipeline）。
   與 implementation-pipeline 內嵌的 qa_testing step 互補：implementation 是「實作完當下立即驗證」，本 workflow 是「實作後任何時間獨立重跑」。
@@ -96,11 +96,28 @@ steps:
     notes:
       - 純 deterministic shell；不允許 AI fallback。
 
+  - id: emit_qa_testing_ticket
+    name: Emit Handoff Ticket for qa_testing
+    capability: handoff_ticket_emit
+    executor: shell
+    script: scripts/workflows/emit-handoff-ticket.sh
+    needs: [persist_task_constitution]
+    inputs:
+      - task_constitution
+    outputs:
+      - handoff_ticket
+    done_when:
+      - ticket 已寫入 ~/.cap/projects/<project_id>/handoffs/qa_testing.ticket.json
+    on_fail: halt
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+
   - id: qa_testing
     name: QA Verification Suite Execution
     capability: qa_testing
     executor: ai
-    needs: [persist_task_constitution]
+    needs: [emit_qa_testing_ticket]
     inputs:
       - frontend_codebase
       - backend_codebase
@@ -129,11 +146,28 @@ steps:
       - 與 security_audit step 平行；兩者皆依賴 persist_task_constitution 但彼此無依賴。
       - 與 implementation-pipeline 不同，本 step 找到的問題不會 route_back_to 實作 step（因為實作不在本 workflow 內），改為 escalate_user 讓使用者決定：開新 fix task / 跑 troubleshoot workflow / 或忽略並收尾。
 
+  - id: emit_security_audit_ticket
+    name: Emit Handoff Ticket for security_audit
+    capability: handoff_ticket_emit
+    executor: shell
+    script: scripts/workflows/emit-handoff-ticket.sh
+    needs: [persist_task_constitution]
+    inputs:
+      - task_constitution
+    outputs:
+      - handoff_ticket
+    done_when:
+      - ticket 已寫入 ~/.cap/projects/<project_id>/handoffs/security_audit.ticket.json
+    on_fail: halt
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+
   - id: security_audit
     name: Security Verification and Compliance Audit
     capability: security_audit
     executor: ai
-    needs: [persist_task_constitution]
+    needs: [emit_security_audit_ticket]
     inputs:
       - frontend_codebase
       - backend_codebase
@@ -160,11 +194,28 @@ steps:
       - 與 qa_testing step 平行。
       - CRITICAL 漏洞發現時建議立即升級給使用者，由 supervisor 開新 fix task 走 implementation-pipeline 的子集流程修復後，再重跑本 workflow 確認。
 
+  - id: emit_qa_audit_ticket
+    name: Emit Handoff Ticket for qa_audit
+    capability: handoff_ticket_emit
+    executor: shell
+    script: scripts/workflows/emit-handoff-ticket.sh
+    needs: [qa_testing, security_audit]
+    inputs:
+      - task_constitution
+    outputs:
+      - handoff_ticket
+    done_when:
+      - ticket 已寫入 ~/.cap/projects/<project_id>/handoffs/qa_audit.ticket.json
+    on_fail: halt
+    timeout_seconds: 30
+    input_mode: full
+    output_tier: machine_metadata
+
   - id: qa_audit
     name: Cross-Layer Verification Consistency Audit
     capability: code_structure_audit
     executor: ai
-    needs: [qa_testing, security_audit]
+    needs: [emit_qa_audit_ticket]
     inputs:
       - prd_document
       - tech_plan_document

@@ -52,6 +52,18 @@ target_step_id="${CAP_TARGET_STEP_ID:-}"
 input_context="${CAP_WORKFLOW_INPUT_CONTEXT:-}"
 task_constitution_path="${CAP_TASK_CONSTITUTION_PATH:-}"
 
+# When invoked as a workflow step named `emit_<target>_ticket`, derive the
+# target step id automatically so the workflow YAML does not need to inject
+# CAP_TARGET_STEP_ID per step. Explicit env var still wins if set.
+if [ -z "${target_step_id}" ]; then
+  case "${step_id}" in
+    emit_*_ticket)
+      stripped="${step_id#emit_}"
+      target_step_id="${stripped%_ticket}"
+      ;;
+  esac
+fi
+
 CAP_ROOT="${CAP_ROOT:-}"
 if [ -z "${CAP_ROOT}" ]; then
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
