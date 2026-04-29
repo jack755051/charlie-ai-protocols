@@ -1,0 +1,202 @@
+workflow_id: project-qa-pipeline
+version: 1
+name: Project QA & Security Verification Pipeline
+summary: |
+  針對已實作的專案，獨立執行品質保證與安全稽核循環。
+  流程依 goal_stage: implementation_and_verification（驗證子集）展開為 init_task → (qa_testing ∥ security_audit) → qa_audit → archive 五步，
+  最終於 ~/.cap/projects/<id>/ 留下 QA 自動化測試套件、QA 報告、安全稽核報告、跨層稽核報告與 task archive。
+  本 workflow 是 per-stage workflow 系列的第三條（前置：project-spec-pipeline、project-implementation-pipeline）。
+  與 implementation-pipeline 內嵌的 qa_testing step 互補：implementation 是「實作完當下立即驗證」，本 workflow 是「實作後任何時間獨立重跑」。
+  典型使用情境：
+    - 修小 bug 後的 regression 驗證（不重跑整個 implementation-pipeline）
+    - 定期 Lighthouse / 性能 / 安全重 baseline
+    - 依賴套件升級後的安全稽核
+    - Release / Tag 前的最後一道 cross-cutting 驗證
+    - 環境變更後（新部署目標 / 新 OS 版本）的相容性確認
+owner: supervisor
+triggers:
+  - manual
+  - project-qa
+  - regression-check
+  - pre-release-verification
+
+artifacts:
+  task_constitution: Task Constitution（Type B）含 verification 範圍（regression / lighthouse / security / 全套）/ governance / budget；落地於 ~/.cap/projects/<id>/constitutions/task_<id>.json
+  qa_test_suite: QA 自動化測試腳本（依 verification_scope 涵蓋 API integration + Playwright E2E + k6 perf + Lighthouse 的子集或全集）
+  qa_report: QA 測試執行報告，含指標達成率、Lighthouse 四大分數、性能門檻達標狀態、SRE_TRIGGER 標記（如有）
+  security_audit_report: 安全稽核報告，覆蓋 SAST / 機敏資訊 / IDOR / XSS / Auth boundary / 安全標頭 / 依賴漏洞
+  qa_audit_report: Watcher 終局 gate 報告，覆蓋 spec ↔ code ↔ test ↔ qa_report ↔ security_report 一致性矩陣與 verdict
+  task_archive: 結案摘要（_archive.md）+ trace.jsonl 收尾事件 + regression / fix 建議路徑
+
+governance:
+  watcher_mode: milestone_gate
+  watcher_checkpoints: [qa_audit]
+  logger_mode: milestone_log
+  logger_checkpoints: [init_task, qa_testing, security_audit, qa_audit, archive]
+  context_mode: summary_first
+  goal_stage: implementation_and_verification
+  halt_on_missing_handoff: true
+  required_upstream_artifacts:
+    - prd_document
+    - tech_plan_document
+    - ba_spec
+    - schema_ssot
+    - api_contract
+    - ui_spec
+    - frontend_codebase
+    - backend_codebase
+
+steps:
+  - id: init_task
+    name: Derive QA Verification Task Constitution
+    capability: task_constitution_planning
+    executor: ai
+    needs: []
+    inputs:
+      - project_constitution
+      - user_intent
+      - goal_stage_hint
+      - prior_spec_artifacts
+      - prior_impl_artifacts
+    outputs:
+      - task_constitution
+    done_when:
+      - 已驗證上游 spec 與 implementation 產出齊備（缺任一即 halt 並回報 needs_data）
+      - goal_stage 已選定為 implementation_and_verification（驗證子集）並對應展開 5 步 execution_plan
+      - verification_scope 已明確（regression / lighthouse_only / security_only / full_suite 等），對應裁減 qa_testing 與 security_audit 的執行範圍
+      - budget 已估算（建議 4-5 sub-agent sessions，archive 由 supervisor in-line 不消耗）
+      - task constitution 已寫入 ~/.cap/projects/<project_id>/constitutions/task_<task_id>.json
+      - 若 user_intent 對 verification_scope 無明確指示，預設執行 full_suite
+    on_fail: halt
+    timeout_seconds: 600
+    input_mode: full
+    output_tier: planning_artifact
+    notes:
+      - 本 workflow 不允許在 implementation 缺漏的情況下啟動；若僅有 spec 而無 frontend/backend codebase，應改跑 implementation-pipeline。
+      - verification_scope 是本 workflow 的核心參數；它決定 qa_testing 與 security_audit 是否做全套或局部驗證。
+
+  - id: qa_testing
+    name: QA Verification Suite Execution
+    capability: qa_testing
+    executor: ai
+    needs: [init_task]
+    inputs:
+      - frontend_codebase
+      - backend_codebase
+      - api_contract
+      - ba_spec
+      - ui_spec
+      - task_constitution
+    outputs:
+      - qa_test_suite
+      - qa_report
+    done_when:
+      - 依 verification_scope 執行對應的測試類別（不必每次都跑全套）
+      - 若 scope 含 api_integration：Response Body 欄位 100% 對齊 api_contract；ApiResponse 包裹格式驗證通過
+      - 若 scope 含 e2e：Playwright POM 模式，覆蓋 ba_spec 主要使用者流程
+      - 若 scope 含 perf：k6 thresholds p(95)<500ms / error_rate<1%；對既有 baseline 比對性能退化
+      - 若 scope 含 lighthouse：四大分數達標；如未達標標明 LH_PERF_FAIL / LH_A11Y_FAIL / LH_BP_FAIL / LH_SEO_FAIL
+      - 測試結果 FAIL 時，附 trace.zip / 錯誤 Payload 截圖；若為性能類，標記 SRE_TRIGGER 供下游分析
+      - 若本次為 regression 模式，新增的測試案例已對齊修補 PR 的變動範圍，無覆蓋遺漏
+    on_fail: escalate_user
+    fallback:
+      when: ["qa_report.verdict == FAIL"]
+    timeout_seconds: 1500
+    input_mode: full
+    output_tier: governance_report
+    notes:
+      - 與 security_audit step 平行；兩者皆依賴 init_task 但彼此無依賴。
+      - 與 implementation-pipeline 不同，本 step 找到的問題不會 route_back_to 實作 step（因為實作不在本 workflow 內），改為 escalate_user 讓使用者決定：開新 fix task / 跑 troubleshoot workflow / 或忽略並收尾。
+
+  - id: security_audit
+    name: Security Verification and Compliance Audit
+    capability: security_audit
+    executor: ai
+    needs: [init_task]
+    inputs:
+      - frontend_codebase
+      - backend_codebase
+      - api_contract
+      - schema_ssot
+      - task_constitution
+    outputs:
+      - security_audit_report
+    done_when:
+      - 依 verification_scope 執行對應的安全檢查（如 secrets-only / dependency-only / full-OWASP）
+      - 機敏資訊掃描：嚴禁硬編碼 API_KEY / PASSWORD / JWT_SECRET 於 git 追蹤檔
+      - 若 scope 含 dependency：第三方套件 CVE 掃描（如 npm audit / dotnet list package --vulnerable / pip-audit）
+      - 若 scope 含 sast：SQL 注入 / XSS / IDOR / Path Traversal 全項稽核
+      - 若 scope 含 headers：CORS / HSTS / Cookie HttpOnly+SameSite 配置驗證
+      - Logger 設定遮罩驗證：敏感欄位無外洩
+      - 嚴重度為 CRITICAL / HIGH 的漏洞已詳列；MEDIUM 以下需於報告中列出修復建議與優先序
+    on_fail: escalate_user
+    fallback:
+      when: ["security_audit_report.severity == CRITICAL"]
+    timeout_seconds: 900
+    input_mode: full
+    output_tier: governance_report
+    notes:
+      - 與 qa_testing step 平行。
+      - CRITICAL 漏洞發現時建議立即升級給使用者，由 supervisor 開新 fix task 走 implementation-pipeline 的子集流程修復後，再重跑本 workflow 確認。
+
+  - id: qa_audit
+    name: Cross-Layer Verification Consistency Audit
+    capability: code_structure_audit
+    executor: ai
+    needs: [qa_testing, security_audit]
+    inputs:
+      - prd_document
+      - tech_plan_document
+      - ba_spec
+      - schema_ssot
+      - api_contract
+      - ui_spec
+      - frontend_codebase
+      - backend_codebase
+      - qa_test_suite
+      - qa_report
+      - security_audit_report
+    outputs:
+      - qa_audit_report
+    done_when:
+      - 跨層一致性矩陣：spec ↔ code ↔ test ↔ qa_report ↔ security_report 對齊（至少 6 個核心概念 × 5 層）
+      - QA 測試覆蓋對齊 ba_spec 的核心使用者流程（無覆蓋遺漏）
+      - Security 風險對齊 spec 的 stop_conditions（無未列風險）
+      - QA 與 Security 之間無互相矛盾結論（如 QA PASS 但 Security 標出該功能違反 spec）
+      - 若 qa_report 或 security_report 任一為 FAIL，本 step 必須將其升級為 BLOCKING 並建議下一步路徑（fix task / troubleshoot / 忽略）
+      - verdict 明確（PASS / PASS_WITH_NOTES / FAIL）
+    on_fail: escalate_user
+    fallback:
+      when: ["qa_audit_report.verdict == FAIL"]
+    timeout_seconds: 600
+    input_mode: full
+    output_tier: governance_report
+    notes:
+      - 本 step 是本 workflow 唯一的 watcher milestone gate。
+      - PASS_WITH_NOTES 可放行；NOTES 收錄入 archive，建議於下一輪 implementation-pipeline 或 hotfix task 處理。
+
+  - id: archive
+    name: Archive QA Verification Outputs and Findings
+    capability: technical_logging
+    executor: ai
+    needs: [qa_audit]
+    inputs:
+      - task_constitution
+      - qa_test_suite
+      - qa_report
+      - security_audit_report
+      - qa_audit_report
+    outputs:
+      - task_archive
+    done_when:
+      - _archive.md 已產出，含驗證範圍（verification_scope）、qa / security / qa_audit 三份報告摘要、發現項目分級（CRITICAL / HIGH / MEDIUM / LOW / NOTES）、建議下一步路徑
+      - trace.jsonl 已附上 task_closed 事件，含 budget 使用統計與 watcher_gates_passed
+      - 若有 BLOCKING 發現，已建議：(1) 開 hotfix task 走 implementation-pipeline 子集流程；或 (2) 跑 troubleshooting workflow（如未來支援）；或 (3) escalate_user 等待人工裁決
+      - 已標明若所有發現均為 PASS_WITH_NOTES 或 PASS，可繼續走 release（version-control workflow / GitHub Releases）
+    on_fail: halt
+    timeout_seconds: 300
+    input_mode: full
+    output_tier: governance_report
+    notes:
+      - archive step 由 supervisor in-line 執行，不消耗 sub-agent budget。
+      - 本 workflow 的 archive 與 implementation-pipeline 的 archive 不衝突；兩者各自結案各自的 task_id；下游可選擇是否同時讀兩份。
