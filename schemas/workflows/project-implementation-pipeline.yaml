@@ -1,0 +1,293 @@
+workflow_id: project-implementation-pipeline
+version: 1
+name: Project Implementation Pipeline
+summary: |
+  把已通過 project-spec-pipeline 的專案，從規格層推進到可部署的實作層。
+  流程依 goal_stage: implementation_and_verification 展開為 init_task → (frontend ∥ backend) → (qa_testing ∥ security_audit) → devops_packaging → impl_audit → archive 八步，
+  最終於 ~/.cap/projects/<id>/ 留下 frontend / backend codebase（含 unit tests）、qa 測試套件與報告、security 稽核報告、deployment artifacts 與 task archive。
+  本 workflow 是 per-stage workflow 系列的第二條（前置：project-spec-pipeline；後續：project-qa-pipeline 視需要）；
+  hard-依賴 spec-pipeline 的 11 個正式產出（PRD / TechPlan / BA / Schema / API / 6 設計資產），缺任一即拒絕啟動。
+owner: supervisor
+triggers:
+  - manual
+  - project-implementation
+  - new-impl-task
+
+artifacts:
+  task_constitution: Task Constitution（Type B）含 implementation 階段的 execution_plan / success_criteria / governance / budget；落地於 ~/.cap/projects/<id>/constitutions/task_<id>.json
+  frontend_codebase: 前端程式碼產出（依 spec layer 鎖定的框架與技術棧），含 components / pages / services / facades / mappers / domain models
+  frontend_unit_tests: 前端單元測試（per agent-skills/strategies/unit-test-frontend.md），與 codebase 同步交付
+  backend_codebase: 後端程式碼產出（依 spec layer 鎖定的框架），含 Domain / Application / Infrastructure / WebAPI 四層
+  backend_unit_tests: 後端單元測試（per agent-skills/strategies/unit-test-backend.md），與 codebase 同步交付
+  qa_test_suite: QA 自動化測試腳本（API integration + Playwright E2E + k6 perf + Lighthouse audit）
+  qa_report: QA 測試執行報告，含指標達成率、Lighthouse 四大分數、性能門檻達標狀態
+  security_audit_report: 安全稽核報告，覆蓋 SAST / 機敏資訊 / IDOR / XSS / Auth boundary / 安全標頭等檢核項
+  deployment_artifacts: 部署產物（Dockerfile / docker-compose / k8s yaml / Tauri bundle / GitHub Releases workflow 等視 spec 層拍板而異）
+  impl_audit_report: Watcher 終局 gate 報告，覆蓋 spec ↔ code ↔ test ↔ deployment 四層一致性矩陣
+  task_archive: 結案摘要（_archive.md）+ trace.jsonl 收尾事件 + cap promote 建議路徑
+
+governance:
+  watcher_mode: milestone_gate
+  watcher_checkpoints: [frontend, backend, impl_audit]
+  logger_mode: milestone_log
+  logger_checkpoints: [init_task, frontend, backend, qa_testing, security_audit, devops_packaging, impl_audit, archive]
+  context_mode: summary_first
+  goal_stage: implementation_and_verification
+  halt_on_missing_handoff: true
+  required_upstream_artifacts:
+    - prd_document
+    - tech_plan_document
+    - ba_spec
+    - schema_ssot
+    - api_contract
+    - ui_spec
+    - ui_design_assets
+
+steps:
+  - id: init_task
+    name: Derive Implementation Task Constitution
+    capability: task_constitution_planning
+    executor: ai
+    needs: []
+    inputs:
+      - project_constitution
+      - user_intent
+      - goal_stage_hint
+      - prior_spec_artifacts
+    outputs:
+      - task_constitution
+    done_when:
+      - 已驗證 project-spec-pipeline 11 個正式產出齊備（缺任一即 halt 並回報 needs_data）
+      - goal_stage 已選定為 implementation_and_verification 並對應展開 8 步 execution_plan
+      - execution_plan 中每個 step 已指定 step_id / target_capability / bound_to / needs（依賴關係）
+      - budget 已估算（建議 8-10 sub-agent sessions，archive 由 supervisor in-line 不消耗）
+      - task constitution 已寫入 ~/.cap/projects/<project_id>/constitutions/task_<task_id>.json
+      - 若 spec_audit 留有 NON-BLOCKING NOTES，已在 task constitution 中標記為「實作期應對齊或忽略」並指明處置方式
+    on_fail: halt
+    timeout_seconds: 600
+    input_mode: full
+    output_tier: planning_artifact
+    notes:
+      - 本 step 不允許在 spec layer 缺漏的情況下啟動；若 spec-pipeline 未完成或 spec_audit 為 FAIL，必須先回 spec-pipeline 修復。
+      - cap promote 應於本 step 啟動前完成（spec 產出已升級至 repo SSOT），確保下游實作步驟讀的是 repo 真理而非 runtime 快照。
+
+  - id: frontend
+    name: Frontend Implementation
+    capability: frontend_implementation
+    executor: ai
+    needs: [init_task]
+    inputs:
+      - ui_spec
+      - ui_design_assets
+      - api_contract
+      - ba_spec
+      - task_constitution
+    outputs:
+      - frontend_codebase
+      - frontend_unit_tests
+    done_when:
+      - 對應 spec layer 鎖定的框架（Tauri 殼 / Next.js / Angular / Nuxt 視 PRD 而定）已正確初始化專案結構
+      - DTO / Mapper / Service / Facade 分層完整，UI 不直接消費 Raw DTO
+      - 路由 / 頁面 / Section / Component 對齊 ui_spec 與 ui_design_assets（Tokens / Screens / Prototype）
+      - 6 類非同步狀態（Loading / Empty / Error / Disclaimer / Degraded / Success）已於關鍵流程實作
+      - 主要 CTA / 表單 / 狀態區塊已預埋 data-testid，供 QA 接手
+      - 單元測試（per unit-test-frontend.md）覆蓋 Mapper / Service / Facade 與關鍵 UI 組件，與原始碼同步提交
+      - 對應框架的特化規範（如 Angular 強制 Standalone + Signals、Next.js 強制 next/navigation 等）已遵守
+      - 機敏憑證一律不入 git；UI 端禁止 dangerouslySetInnerHTML / v-html
+    on_fail: halt
+    timeout_seconds: 1800
+    input_mode: full
+    output_tier: implementation_artifact
+    notes:
+      - watcher milestone gate 在本 step 完成後觸發，重點稽核：分層邊界 / 設計資產對齊 / 單元測試存在性 / 框架特化合規。
+      - 與 backend step 平行；兩者皆依賴 init_task 但彼此無依賴。
+
+  - id: backend
+    name: Backend Implementation
+    capability: backend_implementation
+    executor: ai
+    needs: [init_task]
+    inputs:
+      - schema_ssot
+      - api_contract
+      - ba_spec
+      - task_constitution
+    outputs:
+      - backend_codebase
+      - backend_unit_tests
+    done_when:
+      - 對應 spec layer 鎖定的後端框架（.NET Core / NestJS 視 PRD 而定）已正確初始化 Clean Architecture 四層結構
+      - Aggregate Root / Entity / Value Object 建模對齊 ba_spec 與 schema_ssot
+      - Application Service 透過 Unit of Work 管理事務邊界；嚴禁 Service 內 try-catch 後回錯誤碼
+      - 樂觀併發欄位（version / rowversion）依 schema_ssot 落地
+      - 全域異常 Middleware / Filter 統一捕獲為 ApiResponse；無 Stack Trace 外洩
+      - 統一回應格式（ApiResponse / PaginatedResponse）落實
+      - 健康探針（/api/health）與 metrics（/metrics）端點已實作（依 SRE 擴展要求）
+      - Migration 透過 ORM 代碼化，無手動 Schema 修改
+      - 單元測試（per unit-test-backend.md）覆蓋 Domain / Application / Mapper，外部依賴正確 Mock，與原始碼同步提交
+      - 機敏憑證透過環境變數 / OS Keychain 注入，禁止 plaintext 入 git
+    on_fail: halt
+    timeout_seconds: 1800
+    input_mode: full
+    output_tier: implementation_artifact
+    notes:
+      - watcher milestone gate 在本 step 完成後觸發，重點稽核：DDD 邊界 / Unit of Work 邊界 / 樂觀併發 / 異常統一 / 單元測試 Mock 隔離。
+      - 與 frontend step 平行。
+
+  - id: qa_testing
+    name: QA Integration / E2E / Performance / Lighthouse
+    capability: qa_testing
+    executor: ai
+    needs: [frontend, backend]
+    inputs:
+      - frontend_codebase
+      - backend_codebase
+      - api_contract
+      - ba_spec
+      - ui_spec
+    outputs:
+      - qa_test_suite
+      - qa_report
+    done_when:
+      - API 整合測試：Response Body 欄位 100% 對齊 api_contract；ApiResponse 包裹格式驗證通過；Happy / 異常狀態碼覆蓋
+      - E2E 測試：Playwright POM 模式，Locator 優先級 Role > TestId > Text，無 waitForTimeout，覆蓋 ba_spec 主要使用者流程
+      - 性能壓測：k6 thresholds p(95)<500ms / error_rate<1%；含併發競爭模擬（如有 version 欄位）
+      - 前端非功能性：Lighthouse 四大分數達標；如未達標，標明 LH_PERF_FAIL / LH_A11Y_FAIL 等分類
+      - 測試結果為 FAIL 時，附 trace.zip / 錯誤 Payload 截圖，並標記 SRE_TRIGGER（如為性能類）
+      - 全部測試腳本存於專案 tests/ 或 e2e/ 目錄；未污染業務原始碼
+    on_fail: route_back_to
+    fallback:
+      when: ["qa_report.verdict == FAIL"]
+    timeout_seconds: 1500
+    input_mode: full
+    output_tier: governance_report
+    notes:
+      - 與 security_audit step 平行；兩者皆依賴 frontend + backend 但彼此無依賴。
+      - 嚴禁修改業務邏輯代碼；僅產測試腳本與報告。
+      - SRE_TRIGGER 標記後，devops_packaging 仍可繼續，但 impl_audit 必須將其列為 NON-BLOCKING NOTES 帶入下一階段優化。
+
+  - id: security_audit
+    name: Security and Compliance Audit
+    capability: security_audit
+    executor: ai
+    needs: [frontend, backend]
+    inputs:
+      - frontend_codebase
+      - backend_codebase
+      - api_contract
+      - schema_ssot
+    outputs:
+      - security_audit_report
+    done_when:
+      - 機敏資訊掃描：嚴禁硬編碼 API_KEY / PASSWORD / JWT_SECRET 於 git 追蹤檔
+      - Logger 設定遮罩驗證：Password / 信用卡 / 身分證等敏感欄位無外洩到 log
+      - 數據輸入安全：SQL 嚴禁字串拼接，必須參數化；前端嚴禁 dangerouslySetInnerHTML / v-html 未經淨化
+      - Auth boundary：所有 API endpoint 預設掛 Guard / Middleware；公開 API 有白名單標註；最小權限原則
+      - IDOR 防禦：歸屬權校驗對齊 session.user_id（如為 multi-user 場景）
+      - 異常輸出：Exception Filter 不外洩 Stack Trace
+      - 安全標頭：CORS 白名單、HSTS、Cookie HttpOnly / SameSite 配置正確
+      - 嚴重度為 CRITICAL / HIGH 的漏洞為 0；MEDIUM 以下需於報告中列出修復建議
+    on_fail: route_back_to
+    fallback:
+      when: ["security_audit_report.severity == CRITICAL", "security_audit_report.severity == HIGH"]
+    timeout_seconds: 900
+    input_mode: full
+    output_tier: governance_report
+    notes:
+      - 與 qa_testing step 平行。
+      - CRITICAL / HIGH 漏洞必須先回流到 frontend / backend 修復後重審；不得進 devops_packaging。
+
+  - id: devops_packaging
+    name: Containerization and Deployment Artifacts
+    capability: devops_delivery
+    executor: ai
+    needs: [qa_testing, security_audit]
+    inputs:
+      - frontend_codebase
+      - backend_codebase
+      - qa_report
+      - security_audit_report
+      - tech_plan_document
+    outputs:
+      - deployment_artifacts
+    done_when:
+      - 部署產物對齊 spec layer 拍板的部署模式（桌面 binary / Docker container / k8s 等）
+      - Dockerfile 採多階段構建，最小化 production image，無 Build Tools 進 production
+      - 容器以非 root 使用者執行（如適用）
+      - 編排配置（docker-compose / k8s）含資源配額（CPU / Memory limits）、健康探針（liveness / readiness）、重啟策略
+      - 機敏資訊透過環境變數 / secrets 注入，禁止 hardcode
+      - CI/CD pipeline 腳本含 Security Scan / Lint / Build / Unit Test / Integration Test / Performance Gate 五階段，任一失敗即中斷
+      - 跨平台打包（如桌面 app）的特殊處理（macOS notarization / Windows code-sign / Linux glibc 相依）已備註於部署文件
+    on_fail: halt
+    timeout_seconds: 1200
+    input_mode: full
+    output_tier: implementation_artifact
+    notes:
+      - 本 step 為 sequential，必須等 qa + security 都過才啟動。
+      - 若 qa_report 含 SRE_TRIGGER 但非 FAIL，devops 仍可進；僅在 impl_audit 帶入 NOTES。
+
+  - id: impl_audit
+    name: Implementation-Layer Cross-Spec Consistency Audit
+    capability: code_structure_audit
+    executor: ai
+    needs: [devops_packaging]
+    inputs:
+      - prd_document
+      - tech_plan_document
+      - ba_spec
+      - schema_ssot
+      - api_contract
+      - ui_spec
+      - frontend_codebase
+      - backend_codebase
+      - qa_report
+      - security_audit_report
+      - deployment_artifacts
+    outputs:
+      - impl_audit_report
+    done_when:
+      - 跨層一致性矩陣：spec ↔ code ↔ test ↔ deployment 四層核心概念對齊（至少 8 個概念 × 4 層）
+      - DDD 邊界、Aggregate Root 守門、Domain Event 觸發鏈在 backend code 中落實
+      - UI 設計資產對齊度：實作 UI 與 ui_design_assets 的 Tokens / Screens 視覺對齊
+      - 框架特化合規（前端：Standalone / Signals / 路由 API；後端：DI / 異常統一 / 樂觀併發）
+      - 單元測試存在性與 Mock 隔離合規（per unit-test-*.md 策略）
+      - QA 報告與 security 報告均為 PASS 或 PASS_WITH_NOTES
+      - verdict 明確（PASS / PASS_WITH_NOTES / FAIL）；FAIL 時每條 alert 標明修復責任 agent 與引用位置
+    on_fail: route_back_to
+    fallback:
+      when: ["impl_audit_report.verdict == FAIL"]
+    timeout_seconds: 900
+    input_mode: full
+    output_tier: governance_report
+    notes:
+      - 本 step 是進入發布期前的最後一道品質門禁。
+      - PASS_WITH_NOTES 可放行，但 NOTES 必須在 archive step 收錄入 _archive.md，並建議於後續迭代處理。
+
+  - id: archive
+    name: Archive Implementation Outputs and Decisions
+    capability: technical_logging
+    executor: ai
+    needs: [impl_audit]
+    inputs:
+      - task_constitution
+      - frontend_codebase
+      - backend_codebase
+      - qa_test_suite
+      - qa_report
+      - security_audit_report
+      - deployment_artifacts
+      - impl_audit_report
+    outputs:
+      - task_archive
+    done_when:
+      - _archive.md 已產出，含實作達成情況、跨平台打包驗證結果、qa / security 報告摘要、impl_audit notes、產出檔案總覽、發布期建議
+      - trace.jsonl 已附上 task_closed 事件，含 budget 使用統計與 watcher_gates_passed 三次（frontend / backend / impl_audit）
+      - 已提示使用者透過 cap promote 將 frontend / backend codebase 與 deployment_artifacts 升級至 repo（codebase 通常已直接提交至 src/，僅 deployment 配置與 CI/CD 腳本需 promote）
+      - 已標明若需發布，建議走 version-control workflow + GitHub Releases / cap workflow run release
+    on_fail: halt
+    timeout_seconds: 300
+    input_mode: full
+    output_tier: governance_report
+    notes:
+      - archive step 由 supervisor in-line 執行，不消耗 sub-agent budget。
+      - 結案後 task constitution 標記 status: completed；同 project 下次再跑此 workflow 會建立新的 task_id（例如修 bug 或加 feature）。
