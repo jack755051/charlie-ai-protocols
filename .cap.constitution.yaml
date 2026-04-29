@@ -102,6 +102,7 @@ binding_policy:
     - prd_generation
     - workflow_orchestration
     - task_constitution_planning
+    - task_constitution_persistence
     - handoff_ticket_emit
     - technical_planning
     - technical_review

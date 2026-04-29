@@ -225,11 +225,11 @@ fi
 
 ticket_path="${ticket_payload#OK:}"
 
-printf 'condition: ok\n'
-printf 'target_step_id: %s\n' "${target_step_id}"
-printf 'ticket_path: %s\n' "${ticket_path}"
-printf '\n'
-printf '## Output Artifacts\n\n'
-printf '- name=handoff_ticket path=%s\n' "${ticket_path}"
+printf -- 'condition: ok\n'
+printf -- 'target_step_id: %s\n' "${target_step_id}"
+printf -- 'ticket_path: %s\n' "${ticket_path}"
+printf -- '\n'
+printf -- '## Output Artifacts\n\n'
+printf -- '- name=handoff_ticket path=%s\n' "${ticket_path}"
 
 exit 0

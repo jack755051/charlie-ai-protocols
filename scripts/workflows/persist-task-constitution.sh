@@ -106,30 +106,40 @@ extract_task_constitution_json() {
 }
 
 validate_and_extract_ids() {
-  local json_payload="$1"
-  printf '%s' "${json_payload}" | "${PYTHON_BIN}" -c '
+  # Validate the task constitution JSON and emit "<project_id>|<task_id>" on
+  # stdout when valid. Errors go to stderr and are surfaced via exit code:
+  #   0  ok
+  #   2  JSON parse error
+  #   3  missing required field
+  #   4  invalid goal_stage
+  printf '%s' "$1" | "${PYTHON_BIN}" -c '
 import json
 import sys
 
+raw = sys.stdin.read()
 try:
-    data = json.load(sys.stdin)
+    data = json.loads(raw)
 except json.JSONDecodeError as e:
-    print(f"PARSE_ERROR:{e}", file=sys.stderr)
+    sys.stderr.write(f"PARSE_ERROR:{e}\n")
     raise SystemExit(2)
 
 required = ["task_id", "project_id", "goal", "goal_stage", "success_criteria"]
 missing = [k for k in required if k not in data or data[k] in (None, "", [])]
 if missing:
-    print(f"MISSING_REQUIRED:{','.join(missing)}", file=sys.stderr)
+    missing_list = ",".join(missing)
+    sys.stderr.write(f"MISSING_REQUIRED:{missing_list}\n")
     raise SystemExit(3)
 
 allowed_stages = {"informal_planning", "formal_specification",
                   "implementation_preparation", "implementation_and_verification"}
-if data["goal_stage"] not in allowed_stages:
-    print(f"INVALID_GOAL_STAGE:{data[\"goal_stage\"]}", file=sys.stderr)
+goal_stage = data["goal_stage"]
+if goal_stage not in allowed_stages:
+    sys.stderr.write(f"INVALID_GOAL_STAGE:{goal_stage}\n")
     raise SystemExit(4)
 
-print(f"{data[\"project_id\"]}|{data[\"task_id\"]}")
+project_id = data["project_id"]
+task_id = data["task_id"]
+sys.stdout.write(f"{project_id}|{task_id}\n")
 '
 }
 
@@ -155,19 +165,19 @@ if [ -z "${json_payload}" ]; then
   fail_with "no_json_in_draft" "neither <<<TASK_CONSTITUTION_JSON>>> fence nor json fence found in ${draft_path}"
 fi
 
-ids="$(validate_and_extract_ids "${json_payload}" 2>&1 1>&3)"
-exec 3>&-
+# Capture stdout+stderr into separate streams via a temp file for stderr.
+tmp_err="$(mktemp -t persist-task-constitution.err.XXXXXX)"
+trap 'rm -f "${tmp_err}"' EXIT
+ids="$(validate_and_extract_ids "${json_payload}" 2>"${tmp_err}")"
 validation_rc=$?
 if [ ${validation_rc} -ne 0 ]; then
-  fail_with "validation_failed" "${ids}"
+  err_msg="$(cat "${tmp_err}")"
+  fail_with "validation_failed" "${err_msg}" "rc=${validation_rc}"
 fi
-ids="$(printf '%s' "${json_payload}" | "${PYTHON_BIN}" -c '
-import json, sys
-data = json.load(sys.stdin)
-print(f"{data[\"project_id\"]}|{data[\"task_id\"]}")
-')"
+
 project_id="${ids%%|*}"
 task_id="${ids##*|}"
+task_id="${task_id%$'\n'}"  # strip trailing newline if any
 
 if [ -z "${project_id}" ] || [ -z "${task_id}" ]; then
   fail_with "missing_ids" "project_id=${project_id} task_id=${task_id}"
@@ -181,21 +191,25 @@ target_path="${target_dir}/${task_id}.json"
 printf '%s' "${json_payload}" > "${target_path}" || fail_with "write_failed" "${target_path}"
 
 # Pretty-print via python for stable formatting
-"${PYTHON_BIN}" -c '
-import json, sys
-with open(sys.argv[1]) as f:
-    data = json.load(f)
-with open(sys.argv[1], "w") as f:
-    json.dump(data, f, ensure_ascii=False, indent=2, sort_keys=False)
-    f.write("\n")
-' "${target_path}" || true
+"${PYTHON_BIN}" - "${target_path}" <<'PY'
+import json
+import sys
+from pathlib import Path
 
-printf 'condition: ok\n'
-printf 'task_id: %s\n' "${task_id}"
-printf 'project_id: %s\n' "${project_id}"
-printf 'persisted_path: %s\n' "${target_path}"
-printf '\n'
-printf '## Output Artifacts\n\n'
-printf '- name=task_constitution path=%s\n' "${target_path}"
+path = Path(sys.argv[1])
+data = json.loads(path.read_text(encoding="utf-8"))
+path.write_text(
+    json.dumps(data, ensure_ascii=False, indent=2, sort_keys=False) + "\n",
+    encoding="utf-8",
+)
+PY
+
+printf -- 'condition: ok\n'
+printf -- 'task_id: %s\n' "${task_id}"
+printf -- 'project_id: %s\n' "${project_id}"
+printf -- 'persisted_path: %s\n' "${target_path}"
+printf -- '\n'
+printf -- '## Output Artifacts\n\n'
+printf -- '- name=task_constitution path=%s\n' "${target_path}"
 
 exit 0
