@@ -68,6 +68,33 @@ capabilities:
       - 已寫入 ~/.cap/projects/<project_id>/constitutions/task_<task_id>.json
       - 若 user_intent 對某 required 欄位資訊不足，已標記 needs_data 並停止，不擅自假設
 
+  handoff_ticket_emit:
+    description: |
+      在每個 sub-agent step 派工前，由 supervisor（或對應 deterministic 步驟）依 task constitution 中的 execution_plan 條目展開單一 step 的 handoff ticket（Type C，依 schemas/handoff-ticket.schema.yaml），落地到 ~/.cap/projects/<id>/handoffs/<step_id>.ticket.json。
+      ticket 是給 RuntimeBinder 與 sub-agent 共讀的工作單，含 target_capability / rules_to_load / context_payload / acceptance_criteria / output_expectations / governance / failure_routing 等欄位。
+      ticket 的存在讓派工痕跡從 Agent prompt 字串提升為磁碟上可審計、可重跑、跨 runtime（Claude / Codex / CrewAI）共用的檔案；同時讓 cap CLI 可預覽即將下發的工作單內容。
+      設計鐵則：
+        - ticket 必須在 RuntimeBinder spawn sub-agent 之前已落地；spawn 失敗時 ticket 不刪除，作為審計痕跡。
+        - 重跑同 step 時 ticket_id 的 seq 遞增，舊 ticket 保留。
+        - context_payload 預設走 summary-first（只塞 upstream handoff summary），audit 類 step 才允許走 full_artifact。
+    default_agent: supervisor
+    allowed_agents: [supervisor]
+    inputs:
+      - task_constitution
+      - target_step_id
+      - upstream_handoff_summaries
+    outputs:
+      - handoff_ticket
+    done_when:
+      - 已從 task constitution 的 execution_plan 中抽出 target_step_id 的條目
+      - ticket 完整對齊 schemas/handoff-ticket.schema.yaml 的 required 欄位
+      - rules_to_load 已指定主 agent_skill 路徑 + 必要 strategies / policies
+      - context_payload 預設走 summary-first；如需 full_artifact 已明確列出 upstream_full_artifacts
+      - acceptance_criteria 對齊 capability 的 done_when + step 特定補強
+      - failure_routing 已指定 on_fail（halt / route_back_to / retry / escalate_user）
+      - ticket 已寫入 ~/.cap/projects/<project_id>/handoffs/<step_id>.ticket.json
+      - 若 task constitution 中該 step 已標 status: completed，拒絕重複 emit（除非 force=true）
+
   prompt_outline_normalize:
     description: |
       把使用者一段或一句的自由 prompt，依目標 schema 拆解成「scalar 欄位草稿 / array 欄位草稿 / object 欄位草稿 / Markdown 敘事補充」四個分流，避免下游 draft 階段把多層次資訊塞錯欄位（例如把多目標、能力清單、out-of-scope 全壓進 type:string 的 project_goal 而踩 schema halt）。
