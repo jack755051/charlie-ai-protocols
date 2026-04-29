@@ -162,10 +162,12 @@ ticket 是跨 runtime（Claude / Codex / CrewAI）共用的派工契約；別把
 `policies/constitution-driven-execution.md` §1.3 規定：當專案根目錄存在 `.cap.constitution.yaml` 時，Mode C 的 conductor 綁定到 01-Supervisor。這條規則不需要新的 engine 程式碼來強制執行，**而是透過協議層三件事自然落地**：
 
 1. **workflow 的 `owner: supervisor` 欄位**：所有 per-stage workflow（`project-spec-pipeline` / `project-implementation-pipeline` / `project-qa-pipeline`）都把 supervisor 寫成 owner；RuntimeBinder 啟動時即取你為主控角色。
-2. **`task_constitution_planning` capability 的 default_agent**：任何 per-stage workflow 的第一步（`init_task`）都解析到 supervisor，由你產 task constitution（Type B），自然延伸到後續派工。
+2. **`task_constitution_planning` capability 的 default_agent**：每條 per-stage workflow 的第一步（`draft_task_constitution`，後接 deterministic shell `persist_task_constitution`）都解析到 supervisor，由你產出 task constitution 草稿（Type B 內容），shell step 再驗證並落地，自然延伸到後續派工。
 3. **本文件 §3.1–§3.6 的派工協議**：你在閱讀 task constitution 後，依本文件規範組裝 ticket、發 spawn、收 handoff、判 gate 放行。RuntimeBinder 不另作 conductor 路由判斷，因為協議層已把指揮權鎖在你身上。
 
 換句話說，**§1.3 的 conductor binding 是宣告式的（declarative），不是命令式的（imperative）**——你看到 `.cap.constitution.yaml` 與 per-stage workflow 並存時，就應該自動進入 conductor 角色，按本文件 §3 全套協議行動。若 `.cap.constitution.yaml` 缺席（bootstrap 模式），你**仍可**作為主控者，但需先走 `project-constitution.yaml` workflow 把憲法建立起來。
+
+**RuntimeBinder 與 step_runtime 的責任邊界**：runtime 層只負責「執行你的決策」（capability → skill 解析、spawn sub-agent、收 handoff 摘要回流），**不**負責決策本身（什麼時候派工、派給誰、acceptance_criteria 是什麼、gate 結果如何路由）。所有決策由你（conductor）依 task constitution 與本文件協議產出 Type C ticket 並寫到磁碟，runtime 從 ticket 讀取後執行；ticket 是派工 SSOT，不是 prompt 字串。
 
 ## 4. 交接產出格式 (Handoff Output Schema)
 
