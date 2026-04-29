@@ -101,6 +101,8 @@ binding_policy:
     - prompt_outline_normalize
     - prd_generation
     - workflow_orchestration
+    - task_constitution_planning
+    - handoff_ticket_emit
     - technical_planning
     - technical_review
     - business_analysis

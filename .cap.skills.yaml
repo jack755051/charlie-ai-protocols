@@ -22,6 +22,8 @@ skills:
       - project_constitution
       - constitution_reconciliation
       - prompt_outline_normalize
+      - task_constitution_planning
+      - handoff_ticket_emit
     fallback_roles:
       - supervisor
 
