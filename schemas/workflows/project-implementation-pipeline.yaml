@@ -3,7 +3,7 @@ version: 1
 name: Project Implementation Pipeline
 summary: |
   把已通過 project-spec-pipeline 的專案，從規格層推進到可部署的實作層。
-  流程依 goal_stage: implementation_and_verification 展開為 init_task → (frontend ∥ backend) → (qa_testing ∥ security_audit) → devops_packaging → impl_audit → archive 八步，
+  流程依 goal_stage: implementation_and_verification 展開為 draft_task_constitution → persist_task_constitution → (frontend ∥ backend) → (qa_testing ∥ security_audit) → devops_packaging → impl_audit → archive 九步，
   最終於 ~/.cap/projects/<id>/ 留下 frontend / backend codebase（含 unit tests）、qa 測試套件與報告、security 稽核報告、deployment artifacts 與 task archive。
   本 workflow 是 per-stage workflow 系列的第二條（前置：project-spec-pipeline；後續：project-qa-pipeline 視需要）；
   hard-依賴 spec-pipeline 的 11 個正式產出（PRD / TechPlan / BA / Schema / API / 6 設計資產），缺任一即拒絕啟動。
@@ -14,6 +14,7 @@ triggers:
   - new-impl-task
 
 artifacts:
+  task_constitution_draft: Task Constitution 草稿（Markdown + 內嵌 JSON），由 supervisor 在 draft_task_constitution step 產出供 persist step 抓取
   task_constitution: Task Constitution（Type B）含 implementation 階段的 execution_plan / success_criteria / governance / budget；落地於 ~/.cap/projects/<id>/constitutions/task_<id>.json
   frontend_codebase: 前端程式碼產出（依 spec layer 鎖定的框架與技術棧），含 components / pages / services / facades / mappers / domain models
   frontend_unit_tests: 前端單元測試（per agent-skills/strategies/unit-test-frontend.md），與 codebase 同步交付
@@ -30,7 +31,7 @@ governance:
   watcher_mode: milestone_gate
   watcher_checkpoints: [frontend, backend, impl_audit]
   logger_mode: milestone_log
-  logger_checkpoints: [init_task, frontend, backend, qa_testing, security_audit, devops_packaging, impl_audit, archive]
+  logger_checkpoints: [draft_task_constitution, persist_task_constitution, frontend, backend, qa_testing, security_audit, devops_packaging, impl_audit, archive]
   context_mode: summary_first
   goal_stage: implementation_and_verification
   halt_on_missing_handoff: true
@@ -44,8 +45,8 @@ governance:
     - ui_design_assets
 
 steps:
-  - id: init_task
-    name: Derive Implementation Task Constitution
+  - id: draft_task_constitution
+    name: Draft Implementation Task Constitution
     capability: task_constitution_planning
     executor: ai
     needs: []
@@ -55,13 +56,13 @@ steps:
       - goal_stage_hint
       - prior_spec_artifacts
     outputs:
-      - task_constitution
+      - task_constitution_draft
     done_when:
       - 已驗證 project-spec-pipeline 11 個正式產出齊備（缺任一即 halt 並回報 needs_data）
-      - goal_stage 已選定為 implementation_and_verification 並對應展開 8 步 execution_plan
+      - goal_stage 已選定為 implementation_and_verification 並對應展開 execution_plan
       - execution_plan 中每個 step 已指定 step_id / target_capability / bound_to / needs（依賴關係）
       - budget 已估算（建議 8-10 sub-agent sessions，archive 由 supervisor in-line 不消耗）
-      - task constitution 已寫入 ~/.cap/projects/<project_id>/constitutions/task_<task_id>.json
+      - 草稿以 markdown + 內嵌 <<<TASK_CONSTITUTION_JSON_BEGIN>>> ... <<<TASK_CONSTITUTION_JSON_END>>> fence 方式輸出供下游 persist step 抓取
       - 若 spec_audit 留有 NON-BLOCKING NOTES，已在 task constitution 中標記為「實作期應對齊或忽略」並指明處置方式
     on_fail: halt
     timeout_seconds: 600
@@ -71,11 +72,31 @@ steps:
       - 本 step 不允許在 spec layer 缺漏的情況下啟動；若 spec-pipeline 未完成或 spec_audit 為 FAIL，必須先回 spec-pipeline 修復。
       - cap promote 應於本 step 啟動前完成（spec 產出已升級至 repo SSOT），確保下游實作步驟讀的是 repo 真理而非 runtime 快照。
 
+  - id: persist_task_constitution
+    name: Persist Implementation Task Constitution
+    capability: task_constitution_persistence
+    executor: shell
+    script: scripts/workflows/persist-task-constitution.sh
+    needs: [draft_task_constitution]
+    inputs:
+      - task_constitution_draft
+    outputs:
+      - task_constitution
+    done_when:
+      - 已從 draft 抓取 JSON 區段並通過 minimal validation
+      - 已寫入 ~/.cap/projects/<project_id>/constitutions/<task_id>.json
+    on_fail: halt
+    timeout_seconds: 60
+    input_mode: full
+    output_tier: machine_metadata
+    notes:
+      - 純 deterministic shell；不允許 AI fallback。
+
   - id: frontend
     name: Frontend Implementation
     capability: frontend_implementation
     executor: ai
-    needs: [init_task]
+    needs: [persist_task_constitution]
     inputs:
       - ui_spec
       - ui_design_assets
@@ -100,13 +121,13 @@ steps:
     output_tier: implementation_artifact
     notes:
       - watcher milestone gate 在本 step 完成後觸發，重點稽核：分層邊界 / 設計資產對齊 / 單元測試存在性 / 框架特化合規。
-      - 與 backend step 平行；兩者皆依賴 init_task 但彼此無依賴。
+      - 與 backend step 平行；兩者皆依賴 persist_task_constitution 但彼此無依賴。
 
   - id: backend
     name: Backend Implementation
     capability: backend_implementation
     executor: ai
-    needs: [init_task]
+    needs: [persist_task_constitution]
     inputs:
       - schema_ssot
       - api_contract

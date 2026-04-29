@@ -3,7 +3,7 @@ version: 1
 name: Project Specification Pipeline
 summary: |
   把已有 .cap.constitution.yaml 的專案，從憲法骨架推進到完整可實作的規格層。
-  流程依 goal_stage: formal_specification 展開為 init_task → prd → tech_plan → ba → (dba_api ∥ ui) → spec_audit → archive 八步，
+  流程依 goal_stage: formal_specification 展開為 draft_task_constitution → persist_task_constitution → prd → tech_plan → ba → (dba_api ∥ ui) → spec_audit → archive 九步，
   最終於 ~/.cap/projects/<id>/ 留下 task constitution、5 份規格 + 6 份設計資產、2 份 watcher gate report 與 task archive。
   本 workflow 是 per-stage workflow 系列的第一條（後續：project-implementation-pipeline / project-qa-pipeline），
   用以把 supervisor 在 Mode C 中的派工迴圈固化為可被 cap CLI 顯示步驟與計時的執行單元。
@@ -14,6 +14,7 @@ triggers:
   - new-spec-task
 
 artifacts:
+  task_constitution_draft: Task Constitution 草稿（Markdown + 內嵌 JSON），由 supervisor 在 draft_task_constitution step 產出供 persist step 抓取
   task_constitution: Task Constitution（Type B）含 execution_plan / success_criteria / governance / budget；落地於 ~/.cap/projects/<id>/constitutions/task_<id>.json
   prd_document: Product Requirements Document（v0.x），由 supervisor 直接草擬；技術棧鎖定後不留 TBD
   tech_plan_document: 技術執行計畫（v0.x），含模組層選型 / 風險 / 聚焦決策 / 下游 BA / DBA / UI 建議
@@ -29,14 +30,14 @@ governance:
   watcher_mode: milestone_gate
   watcher_checkpoints: [tech_plan, spec_audit]
   logger_mode: milestone_log
-  logger_checkpoints: [init_task, prd, tech_plan, ba, dba_api, ui, spec_audit, archive]
+  logger_checkpoints: [draft_task_constitution, persist_task_constitution, prd, tech_plan, ba, dba_api, ui, spec_audit, archive]
   context_mode: summary_first
   goal_stage: formal_specification
   halt_on_missing_handoff: true
 
 steps:
-  - id: init_task
-    name: Derive Task Constitution from Project Constitution
+  - id: draft_task_constitution
+    name: Draft Task Constitution from Project Constitution
     capability: task_constitution_planning
     executor: ai
     needs: []
@@ -45,13 +46,13 @@ steps:
       - user_intent
       - goal_stage_hint
     outputs:
-      - task_constitution
+      - task_constitution_draft
     done_when:
       - 已讀取專案根目錄的 .cap.constitution.yaml 並對齊 allowed_agents / allowed_capabilities / stop_conditions
-      - goal_stage 已選定為 formal_specification 並對應展開 8 步 execution_plan
+      - goal_stage 已選定為 formal_specification 並對應展開 execution_plan
       - execution_plan 中每個 step 已指定 step_id / target_capability / bound_to / needs（依賴關係）
       - budget 已估算（建議 6-7 sub-agent sessions，archive 由 supervisor in-line 不消耗）
-      - task constitution 已寫入 ~/.cap/projects/<project_id>/constitutions/task_<task_id>.json
+      - 草稿以 markdown + 內嵌 <<<TASK_CONSTITUTION_JSON_BEGIN>>> ... <<<TASK_CONSTITUTION_JSON_END>>> fence 方式輸出供下游 persist step 抓取
       - 若 user_intent 對某 required 欄位資訊不足，已標記 needs_data 並 halt
     on_fail: halt
     timeout_seconds: 600
@@ -60,12 +61,36 @@ steps:
     notes:
       - 本 step 是後續所有派工的依據；handoff ticket（Type C）由 supervisor 在後續 step 派工前依此 task constitution 展開。
       - 嚴守憲法 stop_conditions；若 user_intent 與憲法 constraint 衝突，halt 並回報，不擅自越界。
+      - 不直接寫檔案到 ~/.cap/，由下游 persist_task_constitution step 負責持久化。
+
+  - id: persist_task_constitution
+    name: Persist Task Constitution to Runtime Workspace
+    capability: task_constitution_persistence
+    executor: shell
+    script: scripts/workflows/persist-task-constitution.sh
+    needs: [draft_task_constitution]
+    inputs:
+      - task_constitution_draft
+    outputs:
+      - task_constitution
+    done_when:
+      - 已從 draft 抓取 JSON 區段
+      - required 欄位齊全（task_id / project_id / goal / goal_stage / success_criteria）
+      - goal_stage 落在 enum 內
+      - 已寫入 ~/.cap/projects/<project_id>/constitutions/<task_id>.json
+    on_fail: halt
+    timeout_seconds: 60
+    input_mode: full
+    output_tier: machine_metadata
+    notes:
+      - 純 deterministic shell；不允許 AI fallback。
+      - 寫入失敗時整個 task halt，由操作者調查；上游 draft 仍保留於 workflow output dir 可重跑。
 
   - id: prd
     name: Produce Product Requirements Document
     capability: prd_generation
     executor: ai
-    needs: [init_task]
+    needs: [persist_task_constitution]
     inputs:
       - task_constitution
       - project_constitution

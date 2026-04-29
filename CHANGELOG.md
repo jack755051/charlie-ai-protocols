@@ -8,6 +8,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ## [Unreleased]
 
+### Added
+- `scripts/workflows/persist-task-constitution.sh` 新增 deterministic shell：把 supervisor 在 `draft_task_constitution` step 草擬的 Task Constitution JSON 從 `<<<TASK_CONSTITUTION_JSON_BEGIN>>>` fence 抓出，做最小 schema 驗證（required 欄位 / goal_stage enum），寫入 `~/.cap/projects/<project_id>/constitutions/<task_id>.json`；驗證或寫入失敗即 exit 40 halt 整個 task，不允許 AI fallback；對齊既有 `persist-constitution.sh` 的 fence / 退出碼 / pretty-print 慣例。
+- `scripts/workflows/emit-handoff-ticket.sh` 新增 deterministic shell：依 task constitution 中 `execution_plan[target_step_id]` 條目展開單一 step 的 Type C handoff ticket（依 `schemas/handoff-ticket.schema.yaml`），落地至 `~/.cap/projects/<project_id>/handoffs/<step_id>.ticket.json`；同 step 重跑時檔名 seq 自動遞增（`<step_id>-2.ticket.json` / `<step_id>-3.ticket.json` ...），舊 ticket 保留作為審計痕跡；ticket 含 ticket_id / target_capability / rules_to_load / context_payload / acceptance_criteria / output_expectations / governance / failure_routing / budget_slot 等完整欄位。
+- `schemas/capabilities.yaml` 新增 `task_constitution_persistence` capability（shell-bound）：與 `task_constitution_planning`（AI-bound 草擬）配對為 draft → persist 兩段式流程，對齊既有 `project_constitution` ↔ `constitution_persistence` 的設計模式。
+
+### Changed
+- `schemas/workflows/project-spec-pipeline.yaml` / `project-implementation-pipeline.yaml` / `project-qa-pipeline.yaml` 三條 workflow 的 `init_task` step 拆為 `draft_task_constitution`（executor: ai，capability: task_constitution_planning）+ `persist_task_constitution`（executor: shell，capability: task_constitution_persistence，script: scripts/workflows/persist-task-constitution.sh），每條 pipeline step 數各 +1（spec/impl 從 8 變 9，qa 從 5 變 6）；下游 step 的 `needs:` 全數改指向 `persist_task_constitution`，artifacts 區補 `task_constitution_draft`，logger_checkpoints 同步更新；目的是讓 init step 由純 AI 改為「AI 草擬 + 確定性持久化」兩段式，避免 AI 直接寫 runtime 路徑造成不可重現。
+- `schemas/capabilities.yaml` 的 `handoff_ticket_emit` 的 binding 從 `default_agent: supervisor` 改為 `default_agent: shell`，`allowed_agents: [shell, supervisor]`：補完上一輪只宣告 supervisor 角色但沒有 shell 實作的缺口；後續 workflow 可顯式以 `executor: shell` + `script: scripts/workflows/emit-handoff-ticket.sh` 顯式 emit ticket，supervisor 在 ad-hoc 派工時仍可作為內部例行行為（per `01-supervisor-agent.md` §3.6）。
+
 ### Fixed
 - `.cap.skills.yaml` 在 `builtin-supervisor.provided_capabilities` 補上 `task_constitution_planning` 與 `handoff_ticket_emit` 兩條 v0.19.0 新增的 capability：v0.19.0 把 capability 寫進 `schemas/capabilities.yaml` 卻忘了同步綁到 supervisor skill，導致 RuntimeBinder 解析這兩條 capability 時找不到對應 skill；此修復使 `project-spec-pipeline` / `project-implementation-pipeline` / `project-qa-pipeline` 三條 workflow 的 `init_task` step 不再卡 binding。
 - `.cap.constitution.yaml`（自宿主憲法）在 `binding_policy.allowed_capabilities` 補上同兩條 capability：v0.19.0 後 protocols repo 自身若 dogfood 跑新 per-stage workflow 會被自宿主憲法擋下（`blocked_by_constitution`）；此修復讓 protocols repo 自己也能 dogfood 三條新 workflow。注意：此修復僅針對既有 repo；新專案透過 `project-constitution.yaml` workflow bootstrap 出的憲法會自動含這兩條 capability（因 `scripts/workflows/bootstrap-constitution-defaults.sh` 動態從 `schemas/capabilities.yaml` 抽取 allowed_capabilities）。

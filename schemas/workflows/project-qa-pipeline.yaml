@@ -3,7 +3,7 @@ version: 1
 name: Project QA & Security Verification Pipeline
 summary: |
   針對已實作的專案，獨立執行品質保證與安全稽核循環。
-  流程依 goal_stage: implementation_and_verification（驗證子集）展開為 init_task → (qa_testing ∥ security_audit) → qa_audit → archive 五步，
+  流程依 goal_stage: implementation_and_verification（驗證子集）展開為 draft_task_constitution → persist_task_constitution → (qa_testing ∥ security_audit) → qa_audit → archive 六步，
   最終於 ~/.cap/projects/<id>/ 留下 QA 自動化測試套件、QA 報告、安全稽核報告、跨層稽核報告與 task archive。
   本 workflow 是 per-stage workflow 系列的第三條（前置：project-spec-pipeline、project-implementation-pipeline）。
   與 implementation-pipeline 內嵌的 qa_testing step 互補：implementation 是「實作完當下立即驗證」，本 workflow 是「實作後任何時間獨立重跑」。
@@ -21,6 +21,7 @@ triggers:
   - pre-release-verification
 
 artifacts:
+  task_constitution_draft: Task Constitution 草稿（Markdown + 內嵌 JSON），由 supervisor 在 draft_task_constitution step 產出供 persist step 抓取
   task_constitution: Task Constitution（Type B）含 verification 範圍（regression / lighthouse / security / 全套）/ governance / budget；落地於 ~/.cap/projects/<id>/constitutions/task_<id>.json
   qa_test_suite: QA 自動化測試腳本（依 verification_scope 涵蓋 API integration + Playwright E2E + k6 perf + Lighthouse 的子集或全集）
   qa_report: QA 測試執行報告，含指標達成率、Lighthouse 四大分數、性能門檻達標狀態、SRE_TRIGGER 標記（如有）
@@ -32,7 +33,7 @@ governance:
   watcher_mode: milestone_gate
   watcher_checkpoints: [qa_audit]
   logger_mode: milestone_log
-  logger_checkpoints: [init_task, qa_testing, security_audit, qa_audit, archive]
+  logger_checkpoints: [draft_task_constitution, persist_task_constitution, qa_testing, security_audit, qa_audit, archive]
   context_mode: summary_first
   goal_stage: implementation_and_verification
   halt_on_missing_handoff: true
@@ -47,8 +48,8 @@ governance:
     - backend_codebase
 
 steps:
-  - id: init_task
-    name: Derive QA Verification Task Constitution
+  - id: draft_task_constitution
+    name: Draft QA Verification Task Constitution
     capability: task_constitution_planning
     executor: ai
     needs: []
@@ -59,13 +60,13 @@ steps:
       - prior_spec_artifacts
       - prior_impl_artifacts
     outputs:
-      - task_constitution
+      - task_constitution_draft
     done_when:
       - 已驗證上游 spec 與 implementation 產出齊備（缺任一即 halt 並回報 needs_data）
-      - goal_stage 已選定為 implementation_and_verification（驗證子集）並對應展開 5 步 execution_plan
+      - goal_stage 已選定為 implementation_and_verification（驗證子集）並對應展開 execution_plan
       - verification_scope 已明確（regression / lighthouse_only / security_only / full_suite 等），對應裁減 qa_testing 與 security_audit 的執行範圍
       - budget 已估算（建議 4-5 sub-agent sessions，archive 由 supervisor in-line 不消耗）
-      - task constitution 已寫入 ~/.cap/projects/<project_id>/constitutions/task_<task_id>.json
+      - 草稿以 markdown + 內嵌 <<<TASK_CONSTITUTION_JSON_BEGIN>>> ... <<<TASK_CONSTITUTION_JSON_END>>> fence 方式輸出供下游 persist step 抓取
       - 若 user_intent 對 verification_scope 無明確指示，預設執行 full_suite
     on_fail: halt
     timeout_seconds: 600
@@ -75,11 +76,31 @@ steps:
       - 本 workflow 不允許在 implementation 缺漏的情況下啟動；若僅有 spec 而無 frontend/backend codebase，應改跑 implementation-pipeline。
       - verification_scope 是本 workflow 的核心參數；它決定 qa_testing 與 security_audit 是否做全套或局部驗證。
 
+  - id: persist_task_constitution
+    name: Persist QA Task Constitution
+    capability: task_constitution_persistence
+    executor: shell
+    script: scripts/workflows/persist-task-constitution.sh
+    needs: [draft_task_constitution]
+    inputs:
+      - task_constitution_draft
+    outputs:
+      - task_constitution
+    done_when:
+      - 已從 draft 抓取 JSON 區段並通過 minimal validation
+      - 已寫入 ~/.cap/projects/<project_id>/constitutions/<task_id>.json
+    on_fail: halt
+    timeout_seconds: 60
+    input_mode: full
+    output_tier: machine_metadata
+    notes:
+      - 純 deterministic shell；不允許 AI fallback。
+
   - id: qa_testing
     name: QA Verification Suite Execution
     capability: qa_testing
     executor: ai
-    needs: [init_task]
+    needs: [persist_task_constitution]
     inputs:
       - frontend_codebase
       - backend_codebase
@@ -105,14 +126,14 @@ steps:
     input_mode: full
     output_tier: governance_report
     notes:
-      - 與 security_audit step 平行；兩者皆依賴 init_task 但彼此無依賴。
+      - 與 security_audit step 平行；兩者皆依賴 persist_task_constitution 但彼此無依賴。
       - 與 implementation-pipeline 不同，本 step 找到的問題不會 route_back_to 實作 step（因為實作不在本 workflow 內），改為 escalate_user 讓使用者決定：開新 fix task / 跑 troubleshoot workflow / 或忽略並收尾。
 
   - id: security_audit
     name: Security Verification and Compliance Audit
     capability: security_audit
     executor: ai
-    needs: [init_task]
+    needs: [persist_task_constitution]
     inputs:
       - frontend_codebase
       - backend_codebase

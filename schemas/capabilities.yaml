@@ -68,17 +68,36 @@ capabilities:
       - 已寫入 ~/.cap/projects/<project_id>/constitutions/task_<task_id>.json
       - 若 user_intent 對某 required 欄位資訊不足，已標記 needs_data 並停止，不擅自假設
 
+  task_constitution_persistence:
+    description: |
+      把 task_constitution_planning 階段 supervisor 草擬的 Task Constitution JSON 寫入 ~/.cap/projects/<id>/constitutions/task_<task_id>.json，並進行最小驗證（required 欄位 task_id / project_id / goal / goal_stage / success_criteria 不缺，goal_stage 落在 enum 內）。
+      這是 per-stage workflow（spec / implementation / qa）init_task 後續的 deterministic 持久化步驟；對應的 shell 實作為 scripts/workflows/persist-task-constitution.sh。
+      與 constitution_persistence 區分：constitution_persistence 寫的是 Project Constitution（Type A，repo 級 SSOT）；本 capability 寫的是 Task Constitution（Type B，per-task 工作清單）。
+    default_agent: shell
+    allowed_agents: [shell]
+    inputs:
+      - task_constitution_draft
+    outputs:
+      - task_constitution
+    done_when:
+      - 已從 draft artifact 抓取 Task Constitution JSON 區段（<<<TASK_CONSTITUTION_JSON>>> fence 或 ```json 區塊）
+      - 已驗證 required 欄位齊全（task_id / project_id / goal / goal_stage / success_criteria）
+      - goal_stage 已落在 enum 內（informal_planning / formal_specification / implementation_preparation / implementation_and_verification）
+      - 已寫入 ~/.cap/projects/<project_id>/constitutions/<task_id>.json
+      - 已輸出寫入路徑供下游 emit_handoff_ticket / 各 sub-agent step 解析
+
   handoff_ticket_emit:
     description: |
-      在每個 sub-agent step 派工前，由 supervisor（或對應 deterministic 步驟）依 task constitution 中的 execution_plan 條目展開單一 step 的 handoff ticket（Type C，依 schemas/handoff-ticket.schema.yaml），落地到 ~/.cap/projects/<id>/handoffs/<step_id>.ticket.json。
+      在每個 sub-agent step 派工前，依 task constitution 中的 execution_plan 條目展開單一 step 的 handoff ticket（Type C，依 schemas/handoff-ticket.schema.yaml），落地到 ~/.cap/projects/<id>/handoffs/<step_id>.ticket.json。
       ticket 是給 RuntimeBinder 與 sub-agent 共讀的工作單，含 target_capability / rules_to_load / context_payload / acceptance_criteria / output_expectations / governance / failure_routing 等欄位。
+      本 capability 兼具 supervisor 與 shell 兩種 binding：在 workflow 中可顯式作為 deterministic step 由 scripts/workflows/emit-handoff-ticket.sh 執行；在 supervisor 主動派工時也可作為 supervisor 內部例行行為（per agent-skills/01-supervisor-agent.md §3.6）。
       ticket 的存在讓派工痕跡從 Agent prompt 字串提升為磁碟上可審計、可重跑、跨 runtime（Claude / Codex / CrewAI）共用的檔案；同時讓 cap CLI 可預覽即將下發的工作單內容。
       設計鐵則：
         - ticket 必須在 RuntimeBinder spawn sub-agent 之前已落地；spawn 失敗時 ticket 不刪除，作為審計痕跡。
-        - 重跑同 step 時 ticket_id 的 seq 遞增，舊 ticket 保留。
+        - 重跑同 step 時 ticket 檔名 seq 遞增（<step_id>.ticket.json → <step_id>-2.ticket.json → ...），舊 ticket 保留。
         - context_payload 預設走 summary-first（只塞 upstream handoff summary），audit 類 step 才允許走 full_artifact。
-    default_agent: supervisor
-    allowed_agents: [supervisor]
+    default_agent: shell
+    allowed_agents: [shell, supervisor]
     inputs:
       - task_constitution
       - target_step_id
