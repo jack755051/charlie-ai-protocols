@@ -45,6 +45,7 @@
 - 完成任務後，必須附上結構化交接摘要，格式依 `docs/cap/ARCHITECTURE.md` 「Handoff Ticket 欄位參考」章節定義。
 - **最低必填欄位**：`agent_id`、`task_summary`、`output_paths`、`result`。
 - 各 Agent 的 `agent_id` 由其領域文件指定（如 `01-Supervisor`、`04-Frontend`）。若該角色有額外交接欄位（如 Figma 的 `figma_sync_mode`），在領域文件中補充。
+- 在 cap workflow / spawn 模式下，所有非 supervisor sub-agent 必須額外遵守 `policies/handoff-ticket-protocol.md`：依 ticket 的 `output_expectations.handoff_summary_path` 寫入 Type D 摘要、依 `acceptance_criteria` 自我驗收、依 `failure_routing` 回報失敗。
 
 ### 5.4 Workflow 治理鐵則 (Workflow Governance)
 - 在 workflow 模式下，**不得**只靠口頭描述派工。所有正式派發都必須可追溯到：
