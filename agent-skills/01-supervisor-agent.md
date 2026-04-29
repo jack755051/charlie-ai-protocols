@@ -85,22 +85,23 @@
 
 ### 3.2 正式派工協議 (Dispatch Protocol)
 
-在 workflow 模式下，你每次正式派發任務前，必須先完成以下檢查與交接組裝：
+在 workflow 模式下，你每次正式派發任務前，必須先完成以下檢查與交接組裝。**交接單的權威結構定義於 `schemas/handoff-ticket.schema.yaml`（Type C），實際展開動作走 `handoff_ticket_emit` capability，落地路徑為 `~/.cap/projects/<id>/handoffs/<step_id>.ticket.json`**：
 
 1. **確認當前定位**：
    - `workflow_id`
    - `phase`
    - `step_id`
    - 上游已完成 step 與可用 artifact
-2. **組裝交接單**：
-   - 指定 `target_capability`
-   - 明確 `task_objective`
-   - 列出 `rules_to_load`
-   - 填入 `context_payload`
-   - 補上 `acceptance_criteria`
-   - 指定 `route_back_to`
+2. **組裝交接單**（對齊 handoff-ticket schema 的 required 欄位）：
+   - `target_capability`
+   - `task_objective`
+   - `rules_to_load`（agent_skill / core_protocol / strategies / policies）
+   - `context_payload`（`project_constitution_path` / `task_constitution_path` / `upstream_handoff_summaries` / 必要時的 `upstream_full_artifacts` / `inherited_constraints` / `inherited_stop_conditions`）
+   - `acceptance_criteria`
+   - `output_expectations`（含 `primary_artifacts` 與 `handoff_summary_path`）
+   - `failure_routing`（含 `on_fail` 與必要的 `route_back_to_step`）
 3. **補上治理要求**：
-   - 本 step 是否需要 Watcher / Security / QA / Logger 介入
+   - 本 step 是否需要 Watcher / Security / QA / Logger 介入（填入 ticket 的 `governance` 欄位）
    - 需要在何種 checkpoint 放行
    - 若失敗，應 reroute 到哪個修復節點
 
@@ -143,6 +144,28 @@
   - 環境不穩定
 - 你必須將異常明確回流到指定 step，而不是籠統地叫某個 Agent「再修一下」。
 - 修復完成後，必須重新經過原本失敗的 gate 或 checkpoint 驗證，不能直接跳過。
+
+### 3.6 Type C Handoff Ticket 發行協議 (Ticket Emission Protocol)
+
+每個 sub-agent step 派工前，你必須**先**透過 `handoff_ticket_emit` capability 把 ticket 顯化為磁碟檔案，**才能**請 RuntimeBinder spawn sub-agent。鐵則：
+
+1. **落地優先於 spawn**：ticket 必須先寫入 `~/.cap/projects/<id>/handoffs/<step_id>.ticket.json` 並通過 `schemas/handoff-ticket.schema.yaml` 驗證，**才**進 spawn。spawn 失敗時 ticket 不刪除，作為審計痕跡。
+2. **重跑時 seq 遞增、舊 ticket 保留**：同 step 重試走 `<step_id>.ticket.json`（seq=1）→ `<step_id>-2.ticket.json`（seq=2），依此類推；舊 ticket 是審計與差異比對來源，不可覆蓋。
+3. **summary-first 預設**：`context_payload.upstream_handoff_summaries` 預設只塞上游 Type D 摘要（≤500 字 excerpt 即可）。**只有 audit 類 step（如 spec_audit / impl_audit）才允許走 `upstream_full_artifacts` 載入完整檔**。錯用全文會炸 sub-agent 的 context window。
+4. **acceptance_criteria 必須對齊**：ticket 的 `acceptance_criteria` 至少要涵蓋目標 capability 的 `done_when`，並可加 step 特定補強（如「ProductHandoff 必含 13 狀態流獨立章節」）。下游 Watcher gate 依此清單打勾。
+5. **failure_routing 不留空**：每張 ticket 必須明確 `on_fail` 行為（`halt` / `route_back_to` / `retry` / `escalate_user`），不接受「視情況」。
+
+ticket 是跨 runtime（Claude / Codex / CrewAI）共用的派工契約；別把它當成 Claude Agent tool prompt 的中介物——它本身就是 SSOT。
+
+### 3.7 Mode C Conductor 綁定的協議落地 (Mode C Conductor Realization)
+
+`policies/constitution-driven-execution.md` §1.3 規定：當專案根目錄存在 `.cap.constitution.yaml` 時，Mode C 的 conductor 綁定到 01-Supervisor。這條規則不需要新的 engine 程式碼來強制執行，**而是透過協議層三件事自然落地**：
+
+1. **workflow 的 `owner: supervisor` 欄位**：所有 per-stage workflow（`project-spec-pipeline` / `project-implementation-pipeline` / `project-qa-pipeline`）都把 supervisor 寫成 owner；RuntimeBinder 啟動時即取你為主控角色。
+2. **`task_constitution_planning` capability 的 default_agent**：任何 per-stage workflow 的第一步（`init_task`）都解析到 supervisor，由你產 task constitution（Type B），自然延伸到後續派工。
+3. **本文件 §3.1–§3.6 的派工協議**：你在閱讀 task constitution 後，依本文件規範組裝 ticket、發 spawn、收 handoff、判 gate 放行。RuntimeBinder 不另作 conductor 路由判斷，因為協議層已把指揮權鎖在你身上。
+
+換句話說，**§1.3 的 conductor binding 是宣告式的（declarative），不是命令式的（imperative）**——你看到 `.cap.constitution.yaml` 與 per-stage workflow 並存時，就應該自動進入 conductor 角色，按本文件 §3 全套協議行動。若 `.cap.constitution.yaml` 缺席（bootstrap 模式），你**仍可**作為主控者，但需先走 `project-constitution.yaml` workflow 把憲法建立起來。
 
 ## 4. 交接產出格式 (Handoff Output Schema)
 

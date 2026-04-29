@@ -17,6 +17,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 - `schemas/capabilities.yaml` 新增 `handoff_ticket_emit` capability：完成 Type C 派工單顯化的執行端契約。每個 sub-agent step 派工前，supervisor（或對應 deterministic 步驟）依 task constitution 的 execution_plan 條目展開單一 step 的 handoff ticket（落地至 `~/.cap/projects/<id>/handoffs/<step_id>.ticket.json`），給 RuntimeBinder 與 sub-agent 共讀；確立「ticket 必須在 spawn 之前落地」「重跑時 seq 遞增舊 ticket 保留」「context_payload 預設 summary-first」三條鐵則。與 `task_constitution_planning`（產 Type B）一起，補齊 spec / implementation / qa per-stage workflow 把 supervisor 派工迴圈完全顯化所需的最後一塊 capability 拼圖。
 
 ### Changed
+- `agent-skills/01-supervisor-agent.md` 補齊 §3.2 / §3.6 / §3.7：§3.2 把派工協議的交接單欄位對齊 `schemas/handoff-ticket.schema.yaml`（Type C），明示 ticket 落地路徑與必填欄位；§3.6 新增「Type C Handoff Ticket 發行協議」章節，定義五條鐵則（落地優先於 spawn / 重跑 seq 遞增舊 ticket 保留 / context_payload summary-first 預設 / acceptance_criteria 對齊 done_when / failure_routing 不留空）；§3.7 新增「Mode C Conductor 綁定的協議落地」章節，明示 `policies/constitution-driven-execution.md` §1.3 的 binding rule 透過協議層三件事（workflow `owner: supervisor` / `task_constitution_planning` 的 default_agent / 本 agent skill §3 派工協議）自然落地，不需新 engine 程式碼，是 declarative 而非 imperative。
+
+### Changed
 - `policies/constitution-driven-execution.md` 新增 §1.3「Mode C Conductor Binding」並連動更新 §2.1 與 §7：當專案根目錄存在 `.cap.constitution.yaml` 時，Mode C 的 conductor 由 cap runtime 改綁定至 01-Supervisor，由其依憲法守護跨 step 的長期 governance、避免 scope drift；無 project constitution 的 ad-hoc 任務憲章維持 cap runtime 主控，sub-agent prompt 模板、token 成本模型與跨 runtime 適配規則皆不變。
 
 ## [v0.18.1] - 2026-04-28
