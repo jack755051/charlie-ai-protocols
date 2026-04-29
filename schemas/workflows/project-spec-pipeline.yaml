@@ -1,0 +1,250 @@
+workflow_id: project-spec-pipeline
+version: 1
+name: Project Specification Pipeline
+summary: |
+  把已有 .cap.constitution.yaml 的專案，從憲法骨架推進到完整可實作的規格層。
+  流程依 goal_stage: formal_specification 展開為 init_task → prd → tech_plan → ba → (dba_api ∥ ui) → spec_audit → archive 八步，
+  最終於 ~/.cap/projects/<id>/ 留下 task constitution、5 份規格 + 6 份設計資產、2 份 watcher gate report 與 task archive。
+  本 workflow 是 per-stage workflow 系列的第一條（後續：project-implementation-pipeline / project-qa-pipeline），
+  用以把 supervisor 在 Mode C 中的派工迴圈固化為可被 cap CLI 顯示步驟與計時的執行單元。
+owner: supervisor
+triggers:
+  - manual
+  - project-spec
+  - new-spec-task
+
+artifacts:
+  task_constitution: Task Constitution（Type B）含 execution_plan / success_criteria / governance / budget；落地於 ~/.cap/projects/<id>/constitutions/task_<id>.json
+  prd_document: Product Requirements Document（v0.x），由 supervisor 直接草擬；技術棧鎖定後不留 TBD
+  tech_plan_document: 技術執行計畫（v0.x），含模組層選型 / 風險 / 聚焦決策 / 下游 BA / DBA / UI 建議
+  ba_spec: 業務分析規格（v0.x），含 Bounded Context 切分、Ubiquitous Language、sequenceDiagram、stateDiagram、業務規則彙總
+  schema_ssot: 資料庫事實檔案（DBML for SQLite / PostgreSQL 等），含 Aggregate Root / Entity / Value Object 標註
+  api_contract: API 介面合約（v0.x），含路由、Request/Response DTO、授權、Mock Data、Domain Event 觸發點
+  ui_spec: UI 規格書（v0.x）含 Tokens 摘要、元件狀態、非同步回饋、RWD、畫面流轉、視圖元件映射
+  ui_design_assets: 設計資產組合 — Tokens JSON / Screens JSON / Prototype HTML（+ 選配 Flows MMD / Copy Deck JSON）
+  spec_audit_report: Watcher 終局 gate 報告，含跨文件一致性矩陣與 Quality Alerts
+  task_archive: 結案摘要（_archive.md）+ trace.jsonl 收尾事件
+
+governance:
+  watcher_mode: milestone_gate
+  watcher_checkpoints: [tech_plan, spec_audit]
+  logger_mode: milestone_log
+  logger_checkpoints: [init_task, prd, tech_plan, ba, dba_api, ui, spec_audit, archive]
+  context_mode: summary_first
+  goal_stage: formal_specification
+  halt_on_missing_handoff: true
+
+steps:
+  - id: init_task
+    name: Derive Task Constitution from Project Constitution
+    capability: task_constitution_planning
+    executor: ai
+    needs: []
+    inputs:
+      - project_constitution
+      - user_intent
+      - goal_stage_hint
+    outputs:
+      - task_constitution
+    done_when:
+      - 已讀取專案根目錄的 .cap.constitution.yaml 並對齊 allowed_agents / allowed_capabilities / stop_conditions
+      - goal_stage 已選定為 formal_specification 並對應展開 8 步 execution_plan
+      - execution_plan 中每個 step 已指定 step_id / target_capability / bound_to / needs（依賴關係）
+      - budget 已估算（建議 6-7 sub-agent sessions，archive 由 supervisor in-line 不消耗）
+      - task constitution 已寫入 ~/.cap/projects/<project_id>/constitutions/task_<task_id>.json
+      - 若 user_intent 對某 required 欄位資訊不足，已標記 needs_data 並 halt
+    on_fail: halt
+    timeout_seconds: 600
+    input_mode: full
+    output_tier: planning_artifact
+    notes:
+      - 本 step 是後續所有派工的依據；handoff ticket（Type C）由 supervisor 在後續 step 派工前依此 task constitution 展開。
+      - 嚴守憲法 stop_conditions；若 user_intent 與憲法 constraint 衝突，halt 並回報，不擅自越界。
+
+  - id: prd
+    name: Produce Product Requirements Document
+    capability: prd_generation
+    executor: ai
+    needs: [init_task]
+    inputs:
+      - task_constitution
+      - project_constitution
+      - design_source
+    outputs:
+      - prd_document
+    done_when:
+      - PRD 涵蓋專案目標、核心價值與受眾、使用者場景、功能模組、技術堆疊（已鎖定，無 TBD）、NFR / 安全 / 合規、已知風險與 stop_conditions、下一步調度建議、設計交付模式
+      - 技術選型對齊憲法 constraints；如憲法允許多選項，須在 PRD 拍板而不是延後到 TechPlan
+      - 風險條目均對應到 stop_conditions 或緩解策略
+      - PRD 草案已寫入 ~/.cap/projects/<project_id>/reports/workflows/<task_id>/prd.md
+    on_fail: halt
+    timeout_seconds: 900
+    input_mode: full
+    output_tier: planning_artifact
+    notes:
+      - PRD 由 supervisor 直接草擬（不消耗 sub-agent budget）；對應 .cap.skills.yaml / .cap.agents.json 中 prd_generation → supervisor 的 binding。
+      - 設計交付模式（design_output_mode）預設 assets_only；若需 Figma 同步，須在 PRD 顯式寫成 assets_plus_figma 並在 task constitution 補 figma_sync_mode。
+
+  - id: tech_plan
+    name: Technical Plan and Module Architecture
+    capability: technical_planning
+    executor: ai
+    needs: [prd]
+    inputs:
+      - prd_document
+      - task_constitution
+    outputs:
+      - tech_plan_document
+    done_when:
+      - 模組層級可行性與風險評估完成
+      - 已拍板模組層選型（如 IPC、儲存、打包、auto-updater 等視情境而定的 3-5 項決策）
+      - 已撰寫「[建議 - 業務分析方向]」「[建議 - 資料庫與 API 設計方向]」「[建議 - UI 方向]」三段下游建議，內容可派工
+      - 已明示 stop_conditions 與本 step 應觸發的 halt 條件
+      - 全文無業務邏輯程式碼、無 DBML、無 Mermaid、無 API DTO 結構（嚴守 02-TechLead 邊界）
+    on_fail: halt
+    timeout_seconds: 900
+    input_mode: full
+    output_tier: planning_artifact
+    notes:
+      - watcher milestone gate 在本 step 完成後觸發；若 watcher 標 FAIL，回流到本 step 修復後重審。
+      - 不允許在 TechPlan 自行擴展 scope 超出 PRD 與憲法授權範圍。
+
+  - id: ba
+    name: Business Analysis Specification
+    capability: business_analysis
+    executor: ai
+    needs: [tech_plan]
+    inputs:
+      - tech_plan_document
+      - prd_document
+    outputs:
+      - ba_spec
+    done_when:
+      - Bounded Context 切分完成（每個 Context 含責任 / Actor / 核心命令 / 不可跨越規則）
+      - Ubiquitous Language 領域語彙表至少 15 個核心術語
+      - 至少 4 個 sequenceDiagram + 3 個 stateDiagram；含 Happy Path 與邊界異常
+      - 業務規則彙總（BR-1..N）覆蓋 PRD 全部功能模組
+      - 跨模組影響評估與已知業務風險已撰寫
+      - 全文無 Schema 欄位、無 API DTO、無程式碼（嚴守 02a-BA 邊界）
+    on_fail: halt
+    timeout_seconds: 900
+    input_mode: full
+    output_tier: planning_artifact
+    notes:
+      - 後續 dba_api 與 ui 平行展開都依賴本 step 的 Bounded Context 與狀態流；本 step halt 即整個 spec layer halt。
+      - 若 PRD / TechPlan 互相矛盾，halt 並回報 supervisor，不擅自選一份硬做。
+
+  - id: dba_api
+    name: Database Schema and API Contract
+    capability: database_api_design
+    executor: ai
+    needs: [ba]
+    inputs:
+      - ba_spec
+      - tech_plan_document
+    outputs:
+      - schema_ssot
+      - api_contract
+    done_when:
+      - Schema SSOT 採 DBML 包裹於 ```dbml ... ``` 中，與專案憲法指定資料庫類型一致
+      - 每張表標註 Aggregate Root / Entity / Value Object；跨 Aggregate 關聯以 FK 表達
+      - 強制標配欄位 created_at / updated_at / deleted_at / version 齊備（適用情境）
+      - API 路由覆蓋 BA 中所有狀態流轉與使用者互動行為
+      - 寫入 API 嚴守 Aggregate Root 守門；無暴露繞根的 mutation 路由
+      - 每支 API 標註授權機制 + 快取策略 + Mock Data
+      - Domain Event 觸發點與後續處理者已對照
+      - 全文無實作程式碼（Repository / Service / Controller 程式皆禁止）
+    on_fail: halt
+    timeout_seconds: 900
+    input_mode: full
+    output_tier: planning_artifact
+    notes:
+      - 本 step 與 ui step 平行；兩者皆依賴 ba 但彼此無依賴。
+      - 落地路徑：~/.cap/projects/<id>/reports/workflows/<task_id>/database/<module>_schema_v0.1.md 與 <module>_API_v0.1.md。
+
+  - id: ui
+    name: UI Specification and Design Assets
+    capability: ui_design
+    executor: ai
+    needs: [ba]
+    inputs:
+      - ba_spec
+      - tech_plan_document
+      - design_source
+    outputs:
+      - ui_spec
+      - ui_design_assets
+    done_when:
+      - UI Spec / Tokens JSON / Screens JSON / Prototype HTML 四個主資產齊備
+      - Prototype 在瀏覽器可直接打開（不依賴外部資源）
+      - 6 類特殊狀態（Loading / Empty / Error / Disclaimer / Degraded / Success）均有對應視覺
+      - 視覺與互動語意對齊 ~/.cap/designs/<project_id>/（如有），偏離點均有業務理由註記
+      - 全文 / 全資產禁止包含未定義在 Tokens 內的色碼
+      - 設計稿來源目錄保持 read-only，未被寫入或修改
+    on_fail: halt
+    timeout_seconds: 1200
+    input_mode: full
+    output_tier: planning_artifact
+    notes:
+      - 設計稿來源（design_source）由 cap workflow run 啟動時透過 --design-source / --design-path 旗標或反問機制注入。
+      - 若無設計稿來源，UI step 仍可執行但須在 UI Spec 中標明 no-design baseline。
+
+  - id: spec_audit
+    name: Cross-Spec Consistency Audit
+    capability: code_structure_audit
+    executor: ai
+    needs: [dba_api, ui]
+    inputs:
+      - prd_document
+      - tech_plan_document
+      - ba_spec
+      - schema_ssot
+      - api_contract
+      - ui_spec
+      - ui_design_assets
+    outputs:
+      - spec_audit_report
+    done_when:
+      - 跨文件一致性矩陣至少 8 個核心概念 × 6 文件，全綠或僅 NON-BLOCKING
+      - DDD 邊界、Ubiquitous Language、狀態機、Aggregate Root 守門、Domain Event 觸發鏈四方對齊
+      - 安全合規交叉驗證（憑證儲存 / 網路綁定 / 授權機制）一致
+      - Watcher 越權檢查通過（各 agent 守住自身產出邊界）
+      - verdict 明確（PASS / PASS_WITH_NOTES / FAIL）；FAIL 時每條 alert 標明修復責任 agent 與引用位置
+    on_fail: route_back_to
+    fallback:
+      when: ["alert.severity == FAIL"]
+    timeout_seconds: 600
+    input_mode: full
+    output_tier: governance_report
+    notes:
+      - 本 step 是進入實作期前的最後一道品質門禁；FAIL 時必須回流到對應規格 step 修復後重審。
+      - PASS_WITH_NOTES 可放行，但 NOTES 必須在 archive step 收錄入 _archive.md，並在後續 implementation pipeline 派工時加註授權處理。
+
+  - id: archive
+    name: Archive Task Outputs and Decisions
+    capability: technical_logging
+    executor: ai
+    needs: [spec_audit]
+    inputs:
+      - task_constitution
+      - prd_document
+      - tech_plan_document
+      - ba_spec
+      - schema_ssot
+      - api_contract
+      - ui_spec
+      - ui_design_assets
+      - spec_audit_report
+    outputs:
+      - task_archive
+    done_when:
+      - _archive.md 已產出，含任務目標達成情況、鎖定的關鍵決策、風險清單與後續處置、watcher gate notes、產出檔案總覽、下一階段建議
+      - trace.jsonl 已附上 task_closed 事件，含 budget 使用統計與 watcher_gates_passed
+      - 已提示使用者透過 cap promote 將 11 個正式產出（PRD / TechPlan / BA / Schema / API / 6 設計資產）升級至 repo SSOT
+    on_fail: halt
+    timeout_seconds: 300
+    input_mode: full
+    output_tier: governance_report
+    notes:
+      - archive step 由 supervisor in-line 執行，不消耗 sub-agent budget（對齊 99-Logger 角色但不正式 spawn）。
+      - 結案後 task constitution 標記 status: completed；同 project 下次再跑此 workflow 會建立新的 task_id。
