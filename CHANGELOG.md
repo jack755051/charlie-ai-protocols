@@ -6,7 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
-## [Unreleased]
+## [v0.19.2] - 2026-04-29
 
 ### Changed
 - `agent-skills/01-supervisor-agent.md` §3.7「Mode C Conductor 綁定的協議落地」對齊 commit `d157c76` 的 workflow init 拆步：把舊的「init_task」step 名稱改為「`draft_task_constitution`，後接 deterministic shell `persist_task_constitution`」，並補新一段「RuntimeBinder 與 step_runtime 的責任邊界」明示 runtime 只執行不決策、ticket 是派工 SSOT；本變更使 §3.7 與 `policies/constitution-driven-execution.md` §1.3、`policies/handoff-ticket-protocol.md` 三檔對 conductor binding 的描述完全一致。
@@ -21,7 +21,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 ### Fixed
 - `scripts/workflows/persist-task-constitution.sh` 修四個影響執行的真實 bug：(1) Python f-string 內含 `\",\".join(...)` 的反斜線轉義在 Python <3.12 為 SyntaxError，改抽到區域變數 `missing_list = ",".join(missing)` 再 format；(2) 同函式另一處 `f"{data[\"project_id\"]}"` 同樣 invalid，改先 `project_id = data["project_id"]` 再 f-string；(3) 主流程的 `1>&3` 重導向但 FD 3 從未開啟導致 shell 直接 fail，改用 `mktemp` + `2>${tmp_err}` 捕捉 stderr 再讀；(4) 多處 `printf '- name=...'` 與 `printf 'condition: ...'` 改加 `--` 前綴避免某些 shell 把 `-` 開頭的 format 視為選項。本批修復後腳本經 smoke test 通過：valid task constitution draft 進入後 exit 0，產出 pretty-printed JSON 於 `~/.cap/projects/<id>/constitutions/<task_id>.json`。
 
-### Changed
+### Changed (binding fix carryover)
 - `.cap.constitution.yaml`（自宿主憲法）`binding_policy.allowed_capabilities` 補上 `task_constitution_persistence`（v0.19.1 新增 capability 但漏接到 allowed_capabilities，導致使用 shell-bound persist step 的 workflow 仍會被 `blocked_by_constitution` 擋下）。
 
 ## [v0.19.1] - 2026-04-29
