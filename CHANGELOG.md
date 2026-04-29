@@ -9,6 +9,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 ## [Unreleased]
 
 ### Added
+- `tests/scripts/` 新增 deterministic executor 的 fixture smoke 測試套件：`test-persist-task-constitution.sh`（5 cases / 13 assertions：happy path + malformed JSON + missing required + invalid goal_stage + invalid execution_plan entry）+ `test-emit-handoff-ticket.sh`（4 cases / 15 assertions：happy path + seq 遞增 1→2→3 且舊 ticket 保留 + missing target_step_id + step 不在 execution_plan）+ README 說明範圍與執行方式；測試使用 `mktemp -d` 隔離 sandbox 自動清理，無需外部測試框架，純 bash + python3 即可運行；本批為 cap CLI 整合測試（cap workflow bind / plan）之外的單元層補強，封住兩個 shell executor 的 regression 風險面。
 - `scripts/workflows/persist-task-constitution.sh` 強化 task constitution 結構驗證：除既有 required field + goal_stage enum 外，新增 `execution_plan` 結構檢查（必須是非空 array，每個 entry 含 step_id + capability）、`governance` 必須為 object（如有）；validation rc 5 = invalid execution_plan、rc 6 = invalid governance；honest 註解明標為 minimal structural validation 而非 full JSON Schema。
 - `scripts/workflows/emit-handoff-ticket.sh` 新增 ticket 寫入前的 post-build 結構驗證：對齊 `schemas/handoff-ticket.schema.yaml` 的 12 個 top-level required fields（ticket_id / task_id / step_id / created_at / created_by / target_capability / task_objective / rules_to_load / context_payload / acceptance_criteria / output_expectations / failure_routing）+ `context_payload.{project_constitution_path, task_constitution_path}` + `output_expectations.{primary_artifacts, handoff_summary_path}` + `failure_routing.on_fail` 的存在性檢查；validation 失敗於寫檔前 halt（rc 4-7 對應不同層級缺失），避免產出結構不完整的 ticket 流入下游。
 
