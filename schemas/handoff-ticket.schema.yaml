@@ -1,0 +1,262 @@
+# Handoff Ticket Schema (draft v1)
+#
+# 定義 supervisor 派工給單一 step sub-agent 的「工作單」結構（即 Mode C / per-stage workflow
+# 中的 Type C 文件，存於 ~/.cap/projects/<id>/handoffs/<step_id>.ticket.json）。
+#
+# 設計動機：
+#   - 把 supervisor 對 sub-agent 的指令顯化為磁碟上的檔案，跨 runtime（Claude / Codex / CrewAI）
+#     共用同一份語意契約，不再藏在 Agent tool 的 prompt 字串裡。
+#   - 提供可審計、可重跑、可被 cap CLI 預覽的派工痕跡。
+#   - 與 Type B（task constitution）解耦：Type B 是全局工作清單，Type C 是每件工作的詳細工作單。
+#
+# 生命週期：
+#   1. supervisor 在派工前依 task constitution 的 execution_plan 條目展開 ticket
+#   2. RuntimeBinder 讀 ticket → 解析 target_capability → spawn sub-agent（context 餵入 ticket）
+#   3. sub-agent 執行 → 產出主 artifact + Type D（handoff summary）
+#   4. ticket 保留於 handoffs/，作為審計與重跑依據
+
+schema_version: 1
+
+fields:
+
+  # ── 識別與關聯 ──
+
+  ticket_id:
+    type: string
+    required: true
+    description: |
+      Ticket 的唯一識別。建議格式 `<task_id>-<step_id>-<seq>`，seq 從 1 起算；
+      重跑同 step 時 seq 遞增，舊 ticket 保留作為審計痕跡。
+
+  task_id:
+    type: string
+    required: true
+    description: 對應 task constitution 的 task_id；用於回溯全局工作清單。
+
+  step_id:
+    type: string
+    required: true
+    description: 對應 task constitution execution_plan 中的 step_id。
+
+  created_at:
+    type: string
+    required: true
+    description: ISO-8601 時間戳。
+
+  created_by:
+    type: string
+    required: true
+    description: 派工者 agent_id（typically `01-Supervisor`）。
+
+  # ── 派工核心 ──
+
+  target_capability:
+    type: string
+    required: true
+    description: |
+      要被 RuntimeBinder 解析的 capability name；必須存在於 schemas/capabilities.yaml
+      且在當前 project constitution 的 binding_policy.allowed_capabilities 內。
+
+  bound_to:
+    type: string
+    required: false
+    description: |
+      建議 agent 別名（informational hint）。實際 binding 由 RuntimeBinder 依 .cap.skills.yaml
+      / .cap.agents.json 解析；此欄位僅供人類閱讀與 audit trail 使用。
+
+  task_objective:
+    type: string
+    required: true
+    description: 一句話描述本 step 要達成的目標。
+
+  # ── 上下文載入 ──
+
+  rules_to_load:
+    type: object
+    required: true
+    description: |
+      sub-agent 必須載入的規則來源清單。RuntimeBinder 在組 prompt 時依此清單包裝 context。
+    fields:
+      agent_skill:
+        type: string
+        required: true
+        description: 主要 agent skill 路徑（例如 `agent-skills/02-techlead-agent.md`）。
+      core_protocol:
+        type: string
+        required: false
+        description: 行為基底；通常是 `agent-skills/00-core-protocol.md` 的精簡提取。
+      strategies:
+        type: string[]
+        required: false
+        description: 額外策略檔（如 `strategies/unit-test-frontend.md`）。
+      policies:
+        type: string[]
+        required: false
+        description: 額外 policies 檔（如 `policies/git-workflow.md`）。
+
+  context_payload:
+    type: object
+    required: true
+    description: |
+      sub-agent 開工前需要的所有上下文。遵守 workflow-constitution §4.3 的 summary-first 原則：
+      上游 artifact 預設只傳 handoff_summaries 摘要，除非本 step 是 audit 類（需全文）。
+    fields:
+      project_constitution_path:
+        type: string
+        required: true
+        description: Type A 路徑；sub-agent 須對齊此處 constraints。
+      task_constitution_path:
+        type: string
+        required: true
+        description: Type B 路徑；sub-agent 可回查全局 success_criteria 與 stop_conditions。
+      upstream_handoff_summaries:
+        type: object[]
+        required: false
+        description: 上游已完成 step 的 Type D 摘要清單。
+        fields:
+          step_id:
+            type: string
+            required: true
+          summary_path:
+            type: string
+            required: true
+          summary_excerpt:
+            type: string
+            required: false
+            description: 如有空間考量，可只塞 ≤500 字 excerpt 而非完整 summary。
+      upstream_full_artifacts:
+        type: object[]
+        required: false
+        description: |
+          需要 sub-agent 讀全文的上游 artifact（如 Watcher gate 需讀 PRD/TechPlan/BA 全文）。
+          除非必要否則保持空陣列，避免 context 膨脹。
+        fields:
+          step_id:
+            type: string
+            required: true
+          artifact_path:
+            type: string
+            required: true
+          role:
+            type: string
+            required: false
+            description: 此 artifact 在本 step 的角色（如 `audit_target` / `reference`）。
+      inherited_constraints:
+        type: string[]
+        required: false
+        description: 從憲法或 task constitution 萃取出的本 step 必須遵守的約束。
+      inherited_stop_conditions:
+        type: string[]
+        required: false
+        description: 本 step 應監看的停止條件；觸發時必須 halt 並回報。
+      design_assets_pointer:
+        type: string
+        required: false
+        description: 設計稿來源路徑（例如 `~/.cap/designs/<project_id>/`），UI 類 step 必填。
+
+  # ── 驗收與產出 ──
+
+  acceptance_criteria:
+    type: string[]
+    required: true
+    description: |
+      本 step 的 done_when 條件，逐條可驗證。對應到 capability 的 done_when 加上 step
+      特定補強。Watcher / Logger 在驗收時依此清單打勾。
+
+  output_expectations:
+    type: object
+    required: true
+    description: sub-agent 必須產出的檔案與其落地路徑。
+    fields:
+      primary_artifacts:
+        type: object[]
+        required: true
+        description: 主要產出（如 prd.md、tech_plan.md）。
+        fields:
+          path:
+            type: string
+            required: true
+            description: 絕對路徑或相對於 cap runtime root 的路徑。
+          format:
+            type: string
+            required: false
+            description: 格式（markdown / json / yaml / dbml / html / mermaid）。
+          description:
+            type: string
+            required: false
+      handoff_summary_path:
+        type: string
+        required: true
+        description: |
+          Type D（handoff summary）落地路徑；sub-agent 結束時必須寫入。
+          通常位於 reports/workflows/<task_id>/<step_id>.handoff.md。
+
+  # ── 治理與失敗路由 ──
+
+  governance:
+    type: object
+    required: false
+    description: 本 step 觸發的治理介入。
+    fields:
+      watcher_required:
+        type: boolean
+        required: false
+        description: 完成後是否需 90-Watcher 介入稽核。
+      security_required:
+        type: boolean
+        required: false
+        description: 完成後是否需 08-Security 介入稽核。
+      logger_required:
+        type: boolean
+        required: false
+        description: 是否需 99-Logger 立即記錄。
+
+  failure_routing:
+    type: object
+    required: true
+    description: 失敗時的路由策略。
+    fields:
+      on_fail:
+        type: string
+        required: true
+        enum:
+          - halt           # 立即停止 task，回報 supervisor
+          - route_back_to  # 回流到上游某 step（在 route_back_to_step 指定）
+          - retry          # 重試（最多 max_retries 次）
+          - escalate_user  # 升級給使用者決定
+      route_back_to_step:
+        type: string
+        required: false
+        description: on_fail = route_back_to 時必填。
+      max_retries:
+        type: integer
+        required: false
+        description: on_fail = retry 時必填；建議上限 1-2。
+
+  # ── 執行邊界 ──
+
+  timeout_seconds:
+    type: integer
+    required: false
+    description: |
+      sub-agent 的執行 timeout；超過視為失敗並走 failure_routing。
+      建議：簡單規格 step 600；複雜 step（如 ui_design）900-1200。
+
+  budget_slot:
+    type: object
+    required: false
+    description: 對應 task constitution 的 budget 槽位記錄。
+    fields:
+      task_budget_total:
+        type: integer
+      slot_index:
+        type: integer
+        description: 本 ticket 是第幾個 sub-agent slot（從 1 起算）。
+
+  provider_hint:
+    type: string
+    required: false
+    enum: [claude, codex, crewai, deterministic_shell]
+    description: |
+      建議的 runtime（informational）。實際 binding 由 RuntimeBinder 依 .cap.skills.yaml 決定；
+      不對齊本欄位也允許。

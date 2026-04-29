@@ -45,6 +45,29 @@ capabilities:
     done_when:
       - 所有 step 已依 workflow 定義執行或正確路由
 
+  task_constitution_planning:
+    description: |
+      由 supervisor 讀取 Project Constitution（Type A）與使用者意圖，推導出單次任務的 Task Constitution（Type B），含 execution_plan / success_criteria / non_goals / stop_conditions / governance / budget。
+      task constitution 是 per-task 文件，產出後寫入 ~/.cap/projects/<id>/constitutions/task_<id>.json，後續每個 step 派工的 handoff ticket（Type C，依 schemas/handoff-ticket.schema.yaml）由 supervisor 從中展開。
+      本 capability 設計為 spec / implementation / qa 等 per-stage workflow 的固定第一步（如 project-spec-pipeline 的 init_task），給 cap CLI 提供穩定的工作清單顯示與計時，不再依賴 supervisor 在 ad-hoc 對話中即興產出。
+      與 prd_generation 的差異：prd_generation 產出的是給人看的 Markdown PRD；本 capability 產出的是給 runtime 讀的結構化 task plan。兩者可在同一 workflow 中前後串接（task_constitution_planning → prd_generation）。
+    default_agent: supervisor
+    allowed_agents: [supervisor]
+    inputs:
+      - project_constitution
+      - user_intent
+      - goal_stage_hint
+    outputs:
+      - task_constitution
+      - execution_plan
+    done_when:
+      - 已讀取 .cap.constitution.yaml 並對齊 allowed_agents / allowed_capabilities / stop_conditions
+      - 已選定 goal_stage（informal_planning / formal_specification / implementation_preparation / implementation_and_verification）並對應產出 execution_plan
+      - execution_plan 中每個 step 已指定 step_id / target_capability / bound_to / needs（依賴關係）
+      - 已估算 budget（sub-agent session 數）並對齊 task-constitution.schema.yaml 的欄位
+      - 已寫入 ~/.cap/projects/<project_id>/constitutions/task_<task_id>.json
+      - 若 user_intent 對某 required 欄位資訊不足，已標記 needs_data 並停止，不擅自假設
+
   prompt_outline_normalize:
     description: |
       把使用者一段或一句的自由 prompt，依目標 schema 拆解成「scalar 欄位草稿 / array 欄位草稿 / object 欄位草稿 / Markdown 敘事補充」四個分流，避免下游 draft 階段把多層次資訊塞錯欄位（例如把多目標、能力清單、out-of-scope 全壓進 type:string 的 project_goal 而踩 schema halt）。
