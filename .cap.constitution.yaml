@@ -104,6 +104,7 @@ binding_policy:
     - task_constitution_planning
     - task_constitution_persistence
     - handoff_ticket_emit
+    - design_source_ingest
     - technical_planning
     - technical_review
     - business_analysis

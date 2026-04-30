@@ -68,6 +68,28 @@ capabilities:
       - 已寫入 ~/.cap/projects/<project_id>/constitutions/task_<task_id>.json
       - 若 user_intent 對某 required 欄位資訊不足，已標記 needs_data 並停止，不擅自假設
 
+  design_source_ingest:
+    description: |
+      Read the project's design_source block (or legacy ~/.cap/designs/<project_id> fallback) and produce a stable, hash-cached summary bundle under `docs/design/`：`source-summary.md`、`source-tree.txt`、`design-source.yaml`，外加 `.source-hash.txt` sentinel。
+      Skip rebuild when the SHA-256 over (relative-path + content) is unchanged AND all three artifacts exist — supports fast re-runs of project-spec-pipeline without re-reading the raw package.
+      Constitution `design_source.type: none`、缺 block 且 legacy fallback path 為空，皆視為 no-op success（exit 0）；source_path 宣告但磁碟缺失則 halt（exit 40）。
+      設計目的：讓 UI / TechPlan 等下游 step 採 summary-first（讀 `docs/design/source-summary.md`），不再每次面對 raw JSX/HTML package；同時透過 hash 投入是否 rebuild 的決策權。
+    default_agent: shell
+    allowed_agents: [shell]
+    inputs:
+      - project_constitution
+      - design_source
+    outputs:
+      - design_source_summary
+      - design_source_tree
+      - design_source_metadata
+    done_when:
+      - 解析 design_source path 完成（憲法優先、legacy fallback、type none / 缺漏皆 graceful）
+      - SHA256 hash 已計算並寫入 `docs/design/.source-hash.txt`
+      - 三個 artifacts（source-summary.md / source-tree.txt / design-source.yaml）齊備或已標記 no-op
+      - cache hit 時跳過 rebuild 並回報 outcome=cached
+      - source_path 宣告但磁碟缺失時 halt（不偽造 summary）
+
   task_constitution_persistence:
     description: |
       把 task_constitution_planning 階段 supervisor 草擬的 Task Constitution JSON 寫入 ~/.cap/projects/<id>/constitutions/task_<task_id>.json，並進行最小驗證（required 欄位 task_id / project_id / goal / goal_stage / success_criteria 不缺，goal_stage 落在 enum 內）。
