@@ -6,6 +6,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.20.0] - 2026-04-30
+
+### Added
+- `engine/design_prompt.py` 把 `~/.cap/designs/` 從「以 project_id 自動 1:1 推導」升級為**多 package registry**：新增 `_list_design_packages` 列出全部子目錄、`_prompt_for_design_package` 在 TTY 互動模式下要求使用者選擇、`_resolve_design_package_by_name` 處理 `--design-package <name>` 顯式選擇；多 package 非互動環境會 halt 並列出可選 package；單一 package 維持自動選擇行為。新增 `--design-package` argparse 旗標。
+- `schemas/project-constitution.schema.yaml` 新增 optional `design_source` block：top-level object 含 type enum（`none` / `local_design_package` / `claude_design` / `figma_mcp` / `figma_import_script`）+ `design_root` / `package` / `source_path` / `mode` / `figma_target` / `script_path` 屬性；憲法不再依賴 `<project_id>` 與 `<package_name>` 等價的隱式假設，明示記錄選定的 design source。Legacy 憲法（沒有此 block）維持有效，runtime 視為 `type: none`。
+- `scripts/workflows/bootstrap-constitution-defaults.sh` 在 bootstrap markdown 新增 design_source 章節，附三個範例（單一 local package、none、figma_mcp）+ 一段說明「~/.cap/designs/ 是 registry，憲法應顯式記錄選定 package」，引導 supervisor 在 draft constitution step 落地正確的 design_source block。
+- `engine/step_runtime.py` 新增 `_read_constitution_design_source` helper + 升級 `_design_source_path`：解析順序改為「constitution.design_source.source_path → design_root + package join → legacy `~/.cap/designs/<project_id>` fallback」，讓 runtime 從憲法讀來源而不是猜 project_id；type none 與缺 yaml lib 的 degraded 場景皆 graceful fallback。
+- `schemas/design-source-templates.yaml` 的 local-design 模板新增 `design_package_name: {design_package}` 欄位 + 完整的 design_source YAML 區塊（供 supervisor 直接複製進 constitution JSON 草稿）。
+- `engine/design_prompt.py` cmd_augment 在 `selected == "local-design"` 時計算 `fields["design_package"]`：若 path 落在 `~/.cap/designs/<pkg>/...` 取首段為 package；否則取目錄名 fallback。
+- `tests/scripts/test-design-source-resolution.sh` 新增 9 case / 15 assertion 涵蓋 design source 解析全鏈：A 空 registry / B 單 package 自動選 / C 多 package 非互動 fallback / D `--design-package <name>` 顯式選 / E 不存在 package 報錯 / F constitution.source_path 直讀 / G type none fallback / H design_root + package join / I 無 constitution fallback。HOME 重導到 mktemp 沙箱不污染真實 `~/.cap/designs/`。
+- `tests/scripts/test-persist-task-constitution.sh` 新增 Case 6 / 5 assertion 驗 normalize 把 `task_summary → goal`、`user_intent_excerpt → source_request`、`target_capability → capability` 的別名展開（重現 2026-04-30 cap workflow run 觀察到的 supervisor draft 形狀）。
+
+### Changed
+- `scripts/workflows/smoke-per-stage.sh` 從 7 step 擴為 8 step：在 unit smoke 與 e2e 之間插入 `tests/scripts/test-design-source-resolution.sh`；本 repo 環境下從「7/7、90+ assertions」升為「8/8、110 assertions」全綠。
+- `~/.cap/designs/` 的 project_id 自動推導路徑保留為 **legacy fallback**（仍為 `_design_source_path` 的最後一條路徑），但**新專案應透過 `design_source` block 明示記錄**；commit `e720201`（user/linter 修補）已對 persist-task-constitution.sh 的 normalize 主流程串接 `task_summary` 等別名，配合本 release 的測試覆蓋確保不再回歸。
+
 ## [v0.19.6] - 2026-04-30
 
 ### Added
