@@ -9,6 +9,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 ## [Unreleased]
 
 ### Added
+- `scripts/workflows/smoke-per-stage.sh` 新增單一指令的 per-stage workflow smoke 入口：依序跑 `cap workflow bind project-spec-pipeline` / `project-implementation-pipeline` / `project-qa-pipeline` 三條 binding 檢查，再跑 `tests/scripts/test-persist-task-constitution.sh` / `test-emit-handoff-ticket.sh` 兩個 fixture 套件；cap CLI 不在 PATH 時 binding 檢查會 graceful skip 並標 WARN（fixture 仍會跑），讓本 wrapper 可在沒有 cap installer 的 CI 環境作為 hermetic gate；退出碼 0 = 全 PASS（含 skipped）、非 0 = 至少一項 FAIL；`tests/scripts/README.md` 同步補上一鍵跑入口說明。
 - `engine/step_runtime.py` 新增 `validate-jsonschema` subcommand：對 `validate-constitution` 的 generic 別名，接 `<json_path> <schema_path>` 兩參數委派同一個 jsonschema validator function（Draft202012Validator + 無 jsonschema lib 的 manual fallback），讓任何 JSON-Schema 風格的 schema 都能被驗證；不影響 `validate-constitution` 既有行為，純 additive。
 - `scripts/workflows/persist-task-constitution.sh` 在 pretty-print 之後接入 `validate-jsonschema` 全域 schema 驗證：minimal 結構驗證做 fast-fail，schema 驗證捕捉前者看不到的 type / enum / nested shape 問題；schema 驗證失敗即 `fail_with schema_validation_failed` halt。
 - `scripts/workflows/emit-handoff-ticket.sh` 在 ticket 寫入後接入 `validate-jsonschema` 全域 schema 驗證：inline pre-write field-presence assertion + post-write full schema validation 雙層保護；schema 驗證失敗即 halt（ticket 已落地不刪除作為 audit trail）。

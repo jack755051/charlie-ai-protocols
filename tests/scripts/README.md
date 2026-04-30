@@ -34,9 +34,18 @@ bash tests/scripts/test-emit-handoff-ticket.sh
 - 0：全數 case PASS
 - 非 0：第一個 FAIL 的 case 後立即停止並印出 detail
 
+## 一鍵跑全部 smoke（含 cap CLI binding）
+
+```bash
+bash scripts/workflows/smoke-per-stage.sh
+```
+
+該 wrapper 會依序執行三條 per-stage workflow 的 `cap workflow bind` 檢查 + 兩個 fixture 套件。`cap` CLI 不在 PATH 時 bind 檢查會 graceful skip 並標 WARN，但 fixture 套件仍會跑完。退出碼 0 = 全 PASS（含 skipped），非 0 = 至少一項 FAIL。
+
 ## 範圍邊界
 
 這些是 smoke / fixture 測試，不取代：
-- `cap workflow bind` / `cap workflow plan` 的整合測試（需 cap CLI）
+- `cap workflow run --dry-run` / `cap workflow plan` 的整合測試
 - engine 層自動 ticket emission 的測試（engine integration 尚未實作）
-- 跨 workflow 串接的 e2e 測試
+- 跨 workflow 串接的 e2e 測試（cap workflow run 端到端）
+- sub-agent 端 ticket consumption 與 Type D handoff summary 寫出的整合測試
