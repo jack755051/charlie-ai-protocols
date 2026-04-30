@@ -76,7 +76,54 @@ def _project_id_from_config() -> str:
     return Path.cwd().name
 
 
+def _read_constitution_design_source() -> dict[str, Any] | None:
+    """Best-effort read of design_source block from the project's
+    .cap.constitution.yaml. Returns the dict when found, None when the
+    constitution is missing, the block is absent, type is 'none', or YAML
+    parsing fails. Never raises — callers fall back to the legacy
+    ~/.cap/designs/<project_id> path on None.
+    """
+    constitution_path = Path.cwd() / ".cap.constitution.yaml"
+    if not constitution_path.is_file():
+        return None
+    try:
+        import yaml  # type: ignore[import]
+    except ImportError:
+        return None
+    try:
+        with constitution_path.open("r", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+    except Exception:
+        return None
+    block = data.get("design_source")
+    if not isinstance(block, dict):
+        return None
+    if block.get("type") == "none":
+        return None
+    return block
+
+
 def _design_source_path() -> Path:
+    """Resolve the active design package path with constitution-first
+    precedence:
+
+      1. constitution.design_source.source_path (absolute or ~ expanded)
+      2. {constitution.design_source.design_root}/{constitution.design_source.package}
+      3. legacy fallback: ~/.cap/designs/<project_id>
+
+    The legacy fallback exists so older constitutions without a design_source
+    block keep working; new bootstraps fill in the explicit block via
+    bootstrap-constitution-defaults.sh and the supervisor draft step.
+    """
+    block = _read_constitution_design_source()
+    if block is not None:
+        raw_path = block.get("source_path")
+        if isinstance(raw_path, str) and raw_path.strip():
+            return Path(raw_path).expanduser().resolve()
+        design_root = block.get("design_root")
+        package = block.get("package")
+        if isinstance(design_root, str) and isinstance(package, str) and package.strip():
+            return (Path(design_root).expanduser() / package).resolve()
     cap_home = Path.home() / ".cap"
     return cap_home / "designs" / _project_id_from_config()
 
