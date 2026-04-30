@@ -254,6 +254,35 @@ assert_eq "persisted under runtime project id" "0" "$?"
 normalized_project_id="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('project_id',''))" "${persisted}")"
 assert_eq "project_id rewritten in persisted JSON" "runtime-project" "${normalized_project_id}"
 
+# Case 10: explicit task constitution fence may contain a nested markdown
+# ```json block. Claude parity run 2026-05-01 produced this shape; persist
+# must strip the markdown fence before JSON parsing.
+echo "Case 10: strip nested json fence inside explicit task constitution fence"
+cat > "${SANDBOX}/draft-nested-json-fence.md" <<'EOF'
+<<<TASK_CONSTITUTION_JSON_BEGIN>>>
+```json
+{
+  "task_id": "nested-fence",
+  "project_id": "nested-proj",
+  "goal": "Verify nested markdown json fence is accepted.",
+  "goal_stage": "informal_planning",
+  "success_criteria": ["nested fence is stripped before parse"],
+  "execution_plan": [
+    {"step_id": "prd", "capability": "prd_generation"}
+  ]
+}
+```
+<<<TASK_CONSTITUTION_JSON_END>>>
+EOF
+out="$(run_persist "${SANDBOX}/draft-nested-json-fence.md" "nested-proj")"
+rc=$?
+assert_eq "exit code 0 with nested json fence" "0" "${rc}"
+persisted="${SANDBOX}/cap/projects/nested-proj/constitutions/nested-fence.json"
+[ -f "${persisted}" ]
+assert_eq "persisted file exists for nested fence case" "0" "$?"
+goal_value="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('goal',''))" "${persisted}")"
+assert_eq "nested fence JSON parsed" "Verify nested markdown json fence is accepted." "${goal_value}"
+
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"
 [ ${fail_count} -eq 0 ]

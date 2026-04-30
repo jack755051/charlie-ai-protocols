@@ -160,6 +160,19 @@ extract_task_constitution_json() {
   ' "${path}"
 }
 
+strip_json_markdown_fence() {
+  printf '%s' "$1" | "${PYTHON_BIN}" -c '
+import re
+import sys
+
+text = sys.stdin.read().strip()
+match = re.fullmatch(r"```(?:json)?\s*\n(.*)\n```", text, flags=re.S)
+if match:
+    text = match.group(1).strip()
+sys.stdout.write(text)
+'
+}
+
 validate_and_extract_ids() {
   # Validate the task constitution JSON and emit "<project_id>|<task_id>" on
   # stdout when valid. Errors go to stderr and are surfaced via exit code:
@@ -427,6 +440,7 @@ json_payload="$(extract_task_constitution_json "${draft_path}")"
 if [ -z "${json_payload}" ]; then
   fail_with "no_json_in_draft" "neither <<<TASK_CONSTITUTION_JSON>>> fence nor json fence found in ${draft_path}"
 fi
+json_payload="$(strip_json_markdown_fence "${json_payload}")"
 
 runtime_project_id="$(resolve_runtime_project_id)"
 draft_project_id="$(extract_json_project_id "${json_payload}")"
