@@ -6,7 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
-## [Unreleased]
+## [v0.19.5] - 2026-04-30
 
 ### Fixed
 - `scripts/workflows/smoke-per-stage.sh` 修正在沒安裝 `cap` alias 的環境下 binding 階段全部 graceful skip 的問題：(1) 加入 in-repo fallback — cap 不在 PATH 時改用 `${REPO_ROOT}/scripts/cap-workflow.sh`（用 `bash <file>` 呼叫，不依賴 executable bit）；(2) bind 結果判定改用 canonical `binding_status: ready` 信號 + `required_unresolved=0` 雙重確認，不再被 `summary:` 行裡 `required_unresolved=0` 的 key 名誤觸發 FAIL；(3) 報頭印出 bind invoker 解析結果（cap_path / cap_workflow_sh / unavailable）使可追溯；本 repo 環境下從先前的「2 passed, 0 failed, 3 skipped」變為「5 passed, 0 failed, 0 skipped」。
