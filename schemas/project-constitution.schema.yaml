@@ -92,6 +92,60 @@ properties:
       allowed_repo_paths:
         type: object
 
+  design_source:
+    type: object
+    description: |
+      Records which design package this project is anchored to so the runtime
+      no longer has to guess from project_id. Treat ~/.cap/designs/ as a
+      multi-package registry; this block names the specific package selected
+      at constitution-bootstrap time. Optional: projects without a design
+      input simply omit the block (engine treats absence as design_source.type
+      == "none").
+    properties:
+      type:
+        type: string
+        enum:
+          - none
+          - local_design_package
+          - claude_design
+          - figma_mcp
+          - figma_import_script
+        description: |
+          none: project has no design source (text-only spec).
+          local_design_package: a directory under design_root.
+          claude_design / figma_*: external sources captured by their own
+          fields below.
+      design_root:
+        type: string
+        description: |
+          Registry root for local packages, default ~/.cap/designs. Used only
+          when type == local_design_package.
+      package:
+        type: string
+        description: |
+          Package name within design_root (no slashes). Combined with
+          design_root to derive source_path. Used only when type ==
+          local_design_package.
+      source_path:
+        type: string
+        description: |
+          Effective source path. For local_design_package this should equal
+          {design_root}/{package}; persistence may resolve and inline it for
+          determinism. For figma_* / claude_design this is a URL or external
+          handle.
+      mode:
+        type: string
+        enum: [read_only_reference, read_write]
+        description: |
+          read_only_reference: implementation must not mutate this source.
+          read_write: reserved; not used by current workflows.
+      figma_target:
+        type: string
+        description: Used only when type == figma_mcp / figma_import_script.
+      script_path:
+        type: string
+        description: Used only when type == figma_import_script.
+
   runtime_workspace:
     type: object
     required:

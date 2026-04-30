@@ -197,6 +197,36 @@ executor_policy:
     - codex
 \`\`\`
 
+### design_source (optional; fill in only if a design is bound)
+
+\`~/.cap/designs/\` 是 design package registry，不再以 \`<project_id>\`
+為 key 自動推導。憲法應顯式記錄選定的 design package，避免後續 workflow
+（特別是 UI step）誤猜來源。如果 prompt augmentation 階段（design ritual
+block）含有 \`design_snapshot_path: ~/.cap/designs/<pkg>\`，請把對應資訊
+落地為 \`design_source\` block；如果沒有 design，請省略整個 block 或寫
+\`type: none\`。
+
+\`\`\`yaml
+# Type 1: 單一 local design package（最常見）
+design_source:
+  type: local_design_package
+  design_root: ~/.cap/designs
+  package: <package-name>
+  source_path: ~/.cap/designs/<package-name>
+  mode: read_only_reference
+
+# Type 2: 沒有 design source
+design_source:
+  type: none
+
+# Type 3: Figma MCP
+design_source:
+  type: figma_mcp
+  source_path: <figma-file-key-or-url>
+  figma_target: <frame-or-page-name>
+  mode: read_only_reference
+\`\`\`
+
 ## ID Conventions
 
 - \`schema_version\`: integer literal \`1\`
