@@ -486,6 +486,38 @@ append_workflow_log() {
   printf '[%s][%s][%s][%s]\n' "${ts}" "${agent_skill}" "${detail}" "${result}" >> "${log_path}" 2>/dev/null || true
 }
 
+# Record a step that was blocked before execution started (input gating,
+# unresolved binding, unsupported executor, missing agent, invalid shell
+# script, detached HEAD). Without this, blocked steps leave no trace in
+# workflow.log or the run-summary `## Steps` section, and governance layers
+# (provider-parity-check, watcher, post-mortem) read a partial picture.
+# Inherits agent_alias / prompt_file / script_ref from the surrounding
+# while-loop scope; falls back to safe placeholders when those are unset.
+record_blocked_step() {
+  local log_path="$1"
+  local run_summary="$2"
+  local phase_num="$3"
+  local step_id="$4"
+  local capability="$5"
+  local blocked_reason="$6"
+  local extra_detail="${7:-}"
+  local agent_skill="${agent_alias:-shell}:${prompt_file:-${script_ref:-builtin}}"
+  local detail="phase:${phase_num} step:${step_id} capability:${capability} blocked_reason:${blocked_reason}"
+  if [ -n "${extra_detail}" ]; then
+    detail="${detail} ${extra_detail}"
+  fi
+  append_workflow_log "${log_path}" "${agent_skill}" "${detail}" "blocked"
+  {
+    printf '\n### %s\n\n' "${step_id}"
+    printf -- '- phase: %s\n' "${phase_num}"
+    printf -- '- status: blocked\n'
+    printf -- '- blocked_reason: %s\n' "${blocked_reason}"
+    if [ -n "${extra_detail}" ]; then
+      printf -- '- detail: %s\n' "${extra_detail}"
+    fi
+  } >> "${run_summary}"
+}
+
 materialize_step_output() {
   local step_id="$1"
   local output_path="$2"
@@ -832,6 +864,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     echo "  ${RED}│ step ${step_id} 無法執行：binding 狀態為 ${resolution_status}${RESET}"
     FAILED=$((FAILED + 1))
     register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "unresolved_binding" "" "" ""
+    record_blocked_step "${WORKFLOW_LOG}" "${RUN_SUMMARY}" "${phase_num}" "${step_id}" "${capability}" "unresolved_binding" "resolution_status:${resolution_status}"
     break
   fi
 
@@ -848,6 +881,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     echo "  ${RED}│ step ${step_id} executor 不支援：${effective_executor}${RESET}"
     FAILED=$((FAILED + 1))
     register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "unsupported_executor" "" "" ""
+    record_blocked_step "${WORKFLOW_LOG}" "${RUN_SUMMARY}" "${phase_num}" "${step_id}" "${capability}" "unsupported_executor" "executor:${effective_executor}"
     break
   fi
 
@@ -855,6 +889,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     echo "  ${RED}│ step ${step_id} 缺少 agent_alias 或 prompt_file，無法執行${RESET}"
     FAILED=$((FAILED + 1))
     register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "unresolved_binding" "" "" ""
+    record_blocked_step "${WORKFLOW_LOG}" "${RUN_SUMMARY}" "${phase_num}" "${step_id}" "${capability}" "unresolved_binding" "missing:agent_alias_or_prompt_file"
     break
   fi
 
@@ -862,6 +897,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   if [ "${effective_executor}" = "ai" ] || [ "${fallback_executor}" = "ai" ]; then
     check_cli "${effective_cli}" || {
       FAILED=$((FAILED + 1))
+      record_blocked_step "${WORKFLOW_LOG}" "${RUN_SUMMARY}" "${phase_num}" "${step_id}" "${capability}" "cli_unavailable" "cli:${effective_cli}"
       break
     }
   fi
@@ -869,6 +905,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
   if [ "${effective_executor}" = "shell" ] && ! resolve_shell_script_path "${script_ref}" >/dev/null; then
     FAILED=$((FAILED + 1))
     register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "invalid_shell_script" "" "" ""
+    record_blocked_step "${WORKFLOW_LOG}" "${RUN_SUMMARY}" "${phase_num}" "${step_id}" "${capability}" "invalid_shell_script" "script_ref:${script_ref}"
     break
   fi
 
@@ -892,6 +929,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     printf "  ${RED}│ blocked_missing_input: %s${RESET}\n" "${MISSING_INPUTS}"
     FAILED=$((FAILED + 1))
     register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "missing_input_artifact" "" "" ""
+    record_blocked_step "${WORKFLOW_LOG}" "${RUN_SUMMARY}" "${phase_num}" "${step_id}" "${capability}" "missing_input_artifact" "missing:${MISSING_INPUTS}"
     break
   fi
 
@@ -902,6 +940,7 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
       printf "  ${RED}│ blocked_detached_head: version control step requires an attached branch${RESET}\n"
       FAILED=$((FAILED + 1))
       register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "detached_head" "" "" ""
+      record_blocked_step "${WORKFLOW_LOG}" "${RUN_SUMMARY}" "${phase_num}" "${step_id}" "${capability}" "detached_head" "version_control_requires_branch"
       break
     fi
   fi
