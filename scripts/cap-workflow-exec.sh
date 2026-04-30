@@ -146,21 +146,34 @@ run_step_claude() {
 # 剝離之前的所有內容。
 strip_codex_preamble() {
   awk '
-    BEGIN { found = 0 }
-    # Codex banner 結尾是 "--------" 後接 "user" 行，response 從 "assistant" 開始
-    /^assistant$/ { found = 1; next }
-    found == 1 { print }
-    # 如果沒有 assistant 標記（舊版 codex），fallback：跳過前面的 banner
-    END { if (found == 0) exit 1 }
+    BEGIN { found = 0; buf = "" }
+    # Codex CLI 版本差異：有些輸出以 assistant 為回覆標記，
+    # 有些輸出以 codex 為回覆標記，且會夾帶 user/exec transcript。
+    # 取最後一段 assistant/codex 回覆，避免 tool transcript 混入 artifact。
+    /^(assistant|codex)$/ { found = 1; buf = ""; next }
+    found == 1 { buf = buf $0 ORS }
+    END {
+      if (found == 0) exit 1
+      printf "%s", buf
+    }
   '
 }
 
 run_step_codex() {
   local prompt="$1"
   local raw
-  raw="$(codex exec "${prompt}" 2>&1)"
+  local exit_code
+  local args=(exec)
+  if [ "${CAP_CODEX_SKIP_GIT_REPO_CHECK:-1}" != "0" ]; then
+    args+=(--skip-git-repo-check)
+  fi
+  set +e
+  raw="$(codex "${args[@]}" "${prompt}" 2>&1)"
+  exit_code=$?
+  set -e
   # 嘗試剝離 Codex preamble；若失敗（無 assistant 標記），保留原始輸出
   printf '%s\n' "${raw}" | strip_codex_preamble 2>/dev/null || printf '%s\n' "${raw}"
+  return "${exit_code}"
 }
 
 run_step() {

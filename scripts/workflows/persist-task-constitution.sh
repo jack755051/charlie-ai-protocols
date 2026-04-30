@@ -104,7 +104,7 @@ extract_task_constitution_json() {
   awk '
     BEGIN { inside = 0; emitted = 0 }
     /^<<<TASK_CONSTITUTION_JSON_BEGIN>>>[[:space:]]*$/ { inside = 1; next }
-    /^<<<TASK_CONSTITUTION_JSON_END>>>[[:space:]]*$/   { inside = 0; next }
+    /^<<<TASK_CONSTITUTION_JSON_END>>>[[:space:]]*$/   { exit }
     inside == 1 { print; emitted = 1 }
     END { if (emitted == 0) exit 1 }
   ' "${path}" 2>/dev/null && return 0
@@ -178,6 +178,129 @@ sys.stdout.write(f"{project_id}|{task_id}\n")
 '
 }
 
+normalize_task_constitution_json() {
+  printf '%s' "$1" | "${PYTHON_BIN}" -c '
+import json
+import re
+import sys
+
+raw = sys.stdin.read()
+try:
+    data = json.loads(raw)
+except json.JSONDecodeError:
+    sys.stdout.write(raw)
+    raise SystemExit(0)
+
+def first_string(*values):
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+def string_list(value):
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return []
+
+def slug(value):
+    value = re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-")
+    return value or "task"
+
+user_intent = data.get("user_intent") if isinstance(data.get("user_intent"), dict) else {}
+scope = data.get("scope") if isinstance(data.get("scope"), dict) else {}
+
+data["task_id"] = first_string(
+    data.get("task_id"),
+    data.get("task_constitution_id"),
+    data.get("id"),
+)
+if data["task_id"]:
+    data["task_id"] = slug(data["task_id"])
+
+data["source_request"] = first_string(
+    data.get("source_request"),
+    user_intent.get("raw"),
+    user_intent.get("normalized"),
+)
+
+data["goal"] = first_string(
+    data.get("goal"),
+    data.get("task_goal"),
+    user_intent.get("normalized"),
+    user_intent.get("raw"),
+)
+
+if isinstance(scope, dict):
+    data["scope"] = string_list(scope.get("in_scope"))
+    data["non_goals"] = string_list(scope.get("out_of_scope"))
+
+data["success_criteria"] = string_list(
+    data.get("success_criteria")
+    or data.get("completion_criteria")
+    or data.get("acceptance_criteria")
+)
+
+if "constraints" not in data:
+    data["constraints"] = string_list(data.get("inherited_constraints"))
+if "stop_conditions" not in data:
+    data["stop_conditions"] = string_list(data.get("inherited_stop_conditions"))
+
+plan = data.get("execution_plan")
+if isinstance(plan, list):
+    for entry in plan:
+        if not isinstance(entry, dict):
+            continue
+        entry["capability"] = first_string(entry.get("capability"), entry.get("target_capability"))
+        routing = entry.get("failure_routing") if isinstance(entry.get("failure_routing"), dict) else {}
+        if "on_fail" not in entry and routing.get("on_fail"):
+            entry["on_fail"] = routing.get("on_fail")
+        if "route_back_to" not in entry and routing.get("route_back_to_step"):
+            entry["route_back_to"] = routing.get("route_back_to_step")
+        if "done_when" not in entry and entry.get("acceptance_criteria"):
+            entry["done_when"] = entry.get("acceptance_criteria")
+
+if data.get("workflow_id") == "project-spec-pipeline":
+    expected = [
+        ("prd", "prd_generation", "01-Supervisor"),
+        ("tech_plan", "technical_planning", "02-TechLead"),
+        ("ba", "business_analysis", "02a-BA"),
+        ("dba_api", "database_api_design", "02b-DBA"),
+        ("ui", "ui_design", "03-UI"),
+        ("spec_audit", "code_structure_audit", "90-Watcher"),
+    ]
+    by_cap = {
+        entry.get("capability"): entry
+        for entry in data.get("execution_plan", [])
+        if isinstance(entry, dict) and entry.get("capability")
+    }
+    by_id = {
+        entry.get("step_id"): entry
+        for entry in data.get("execution_plan", [])
+        if isinstance(entry, dict) and entry.get("step_id")
+    }
+    if any(step_id not in by_id for step_id, _, _ in expected):
+        canonical = []
+        for step_id, capability, bound_to in expected:
+            source = by_id.get(step_id) or by_cap.get(capability) or {}
+            canonical.append({
+                "step_id": step_id,
+                "capability": capability,
+                "bound_to": source.get("bound_to") or bound_to,
+                "needs": source.get("needs") if isinstance(source.get("needs"), list) else [],
+                "on_fail": source.get("on_fail") or "halt",
+                "route_back_to": source.get("route_back_to") or "",
+                "objective": source.get("objective") or f"Produce {step_id} artifact for project-spec-pipeline.",
+                "acceptance_criteria": string_list(source.get("acceptance_criteria") or source.get("done_when")),
+                "done_when": string_list(source.get("done_when") or source.get("acceptance_criteria")),
+            })
+        data["execution_plan"] = canonical
+
+print(json.dumps(data, ensure_ascii=False))
+'
+}
+
 print_header
 
 if [ -z "${input_context}" ]; then
@@ -199,6 +322,9 @@ json_payload="$(extract_task_constitution_json "${draft_path}")"
 if [ -z "${json_payload}" ]; then
   fail_with "no_json_in_draft" "neither <<<TASK_CONSTITUTION_JSON>>> fence nor json fence found in ${draft_path}"
 fi
+json_payload="$(normalize_task_constitution_json "${json_payload}")" || {
+  fail_with "normalization_failed" "could not normalize task constitution draft"
+}
 
 # Capture stdout+stderr into separate streams via a temp file for stderr.
 tmp_err="$(mktemp -t persist-task-constitution.err.XXXXXX)"

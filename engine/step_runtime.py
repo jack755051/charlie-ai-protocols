@@ -65,6 +65,35 @@ def _load_registry(registry_path: Path) -> dict[str, Any]:
     return {"artifacts": {}, "steps": {}}
 
 
+def _project_id_from_config() -> str:
+    """Best-effort read of the current project's .cap.project.yaml project_id."""
+    config_path = Path.cwd() / ".cap.project.yaml"
+    if config_path.is_file():
+        for line in config_path.read_text(encoding="utf-8").splitlines():
+            match = re.match(r'^project_id:\s*"?([^"#]+)"?\s*$', line)
+            if match:
+                return match.group(1).strip()
+    return Path.cwd().name
+
+
+def _design_source_path() -> Path:
+    cap_home = Path.home() / ".cap"
+    return cap_home / "designs" / _project_id_from_config()
+
+
+def _design_tree(path: Path, limit: int = 120) -> list[str]:
+    if not path.is_dir():
+        return []
+    files = sorted(
+        p for p in path.rglob("*")
+        if p.is_file() and p.name != ".DS_Store"
+    )
+    lines = [str(p.relative_to(path)) for p in files[:limit]]
+    if len(files) > limit:
+        lines.append(f"... truncated, total_files={len(files)}")
+    return lines
+
+
 # ─────────────────────────────────────────────────────────
 # 1. update-status
 # ─────────────────────────────────────────────────────────
@@ -137,10 +166,57 @@ def handoff_summary(artifact_path: str) -> None:
 # 3. resolve-inputs
 # ─────────────────────────────────────────────────────────
 
-def _intrinsic_context(artifact: str) -> str:
+def _intrinsic_context(artifact: str, plan: dict[str, Any] | None = None) -> str:
     """產生內建 intrinsic artifact 的上下文文字。"""
-    if artifact == "user_requirement":
+    if artifact in {"user_requirement", "user_intent"}:
         return "intrinsic_request"
+
+    if artifact == "project_constitution":
+        constitution_path = Path.cwd() / ".cap.constitution.yaml"
+        lines = ["intrinsic_project_constitution", f"  path: {constitution_path}"]
+        if constitution_path.is_file():
+            text = constitution_path.read_text(encoding="utf-8").strip()
+            if text:
+                lines.append("  content:")
+                lines.extend(f"    {line}" for line in text.splitlines())
+        else:
+            lines.append("  status: missing")
+        return "\n".join(lines)
+
+    if artifact == "goal_stage_hint":
+        goal_stage = ""
+        if plan:
+            governance = plan.get("governance") or {}
+            runtime = plan.get("governance_runtime") or {}
+            goal_stage = str(runtime.get("goal_stage") or governance.get("goal_stage") or "")
+        if not goal_stage:
+            workflow_id = str((plan or {}).get("workflow_id") or "")
+            goal_stage = {
+                "project-spec-pipeline": "formal_specification",
+                "project-implementation-pipeline": "implementation",
+                "project-qa-pipeline": "quality_assurance",
+            }.get(workflow_id, "")
+        lines = ["intrinsic_goal_stage_hint"]
+        if goal_stage:
+            lines.append(f"  goal_stage: {goal_stage}")
+        else:
+            lines.append("  status: unspecified")
+        return "\n".join(lines)
+
+    if artifact == "design_source":
+        design_path = _design_source_path()
+        lines = [
+            "intrinsic_design_source",
+            f"  path: {design_path}",
+            "  mode: read_only_reference",
+        ]
+        tree = _design_tree(design_path)
+        if tree:
+            lines.append("  files:")
+            lines.extend(f"    {item}" for item in tree)
+        else:
+            lines.append("  status: missing")
+        return "\n".join(lines)
 
     if artifact == "repo_changes":
         status = _run_git("status", "--short")
@@ -249,6 +325,10 @@ def _intrinsic_context(artifact: str) -> str:
 _INTRINSIC_ARTIFACTS = frozenset(
     {
         "user_requirement",
+        "user_intent",
+        "project_constitution",
+        "goal_stage_hint",
+        "design_source",
         "repo_changes",
         "project_context",
         "commit_scope",
@@ -283,7 +363,7 @@ def resolve_inputs(
     for artifact in inputs:
         if artifact in _INTRINSIC_ARTIFACTS:
             lines.append(f"- {artifact}:")
-            for detail in _intrinsic_context(artifact).splitlines():
+            for detail in _intrinsic_context(artifact, plan).splitlines():
                 lines.append(f"  {detail}")
             continue
 
@@ -373,11 +453,23 @@ def validate_inputs(
 
     for artifact in target.get("inputs", []):
         if artifact in _INTRINSIC_ARTIFACTS:
+            if artifact == "project_constitution" and not (Path.cwd() / ".cap.constitution.yaml").is_file():
+                missing.append(artifact)
+                continue
+            if artifact == "design_source" and not _design_source_path().is_dir():
+                missing.append(artifact)
+                continue
             resolved.append(
                 {
                     "artifact": artifact,
                     "source_step": "__request__",
-                    "path": "<inline:user_request>",
+                    "path": (
+                        str(Path.cwd() / ".cap.constitution.yaml")
+                        if artifact == "project_constitution"
+                        else str(_design_source_path())
+                        if artifact == "design_source"
+                        else "<inline:user_request>"
+                    ),
                     "handoff_path": "",
                 }
             )

@@ -114,6 +114,44 @@ print("")
 ' "${artifact_name}"
 }
 
+resolve_task_constitution_json_path() {
+  local candidate="$1"
+  if [ -z "${candidate}" ] || [ ! -f "${candidate}" ]; then
+    printf '%s\n' "${candidate}"
+    return 0
+  fi
+
+  "${PYTHON_BIN}" - "${candidate}" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+candidate = Path(sys.argv[1])
+text = candidate.read_text(encoding="utf-8")
+
+try:
+    json.loads(text)
+except json.JSONDecodeError:
+    pass
+else:
+    print(candidate)
+    raise SystemExit(0)
+
+patterns = [
+    r"^-\s*name=task_constitution\s+path=(\S+)\s*$",
+    r"^persisted_path:\s*(\S+)\s*$",
+]
+for pattern in patterns:
+    match = re.search(pattern, text, flags=re.MULTILINE)
+    if match:
+        print(match.group(1))
+        raise SystemExit(0)
+
+print(candidate)
+PY
+}
+
 print_header
 
 # Resolve task_constitution path
@@ -123,6 +161,10 @@ fi
 if [ -z "${task_constitution_path}" ]; then
   fail_with "missing_task_constitution_path" "set CAP_TASK_CONSTITUTION_PATH or pass via input_context"
 fi
+if [ ! -f "${task_constitution_path}" ]; then
+  fail_with "task_constitution_not_found" "${task_constitution_path}"
+fi
+task_constitution_path="$(resolve_task_constitution_json_path "${task_constitution_path}")"
 if [ ! -f "${task_constitution_path}" ]; then
   fail_with "task_constitution_not_found" "${task_constitution_path}"
 fi
