@@ -498,51 +498,62 @@ def validate_inputs(
     missing: list[str] = []
     resolved: list[dict[str, Any]] = []
 
-    for artifact in target.get("inputs", []):
+    def _try_resolve(artifact: str) -> dict[str, Any] | None:
+        """Return a resolved artifact descriptor if available; None when
+        the artifact does not yet exist (caller decides whether to treat
+        absence as missing or as a graceful no-op)."""
         if artifact in _INTRINSIC_ARTIFACTS:
             if artifact == "project_constitution" and not (Path.cwd() / ".cap.constitution.yaml").is_file():
-                missing.append(artifact)
-                continue
+                return None
             if artifact == "design_source" and not _design_source_path().is_dir():
-                missing.append(artifact)
-                continue
-            resolved.append(
-                {
-                    "artifact": artifact,
-                    "source_step": "__request__",
-                    "path": (
-                        str(Path.cwd() / ".cap.constitution.yaml")
-                        if artifact == "project_constitution"
-                        else str(_design_source_path())
-                        if artifact == "design_source"
-                        else "<inline:user_request>"
-                    ),
-                    "handoff_path": "",
-                }
-            )
-            continue
+                return None
+            return {
+                "artifact": artifact,
+                "source_step": "__request__",
+                "path": (
+                    str(Path.cwd() / ".cap.constitution.yaml")
+                    if artifact == "project_constitution"
+                    else str(_design_source_path())
+                    if artifact == "design_source"
+                    else "<inline:user_request>"
+                ),
+                "handoff_path": "",
+            }
 
         entry = registry.get("artifacts", {}).get(artifact)
         if not entry:
-            missing.append(artifact)
-            continue
-
+            return None
         source_step = entry.get("source_step")
         source_state = (
             registry.get("steps", {}).get(source_step, {}).get("execution_state")
         )
         if source_state != "validated":
-            missing.append(artifact)
-            continue
+            return None
+        return {
+            "artifact": artifact,
+            "source_step": source_step,
+            "path": entry.get("path"),
+            "handoff_path": entry.get("handoff_path"),
+        }
 
-        resolved.append(
-            {
-                "artifact": artifact,
-                "source_step": source_step,
-                "path": entry.get("path"),
-                "handoff_path": entry.get("handoff_path"),
-            }
-        )
+    # Required inputs — absence blocks the step.
+    for artifact in target.get("inputs", []):
+        descriptor = _try_resolve(artifact)
+        if descriptor is None:
+            missing.append(artifact)
+        else:
+            resolved.append(descriptor)
+
+    # Optional inputs — present means include in resolved with optional flag,
+    # absent means silently skip. Lets workflow YAML mark inputs whose
+    # absence should trigger the step's documented graceful no-op path
+    # (e.g. ingest_design_source when design_source is type=none / unset)
+    # rather than have runtime gate them off before the shell runs.
+    for artifact in target.get("optional_inputs", []):
+        descriptor = _try_resolve(artifact)
+        if descriptor is not None:
+            descriptor["optional"] = True
+            resolved.append(descriptor)
 
     print(
         json.dumps(

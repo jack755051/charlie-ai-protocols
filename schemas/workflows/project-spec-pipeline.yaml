@@ -100,6 +100,7 @@ steps:
     needs: [persist_task_constitution]
     inputs:
       - project_constitution
+    optional_inputs:
       - design_source
     outputs:
       - design_source_summary
@@ -116,6 +117,7 @@ steps:
     notes:
       - 與 emit_prd_ticket 邏輯獨立；此 step 平行於 prd / tech_plan / ba / dba_api 跑，只在 ui step 之前必須完成（已透過 emit_ui_ticket 與 ui 的 needs 銜接）。
       - 純 deterministic shell；不允許 AI fallback。
+      - design_source 在 optional_inputs（不在 inputs）：runtime 對其缺漏不 block，由 shell 從憲法讀 design_source.type 自決 no-op；對齊 done_when 第一條的 graceful no-op 語意。
 
   - id: emit_prd_ticket
     name: Emit Handoff Ticket for prd
@@ -146,6 +148,7 @@ steps:
     inputs:
       - task_constitution
       - project_constitution
+    optional_inputs:
       - design_source
     outputs:
       - prd_document
@@ -316,6 +319,7 @@ steps:
     inputs:
       - ba_spec
       - tech_plan_document
+    optional_inputs:
       - design_source
     outputs:
       - ui_spec
