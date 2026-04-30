@@ -158,7 +158,11 @@ properties:
         description: 本 step 應監看的停止條件；觸發時必須 halt 並回報。
       design_assets_pointer:
         type: string
-        description: 設計稿來源路徑（例如 `~/.cap/designs/<project_id>/`），UI 類 step 必填。
+        description: |
+          設計稿來源路徑，UI 類 step 必填。v0.20.0+ 應由 supervisor 從
+          `constitution.design_source.source_path` 抄寫；legacy fallback 才會
+          走 `~/.cap/designs/<project_id>/`。不要再硬編 project_id 等於
+          design package 的隱式假設。
 
   acceptance_criteria:
     type: array
