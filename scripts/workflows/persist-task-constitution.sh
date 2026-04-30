@@ -261,7 +261,19 @@ if isinstance(plan, list):
         if "done_when" not in entry and entry.get("acceptance_criteria"):
             entry["done_when"] = entry.get("acceptance_criteria")
 
-if data.get("workflow_id") == "project-spec-pipeline":
+is_project_spec_pipeline = (
+    data.get("workflow_id") == "project-spec-pipeline"
+    or (
+        data.get("goal_stage") == "formal_specification"
+        and isinstance(data.get("execution_plan"), list)
+        and all(
+            isinstance(entry, dict) and entry.get("step_id")
+            for entry in data.get("execution_plan", [])
+        )
+    )
+)
+
+if is_project_spec_pipeline:
     expected = [
         ("prd", "prd_generation", "01-Supervisor"),
         ("tech_plan", "technical_planning", "02-TechLead"),
