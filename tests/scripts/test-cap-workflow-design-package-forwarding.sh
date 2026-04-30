@@ -115,6 +115,7 @@ esac
 echo "Case 3: --design-package pkg-a forwards to design_prompt.py augment"
 > "${LOG_FILE}"
 HOME="${SANDBOX}/home" \
+CAP_PYTHON_BIN="${SANDBOX}/bin/python3" \
 PATH="${SANDBOX}/bin:${PATH}" \
 bash "${WRAPPER}" run --dry-run --design-package pkg-a project-constitution "test" \
   > "${SANDBOX}/run-3.out" 2>&1 || true
@@ -126,6 +127,7 @@ assert_log_contains "augment invocation forwards --design-package" "--design-pac
 echo "Case 4: --design-package pkg-b forwards correctly (no hard-coding)"
 > "${LOG_FILE}"
 HOME="${SANDBOX}/home" \
+CAP_PYTHON_BIN="${SANDBOX}/bin/python3" \
 PATH="${SANDBOX}/bin:${PATH}" \
 bash "${WRAPPER}" run --dry-run --design-package pkg-b project-constitution "test" \
   > "${SANDBOX}/run-4.out" 2>&1 || true

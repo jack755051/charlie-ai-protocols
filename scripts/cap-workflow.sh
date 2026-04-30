@@ -30,6 +30,10 @@ EOF
 }
 
 resolve_python() {
+  if [ -n "${CAP_PYTHON_BIN:-}" ]; then
+    printf '%s\n' "${CAP_PYTHON_BIN}"
+    return 0
+  fi
   if [ -x "${VENV_PYTHON}" ]; then
     printf '%s\n' "${VENV_PYTHON}"
   else
