@@ -6,6 +6,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.21.4] - 2026-05-01
+
+### Fixed
+- `scripts/workflows/provider-parity-check.sh` §4.5 修 false positive：當 `.cap.constitution.yaml` 沒有宣告 `design_source` block（DESIGN_TYPE=""）但 `docs/design/` 存在時，先前的邏輯硬查 `source-summary.md` / `source-tree.txt` / `design-source.yaml` / `.source-hash.txt` 4 個 ingest sentinel，把 UI agent（03-ui-agent.md §4）合法寫入的 `<module>_UI_v*.md` / `_tokens_v*.json` / `_screens_v*.json` / `_prototype_v*.html` 4 個交付物誤判為 4 個 missing FAIL；現在合併 `none|""` 為同一條 lenient PASS 分支：沒宣告 design_source 就不該期待 ingest 跑、dir 內容是 UI agent 或更早跑的副產物，視為 PASS with note。codex spec-pipeline parity 從 41 PASS / 5 FAIL 收斂為 **42 PASS / 1 FAIL**（與 claude 一致），剩下 1 FAIL 為 supervisor 寫 `non_goals=[]`（已 deferred）。
+
+### Changed
+- `agent-skills/03-ui-agent.md` §4 加硬性「必須實際寫檔」規範：claude UI step 在 v0.21.3 cross-provider parity run 觀察到只在 stdout / handoff_summary 用 code block 或 diff 列出資產內容、寫「建議落地 / 待後續決定 / 未寫入」等占位語意取代真實寫檔；新規條款明確禁止此模式，要求以實際檔案系統寫入動作建立 4 個必交付資產，且 §5 handoff_output `output_paths` 條目必須對應**已實際寫入**的檔案路徑、不接受占位。
+
 ## [v0.21.3] - 2026-05-01
 
 ### Fixed
