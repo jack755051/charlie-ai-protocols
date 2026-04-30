@@ -133,6 +133,42 @@ rc=$?
 assert_eq "exit code 40" "40" "${rc}"
 assert_contains "INVALID_EXECUTION_PLAN_ENTRY detail" "INVALID_EXECUTION_PLAN_ENTRY" "${out}"
 
+# Case 6: normalize fills `goal` from `task_summary` alias.
+# Reproduces the supervisor-draft shape that real cap workflow run hit on
+# 2026-04-30: top-level `task_summary` instead of `goal`,
+# `user_intent_excerpt` instead of `source_request`, and `target_capability`
+# instead of `capability` inside execution_plan entries. Use goal_stage
+# informal_planning so the canonical project-spec-pipeline plan replacement
+# (which expects six fixed steps) does not kick in for this fixture.
+echo "Case 6: normalize lifts task_summary into canonical goal field"
+cat > "${SANDBOX}/draft-task-summary.md" <<'EOF'
+<<<TASK_CONSTITUTION_JSON_BEGIN>>>
+{
+  "task_id": "alias-test",
+  "project_id": "alias-proj",
+  "task_summary": "Verify normalizer maps task_summary → goal so legacy supervisor drafts persist cleanly.",
+  "goal_stage": "informal_planning",
+  "user_intent_excerpt": "make sure goal alias works",
+  "success_criteria": ["normalize maps aliases without halt"],
+  "execution_plan": [
+    {"step_id": "prd", "target_capability": "prd_generation"}
+  ]
+}
+<<<TASK_CONSTITUTION_JSON_END>>>
+EOF
+out="$(run_persist "${SANDBOX}/draft-task-summary.md")"
+rc=$?
+assert_eq "exit code 0 with task_summary alias" "0" "${rc}"
+persisted="${SANDBOX}/cap/projects/alias-proj/constitutions/alias-test.json"
+[ -f "${persisted}" ]
+assert_eq "persisted file exists for alias case" "0" "$?"
+goal_value="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('goal',''))" "${persisted}")"
+assert_eq "goal field populated from task_summary" "Verify normalizer maps task_summary → goal so legacy supervisor drafts persist cleanly." "${goal_value}"
+source_request_value="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('source_request',''))" "${persisted}")"
+assert_eq "source_request populated from user_intent_excerpt" "make sure goal alias works" "${source_request_value}"
+capability_value="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['execution_plan'][0].get('capability',''))" "${persisted}")"
+assert_eq "execution_plan capability normalized from target_capability" "prd_generation" "${capability_value}"
+
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"
 [ ${fail_count} -eq 0 ]
