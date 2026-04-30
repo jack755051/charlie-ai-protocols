@@ -228,6 +228,8 @@ data["source_request"] = first_string(
 data["goal"] = first_string(
     data.get("goal"),
     data.get("task_goal"),
+    data.get("objective"),
+    data.get("summary"),
     user_intent.get("normalized"),
     user_intent.get("raw"),
 )
@@ -235,11 +237,17 @@ data["goal"] = first_string(
 if isinstance(scope, dict):
     data["scope"] = string_list(scope.get("in_scope"))
     data["non_goals"] = string_list(scope.get("out_of_scope"))
+elif "scope" not in data:
+    data["scope"] = string_list(data.get("scope_in"))
+if "non_goals" not in data:
+    data["non_goals"] = string_list(data.get("scope_out"))
 
 data["success_criteria"] = string_list(
     data.get("success_criteria")
     or data.get("completion_criteria")
+    or data.get("completion_criteria_global")
     or data.get("acceptance_criteria")
+    or data.get("acceptance_criteria_global")
 )
 
 if "constraints" not in data:
@@ -260,6 +268,17 @@ if isinstance(plan, list):
             entry["route_back_to"] = routing.get("route_back_to_step")
         if "done_when" not in entry and entry.get("acceptance_criteria"):
             entry["done_when"] = entry.get("acceptance_criteria")
+
+if not data["success_criteria"] and isinstance(plan, list):
+    derived_success = []
+    for entry in plan:
+        if not isinstance(entry, dict):
+            continue
+        step_id = first_string(entry.get("step_id"), entry.get("capability"), entry.get("target_capability"))
+        criteria = string_list(entry.get("acceptance_criteria") or entry.get("done_when"))
+        if criteria:
+            derived_success.append(f"{step_id}: " + "; ".join(criteria[:3]))
+    data["success_criteria"] = derived_success
 
 is_project_spec_pipeline = (
     data.get("workflow_id") == "project-spec-pipeline"
