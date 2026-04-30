@@ -480,6 +480,15 @@ def cmd_augment(args: argparse.Namespace) -> int:
             return 30
         fields["design_path"] = _display_design_path(design_path)
         fields["design_tree"] = _format_design_tree(design_path)
+        # design_package: basename when path lives under ~/.cap/designs/<pkg>;
+        # otherwise just the directory's own name. Caller (constitution draft)
+        # uses this as the value of design_source.package in the JSON block.
+        designs_root = _resolve_design_path(DEFAULT_DESIGNS_DIR)
+        try:
+            relative = design_path.resolve().relative_to(designs_root)
+            fields["design_package"] = relative.parts[0] if relative.parts else design_path.name
+        except ValueError:
+            fields["design_package"] = design_path.name
 
     ritual = _render_block(source_def.get("appended_block", "") or "", fields)
     augmented = _augment(prompt, ritual)

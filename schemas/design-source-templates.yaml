@@ -43,9 +43,21 @@ sources:
     appended_block: |
       設計來源：local-design
       design_snapshot_path: {design_path}
+      design_package_name: {design_package}
       design_snapshot_mutability: read_only
       implementation_authority: reference_only
       請讀取上述本地設計稿 package 目錄，將它作為 UI / interaction / layout 的參考來源；不得修改 ~/.cap/designs 內任何檔案。若設計稿內含 framework 或技術棧假設，僅視為 reference implementation，須由 TechLead / Supervisor 與 Project Constitution 對齊後才能採用。
+
+      請將以下 design_source block 落地進 Project Constitution（draft_constitution step 的 JSON 草稿），讓後續 workflow 可從憲法直接讀取設計來源，不再從 project_id 推導：
+
+      ```yaml
+      design_source:
+        type: local_design_package
+        design_root: ~/.cap/designs
+        package: {design_package}
+        source_path: {design_path}
+        mode: read_only_reference
+      ```
 
       design_tree:
       ```text
