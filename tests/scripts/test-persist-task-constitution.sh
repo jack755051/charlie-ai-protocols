@@ -94,7 +94,7 @@ cat > "${SANDBOX}/draft-bad-json.md" <<'EOF'
 EOF
 out="$(run_persist "${SANDBOX}/draft-bad-json.md")"
 rc=$?
-assert_eq "exit code 40" "40" "${rc}"
+assert_eq "exit code 41" "41" "${rc}"
 assert_contains "PARSE_ERROR detail" "PARSE_ERROR" "${out}"
 
 # Case 3: missing required field
@@ -106,7 +106,7 @@ cat > "${SANDBOX}/draft-missing.md" <<'EOF'
 EOF
 out="$(run_persist "${SANDBOX}/draft-missing.md")"
 rc=$?
-assert_eq "exit code 40" "40" "${rc}"
+assert_eq "exit code 41" "41" "${rc}"
 assert_contains "MISSING_REQUIRED detail" "MISSING_REQUIRED:task_id" "${out}"
 
 # Case 4: invalid goal_stage
@@ -118,7 +118,7 @@ cat > "${SANDBOX}/draft-bad-stage.md" <<'EOF'
 EOF
 out="$(run_persist "${SANDBOX}/draft-bad-stage.md")"
 rc=$?
-assert_eq "exit code 40" "40" "${rc}"
+assert_eq "exit code 41" "41" "${rc}"
 assert_contains "INVALID_GOAL_STAGE detail" "INVALID_GOAL_STAGE:bogus" "${out}"
 
 # Case 5: invalid execution_plan entry
@@ -130,7 +130,7 @@ cat > "${SANDBOX}/draft-bad-plan.md" <<'EOF'
 EOF
 out="$(run_persist "${SANDBOX}/draft-bad-plan.md")"
 rc=$?
-assert_eq "exit code 40" "40" "${rc}"
+assert_eq "exit code 41" "41" "${rc}"
 assert_contains "INVALID_EXECUTION_PLAN_ENTRY detail" "INVALID_EXECUTION_PLAN_ENTRY" "${out}"
 
 # Case 6: normalize fills `goal` from `task_summary` alias.
@@ -168,6 +168,60 @@ source_request_value="$(python3 -c "import json,sys; print(json.load(open(sys.ar
 assert_eq "source_request populated from user_intent_excerpt" "make sure goal alias works" "${source_request_value}"
 capability_value="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['execution_plan'][0].get('capability',''))" "${persisted}")"
 assert_eq "execution_plan capability normalized from target_capability" "prd_generation" "${capability_value}"
+
+# Case 7: normalize coerces risk_profile object form into the schema enum string.
+# Reproduces the supervisor draft shape that real cap workflow run hit on
+# 2026-05-01: top-level `risk_profile` was {"level":"medium","key_risks":[...]}
+# but schema requires type=string with enum [low,medium,high,unknown]. The
+# normalizer must keep level and drop sub-fields so persist does not halt.
+echo "Case 7: normalize coerces risk_profile object form to enum string"
+cat > "${SANDBOX}/draft-risk-object.md" <<'EOF'
+<<<TASK_CONSTITUTION_JSON_BEGIN>>>
+{
+  "task_id": "risk-obj",
+  "project_id": "risk-proj",
+  "goal": "Verify risk_profile object is collapsed to level string.",
+  "goal_stage": "informal_planning",
+  "success_criteria": ["risk_profile becomes a schema-valid string"],
+  "risk_profile": {"level": "medium", "key_risks": ["ignored sub-field"]},
+  "execution_plan": [
+    {"step_id": "prd", "capability": "prd_generation"}
+  ]
+}
+<<<TASK_CONSTITUTION_JSON_END>>>
+EOF
+out="$(run_persist "${SANDBOX}/draft-risk-object.md")"
+rc=$?
+assert_eq "exit code 0 with risk_profile object" "0" "${rc}"
+persisted="${SANDBOX}/cap/projects/risk-proj/constitutions/risk-obj.json"
+risk_value="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('risk_profile',''))" "${persisted}")"
+assert_eq "risk_profile collapsed to level string" "medium" "${risk_value}"
+
+# Case 8: normalize ensures non_goals is always an array even when omitted.
+# parity-check (PROVIDER-PARITY-E2E §4.2) treats missing non_goals as a real
+# FAIL. The normalizer should default it to [] so downstream gates see a
+# schema-valid array rather than null/absent.
+echo "Case 8: normalize defaults missing non_goals to []"
+cat > "${SANDBOX}/draft-no-non-goals.md" <<'EOF'
+<<<TASK_CONSTITUTION_JSON_BEGIN>>>
+{
+  "task_id": "no-ng",
+  "project_id": "no-ng-proj",
+  "goal": "Verify normalize defaults non_goals to empty array.",
+  "goal_stage": "informal_planning",
+  "success_criteria": ["non_goals is array even when supervisor omits it"],
+  "execution_plan": [
+    {"step_id": "prd", "capability": "prd_generation"}
+  ]
+}
+<<<TASK_CONSTITUTION_JSON_END>>>
+EOF
+out="$(run_persist "${SANDBOX}/draft-no-non-goals.md")"
+rc=$?
+assert_eq "exit code 0 without non_goals" "0" "${rc}"
+persisted="${SANDBOX}/cap/projects/no-ng-proj/constitutions/no-ng.json"
+non_goals_type="$(python3 -c "import json,sys; print(type(json.load(open(sys.argv[1])).get('non_goals')).__name__)" "${persisted}")"
+assert_eq "non_goals normalized to list type" "list" "${non_goals_type}"
 
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"

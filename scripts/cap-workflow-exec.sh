@@ -265,6 +265,7 @@ shell_exit_condition() {
     21) printf '%s\n' "mixed_change_type" ;;
     30) printf '%s\n' "policy_blocked" ;;
     40) printf '%s\n' "git_operation_failed" ;;
+    41) printf '%s\n' "schema_validation_failed" ;;
     50) printf '%s\n' "sensitive_file_risk" ;;
     *)  printf '%s\n' "shell_exit_nonzero" ;;
   esac

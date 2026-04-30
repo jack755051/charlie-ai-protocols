@@ -72,7 +72,10 @@ fail_with() {
   for line in "$@"; do
     printf 'detail: %s\n' "${line}"
   done
-  exit 40
+  # exit 41 = schema_validation_failed (cap-workflow-exec shell_exit_condition).
+  # Distinct from 40 (git_operation_failed) so observability layers can tell
+  # a Type B drift from a vc-apply git failure. Both still halt the workflow.
+  exit 41
 }
 
 extract_artifact_path() {
@@ -256,6 +259,29 @@ if "constraints" not in data:
     data["constraints"] = string_list(data.get("inherited_constraints"))
 if "stop_conditions" not in data:
     data["stop_conditions"] = string_list(data.get("inherited_stop_conditions"))
+
+# Coerce non_goals into the schema-required array<string> shape. Supervisor
+# drafts sometimes leave the field as null, a string, or omit it entirely;
+# parity-check (PROVIDER-PARITY-E2E §4.2) treats absent/empty as a real FAIL,
+# so we collapse those drift forms into an empty list rather than re-fighting
+# the schema gate downstream.
+data["non_goals"] = string_list(data.get("non_goals"))
+
+# Coerce risk_profile object-form into the schema enum string. Supervisors
+# occasionally return a structured block like {"level":"medium","key_risks":[...]};
+# the schema is type=string with enum [low,medium,high,unknown], so we extract
+# the `level` and drop sub-fields. The richer narrative still lives in the
+# supervisor draft markdown — only the persisted JSON must conform.
+risk = data.get("risk_profile")
+risk_levels = {"low", "medium", "high", "unknown"}
+if isinstance(risk, dict):
+    level = risk.get("level")
+    data["risk_profile"] = level if isinstance(level, str) and level in risk_levels else "unknown"
+elif isinstance(risk, str):
+    if risk and risk not in risk_levels:
+        data["risk_profile"] = "unknown"
+elif risk is not None:
+    data["risk_profile"] = "unknown"
 
 plan = data.get("execution_plan")
 if isinstance(plan, list):
