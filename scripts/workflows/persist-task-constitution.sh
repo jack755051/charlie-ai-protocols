@@ -221,6 +221,7 @@ if data["task_id"]:
 
 data["source_request"] = first_string(
     data.get("source_request"),
+    data.get("user_intent_excerpt"),
     user_intent.get("raw"),
     user_intent.get("normalized"),
 )
@@ -228,6 +229,7 @@ data["source_request"] = first_string(
 data["goal"] = first_string(
     data.get("goal"),
     data.get("task_goal"),
+    data.get("task_summary"),
     data.get("objective"),
     data.get("summary"),
     user_intent.get("normalized"),
@@ -268,6 +270,8 @@ if isinstance(plan, list):
             entry["route_back_to"] = routing.get("route_back_to_step")
         if "done_when" not in entry and entry.get("acceptance_criteria"):
             entry["done_when"] = entry.get("acceptance_criteria")
+        if "output_paths" not in entry and entry.get("outputs"):
+            entry["output_paths"] = entry.get("outputs")
 
 if not data["success_criteria"] and isinstance(plan, list):
     derived_success = []
