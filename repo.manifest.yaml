@@ -3,8 +3,8 @@ repo_id: charlie-ai-protocols
 name: "Charlie's AI Protocols (CAP)"
 display_name: AI 多代理協作系統
 summary: >
-  工業級 AI 多代理協作框架與 CLI 工具。定義 17 位專職 AI Agent 的角色邊界、交接協議與品質門禁，
-  搭配 CrewAI 執行引擎、Shell CLI（cap）與雙寫 Trace 機制，讓 AI 與工程團隊在同一套契約下穩定協作。
+  本地 AI agent 協作規範與 CLI 工具。定義 agent 角色邊界、交接協議與 workflow 契約，
+  搭配 Shell CLI（cap）與 runtime storage，把角色分工、執行紀錄與常用流程整理成可追蹤的形式。
 owner: jack755051
 maintainers:
   - jack755051
@@ -226,10 +226,10 @@ portfolio:
   featured: true
   priority: 2
   card_title: "Charlie's AI Protocols"
-  card_subtitle: 工業級 AI 多代理協作框架
+  card_subtitle: 本地 AI agent 協作規範與 CLI
   highlights:
-    - 17 位專職 AI Agent 涵蓋完整軟體開發流水線
-    - CLI 工具 (cap) 一鍵安裝、版本管理與 session tracing
+    - 17 位 agent skill 定義角色邊界與交接責任
+    - CLI 工具 (cap) 支援安裝、版本管理與 session tracing
     - 三消費者架構：CrewAI / Claude Code / Codex 共用同一份 SSOT
     - BYOCLI 模式：$prefix 臨時調用任意 Agent
-    - 10 套框架策略 + README 治理系統
+    - 10 套框架策略與 README 治理系統
