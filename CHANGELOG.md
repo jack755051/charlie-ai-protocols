@@ -6,6 +6,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.21.0] - 2026-04-30
+
+### Added
+- `scripts/workflows/ingest-design-source.sh` 新增 deterministic ingest 腳本：把 `constitution.design_source` 指向的 raw package 收斂為 `docs/design/source-summary.md` + `source-tree.txt` + `design-source.yaml` 三個 artifacts 與 `.source-hash.txt` sentinel；採 SHA-256 over (relative-path + content) 計算 hash，cache hit 時跳過 rebuild 維持 mtime 不變；`design_source.type: none` / 缺 block + 空 fallback 視為 graceful no-op 不寫檔；source_path 宣告但磁碟缺失則 halt（exit 40）。共享 `engine/step_runtime.py` `_design_source_path` 三段式解析（constitution → design_root + package → legacy `~/.cap/designs/<project_id>`）。
+- `schemas/capabilities.yaml` 新增 `design_source_ingest` capability（shell-only）：`default_agent: shell` / `allowed_agents: [shell]`，inputs `project_constitution` + `design_source`，outputs `design_source_summary` / `design_source_tree` / `design_source_metadata`；done_when 含 hash 計算、cache hit 行為、no-op 與 halt 條件。`.cap.constitution.yaml` 自宿主憲法 allowed_capabilities 同步加入。
+- `schemas/workflows/project-spec-pipeline.yaml` 插入 `ingest_design_source` 為新一級 step（spec pipeline 從 15 步升至 16 步）：依賴 `persist_task_constitution`、平行於 prd / tech_plan / ba / dba_api 跑、由 `emit_ui_ticket` 與 `ui` 顯式 needs 銜接，確保 UI step 啟動前 summary 已落地；artifacts 區補三個新名稱、logger_checkpoints 加入該 step。
+- `tests/scripts/test-design-source-ingest.sh` 新增 6 cases / 21 assertions 涵蓋 hash-cache 全生命週期：no_design_source / type=none no-op / 真實 source rebuilt 三件式 + 64-char hash sentinel / 重跑 cached（mtime 不變、hash 相同）/ 修改 source 觸發 rebuild + 新 hash / source_path 缺失 halt exit 40；用 `mktemp -d` sandbox + subshell run_ingest 避免 cd leak 與 exit code masking。
+
+### Changed
+- `schemas/handoff-ticket.schema.yaml` `context_payload.design_assets_pointer` 描述更新：明示 v0.20.0+ 應由 supervisor 從 `constitution.design_source.source_path` 抄寫；legacy `~/.cap/designs/<project_id>/` 僅作為 runtime fallback；不再硬編 project_id 等於 design package 的隱式假設。
+- `schemas/workflows/project-spec-pipeline.yaml` UI step done_when 改為「**優先**對齊 `docs/design/source-summary.md`」（v0.21.0 summary-first），raw package 解析降為 fallback；notes 詳述 summary-first 規範、cache 機制（`.source-hash.txt` sentinel）、與 ingest 共享的三段式解析鏈。
+- `scripts/workflows/smoke-per-stage.sh` 從 9 step 擴為 10 step，加入 design-source ingest smoke；本 repo 環境下從「9/9、115 assertions」升為「10/10、136 assertions」全綠。
+
 ## [v0.20.1] - 2026-04-30
 
 ### Added
