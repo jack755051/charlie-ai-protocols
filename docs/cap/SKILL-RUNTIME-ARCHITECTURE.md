@@ -19,7 +19,8 @@
   - LangGraph backend 實作
   - 統一 State Container
   - Checkpoint / 可恢復執行
-  - dispatch 前自動 materialize handoff ticket
+- **v0.19.x 已部分實作**
+  - dispatch 前自動 materialize handoff ticket — 透過 `scripts/workflows/emit-handoff-ticket.sh` 與三條 per-stage workflow 中 `emit_<step>_ticket` 顯式 shell step 達成；engine `step_runtime` 自動 hook（不需要在 workflow YAML 顯式插步驟）仍在 deferred 範圍
 
 ## 核心原則
 

@@ -56,13 +56,13 @@ install CAP
 - `agent-sessions.json` executor-level ledger
 - `result.md` 初版 run archive
 
-主要缺口：
+主要缺口（含 v0.19.x 進度註記）：
 
-- Project Constitution runner 尚未完整
+- Project Constitution runner 尚未完整 — `project-constitution.yaml` workflow 已穩定，但 task-scoped runner（task constitution + execution_plan + per-step ticket）僅做到 deterministic shell + workflow YAML 層；engine `step_runtime` 自動 ticket emission hook 仍 deferred
 - `cap workflow constitution` 與 Project Constitution 語意尚未拆乾淨
-- Supervisor structured orchestration 尚未落地
+- Supervisor structured orchestration **v0.19.x 部分落地**：per-stage workflow（spec / implementation / qa）固化派工迴圈、Type C handoff ticket schema + emit shell executor、`policies/handoff-ticket-protocol.md` 規範非 supervisor sub-agent 的 ticket 讀寫；engine 自動 hook 與 sub-agent 端 e2e consumption 仍 deferred
 - AgentSessionRunner 尚未抽象化
-- Artifact validation / governance gates 尚未完整 runtime enforce
+- Artifact validation / governance gates **v0.19.x 部分強化**：persist-task-constitution.sh 與 emit-handoff-ticket.sh 接入 `engine/step_runtime.py validate-jsonschema` 全 schema 驗證；watcher milestone gate 規範已寫入三條 per-stage workflow，但 runtime 自動觸發與 fail route_back_to 自動回流仍 deferred
 - repo-specific source resolver 尚未完整
 - promote / publish 閉環尚未完整
 - detached / background runtime 尚未實作

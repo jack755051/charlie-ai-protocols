@@ -18,6 +18,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 - `schemas/handoff-ticket.schema.yaml` 從 legacy `fields:` 風格轉為 JSON-Schema 標準；保留所有 12 個 top-level required fields 與 nested required（context_payload.{project_constitution_path, task_constitution_path}、output_expectations.{primary_artifacts, handoff_summary_path}、failure_routing.on_fail）；array-of-object 改用 JSON-Schema 標準 `items: {type: object, properties: {...}}` 寫法，可被 jsonschema 標準驗證器直接消費。
 
 ### Fixed
+- `docs/cap/SKILL-RUNTIME-ARCHITECTURE.md` 既有「draft（尚未實作）」清單把已落地的 `dispatch 前自動 materialize handoff ticket` 移出，改置入新增的「v0.19.x 已部分實作」分類並註記哪部分還缺（engine `step_runtime` 自動 hook 仍 deferred）。
+- `docs/cap/IMPLEMENTATION-ROADMAP.md` Phase 0 的「主要缺口」清單為三項加上 v0.19.x 進度註記：(1) Project Constitution runner — task-scoped runner 已部分落地；(2) Supervisor structured orchestration — per-stage workflow + Type C ticket + cross-agent policy 已落地；(3) Artifact validation / governance gates — schema validation 已強化；其餘 5 項維持原狀。讓 roadmap 反映實際進度，避免誤判已完成事項。
 - `docs/cap/ARCHITECTURE.md` 「Handoff Ticket 欄位參考」章節更新兩處過時敘述：(1) 原文寫「engine 尚未實例化」，改為「自 v0.19.x 起已由 `scripts/workflows/emit-handoff-ticket.sh` 實例化；engine `step_runtime` 自動 ticket emission hook 與 sub-agent 端的 ticket consumption end-to-end 仍待完整 e2e 驗證」，誠實反映目前狀態；(2) 原文寫「`schemas/handoff-ticket.schema.yaml` 已於 v0.10.1 降級為概念參考」，改為「v0.19.x 重新升級為一級 SSOT，不再是概念參考」；連帶補完 ticket 欄位表（從 8 欄擴為 11 欄，新增 `ticket_id` / `output_expectations` / `failure_routing` / `created_at,created_by` 等實際存在的欄位），並補上一句派工流程概覽指向 supervisor §3.6 + emit-handoff-ticket.sh + handoff-ticket-protocol.md 的閉環。
 
 ## [v0.19.3] - 2026-04-30
