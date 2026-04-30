@@ -16,6 +16,9 @@ triggers:
 artifacts:
   task_constitution_draft: Task Constitution 草稿（Markdown + 內嵌 JSON），由 supervisor 在 draft_task_constitution step 產出供 persist step 抓取
   task_constitution: Task Constitution（Type B）含 execution_plan / success_criteria / governance / budget；落地於 ~/.cap/projects/<id>/constitutions/task_<id>.json
+  design_source_summary: 設計稿摘要（docs/design/source-summary.md），由 ingest_design_source step 產出，供 UI / TechPlan 等下游 summary-first 消費
+  design_source_tree: 設計稿目錄樹（docs/design/source-tree.txt），deterministic 排序的相對路徑清單
+  design_source_metadata: 設計稿來源 metadata（docs/design/design-source.yaml），含 type / source_path / package / sha256 / generated_at 等欄位
   prd_document: Product Requirements Document（v0.x），由 supervisor 直接草擬；技術棧鎖定後不留 TBD
   tech_plan_document: 技術執行計畫（v0.x），含模組層選型 / 風險 / 聚焦決策 / 下游 BA / DBA / UI 建議
   ba_spec: 業務分析規格（v0.x），含 Bounded Context 切分、Ubiquitous Language、sequenceDiagram、stateDiagram、業務規則彙總
@@ -30,7 +33,7 @@ governance:
   watcher_mode: milestone_gate
   watcher_checkpoints: [tech_plan, spec_audit]
   logger_mode: milestone_log
-  logger_checkpoints: [draft_task_constitution, persist_task_constitution, prd, tech_plan, ba, dba_api, ui, spec_audit, archive]
+  logger_checkpoints: [draft_task_constitution, persist_task_constitution, ingest_design_source, prd, tech_plan, ba, dba_api, ui, spec_audit, archive]
   # emit_*_ticket steps 為 shell-only deterministic 派工單發行；不入 logger checkpoint 以免 milestone log 過於密集
   context_mode: summary_first
   goal_stage: formal_specification
@@ -86,6 +89,31 @@ steps:
     notes:
       - 純 deterministic shell；不允許 AI fallback。
       - 寫入失敗時整個 task halt，由操作者調查；上游 draft 仍保留於 workflow output dir 可重跑。
+
+  - id: ingest_design_source
+    name: Ingest Design Source into docs/design Summary
+    capability: design_source_ingest
+    executor: shell
+    script: scripts/workflows/ingest-design-source.sh
+    needs: [persist_task_constitution]
+    inputs:
+      - project_constitution
+      - design_source
+    outputs:
+      - design_source_summary
+      - design_source_tree
+      - design_source_metadata
+    done_when:
+      - design_source path 解析完成（憲法 design_source 優先；缺漏 / type none 視為 graceful no-op）
+      - source-summary.md / source-tree.txt / design-source.yaml 三個 artifacts 已寫入 docs/design/（or no-op 若無 design source）
+      - 同來源 hash 不變時跳過 rebuild（cache hit），避免每次 spec pipeline 都重新理解 raw package
+    on_fail: halt
+    timeout_seconds: 90
+    input_mode: full
+    output_tier: machine_metadata
+    notes:
+      - 與 emit_prd_ticket 邏輯獨立；此 step 平行於 prd / tech_plan / ba / dba_api 跑，只在 ui step 之前必須完成（已透過 emit_ui_ticket 與 ui 的 needs 銜接）。
+      - 純 deterministic shell；不允許 AI fallback。
 
   - id: emit_prd_ticket
     name: Emit Handoff Ticket for prd
@@ -265,13 +293,14 @@ steps:
     capability: handoff_ticket_emit
     executor: shell
     script: scripts/workflows/emit-handoff-ticket.sh
-    needs: [ba]
+    needs: [ba, ingest_design_source]
     inputs:
       - task_constitution
     outputs:
       - handoff_ticket
     done_when:
       - ticket 已寫入 ~/.cap/projects/<project_id>/handoffs/ui.ticket.json
+      - 上游 design_source_summary 已可用（ingest_design_source 已完成或標記 no-op）
     on_fail: halt
     timeout_seconds: 30
     input_mode: full
@@ -281,7 +310,7 @@ steps:
     name: UI Specification and Design Assets
     capability: ui_design
     executor: ai
-    needs: [emit_ui_ticket]
+    needs: [emit_ui_ticket, ingest_design_source]
     inputs:
       - ba_spec
       - tech_plan_document
@@ -293,7 +322,7 @@ steps:
       - UI Spec / Tokens JSON / Screens JSON / Prototype HTML 四個主資產齊備
       - Prototype 在瀏覽器可直接打開（不依賴外部資源）
       - 6 類特殊狀態（Loading / Empty / Error / Disclaimer / Degraded / Success）均有對應視覺
-      - 視覺與互動語意對齊 `constitution.design_source.source_path`（v0.20.0+ 由憲法 design_source block 顯式記錄；legacy 憲法無此 block 時 fallback 到 `~/.cap/designs/<project_id>/`），偏離點均有業務理由註記
+      - 視覺與互動語意**優先**對齊 `docs/design/source-summary.md`（由 ingest_design_source step 產出，含 hash-cached 摘要）；只有摘要不足以決策時才回頭讀 `constitution.design_source.source_path` 的 raw package 細節
       - 全文 / 全資產禁止包含未定義在 Tokens 內的色碼
       - 設計稿來源目錄保持 read-only，未被寫入或修改
     on_fail: halt
@@ -301,8 +330,10 @@ steps:
     input_mode: full
     output_tier: planning_artifact
     notes:
-      - 設計稿來源（design_source）優先讀 `constitution.design_source.source_path`；若憲法無此 block，fallback 到 cap workflow run 啟動時 `--design-package <name>`（v0.20.0+ 推薦）或 legacy `--design-source / --design-path` 旗標、或 TTY 反問機制注入。`engine/step_runtime.py` `_design_source_path` 採三段式解析：constitution → design_root+package → legacy `~/.cap/designs/<project_id>`。
-      - 若無設計稿來源（憲法 `design_source.type: none` 或全部解析失敗），UI step 仍可執行但須在 UI Spec 中標明 no-design baseline。
+      - "**summary-first**（v0.21.0+）：本 step 優先讀 `docs/design/source-summary.md` + `docs/design/design-source.yaml` + `docs/design/source-tree.txt`，不直接展開 raw JSX/HTML package，避免每次 UI step 都重新理解設計稿。Cache 由 `docs/design/.source-hash.txt` 管控，hash 不變時 ingest_design_source 跳過 rebuild。"
+      - Raw package 解析仍可作為 fallback：若 summary 對某具體決策（如某個 frame 的精細互動）不足，再從 `constitution.design_source.source_path` 讀對應子檔案。
+      - design_source 解析鏈：`constitution.design_source.source_path` → `design_root + package` → legacy `~/.cap/designs/<project_id>` fallback（由 `engine/step_runtime.py` `_design_source_path` 與 `scripts/workflows/ingest-design-source.sh` 共享）。
+      - 若無設計稿（憲法 `design_source.type: none` 或全部解析失敗），ingest 會標記 no-op、UI step 仍可執行但須在 UI Spec 中標明 no-design baseline。
 
   - id: emit_spec_audit_ticket
     name: Emit Handoff Ticket for spec_audit
