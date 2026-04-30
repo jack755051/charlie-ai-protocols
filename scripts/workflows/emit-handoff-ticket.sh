@@ -55,10 +55,14 @@ task_constitution_path="${CAP_TASK_CONSTITUTION_PATH:-}"
 # When invoked as a workflow step named `emit_<target>_ticket`, derive the
 # target step id automatically so the workflow YAML does not need to inject
 # CAP_TARGET_STEP_ID per step. Explicit env var still wins if set.
-if [ -z "${target_step_id}" ]; then
-  case "${step_id}" in
+#
+# Only fire when CAP_WORKFLOW_STEP_ID is *explicitly* set; never derive from
+# the local default `emit_handoff_ticket` because that would silently produce
+# target_step_id=handoff and mask the user's missing-input mistake.
+if [ -z "${target_step_id}" ] && [ -n "${CAP_WORKFLOW_STEP_ID:-}" ]; then
+  case "${CAP_WORKFLOW_STEP_ID}" in
     emit_*_ticket)
-      stripped="${step_id#emit_}"
+      stripped="${CAP_WORKFLOW_STEP_ID#emit_}"
       target_step_id="${stripped%_ticket}"
       ;;
   esac
