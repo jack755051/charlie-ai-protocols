@@ -24,6 +24,9 @@ allowed_agents:
   - 90-Watcher
   - 99-Logger
 
+design_source:
+  type: none
+
 source_of_truth:
   project_constitution: .cap.constitution.yaml
   project_config: .cap.project.yaml
