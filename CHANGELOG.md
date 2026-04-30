@@ -6,6 +6,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.21.1] - 2026-04-30
+
+### Added
+- `agent-skills/01-supervisor-agent.md` 新增 §2.5「Task Constitution 嚴格 Schema 契約 (v0.21.1+)」：明確列出 task_constitution_planning 必須輸出的 8 個固定頂層欄位（task_id / project_id / source_request / goal / goal_stage / success_criteria / non_goals / execution_plan）+ execution_plan entry 必填的 step_id / capability，**列出每個欄位禁止改用的別名**（task_summary、task_goal、user_intent_excerpt、scope.out_of_scope、target_capability 等），並聲明 v0.22.0+ 將逐步移除 persist normalizer 的 alias fan-in；needs_data + halt 是資訊不足時的正確逃生路徑，不應依賴別名繞過。
+- `docs/cap/DESIGN-SOURCE-RUNTIME.md` 新增 design source 運行時 SSOT 文件：四層模型（registry / constitution / docs/design summary / raw fallback）+ 三段式解析鏈 + 6 條不變式 + workflow 接觸點對照表 + 測試覆蓋摘要 + migration & deprecation 計畫；把 v0.20.0–v0.21.0 散落在 schema / capability / workflow / agent-skill / shell / 測試的規則收成一份權威藍圖。
+- `docs/cap/PROVIDER-PARITY-E2E.md` 新增 provider parity 驗收 checklist：minimum + extended 受測組合、跑法、4.1-4.7 七個分類共 30+ checklist 項、失敗診斷對照表、release gate 規範；把 Codex / Claude 真實 e2e 從人工觀察變為可重跑、可審計、可比對的正式程序。
+- `scripts/workflows/provider-parity-check.sh` 新增 artifact-only 驗收工具（不呼叫 AI）：依 `--run-dir` / `--task-id` / `--project-id` 自動驗 4.1-4.6，含 Type B 8 欄位嚴格檢查 + 別名偵測（task_summary / user_intent_excerpt / scope）、Type C 每張 ticket schema validation、Type D summary 存在性、design source 三件式 + sentinel；exit code 0/1/2 區分通過 / 缺漏 / 誤用旗標。
+
+### Changed
+- `schemas/workflows/project-spec-pipeline.yaml` `draft_task_constitution` step done_when：把「execution_plan 中每個 step 已指定 step_id / target_capability」改為嚴格 schema 描述（8 個固定頂層欄位 + entry 必含 step_id / capability，禁用 target_capability 等別名），指向 supervisor §2.5 為權威定義。
+- `schemas/capabilities.yaml` `task_constitution_planning` capability done_when 同步加入 v0.21.1+ 嚴格 schema 條目，讓任何未來 workflow 引用此 capability 都繼承同一份契約。
+
 ## [v0.21.0] - 2026-04-30
 
 ### Added
