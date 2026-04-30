@@ -6,6 +6,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.21.2] - 2026-04-30
+
+### Fixed
+- `scripts/workflows/provider-parity-check.sh` 修兩個影響 release-gate 結果的 checker bug：(1) §4.6 spec layer artifact pattern `_archive` 帶底線是錯的，cap workflow run 實際寫的是 `<phase>-archive.md`（無底線），改為 `archive` 後既有成功 run 不再被誤標 FAIL；(2) §4.5 design source 區段原本當 `docs/design/` 不存在時靜默略過，遮蔽了「憲法宣告 `design_source.type: local_design_package` 但 `ingest_design_source` 沒跑」的真實缺漏；現在從 cwd 的 `.cap.constitution.yaml` 讀 `design_source.type`，依 type 分流：`none` 或無宣告 + 無 `docs/design` 視為 PASS no-op、`none` 但有 dir 視為 PASS with note、非 none 但無 dir 視為 FAIL、非 none 且有 dir 走 per-file 檢查。修復後對 token-monitor 兩個歷史 run 驗證行為符合預期：成功 run 報 40 PASS / 3 真實 FAIL（pre-v0.21.1 schema 缺欄位 + pre-v0.21.0 缺 ingest 產物）、halted run 正確抓到 3 個 banned aliases（task_summary / user_intent_excerpt / scope）展示工具在 release-gate 上的真實價值。
+
 ## [v0.21.1] - 2026-04-30
 
 ### Added
