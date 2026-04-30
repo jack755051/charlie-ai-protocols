@@ -1,0 +1,7 @@
+project_id: token-monitor-minimal
+project_name: Token Monitor (Minimal Fixture)
+project_type: fixture
+constitution_file: .cap.constitution.yaml
+skill_registry: .cap.skills.yaml
+workflow_dir: schemas/workflows
+agent_registry: .cap.agents.json

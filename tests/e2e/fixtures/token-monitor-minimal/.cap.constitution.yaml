@@ -1,0 +1,89 @@
+schema_version: 1
+constitution_id: token-monitor-minimal-fixture
+project_id: token-monitor-minimal
+name: Token Monitor (Minimal Fixture)
+summary: Minimal CAP project fixture used by tests/e2e/ to exercise the deterministic shell-executor chain end to end without spawning real AI sub-agents.
+project_goal: 為 e2e 測試提供一個可重跑、零 AI 依賴的最小專案，用以驗證 task_constitution_planning → persist → emit_*_ticket → fake-sub-agent → Type D summary 整條鏈路。
+
+inherits:
+  - charlie-ai-protocols/agent-skills/00-core-protocol.md
+
+constraints:
+  - 本 fixture 僅供 deterministic e2e 測試使用，不應被當成真實專案。
+  - 所有測試操作必須在隔離 sandbox（mktemp -d）下進行，禁止寫入 ~/.cap/projects/token-monitor/。
+
+stop_conditions:
+  - 若 e2e 測試需要真實 AI runtime，請改跑 cap workflow run 而非本 fixture。
+
+allowed_agents:
+  - 01-Supervisor
+  - 02-TechLead
+  - 02a-BA
+  - 02b-DBA
+  - 03-UI
+  - 90-Watcher
+  - 99-Logger
+
+source_of_truth:
+  project_constitution: .cap.constitution.yaml
+  project_config: .cap.project.yaml
+  skill_registry: .cap.skills.yaml
+  agent_registry: .cap.agents.json
+  builtin_workflows_dir: schemas/workflows
+  builtin_capabilities: schemas/capabilities.yaml
+
+binding_policy:
+  defaults:
+    binding_mode: fallback_allowed
+    missing_policy: manual
+  allowed_capabilities:
+    - prd_generation
+    - workflow_orchestration
+    - prompt_outline_normalize
+    - project_constitution
+    - bootstrap_platform_defaults
+    - constitution_validation
+    - constitution_persistence
+    - task_constitution_planning
+    - task_constitution_persistence
+    - handoff_ticket_emit
+    - technical_planning
+    - business_analysis
+    - database_api_design
+    - ui_design
+    - code_structure_audit
+    - technical_logging
+
+workflow_policy:
+  enforce_allowed_source_roots: true
+  allowed_source_roots:
+    - schemas/workflows
+    - workflows
+
+artifact_policy:
+  promote_required_for_formal_outputs: true
+  runtime_snapshot_only_paths:
+    - ~/.cap/projects/token-monitor-minimal/
+
+executor_policy:
+  deterministic_first: true
+  ai_on_ambiguity: false
+  halt_on_risk: true
+  allowed_providers:
+    - claude
+    - codex
+    - deterministic_shell
+
+runtime_workspace:
+  root: ~/.cap/projects/token-monitor-minimal/
+  stores:
+    - constitutions
+    - compiled-workflows
+    - bindings
+    - workspace
+    - traces
+    - logs
+    - reports
+    - sessions
+    - drafts
+    - handoffs
