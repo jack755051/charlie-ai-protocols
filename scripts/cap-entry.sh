@@ -42,7 +42,8 @@ COMMAND                            DESCRIPTION
   cap workflow run <id> [prompt]   前景執行（預設 CLI: claude）
   cap workflow run --strategy auto <id> [prompt]  自動選擇 fast / governed / strict strategy
   cap workflow run --cli codex <id> [prompt]  指定使用 codex 執行
-  cap workflow run --design-source local-design --design-path ~/.cap/designs/<name> <id> [prompt]  使用全域設計稿 package
+  cap workflow run --design-package <name> <id> [prompt]                          使用 ~/.cap/designs/<name> 設計稿 package（v0.20.0+ 推薦寫法）
+  cap workflow run --design-source local-design --design-path ~/.cap/designs/<name> <id> [prompt]  legacy 顯式路徑寫法
   cap workflow run --dry-run <id> [prompt]  只顯示執行計畫，不真的執行
   cap workflow <id> "<prompt>"     run 的簡寫
 
