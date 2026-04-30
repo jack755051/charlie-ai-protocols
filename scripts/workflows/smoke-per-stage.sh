@@ -9,8 +9,9 @@
 #   3. cap workflow bind project-qa-pipeline                     (must end in ready)
 #   4. tests/scripts/test-persist-task-constitution.sh           (must report 13/13)
 #   5. tests/scripts/test-emit-handoff-ticket.sh                 (must report 15/15)
-#   6. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report 40/40)
-#   7. tests/e2e/test-ticket-consumption.sh                      (must report 22/22)
+#   6. tests/scripts/test-design-source-resolution.sh            (must report 15/15)
+#   7. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report 40/40)
+#   8. tests/e2e/test-ticket-consumption.sh                      (must report 22/22)
 #
 # Resolution order for the bind command:
 #   1. `cap` on PATH (installed via cap installer)
@@ -145,6 +146,7 @@ run_bind "project-implementation-pipeline"
 run_bind "project-qa-pipeline"
 run_fixture "${REPO_ROOT}/tests/scripts/test-persist-task-constitution.sh" "persist-task-constitution unit smoke"
 run_fixture "${REPO_ROOT}/tests/scripts/test-emit-handoff-ticket.sh" "emit-handoff-ticket unit smoke"
+run_fixture "${REPO_ROOT}/tests/scripts/test-design-source-resolution.sh" "design source resolution unit smoke"
 run_fixture "${REPO_ROOT}/tests/e2e/test-project-spec-pipeline-deterministic.sh" "spec-pipeline deterministic e2e"
 run_fixture "${REPO_ROOT}/tests/e2e/test-ticket-consumption.sh" "ticket consumption e2e"
 
