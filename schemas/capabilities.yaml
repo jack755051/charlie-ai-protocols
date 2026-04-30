@@ -63,10 +63,10 @@ capabilities:
     done_when:
       - 已讀取 .cap.constitution.yaml 並對齊 allowed_agents / allowed_capabilities / stop_conditions
       - 已選定 goal_stage（informal_planning / formal_specification / implementation_preparation / implementation_and_verification）並對應產出 execution_plan
-      - execution_plan 中每個 step 已指定 step_id / target_capability / bound_to / needs（依賴關係）
+      - "v0.21.1+ 嚴格 schema：JSON 草稿 top-level 必含 8 個固定欄位（task_id / project_id / source_request / goal / goal_stage / success_criteria / non_goals / execution_plan），禁止別名（task_summary / user_intent_excerpt / scope 等）；execution_plan 每個 entry 必含 step_id 與 capability（不接受 target_capability 別名），可選 bound_to / needs / on_fail / route_back_to / timeout_seconds"
       - 已估算 budget（sub-agent session 數）並對齊 task-constitution.schema.yaml 的欄位
       - 已寫入 ~/.cap/projects/<project_id>/constitutions/task_<task_id>.json
-      - 若 user_intent 對某 required 欄位資訊不足，已標記 needs_data 並停止，不擅自假設
+      - 若 user_intent 對某 required 欄位資訊不足，已標記 needs_data 並停止，不擅自假設或用別名繞過
 
   design_source_ingest:
     description: |

@@ -64,6 +64,48 @@
    - `schema_alignment_notes`：每個分流對應的 schema 欄位、缺料標記、以及 supervisor 在分流時做出的合理推導。
 6. **嚴守邊界**：本 capability **不產出 final JSON、不寫憲章 / PRD / TechPlan 文件本體**。產出僅作為下游 draft step 的 prompt context；對外 schema validation 不會驗 outline 本身。
 
+### Step 2.5: Task Constitution 嚴格 Schema 契約（v0.21.1+）
+
+當你扮演 `task_constitution_planning` capability 的執行者（如 `project-spec-pipeline` 的 `draft_task_constitution` step），輸出的 JSON 草稿（包在 `<<<TASK_CONSTITUTION_JSON_BEGIN>>> ... <<<TASK_CONSTITUTION_JSON_END>>>` fence 內）**必須**符合下列嚴格 schema，不得自行用別名替代：
+
+#### 必填頂層欄位（8 個）
+
+| 欄位 | 型別 | 說明 | **不得**改用的別名 |
+|---|---|---|---|
+| `task_id` | string | 穩定 task 識別，建議 kebab-case | ~~`task_constitution_id`~~、~~`id`~~ |
+| `project_id` | string | 對應 `.cap.project.yaml` 的 `project_id` | — |
+| `source_request` | string | 使用者原始需求；務必引用實際 prompt 文字 | ~~`user_intent_excerpt`~~、~~`user_intent.raw`~~、~~`user_intent.normalized`~~ |
+| `goal` | string | 一句話目標；不要寫成段落或多目標清單 | ~~`task_goal`~~、~~`task_summary`~~、~~`objective`~~、~~`summary`~~ |
+| `goal_stage` | enum | `informal_planning` / `formal_specification` / `implementation_preparation` / `implementation_and_verification` | — |
+| `success_criteria` | string[] | 至少 1 條可驗證條件；不接受空陣列 | ~~`completion_criteria`~~、~~`completion_criteria_global`~~、~~`acceptance_criteria_global`~~ |
+| `non_goals` | string[] | 明示排除的範圍，可空陣列 | ~~`scope.out_of_scope`~~、~~`scope_out`~~、~~`out_of_scope`~~ |
+| `execution_plan` | object[] | 派工清單，至少 1 個 entry | — |
+
+#### `execution_plan[]` entry 必填欄位
+
+| 欄位 | 型別 | 說明 | **不得**改用的別名 |
+|---|---|---|---|
+| `step_id` | string | step 唯一識別，與 workflow YAML step id 對齊 | — |
+| `capability` | string | 對應 `schemas/capabilities.yaml` 的 capability name | ~~`target_capability`~~ |
+
+#### `execution_plan[]` entry 選填欄位
+
+`bound_to` / `needs` / `on_fail` / `route_back_to` / `timeout_seconds` / `acceptance_criteria` / `done_when` / `objective` / `output_paths`。
+
+#### 推薦頂層欄位（強烈建議）
+
+`constraints` / `stop_conditions` / `governance` / `risk_profile` / `inferred_context` — 缺漏時下游 watcher gate 較難落地，但不阻擋 persist。
+
+#### 為什麼嚴格
+
+`scripts/workflows/persist-task-constitution.sh` 的 `normalize_task_constitution_json` 目前接受多種別名（`task_summary→goal`、`user_intent_excerpt→source_request`、`target_capability→capability` 等），這是 v0.19.x → v0.20.x 為了解決 Claude / Codex 草稿形狀差異而做的兼容層。**v0.22.0+ 將逐步移除這些 alias fan-in**：你應該直接輸出固定欄位名，不要依賴 normalize 補洞。若資訊不足，標記 `needs_data` 並 halt，不要硬塞別名。
+
+#### 對應 schema 與測試
+
+- 結構契約：`schemas/task-constitution.schema.yaml`
+- normalize alias 行為（過渡期保留）：`scripts/workflows/persist-task-constitution.sh:normalize_task_constitution_json`
+- 別名 regression 測試：`tests/scripts/test-persist-task-constitution.sh` Case 6（v0.22.0+ 移除 alias 時，此 case 將被改為「驗證固定欄位」而非「驗證 alias 接收」）
+
 ## 3. 編排參考 (Orchestration Reference)
 
 本 Agent 的編排行為（流程路由、品質門禁、交接單格式）已從本文件抽離，改由結構化定義檔驅動：
