@@ -389,6 +389,7 @@ case "${1:-}" in
     DESIGN_SOURCE=""
     DESIGN_URL=""
     DESIGN_PATH=""
+    DESIGN_PACKAGE=""
     DESIGN_FIGMA_TARGET=""
     DESIGN_SCRIPT=""
     DESIGN_NO=0
@@ -402,6 +403,7 @@ case "${1:-}" in
         --design-source) DESIGN_SOURCE="$2"; shift 2 ;;
         --design-url) DESIGN_URL="$2"; shift 2 ;;
         --design-path) DESIGN_PATH="$2"; shift 2 ;;
+        --design-package) DESIGN_PACKAGE="$2"; shift 2 ;;
         --design-figma-target) DESIGN_FIGMA_TARGET="$2"; shift 2 ;;
         --design-script) DESIGN_SCRIPT="$2"; shift 2 ;;
         --no-design) DESIGN_NO=1; shift ;;
@@ -410,7 +412,7 @@ case "${1:-}" in
     done
 
     [ "$#" -ge 1 ] || {
-      echo "Usage: cap workflow run [--dry-run] [-d] [--cli codex|claude] [--strategy fast|governed|strict|auto] [--design-source TYPE] [--design-url URL] [--design-path PATH] [--design-figma-target NAME] [--design-script PATH] [--no-design] <workflow> [prompt...]" >&2
+      echo "Usage: cap workflow run [--dry-run] [-d] [--cli codex|claude] [--strategy fast|governed|strict|auto] [--design-source TYPE] [--design-url URL] [--design-path PATH] [--design-package NAME] [--design-figma-target NAME] [--design-script PATH] [--no-design] <workflow> [prompt...]" >&2
       exit 1
     }
     case "${EXECUTION_STRATEGY}" in
@@ -450,6 +452,7 @@ case "${1:-}" in
       [ -n "${DESIGN_SOURCE}" ] && DESIGN_AUGMENT_ARGS+=( --design-source "${DESIGN_SOURCE}" )
       [ -n "${DESIGN_URL}" ] && DESIGN_AUGMENT_ARGS+=( --design-url "${DESIGN_URL}" )
       [ -n "${DESIGN_PATH}" ] && DESIGN_AUGMENT_ARGS+=( --design-path "${DESIGN_PATH}" )
+      [ -n "${DESIGN_PACKAGE}" ] && DESIGN_AUGMENT_ARGS+=( --design-package "${DESIGN_PACKAGE}" )
       [ -n "${DESIGN_FIGMA_TARGET}" ] && DESIGN_AUGMENT_ARGS+=( --design-figma-target "${DESIGN_FIGMA_TARGET}" )
       [ -n "${DESIGN_SCRIPT}" ] && DESIGN_AUGMENT_ARGS+=( --design-script "${DESIGN_SCRIPT}" )
       [ "${DESIGN_NO}" -eq 1 ] && DESIGN_AUGMENT_ARGS+=( --no-design )
