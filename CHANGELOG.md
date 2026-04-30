@@ -6,7 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
-## [Unreleased]
+## [v0.19.6] - 2026-04-30
 
 ### Added
 - `tests/e2e/fixtures/token-monitor-minimal/` 新增最小 CAP 專案 fixture（`.cap.constitution.yaml` + `.cap.project.yaml` + README），repo 追蹤確保 e2e 測試跨環境可重跑；`binding_policy.allowed_capabilities` 涵蓋 v0.19.x 全部新 capability（task_constitution_planning / task_constitution_persistence / handoff_ticket_emit）+ project-spec-pipeline 全部 AI 步驟所需 capability。
