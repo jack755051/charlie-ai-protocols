@@ -293,7 +293,7 @@ steps:
       - UI Spec / Tokens JSON / Screens JSON / Prototype HTML 四個主資產齊備
       - Prototype 在瀏覽器可直接打開（不依賴外部資源）
       - 6 類特殊狀態（Loading / Empty / Error / Disclaimer / Degraded / Success）均有對應視覺
-      - 視覺與互動語意對齊 ~/.cap/designs/<project_id>/（如有），偏離點均有業務理由註記
+      - 視覺與互動語意對齊 `constitution.design_source.source_path`（v0.20.0+ 由憲法 design_source block 顯式記錄；legacy 憲法無此 block 時 fallback 到 `~/.cap/designs/<project_id>/`），偏離點均有業務理由註記
       - 全文 / 全資產禁止包含未定義在 Tokens 內的色碼
       - 設計稿來源目錄保持 read-only，未被寫入或修改
     on_fail: halt
@@ -301,8 +301,8 @@ steps:
     input_mode: full
     output_tier: planning_artifact
     notes:
-      - 設計稿來源（design_source）由 cap workflow run 啟動時透過 --design-source / --design-path 旗標或反問機制注入。
-      - 若無設計稿來源，UI step 仍可執行但須在 UI Spec 中標明 no-design baseline。
+      - 設計稿來源（design_source）優先讀 `constitution.design_source.source_path`；若憲法無此 block，fallback 到 cap workflow run 啟動時 `--design-package <name>`（v0.20.0+ 推薦）或 legacy `--design-source / --design-path` 旗標、或 TTY 反問機制注入。`engine/step_runtime.py` `_design_source_path` 採三段式解析：constitution → design_root+package → legacy `~/.cap/designs/<project_id>`。
+      - 若無設計稿來源（憲法 `design_source.type: none` 或全部解析失敗），UI step 仍可執行但須在 UI Spec 中標明 no-design baseline。
 
   - id: emit_spec_audit_ticket
     name: Emit Handoff Ticket for spec_audit

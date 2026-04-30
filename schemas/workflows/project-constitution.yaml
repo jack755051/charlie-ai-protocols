@@ -122,7 +122,8 @@ steps:
       - "input_mode 採用 full 是因為 AI 必須讀完 platform_defaults 全文才能正確抄寫治理欄位；platform_defaults 體積極小，不會違反 workflow-constitution §4.3。"
       - "命名澄清：本 workflow 是「產出 Project Constitution 文件」的具體流程；policies/workflow-constitution.md 是 runtime 編排層的元憲法（規範所有 workflow 應遵守的 phase 上限、summary-first handoff、artifact tiering 等）。兩者不同層級——本 workflow 自己也必須遵守 workflow-constitution.md 的所有立法規則。詳細層級對照見 workflows/project-constitution-memo.md §術語對照。"
       - "對齊 workflow-constitution §10：goal_stage=informal_planning 表示這是規劃階段（建 constitution），runtime 不得從此 workflow 自動展開 BA / DBA / UI / QA 等實作 step。"
-      - "若 prompt 含 local-design 區塊，表示使用者已將設計稿 package 手動放入全域 `~/.cap/designs/<name>/`；本 workflow 只可把該 package 目錄記錄為 read_only / reference_only artifact，不得修改設計稿，也不得讓設計稿內的 framework 假設覆蓋 Project Constitution 或 TechLead 決策。若 `~/.cap/designs/` 下有多個 package，必須要求使用者指定 `--design-path ~/.cap/designs/<name>`，不得把整個 designs library 當成單一設計稿。"
+      - "若 prompt 含 local-design 區塊，表示使用者已將設計稿 package 手動放入全域 `~/.cap/designs/<name>/`；本 workflow 只可把該 package 目錄記錄為 read_only / reference_only artifact，不得修改設計稿，也不得讓設計稿內的 framework 假設覆蓋 Project Constitution 或 TechLead 決策。若 `~/.cap/designs/` 下有多個 package，必須要求使用者指定 `--design-package <name>`（v0.20.0+ 推薦）或 legacy `--design-path ~/.cap/designs/<name>`，不得把整個 designs library 當成單一設計稿。"
+      - "draft_constitution step 必須把 prompt augmentation 階段的 design ritual block 落地為 `design_source` block：含 type / design_root / package / source_path / mode 五個欄位，後續 workflow 從憲法 design_source 直讀來源，不再從 project_id 推導 ~/.cap/designs/<project_id>。"
 
   - id: validate_constitution
     name: Validate Constitution Against Schema
