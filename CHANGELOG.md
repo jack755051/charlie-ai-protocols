@@ -6,7 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
-## [Unreleased]
+## [v0.19.3] - 2026-04-30
 
 ### Fixed
 - `scripts/workflows/emit-handoff-ticket.sh` 修正 target_step_id 自動推導誤觸發的 edge case：當 `CAP_TARGET_STEP_ID` 與 `CAP_WORKFLOW_STEP_ID` 都未設定時，`step_id` 會落到本地預設值 `emit_handoff_ticket`，剛好符合 `emit_*_ticket` pattern 而被誤推導成 `target_step_id=handoff`，遮蔽了「使用者忘了設 env」這個錯誤；改為顯式檢查 `CAP_WORKFLOW_STEP_ID` 是否被設定（不是預設 fallback）才允許 derive，並直接以 `CAP_WORKFLOW_STEP_ID` 為 derive 來源；smoke test `test-emit-handoff-ticket.sh` 從 14/15 變回 15/15 PASS（Case 3 「missing target_step_id env」正確回報 `missing_target_step_id` 而非誤導性的 `step_not_in_execution_plan`）。
