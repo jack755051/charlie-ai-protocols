@@ -225,21 +225,20 @@ for design_root in "${PWD}/docs/design" "${RUN_DIR}/docs/design"; do
 done
 
 case "${DESIGN_TYPE}" in
-  none)
+  none|"")
+    # No design_source declared (or explicitly type=none). ingest_design_source
+    # is expected to run as a graceful no-op, so we MUST NOT demand the four
+    # ingest sentinels (source-summary.md / source-tree.txt / design-source.yaml /
+    # .source-hash.txt). The docs/design/ directory may still exist because
+    # the UI agent (03-ui-agent.md §4) writes its own deliverables there
+    # (<module>_UI_v*.md / _tokens_v*.json / _screens_v*.json /
+    # _prototype_v*.html); those are legitimate UI agent output, not missing
+    # ingest artifacts. Earlier v0.21.2 logic conflated them and produced four
+    # false-positive FAILs against valid codex parity runs.
     if [ -z "${design_dir_found}" ]; then
-      ok "design_source.type=none and no docs/design (expected no-op)"
+      ok "design_source ${DESIGN_TYPE:-undeclared} and no docs/design (expected no-op)"
     else
-      ok "design_source.type=none; docs/design exists ${design_dir_found} (artifacts likely from earlier run)"
-    fi
-    ;;
-  "")
-    if [ -z "${design_dir_found}" ]; then
-      ok "no design_source declared; no docs/design (expected no-op)"
-    else
-      check_file "${design_dir_found}/source-summary.md present"   "${design_dir_found}/source-summary.md"
-      check_file "${design_dir_found}/source-tree.txt present"     "${design_dir_found}/source-tree.txt"
-      check_file "${design_dir_found}/design-source.yaml present"  "${design_dir_found}/design-source.yaml"
-      check_file "${design_dir_found}/.source-hash.txt sentinel present" "${design_dir_found}/.source-hash.txt"
+      ok "design_source ${DESIGN_TYPE:-undeclared}; docs/design exists ${design_dir_found} (ingest not expected; UI agent / earlier-run artifacts allowed)"
     fi
     ;;
   *)
