@@ -1,5 +1,7 @@
 # Provider Parity Findings — v0.21.2 baseline
 
+> **Status (2026-05-01 closeout)**：R2 / R4 / R1 已落地（commits cf86b4d / 82e289c / eb671a7），claude e2e 從 3/16 step_failed → 16/16 completed，parity check 22 PASS / 16 FAIL → **42 PASS / 1 FAIL**。R3 latent system bug 留下一輪。本檔已完成 baseline → resolution 一輪角色，後續可由 RELEASE-NOTES v0.21.3 摘要替代。
+
 > 短收斂文件。目的是凍結 2026-05-01 跑 claude `project-spec-pipeline` 的觀察，作為 R2/R1/R4/R3 修復的引用基準。**不是長盤點**；後續修復完成後本檔可以由 RELEASE-NOTES 摘要替代。
 
 ## Run metadata
@@ -27,22 +29,39 @@
 
 ## Root causes（4 個獨立打擊面）
 
-| ID | 根因 | 證據 | 命中使用者大項 |
-|---|---|---|---|
-| **R1** | `ingest_design_source` 規格 vs runtime 偏差 — `schemas/workflows/project-spec-pipeline.yaml` L108-111 `done_when` 寫「design_source 缺漏 / type none 視為 graceful no-op」，但 runtime 在 step 進到 shell 前就標 `blocked / missing_input_artifact`，shell script 根本沒執行 | `runtime-state.json` `steps.ingest_design_source.execution_state=blocked, blocked_reason=missing_input_artifact` | #1（runner 閉環） |
-| **R2** | 治理信號斷裂 — `cap-workflow-exec.sh` 的 6 個 block 路徑（required_unresolved / unsupported_executor / missing_agent / invalid_shell_script / missing_input_artifact / detached_head）**不寫 workflow.log、也不寫 RUN_SUMMARY `## Steps` entry**。對比 fail 路徑（L1097/L1119/L1138/L1162/L1225）都有 `append_workflow_log`。註：exit code 已正確反映（L1310-1318 `EXIT_CODE=1`、L1380 `exit "${EXIT_CODE}"`）；先前以為 exit 0 是觀察者 background command shell 結構誤導 | run-summary.md `## Finished failed: 1` 但 `## Steps` 三個全 ok；workflow.log 完全沒有 `phase:3 step:ingest_design_source` 任一行 | #5（governance）+ #3（log 完整性） |
-| **R3** | 雙 project_id 解析 — run dir / binding 用 cwd 解析（`charlie-ai-protocols`）；task constitution / handoff 用 supervisor 草寫的 `project_id`（`token-monitor-minimal`）。同一個 run 物件分裂兩處 | `~/.cap/projects/charlie-ai-protocols/reports/workflows/.../run_dir` 與 `~/.cap/projects/token-monitor-minimal/{constitutions,handoffs}/` 並存 | #1 + #2 + #6 |
-| **R4** | supervisor §2.5 嚴格 schema 在實跑時漏 `non_goals` — 8 必填字段中有 1 個缺，normalize 也沒補預設值 | parity-check `[4.2] FAIL: Type B missing required field: non_goals` | #2（schema 拆乾淨） |
+| ID | 根因 | 證據 | 命中使用者大項 | Status |
+|---|---|---|---|---|
+| **R1** | `ingest_design_source` 規格 vs runtime 偏差 — `schemas/workflows/project-spec-pipeline.yaml` L108-111 `done_when` 寫「design_source 缺漏 / type none 視為 graceful no-op」，但 runtime 在 step 進到 shell 前就標 `blocked / missing_input_artifact`，shell script 根本沒執行 | `runtime-state.json` `steps.ingest_design_source.execution_state=blocked, blocked_reason=missing_input_artifact` | #1（runner 閉環） | ✓ Fixed (eb671a7) |
+| **R2** | 治理信號斷裂 — `cap-workflow-exec.sh` 的 6 個 block 路徑（required_unresolved / unsupported_executor / missing_agent / invalid_shell_script / missing_input_artifact / detached_head）**不寫 workflow.log、也不寫 RUN_SUMMARY `## Steps` entry**。對比 fail 路徑（L1097/L1119/L1138/L1162/L1225）都有 `append_workflow_log`。註：exit code 已正確反映（L1310-1318 `EXIT_CODE=1`、L1380 `exit "${EXIT_CODE}"`）；先前以為 exit 0 是觀察者 background command shell 結構誤導 | run-summary.md `## Finished failed: 1` 但 `## Steps` 三個全 ok；workflow.log 完全沒有 `phase:3 step:ingest_design_source` 任一行 | #5（governance）+ #3（log 完整性） | ✓ Fixed (cf86b4d) |
+| **R3** | 雙 project_id 解析 — run dir / binding 用 cwd 解析（`charlie-ai-protocols`）；task constitution / handoff 用 supervisor 草寫的 `project_id`（`token-monitor-minimal`）。同一個 run 物件分裂兩處 | `~/.cap/projects/charlie-ai-protocols/reports/workflows/.../run_dir` 與 `~/.cap/projects/token-monitor-minimal/{constitutions,handoffs}/` 並存 | #1 + #2 + #6 | ⏸ Deferred — latent system bug，留下輪。本批 closeout 跑 supervisor 草寫對齊（`charlie-ai-protocols`）沒觸發，但 system-level identity resolver 仍未統一。 |
+| **R4** | supervisor §2.5 嚴格 schema 在實跑時漏 `non_goals` — 8 必填字段中有 1 個缺，normalize 也沒補預設值 | parity-check `[4.2] FAIL: Type B missing required field: non_goals` | #2（schema 拆乾淨） | ✓ Fixed (82e289c) — 但 closeout 跑揭露新議題：supervisor 寫 `non_goals: []` 空陣列、normalize 維持 `[]`、parity check §4.2 仍判定為 missing（檢查邏輯 `val in (None, "", [])`）。屬 supervisor draft 行為 + parity interpretation，不是 schema/runtime 能解的，標 deferred。 |
 
-## 修復順序（已裁定）
+## Resolution and follow-up (v0.21.3 closeout)
 
-1. **本檔 C**：完成（即此文件）
-2. **R2 / A**：補 6 個 block 路徑寫 workflow.log + RUN_SUMMARY entry（exit code 部分撤銷，已正確）。S 級。
-3. **R1 / B**：放寬 `ingest_design_source` runtime input gating，讓 graceful no-op 邏輯能由 shell 執行。M 級。
-4. **R4**：在 `persist-task-constitution.sh` 的 normalize 對 `non_goals` 補 `[]` 預設；supervisor §2.5 prompt 仍保嚴格要求。S 級。
-5. **R3**：釐清 `cwd → cap_home_project_id` 與 `task_constitution.project_id` 的優先權。M 級。會碰 `engine/cap-paths` / `step_runtime`。
+**E2E re-run on self-hosting `charlie-ai-protocols` (claude, 2026-05-01)**：
 
-R1-R4 修完後重跑 claude + codex `project-spec-pipeline` 雙條，再更新本檔（或交給 v0.22.x RELEASE-NOTES）。
+- run_id：`run_20260501020621_b27b155f`
+- duration：1217s（從 100s halt 推到完整跑通）
+- final_state：`completed` / final_result：`success`
+- step：**16/16 completed, 0 failed**（前 baseline 3/16, 1 failed）
+- parity-check：**42 PASS / 1 FAIL**（前 baseline 22 PASS / 16 FAIL）
+- 唯一 FAIL：Type B missing required field: non_goals — supervisor draft 寫了 `[]` 空陣列；parity check §4.2 把空陣列也判 missing。已分類為 deferred。
+
+**修復順序執行紀錄**：
+
+| Step | 動作 | 結果 |
+|---|---|---|
+| 1. **C** baseline | 本文件第一版（db93e55） | ✓ |
+| 2. **R2 / A** | `cap-workflow-exec.sh` 加 `record_blocked_step` helper + 6 處 block 路徑 wire 入（cf86b4d） | ✓ workflow.log 與 RUN_SUMMARY 出現 blocked entry |
+| 3. **R4** | `persist-task-constitution.sh` normalize 補 `risk_profile` object→string、`non_goals` array coercion；`fail_with` 改 exit 41 = schema_validation_failed；test 套件 18→22 assertions（82e289c） | ✓ phase 2 不再撞 risk_profile schema |
+| 4. **R1 / B** | `engine/step_runtime.py:validate_inputs` 抽 `_try_resolve` helper，新增 `optional_inputs` 欄位處理；`schemas/workflows/project-spec-pipeline.yaml` 把 `design_source` 從 `inputs` 移到 `optional_inputs`（ingest_design_source / prd / ui 共 3 step）（eb671a7） | ✓ ingest_design_source duration 0s 走 graceful no-op |
+
+**Deferred 項目**：
+
+- **R3** 雙 project_id 解析 — 系統性 identity resolver 未統一，留下一輪。
+- **non_goals 空陣列 vs missing 判定** — 兩個方向可選：(a) 強化 supervisor §2.5 prompt「至少 1 條」；(b) 調寬 parity check §4.2 接受 `[]`。下輪選定。
+- **其他 schema-class executors exit code** — `validate-constitution` / `emit-handoff-ticket` / `ingest-design-source` / `bootstrap-constitution-defaults` / `persist-constitution` / `load-constitution-reconcile-inputs` 仍用 exit 40，可漸進改 41 完整覆蓋。
+- **codex parity run** — claude 主鏈已驗證、codex 待跑驗 cross-provider 一致性。
 
 ## 隱性觀察（記錄、不立刻修）
 

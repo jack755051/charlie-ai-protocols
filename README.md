@@ -394,6 +394,7 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 ## Notes
 
 - 最新已驗證 tag：`v0.21.2`
+- v0.21.3 重點：claude `project-spec-pipeline` 從 3/16 step_failed 推到 16/16 completed，parity check 22/16 → 42 PASS / 1 FAIL — workflow step 新增 `optional_inputs` 欄位讓 graceful no-op 可被 shell 真正執行、`cap-workflow-exec.sh` 補 6 個 block 路徑的 log/RUN_SUMMARY 可觀測性、`persist-task-constitution.sh` 收斂 risk_profile/non_goals schema drift 並把 schema_validation_failed 從 git_operation_failed exit code 拆開。
 - v0.21.2 重點：provider parity checker 對齊 archive pattern 與 design source type-aware 判定。
 - 近期主軸：design source runtime、provider parity e2e、task constitution strict schema 與 per-stage workflow 穩定化。
 - 完整版本紀錄請看 [docs/cap/RELEASE-NOTES.md](docs/cap/RELEASE-NOTES.md)。
