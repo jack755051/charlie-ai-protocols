@@ -284,6 +284,19 @@ ticket = {
     },
 }
 
+def drop_none(value):
+    if isinstance(value, dict):
+        return {
+            key: drop_none(item)
+            for key, item in value.items()
+            if item is not None
+        }
+    if isinstance(value, list):
+        return [drop_none(item) for item in value]
+    return value
+
+ticket = drop_none(ticket)
+
 # Minimal structural validation against schemas/handoff-ticket.schema.yaml
 # (top-level required fields + key nested required fields). Honest scope:
 # this is field-presence checking, not full JSON Schema validation.
