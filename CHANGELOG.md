@@ -6,7 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
-## [Unreleased]
+## [v0.19.4] - 2026-04-30
 
 ### Added
 - `scripts/workflows/smoke-per-stage.sh` 新增單一指令的 per-stage workflow smoke 入口：依序跑 `cap workflow bind project-spec-pipeline` / `project-implementation-pipeline` / `project-qa-pipeline` 三條 binding 檢查，再跑 `tests/scripts/test-persist-task-constitution.sh` / `test-emit-handoff-ticket.sh` 兩個 fixture 套件；cap CLI 不在 PATH 時 binding 檢查會 graceful skip 並標 WARN（fixture 仍會跑），讓本 wrapper 可在沒有 cap installer 的 CI 環境作為 hermetic gate；退出碼 0 = 全 PASS（含 skipped）、非 0 = 至少一項 FAIL；`tests/scripts/README.md` 同步補上一鍵跑入口說明。
