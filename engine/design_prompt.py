@@ -197,6 +197,14 @@ def _visible_children(path: Path) -> list[Path]:
 
 
 def _resolve_default_design_package() -> Path | None:
+    """Auto-select a design package only when there is exactly one unambiguous
+    candidate. Returns None on zero packages, on a tie (2+ packages), or when
+    the directory mixes loose files with sub-package dirs.
+
+    Multi-package selection is the responsibility of `_list_design_packages`
+    plus `_prompt_for_design_package` (interactive) or the `--design-package`
+    CLI flag (non-interactive). This function never silently picks among many.
+    """
     designs_dir = _resolve_design_path(DEFAULT_DESIGNS_DIR)
     if not designs_dir.is_dir():
         return None
@@ -208,6 +216,60 @@ def _resolve_default_design_package() -> Path | None:
     if len(package_dirs) == 0 and loose_files:
         return designs_dir
     return None
+
+
+def _list_design_packages() -> list[Path]:
+    """Return every visible sub-directory under ~/.cap/designs/, sorted by name.
+
+    Used to enumerate candidates when `_resolve_default_design_package` cannot
+    auto-select. Returns empty list if the designs registry is missing.
+    """
+    designs_dir = _resolve_design_path(DEFAULT_DESIGNS_DIR)
+    if not designs_dir.is_dir():
+        return []
+    return [child for child in _visible_children(designs_dir) if child.is_dir()]
+
+
+def _prompt_for_design_package(candidates: list[Path]) -> Path | None:
+    """Interactively ask the user to pick one of multiple design packages.
+
+    Returns the chosen Path, or None if the user declines (selects 'n') or
+    /dev/tty is unavailable. Caller decides what to do with None — typically
+    fall back to design_source: none.
+    """
+    read_h, write_h = _open_tty()
+    if read_h is None or write_h is None:
+        return None
+    write_h.write("\n[cap] 在 ~/.cap/designs/ 下發現多個 design package，請選擇要使用哪一個：\n")
+    for idx, path in enumerate(candidates, 1):
+        write_h.write(f"  [{idx}] {path.name}\n")
+    write_h.write("  [n] 不指定（design_source: none）\n")
+    write_h.flush()
+    while True:
+        write_h.write("選擇 (1-{0} / n) > ".format(len(candidates)))
+        write_h.flush()
+        line = read_h.readline()
+        if not line:
+            return None
+        choice = line.strip().lower()
+        if choice == "n":
+            return None
+        if choice.isdigit():
+            idx = int(choice)
+            if 1 <= idx <= len(candidates):
+                return candidates[idx - 1]
+        write_h.write(f"  ✗ 請輸入 1-{len(candidates)} 或 n。\n")
+        write_h.flush()
+
+
+def _resolve_design_package_by_name(package_name: str) -> Path | None:
+    """Resolve an explicit `--design-package <name>` argument under the
+    designs registry. Returns the Path if it exists and is a directory,
+    None otherwise. Caller should halt cleanly on None.
+    """
+    designs_dir = _resolve_design_path(DEFAULT_DESIGNS_DIR)
+    candidate = designs_dir / package_name
+    return candidate if candidate.is_dir() else None
 
 
 def _is_designs_library(path: Path) -> bool:
@@ -292,7 +354,36 @@ def cmd_augment(args: argparse.Namespace) -> int:
         )
         return 30
 
-    auto_design_package = _resolve_default_design_package() if not args.design_path else None
+    # Resolve auto_design_package with explicit-name precedence:
+    #   1. --design-path wins (legacy explicit path)
+    #   2. --design-package resolves <name> under ~/.cap/designs/
+    #   3. Auto-select when exactly one package present
+    #   4. When 2+ packages and TTY interactive, prompt user
+    #   5. When 2+ packages and non-interactive, halt with clear error
+    auto_design_package: Path | None = None
+    if not args.design_path:
+        if args.design_package:
+            resolved = _resolve_design_package_by_name(args.design_package)
+            if resolved is None:
+                designs_dir = _resolve_design_path(DEFAULT_DESIGNS_DIR)
+                available = ", ".join(p.name for p in _list_design_packages()) or "<none>"
+                sys.stderr.write(
+                    f"[design_prompt] --design-package '{args.design_package}' not found under {designs_dir}. "
+                    f"Available packages: {available}\n"
+                )
+                return 30
+            auto_design_package = resolved
+        else:
+            auto_design_package = _resolve_default_design_package()
+            if auto_design_package is None:
+                packages = _list_design_packages()
+                if len(packages) > 1:
+                    if _is_tty_interactive():
+                        try:
+                            auto_design_package = _prompt_for_design_package(packages)
+                        except (KeyboardInterrupt, EOFError):
+                            sys.stderr.write("\n[cap] 使用者中止互動。\n")
+                            return 20
 
     if selected is None and (args.design_path and _local_design_exists(args.design_path) or auto_design_package is not None):
         selected = "local-design"
@@ -368,7 +459,8 @@ def cmd_augment(args: argparse.Namespace) -> int:
                 names = ", ".join(child.name for child in package_dirs)
                 print(
                     "[design_prompt] ~/.cap/designs contains multiple design packages; "
-                    f"specify one with --design-path ~/.cap/designs/<name>. Available: {names}",
+                    f"specify one with --design-package <name> or --design-path ~/.cap/designs/<name>. "
+                    f"Available: {names}",
                     file=sys.stderr,
                 )
                 return 30
@@ -427,6 +519,14 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--design-source", default=None)
     p.add_argument("--design-url", default=None)
     p.add_argument("--design-path", default=None)
+    p.add_argument(
+        "--design-package",
+        default=None,
+        help=(
+            "Local-design 模式下指定 ~/.cap/designs/<name> 的 package；"
+            "比 --design-path 短，且明示走 designs registry。"
+        ),
+    )
     p.add_argument("--design-figma-target", default=None)
     p.add_argument("--design-script", default=None)
     p.add_argument("--no-design", action="store_true")
