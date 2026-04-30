@@ -6,6 +6,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [Unreleased]
+
+### Added
+- `tests/e2e/fixtures/token-monitor-minimal/` 新增最小 CAP 專案 fixture（`.cap.constitution.yaml` + `.cap.project.yaml` + README），repo 追蹤確保 e2e 測試跨環境可重跑；`binding_policy.allowed_capabilities` 涵蓋 v0.19.x 全部新 capability（task_constitution_planning / task_constitution_persistence / handoff_ticket_emit）+ project-spec-pipeline 全部 AI 步驟所需 capability。
+- `tests/e2e/test-project-spec-pipeline-deterministic.sh` 新增「persist + emit 鏈」deterministic e2e（4 stages / 40 assertions）：模擬 task_constitution_draft 後依序跑 persist-task-constitution.sh → emit-handoff-ticket.sh × 6（prd / tech_plan / ba / dba_api / ui / spec_audit）→ 重跑 emit_prd 驗 seq 遞增 1→2 + 舊 ticket 保留；用 `mktemp -d` 隔離 sandbox，零 AI 依賴可在 CI 跑。
+- `scripts/workflows/fake-sub-agent.sh` 新增 deterministic sub-agent 模擬器：讀 `CAP_HANDOFF_TICKET_PATH`（或第一個位置參數），對 ticket 跑 `engine/step_runtime.py validate-jsonschema`，依 `output_expectations.handoff_summary_path` 寫出符合 `policies/handoff-ticket-protocol.md` §4 的 Type D summary（YAML frontmatter + task_summary / key_decisions / downstream_notes / risks_carried_forward / halt_signals_raised 五段）；env hook `CAP_FAKE_RESULT=failure` + `CAP_FAKE_HALT_SIGNAL` 切換到 simulated failure 仍寫 Type D 但記 `result: 失敗`；exit 碼 0/1/2/3/4/5 分別對應成功 / 模擬失敗 / ticket 不可讀 / schema 驗證失敗 / 缺 handoff_summary_path / 寫入失敗。
+- `tests/e2e/test-ticket-consumption.sh` 新增 ticket consumption e2e（4 cases / 22 assertions）：成功路徑驗證 Type D 落地與五段 body 結構齊全 + ticket bytes 經 sha256 比對「未被 consumption 修改」（read-only 契約）；失敗路徑驗 result=失敗 與 halt signal；malformed ticket 驗 schema 驗證 halt（exit 3）；缺 env 驗 exit 2。
+- `tests/e2e/README.md` 新增說明 e2e 三層測試金字塔（unit smoke / deterministic e2e / real AI e2e）的範圍、跑法、與不取代真實 `cap workflow run` 的明確聲明。
+- `scripts/workflows/smoke-per-stage.sh` 整合兩個新 e2e 測試為 step 6 / step 7，與既有 3 條 binding + 2 條 unit smoke 合計 7 個 step；本 repo 環境下 7/7 PASS。
+
+### Changed
+- `tests/scripts/README.md` 同步更新「一鍵跑全部 smoke」段落為 7 個 step（v0.19.6 整合 e2e）。
+
 ## [v0.19.5] - 2026-04-30
 
 ### Fixed
