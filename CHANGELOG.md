@@ -6,6 +6,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.20.1] - 2026-04-30
+
+### Added
+- `scripts/cap-workflow.sh` 把 `--design-package <name>` 旗標完整接通：宣告 `DESIGN_PACKAGE` slot、case 解析、forwarding 至 `DESIGN_AUGMENT_ARGS`、usage 行同步加入該旗標；補完 v0.20.0 只在 engine `engine/design_prompt.py` 加旗標但 wrapper 沒接的斷層。
+- `scripts/cap-entry.sh` 主用法區塊加 `cap workflow run --design-package <name>` 一行範例（標 v0.20.0+ 推薦），legacy `--design-source local-design --design-path` 寫法保留作為相容路徑。
+- `tests/scripts/test-cap-workflow-design-package-forwarding.sh` 新增 wrapper 層 forwarding smoke（4 cases / 5 assertions）：sandbox HOME 雙 package + 攔截 python3 invocation log，驗 (1) usage 列出 `--design-package`、(2) wrapper 不報 unknown option、(3) `--design-package pkg-a` 確實傳到 `design_prompt.py augment` argv、(4) 換 pkg-b 不會 hard-code。
+
+### Changed
+- `schemas/workflows/project-constitution.yaml` `draft_constitution` notes 區塊更新：多 package 選擇優先推薦 `--design-package <name>`（v0.20.0+），legacy `--design-path ~/.cap/designs/<name>` 並列保留；新增一條 note 明示 supervisor 必須把 design ritual block 落地為 `design_source` 五欄結構（type / design_root / package / source_path / mode），下游不再從 project_id 推導。
+- `schemas/workflows/project-spec-pipeline.yaml` UI step 的 done_when 與 notes 改用 `constitution.design_source.source_path` 為主要解析點；明示 `engine/step_runtime.py` `_design_source_path` 三段式解析（constitution → design_root+package → legacy `~/.cap/designs/<project_id>`）；移除「`<project_id>` 等於 design package」的隱式假設。
+- `tests/e2e/fixtures/token-monitor-minimal/.cap.constitution.yaml` 新增 `design_source: type: none`，讓 fixture 本身遵守 v0.20.0+ 的「每份憲法應顯式記錄 design_source」規範，並作為 type none 場景的 copy-ready 範例。
+- `scripts/workflows/smoke-per-stage.sh` 從 8 step 擴為 9 step，加入 `test-cap-workflow-design-package-forwarding.sh`；本 repo 現況 9/9、115 assertions 全綠。
+- 外部專案 `token-monitor/.cap.constitution.yaml`（非 git repo，無 commit）已手動補 `design_source` block 為 `local_design_package` + `package: token-monitor` + `source_path: ~/.cap/designs/token-monitor`，作為實際專案 migration 範例；其他既有專案的批次 reconcile / migration workflow 仍 deferred。
+
 ## [v0.20.0] - 2026-04-30
 
 ### Added
