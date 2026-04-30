@@ -73,7 +73,7 @@
 | 欄位 | 型別 | 說明 | **不得**改用的別名 |
 |---|---|---|---|
 | `task_id` | string | 穩定 task 識別，建議 kebab-case | ~~`task_constitution_id`~~、~~`id`~~ |
-| `project_id` | string | 對應 `.cap.project.yaml` 的 `project_id` | — |
+| `project_id` | string | 對應 `.cap.project.yaml` 的 `project_id`；必須繼承目前 cwd 專案身份，不得從使用者 prompt、產品名稱或任務名稱推測 | — |
 | `source_request` | string | 使用者原始需求；務必引用實際 prompt 文字 | ~~`user_intent_excerpt`~~、~~`user_intent.raw`~~、~~`user_intent.normalized`~~ |
 | `goal` | string | 一句話目標；不要寫成段落或多目標清單 | ~~`task_goal`~~、~~`task_summary`~~、~~`objective`~~、~~`summary`~~ |
 | `goal_stage` | enum | `informal_planning` / `formal_specification` / `implementation_preparation` / `implementation_and_verification` | — |
@@ -99,6 +99,8 @@
 #### 為什麼嚴格
 
 `scripts/workflows/persist-task-constitution.sh` 的 `normalize_task_constitution_json` 目前接受多種別名（`task_summary→goal`、`user_intent_excerpt→source_request`、`target_capability→capability` 等），這是 v0.19.x → v0.20.x 為了解決 Claude / Codex 草稿形狀差異而做的兼容層。**v0.22.0+ 將逐步移除這些 alias fan-in**：你應該直接輸出固定欄位名，不要依賴 normalize 補洞。若資訊不足，標記 `needs_data` 並 halt，不要硬塞別名。
+
+`project_id` 是 runtime identity，不是任務內容。若 workflow context 已提供 `.cap.project.yaml` 或 CAP runtime 解析出的 project id，必須原樣沿用；若上下文沒有提供 project id，應標記 `needs_data` 或讓 deterministic persist step 對齊，**不得自行用產品名稱、fixture 名稱或 user prompt 猜測新 project_id**。persist / handoff shell executor 會以 `scripts/cap-paths.sh` 的解析結果為權威值；若你的草稿不一致，runtime 會 normalize 並留下 `project_id_drift` governance warning。
 
 #### 對應 schema 與測試
 

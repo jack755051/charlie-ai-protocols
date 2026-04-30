@@ -112,6 +112,7 @@ assert_file_exists "draft fixture written" "${DRAFT_PATH}"
 echo "Stage B: persist-task-constitution"
 
 CAP_HOME="${CAP_HOME}" \
+CAP_PROJECT_ID_OVERRIDE="${PROJECT_ID}" \
 CAP_WORKFLOW_INPUT_CONTEXT="- name=task_constitution_draft path=${DRAFT_PATH}" \
 CAP_WORKFLOW_STEP_ID=persist_task_constitution \
 bash "${PERSIST_SCRIPT}" > "${SANDBOX}/persist.out" 2>&1
@@ -143,6 +144,7 @@ declare -A expected_capability=(
 
 for step in "${steps[@]}"; do
   CAP_HOME="${CAP_HOME}" \
+  CAP_PROJECT_ID_OVERRIDE="${PROJECT_ID}" \
   CAP_TASK_CONSTITUTION_PATH="${TC_PATH}" \
   CAP_TARGET_STEP_ID="${step}" \
   CAP_WORKFLOW_STEP_ID="emit_${step}_ticket" \
@@ -164,6 +166,7 @@ done
 echo "Stage D: seq increment on re-emit"
 
 CAP_HOME="${CAP_HOME}" \
+CAP_PROJECT_ID_OVERRIDE="${PROJECT_ID}" \
 CAP_TASK_CONSTITUTION_PATH="${TC_PATH}" \
 CAP_TARGET_STEP_ID=prd \
 CAP_WORKFLOW_STEP_ID=emit_prd_ticket \

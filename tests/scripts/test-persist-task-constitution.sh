@@ -52,7 +52,9 @@ assert_contains() {
 
 run_persist() {
   local draft_path="$1"
+  local project_id_override="${2:-}"
   CAP_HOME="${SANDBOX}/cap" \
+  CAP_PROJECT_ID_OVERRIDE="${project_id_override}" \
   CAP_WORKFLOW_INPUT_CONTEXT="- name=task_constitution_draft path=${draft_path}" \
   CAP_WORKFLOW_STEP_ID=test_persist \
   bash "${PERSIST_SCRIPT}" 2>&1
@@ -76,7 +78,7 @@ cat > "${SANDBOX}/draft-good.md" <<'EOF'
 }
 <<<TASK_CONSTITUTION_JSON_END>>>
 EOF
-out="$(run_persist "${SANDBOX}/draft-good.md")"
+out="$(run_persist "${SANDBOX}/draft-good.md" "smoke-proj")"
 rc=$?
 assert_eq "exit code 0" "0" "${rc}"
 assert_contains "report shows condition: ok" "condition: ok" "${out}"
@@ -92,7 +94,7 @@ cat > "${SANDBOX}/draft-bad-json.md" <<'EOF'
 { this is not valid json
 <<<TASK_CONSTITUTION_JSON_END>>>
 EOF
-out="$(run_persist "${SANDBOX}/draft-bad-json.md")"
+out="$(run_persist "${SANDBOX}/draft-bad-json.md" "x")"
 rc=$?
 assert_eq "exit code 41" "41" "${rc}"
 assert_contains "PARSE_ERROR detail" "PARSE_ERROR" "${out}"
@@ -104,7 +106,7 @@ cat > "${SANDBOX}/draft-missing.md" <<'EOF'
 {"project_id":"x","goal":"g","goal_stage":"formal_specification","success_criteria":["x"]}
 <<<TASK_CONSTITUTION_JSON_END>>>
 EOF
-out="$(run_persist "${SANDBOX}/draft-missing.md")"
+out="$(run_persist "${SANDBOX}/draft-missing.md" "x")"
 rc=$?
 assert_eq "exit code 41" "41" "${rc}"
 assert_contains "MISSING_REQUIRED detail" "MISSING_REQUIRED:task_id" "${out}"
@@ -116,7 +118,7 @@ cat > "${SANDBOX}/draft-bad-stage.md" <<'EOF'
 {"task_id":"x","project_id":"p","goal":"g","goal_stage":"bogus","success_criteria":["x"]}
 <<<TASK_CONSTITUTION_JSON_END>>>
 EOF
-out="$(run_persist "${SANDBOX}/draft-bad-stage.md")"
+out="$(run_persist "${SANDBOX}/draft-bad-stage.md" "p")"
 rc=$?
 assert_eq "exit code 41" "41" "${rc}"
 assert_contains "INVALID_GOAL_STAGE detail" "INVALID_GOAL_STAGE:bogus" "${out}"
@@ -128,7 +130,7 @@ cat > "${SANDBOX}/draft-bad-plan.md" <<'EOF'
 {"task_id":"x","project_id":"p","goal":"g","goal_stage":"formal_specification","success_criteria":["x"],"execution_plan":[{"capability":"prd_generation"}]}
 <<<TASK_CONSTITUTION_JSON_END>>>
 EOF
-out="$(run_persist "${SANDBOX}/draft-bad-plan.md")"
+out="$(run_persist "${SANDBOX}/draft-bad-plan.md" "p")"
 rc=$?
 assert_eq "exit code 41" "41" "${rc}"
 assert_contains "INVALID_EXECUTION_PLAN_ENTRY detail" "INVALID_EXECUTION_PLAN_ENTRY" "${out}"
@@ -156,7 +158,7 @@ cat > "${SANDBOX}/draft-task-summary.md" <<'EOF'
 }
 <<<TASK_CONSTITUTION_JSON_END>>>
 EOF
-out="$(run_persist "${SANDBOX}/draft-task-summary.md")"
+out="$(run_persist "${SANDBOX}/draft-task-summary.md" "alias-proj")"
 rc=$?
 assert_eq "exit code 0 with task_summary alias" "0" "${rc}"
 persisted="${SANDBOX}/cap/projects/alias-proj/constitutions/alias-test.json"
@@ -190,7 +192,7 @@ cat > "${SANDBOX}/draft-risk-object.md" <<'EOF'
 }
 <<<TASK_CONSTITUTION_JSON_END>>>
 EOF
-out="$(run_persist "${SANDBOX}/draft-risk-object.md")"
+out="$(run_persist "${SANDBOX}/draft-risk-object.md" "risk-proj")"
 rc=$?
 assert_eq "exit code 0 with risk_profile object" "0" "${rc}"
 persisted="${SANDBOX}/cap/projects/risk-proj/constitutions/risk-obj.json"
@@ -216,12 +218,41 @@ cat > "${SANDBOX}/draft-no-non-goals.md" <<'EOF'
 }
 <<<TASK_CONSTITUTION_JSON_END>>>
 EOF
-out="$(run_persist "${SANDBOX}/draft-no-non-goals.md")"
+out="$(run_persist "${SANDBOX}/draft-no-non-goals.md" "no-ng-proj")"
 rc=$?
 assert_eq "exit code 0 without non_goals" "0" "${rc}"
 persisted="${SANDBOX}/cap/projects/no-ng-proj/constitutions/no-ng.json"
 non_goals_type="$(python3 -c "import json,sys; print(type(json.load(open(sys.argv[1])).get('non_goals')).__name__)" "${persisted}")"
 assert_eq "non_goals normalized to list type" "list" "${non_goals_type}"
+
+# Case 9: runtime project identity wins over supervisor-drafted project_id.
+# Reproduces R3: supervisor can draft a different project_id than the current
+# CAP runtime project, but storage must not split into two CAP homes.
+echo "Case 9: normalize aligns project_id to cap-paths runtime identity"
+cat > "${SANDBOX}/draft-project-drift.md" <<'EOF'
+<<<TASK_CONSTITUTION_JSON_BEGIN>>>
+{
+  "task_id": "project-drift",
+  "project_id": "supervisor-guessed-id",
+  "goal": "Verify runtime project identity is authoritative.",
+  "goal_stage": "informal_planning",
+  "success_criteria": ["project_id is rewritten to runtime identity"],
+  "execution_plan": [
+    {"step_id": "prd", "capability": "prd_generation"}
+  ]
+}
+<<<TASK_CONSTITUTION_JSON_END>>>
+EOF
+out="$(run_persist "${SANDBOX}/draft-project-drift.md" "runtime-project")"
+rc=$?
+assert_eq "exit code 0 with project_id drift" "0" "${rc}"
+assert_contains "project drift warning emitted" "governance_warning: project_id_drift" "${out}"
+assert_contains "runtime project_id reported" "runtime_project_id: runtime-project" "${out}"
+persisted="${SANDBOX}/cap/projects/runtime-project/constitutions/project-drift.json"
+[ -f "${persisted}" ]
+assert_eq "persisted under runtime project id" "0" "$?"
+normalized_project_id="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('project_id',''))" "${persisted}")"
+assert_eq "project_id rewritten in persisted JSON" "runtime-project" "${normalized_project_id}"
 
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"

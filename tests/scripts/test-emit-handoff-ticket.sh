@@ -70,6 +70,7 @@ cat > "${SANDBOX}/draft.md" <<'EOF'
 EOF
 
 CAP_HOME="${SANDBOX}/cap" \
+CAP_PROJECT_ID_OVERRIDE="emit-smoke-proj" \
 CAP_WORKFLOW_INPUT_CONTEXT="- name=task_constitution_draft path=${SANDBOX}/draft.md" \
 bash "${PERSIST_SCRIPT}" > /dev/null 2>&1
 TC_PATH="${SANDBOX}/cap/projects/emit-smoke-proj/constitutions/emit-smoke-001.json"
@@ -81,8 +82,10 @@ fi
 
 run_emit() {
   local target_step="$1"
+  local tc_path="${2:-${TC_PATH}}"
   CAP_HOME="${SANDBOX}/cap" \
-  CAP_TASK_CONSTITUTION_PATH="${TC_PATH}" \
+  CAP_PROJECT_ID_OVERRIDE="emit-smoke-proj" \
+  CAP_TASK_CONSTITUTION_PATH="${tc_path}" \
   CAP_TARGET_STEP_ID="${target_step}" \
   CAP_WORKFLOW_STEP_ID=test_emit \
   bash "${EMIT_SCRIPT}" 2>&1
@@ -144,6 +147,28 @@ out="$(run_emit "ghost_step")"
 rc=$?
 assert_eq "exit code 40" "40" "${rc}"
 assert_contains "step_not_in_execution_plan detail" "step_not_in_execution_plan" "${out}"
+
+# Case 5: runtime project identity wins over a drifted task_constitution project_id.
+echo "Case 5: project_id drift warning and runtime handoff path"
+DRIFT_TC="${SANDBOX}/drift-task-constitution.json"
+python3 - "${TC_PATH}" "${DRIFT_TC}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+src, dst = map(Path, sys.argv[1:])
+data = json.loads(src.read_text(encoding="utf-8"))
+data["project_id"] = "supervisor-guessed-id"
+dst.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+out="$(run_emit "tech_plan" "${DRIFT_TC}")"
+rc=$?
+assert_eq "exit code 0 with project_id drift" "0" "${rc}"
+assert_contains "project drift warning emitted" "governance_warning: project_id_drift" "${out}"
+drift_ticket="${SANDBOX}/cap/projects/emit-smoke-proj/handoffs/tech_plan.ticket.json"
+[ -f "${drift_ticket}" ]
+assert_eq "ticket written under runtime project id" "0" "$?"
+assert_contains "output artifact uses runtime project path" "- name=handoff_ticket path=${drift_ticket}" "${out}"
 
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"

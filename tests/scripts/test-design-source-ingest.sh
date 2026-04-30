@@ -63,6 +63,14 @@ assert_contains() {
   fi
 }
 
+file_mtime() {
+  if stat -c %Y "$1" >/dev/null 2>&1; then
+    stat -c %Y "$1"
+    return
+  fi
+  stat -f %m "$1"
+}
+
 run_ingest() {
   local workdir="$1"
   # Subshell so the cd does not leak; explicit exit so the function's
@@ -142,11 +150,11 @@ assert_contains "yaml carries source_path" "${SRC3}" "${yaml_content}"
 # ─────────────────────────────────────────────────────────
 
 echo "Case 4: re-run unchanged → cached"
-mtime_before="$(stat -f %m "${WD3}/docs/design/source-summary.md" 2>/dev/null || stat -c %Y "${WD3}/docs/design/source-summary.md")"
+mtime_before="$(file_mtime "${WD3}/docs/design/source-summary.md")"
 sleep 1
 out="$(run_ingest "${WD3}")"
 assert_contains "outcome=cached on rerun" "outcome: cached" "${out}"
-mtime_after="$(stat -f %m "${WD3}/docs/design/source-summary.md" 2>/dev/null || stat -c %Y "${WD3}/docs/design/source-summary.md")"
+mtime_after="$(file_mtime "${WD3}/docs/design/source-summary.md")"
 assert_eq "summary mtime unchanged on cache hit" "${mtime_before}" "${mtime_after}"
 hash3_after="$(cat "${WD3}/docs/design/.source-hash.txt")"
 assert_eq "hash unchanged on cache hit" "${hash3}" "${hash3_after}"

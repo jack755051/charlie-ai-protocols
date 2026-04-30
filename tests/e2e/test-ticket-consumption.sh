@@ -99,11 +99,13 @@ cat > "${SANDBOX}/draft.md" <<'EOF'
 EOF
 
 CAP_HOME="${CAP_HOME}" \
+CAP_PROJECT_ID_OVERRIDE="${PROJECT_ID}" \
 CAP_WORKFLOW_INPUT_CONTEXT="- name=task_constitution_draft path=${SANDBOX}/draft.md" \
 bash "${PERSIST_SCRIPT}" > /dev/null 2>&1
 TC_PATH="${CAP_HOME}/projects/${PROJECT_ID}/constitutions/${TASK_ID}.json"
 
 CAP_HOME="${CAP_HOME}" \
+CAP_PROJECT_ID_OVERRIDE="${PROJECT_ID}" \
 CAP_TASK_CONSTITUTION_PATH="${TC_PATH}" \
 CAP_TARGET_STEP_ID=prd \
 CAP_WORKFLOW_STEP_ID=emit_prd_ticket \
@@ -153,6 +155,7 @@ echo "Case 2: failure consumption writes Type D with result=失敗"
 
 # Use a fresh ticket to avoid overwriting the success-case Type D
 CAP_HOME="${CAP_HOME}" \
+CAP_PROJECT_ID_OVERRIDE="${PROJECT_ID}" \
 CAP_TASK_CONSTITUTION_PATH="${TC_PATH}" \
 CAP_TARGET_STEP_ID=prd \
 CAP_WORKFLOW_STEP_ID=emit_prd_ticket \

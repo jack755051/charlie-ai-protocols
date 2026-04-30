@@ -78,6 +78,45 @@ fail_with() {
   exit 41
 }
 
+resolve_runtime_project_id() {
+  if [ -x "${PATH_HELPER}" ]; then
+    CAP_HOME="${CAP_HOME:-${HOME}/.cap}" bash "${PATH_HELPER}" get project_id 2>/dev/null && return 0
+  fi
+
+  if [ -f "${CAP_ROOT}/.cap.project.yaml" ]; then
+    "${PYTHON_BIN}" - "${CAP_ROOT}/.cap.project.yaml" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+match = re.search(r"^project_id:\s*['\"]?([^'\"\n#]+)", path.read_text(encoding="utf-8"), re.M)
+if match:
+    print(match.group(1).strip())
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+    return 0
+  fi
+
+  basename "${CAP_ROOT}"
+}
+
+extract_json_project_id() {
+  printf '%s' "$1" | "${PYTHON_BIN}" -c '
+import json
+import sys
+
+try:
+    data = json.loads(sys.stdin.read())
+except json.JSONDecodeError:
+    print("")
+    raise SystemExit(0)
+value = data.get("project_id")
+print(value if isinstance(value, str) else "")
+'
+}
+
 extract_artifact_path() {
   local context="$1"
   local artifact_name="$2"
@@ -184,6 +223,7 @@ sys.stdout.write(f"{project_id}|{task_id}\n")
 normalize_task_constitution_json() {
   printf '%s' "$1" | "${PYTHON_BIN}" -c '
 import json
+import os
 import re
 import sys
 
@@ -213,6 +253,10 @@ def slug(value):
 
 user_intent = data.get("user_intent") if isinstance(data.get("user_intent"), dict) else {}
 scope = data.get("scope") if isinstance(data.get("scope"), dict) else {}
+runtime_project_id = os.environ.get("CAP_RUNTIME_PROJECT_ID", "").strip()
+
+if runtime_project_id:
+    data["project_id"] = runtime_project_id
 
 data["task_id"] = first_string(
     data.get("task_id"),
@@ -383,7 +427,20 @@ json_payload="$(extract_task_constitution_json "${draft_path}")"
 if [ -z "${json_payload}" ]; then
   fail_with "no_json_in_draft" "neither <<<TASK_CONSTITUTION_JSON>>> fence nor json fence found in ${draft_path}"
 fi
-json_payload="$(normalize_task_constitution_json "${json_payload}")" || {
+
+runtime_project_id="$(resolve_runtime_project_id)"
+draft_project_id="$(extract_json_project_id "${json_payload}")"
+if [ -z "${runtime_project_id}" ]; then
+  fail_with "missing_runtime_project_id" "cap-paths could not resolve current project_id"
+fi
+
+if [ -n "${draft_project_id}" ] && [ "${draft_project_id}" != "${runtime_project_id}" ]; then
+  printf 'governance_warning: project_id_drift\n'
+  printf 'draft_project_id: %s\n' "${draft_project_id}"
+  printf 'runtime_project_id: %s\n\n' "${runtime_project_id}"
+fi
+
+json_payload="$(CAP_RUNTIME_PROJECT_ID="${runtime_project_id}" normalize_task_constitution_json "${json_payload}")" || {
   fail_with "normalization_failed" "could not normalize task constitution draft"
 }
 

@@ -80,6 +80,8 @@ else
   PYTHON_BIN="python3"
 fi
 
+PATH_HELPER="${CAP_ROOT}/scripts/cap-paths.sh"
+
 print_header() {
   printf '# %s\n\n' "${step_id}"
   printf '## Handoff Ticket Emission Report\n\n'
@@ -94,6 +96,46 @@ fail_with() {
     printf 'detail: %s\n' "${line}"
   done
   exit 40
+}
+
+resolve_runtime_project_id() {
+  if [ -x "${PATH_HELPER}" ]; then
+    CAP_HOME="${CAP_HOME:-${HOME}/.cap}" bash "${PATH_HELPER}" get project_id 2>/dev/null && return 0
+  fi
+
+  if [ -f "${CAP_ROOT}/.cap.project.yaml" ]; then
+    "${PYTHON_BIN}" - "${CAP_ROOT}/.cap.project.yaml" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+match = re.search(r"^project_id:\s*['\"]?([^'\"\n#]+)", path.read_text(encoding="utf-8"), re.M)
+if match:
+    print(match.group(1).strip())
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+    return 0
+  fi
+
+  basename "${CAP_ROOT}"
+}
+
+extract_task_project_id() {
+  "${PYTHON_BIN}" - "$1" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+try:
+    data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+except Exception:
+    print("")
+    raise SystemExit(0)
+value = data.get("project_id")
+print(value if isinstance(value, str) else "")
+PY
 }
 
 extract_artifact_path() {
@@ -175,12 +217,23 @@ fi
 
 CAP_HOME="${CAP_HOME:-${HOME}/.cap}"
 upstream_handoffs="${CAP_UPSTREAM_HANDOFFS:-}"
+runtime_project_id="$(resolve_runtime_project_id)"
+task_project_id="$(extract_task_project_id "${task_constitution_path}")"
+if [ -z "${runtime_project_id}" ]; then
+  fail_with "missing_runtime_project_id" "cap-paths could not resolve current project_id"
+fi
+if [ -n "${task_project_id}" ] && [ "${task_project_id}" != "${runtime_project_id}" ]; then
+  printf 'governance_warning: project_id_drift\n'
+  printf 'task_constitution_project_id: %s\n' "${task_project_id}"
+  printf 'runtime_project_id: %s\n\n' "${runtime_project_id}"
+fi
 
 ticket_payload="$(
   CAP_TASK_CONSTITUTION_PATH="${task_constitution_path}" \
   CAP_TARGET_STEP_ID="${target_step_id}" \
   CAP_UPSTREAM_HANDOFFS="${upstream_handoffs}" \
   CAP_HOME="${CAP_HOME}" \
+  CAP_RUNTIME_PROJECT_ID="${runtime_project_id}" \
   "${PYTHON_BIN}" - <<'PY'
 import json
 import os
@@ -192,11 +245,12 @@ tc_path = Path(os.environ["CAP_TASK_CONSTITUTION_PATH"])
 target_step_id = os.environ["CAP_TARGET_STEP_ID"]
 upstream_raw = os.environ.get("CAP_UPSTREAM_HANDOFFS", "")
 cap_home = Path(os.environ["CAP_HOME"])
+runtime_project_id = os.environ["CAP_RUNTIME_PROJECT_ID"]
 
 with tc_path.open() as f:
     tc = json.load(f)
 
-project_id = tc.get("project_id")
+project_id = runtime_project_id or tc.get("project_id")
 task_id = tc.get("task_id")
 if not project_id or not task_id:
     print("ERROR:missing_project_or_task_id", file=sys.stderr)
