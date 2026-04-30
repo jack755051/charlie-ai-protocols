@@ -6,6 +6,29 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.21.3] - 2026-05-01
+
+### Fixed
+- `engine/step_runtime.py` `validate_inputs` 抽 `_try_resolve` helper 並新增 `optional_inputs` 欄位處理：required 缺漏仍 block；optional 缺漏 silently skip 並讓 shell 自決 graceful no-op，descriptor 帶 `optional: True` 標記。對齊 spec yaml 早已承諾的 graceful 行為（如 `ingest_design_source` 在 design_source 缺漏 / type=none 時應走 no-op）。
+- `schemas/workflows/project-spec-pipeline.yaml` 把 `design_source` 從 `inputs` 移到 `optional_inputs` 共三個 step：`ingest_design_source`（shell graceful no-op 主場景）、`prd`（無設計稿時仍能產 PRD）、`ui`（no-design baseline）。
+- `scripts/cap-workflow-exec.sh` 新增 `record_blocked_step` helper 並 wire 入 6 個 block 路徑（required_unresolved / unsupported_executor / missing_agent / invalid_shell_script / missing_input_artifact / detached_head），blocked step 現在會寫 `workflow.log` entry 與 `run-summary.md ## Steps` 區塊；治理層不再對 block 失明。先前以為 `cap workflow run` 撞 step_failed 仍 exit 0 是觀察者 background command shell 結構誤導（`...; echo "EXIT_CODE=$?"`），實際 `EXIT_CODE` 已自 v0.19.x 起正確反映 `final_state`。
+- `scripts/workflows/persist-task-constitution.sh:normalize_task_constitution_json` 補兩條漂移收斂：(1) `risk_profile` object form（如 `{"level":"medium","key_risks":[...]}`）coerce 為 schema enum string `low|medium|high|unknown`，sub-fields 丟棄（仍保存於 supervisor draft markdown）；(2) `non_goals` 缺漏 / null / 字串強制 coerce 為 `array<string>`。`fail_with` 從 `exit 40` 改為 `exit 41`，`cap-workflow-exec.sh:shell_exit_condition` 新增 `41 → schema_validation_failed` mapping，跟 vc-apply 的 `40 → git_operation_failed` 拆開，治理層可區分 Type B drift 與 git 操作失敗。
+
+### Added
+- `tests/scripts/test-persist-task-constitution.sh` 新增 Case 7（risk_profile object form → schema enum string）與 Case 8（missing non_goals → `[]`），unit smoke 從 18/18 升為 22/22。`smoke-per-stage.sh` 整體 136 → 140 assertions，10 step 全綠。
+- `docs/cap/PROVIDER-PARITY-FINDINGS-v0.21.2.md` 新增 baseline → resolution 治理紀錄，凍結 2026-05-01 v0.21.2 跑 claude `project-spec-pipeline` 撞 phase 3 `ingest_design_source` blocked 的觀察與根因（R1 規格 vs runtime 偏差、R2 治理信號斷裂、R3 雙 project_id 解析、R4 schema drift）；R1/R2/R4 closeout 摘要 + cross-provider e2e 結果 + deferred 清單。
+
+### Verified
+- E2E claude `project-spec-pipeline` 重跑（self-hosting `charlie-ai-protocols`，run_id `run_20260501020621_b27b155f`）：v0.21.2 baseline 3/16 step_failed 推到 16/16 completed；duration 1217s；provider-parity-check 22 PASS / 16 FAIL → **42 PASS / 1 FAIL**（剩 1 FAIL 為 supervisor draft 寫 `non_goals: []` 觸發 §4.2 嚴格判定，標 deferred）。
+- E2E codex `project-spec-pipeline` cross-provider 驗證（run_id `run_20260501023353_ce13c11d`）：16/16 completed、duration 1254s；provider-parity-check 41 PASS / 5 FAIL（4 FAIL 為 §4.5 工具盲點對 codex UI step 寫的 `docs/design/<module>_*` 4 個交付物誤判為缺 ingest sentinel；1 FAIL 與 claude 同源於 `non_goals=[]`）；無 provider-specific regression。
+
+### Deferred (next round)
+- R3 雙 project_id 解析：cwd 解析的 cap_home_project_id vs supervisor 草寫的 task_constitution.project_id 仍可能分裂兩個 cap home（本批 closeout 跑 supervisor 對齊沒觸發，但 system-level identity resolver 未統一）。
+- supervisor `non_goals=[]` 處置方向：(a) 強化 `agent-skills/01-supervisor-agent.md` §2.5 prompt「至少 1 條」；(b) 調寬 `provider-parity-check.sh` §4.2 接受空陣列。
+- `provider-parity-check.sh` §4.5 false positive：對 UI agent 交付物（`<module>_UI_v*.md` / `<module>_tokens_v*.json` 等）誤報為缺 ingest sentinel；應加白名單或拆「ingest 期望」與「整體 docs/design 期望」兩套檢查。
+- Provider divergence on docs/design/ writeback：claude UI step 在 handoff 寫「本次未寫入，待後續專案決定」**不**寫實檔；codex UI step 真寫；應對齊 03-ui-agent.md §4「必交付清單」強制寫檔。
+- 其他 schema-class executors exit code：`validate-constitution` / `emit-handoff-ticket` / `ingest-design-source` / `bootstrap-constitution-defaults` / `persist-constitution` / `load-constitution-reconcile-inputs` 仍用 exit 40，可漸進改 41 完整覆蓋。
+
 ## [v0.21.2] - 2026-04-30
 
 ### Fixed
