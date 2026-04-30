@@ -191,26 +191,74 @@ done
 # ── 4.5 Design Source ──
 echo ""
 echo "[4.5] Design Source artifacts"
-PROJECT_ROOT="$(dirname "${TC_PATH%/constitutions/*}")/${PROJECT_ID}"
-# Note: design source artifacts live in the project repo's docs/design/, not
-# in the runtime workspace. provider-parity-check trusts the caller to have
-# cwd=project_root or to skip this section when not applicable. We probe
-# both common locations.
+# Read design_source.type from cwd .cap.constitution.yaml (best effort) so we
+# can distinguish "expected to have artifacts" from "expected to be empty".
+DESIGN_TYPE="$(
+  if [ -f "${PWD}/.cap.constitution.yaml" ]; then
+    "${PYTHON_BIN}" - "${PWD}/.cap.constitution.yaml" <<'PY'
+import sys
+try:
+    import yaml  # type: ignore[import]
+except ImportError:
+    print("")
+    raise SystemExit(0)
+try:
+    data = yaml.safe_load(open(sys.argv[1])) or {}
+except Exception:
+    print("")
+    raise SystemExit(0)
+ds = data.get("design_source") or {}
+if isinstance(ds, dict):
+    print(ds.get("type") or "")
+else:
+    print("")
+PY
+  fi
+)"
+
+design_dir_found=""
 for design_root in "${PWD}/docs/design" "${RUN_DIR}/docs/design"; do
   if [ -d "${design_root}" ]; then
-    check_file "${design_root}/source-summary.md present" "${design_root}/source-summary.md"
-    check_file "${design_root}/source-tree.txt present" "${design_root}/source-tree.txt"
-    check_file "${design_root}/design-source.yaml present" "${design_root}/design-source.yaml"
-    check_file "${design_root}/.source-hash.txt sentinel present" "${design_root}/.source-hash.txt"
+    design_dir_found="${design_root}"
     break
   fi
 done
+
+case "${DESIGN_TYPE}" in
+  none)
+    if [ -z "${design_dir_found}" ]; then
+      ok "design_source.type=none and no docs/design (expected no-op)"
+    else
+      ok "design_source.type=none; docs/design exists ${design_dir_found} (artifacts likely from earlier run)"
+    fi
+    ;;
+  "")
+    if [ -z "${design_dir_found}" ]; then
+      ok "no design_source declared; no docs/design (expected no-op)"
+    else
+      check_file "${design_dir_found}/source-summary.md present"   "${design_dir_found}/source-summary.md"
+      check_file "${design_dir_found}/source-tree.txt present"     "${design_dir_found}/source-tree.txt"
+      check_file "${design_dir_found}/design-source.yaml present"  "${design_dir_found}/design-source.yaml"
+      check_file "${design_dir_found}/.source-hash.txt sentinel present" "${design_dir_found}/.source-hash.txt"
+    fi
+    ;;
+  *)
+    if [ -z "${design_dir_found}" ]; then
+      miss "design_source.type=${DESIGN_TYPE} declared but no docs/design — ingest_design_source did not run or output is missing"
+    else
+      check_file "${design_dir_found}/source-summary.md present"   "${design_dir_found}/source-summary.md"
+      check_file "${design_dir_found}/source-tree.txt present"     "${design_dir_found}/source-tree.txt"
+      check_file "${design_dir_found}/design-source.yaml present"  "${design_dir_found}/design-source.yaml"
+      check_file "${design_dir_found}/.source-hash.txt sentinel present" "${design_dir_found}/.source-hash.txt"
+    fi
+    ;;
+esac
 
 # ── 4.6 Spec layer artifacts (only for spec pipeline) ──
 if [ "${WORKFLOW_ID}" = "project-spec-pipeline" ]; then
   echo ""
   echo "[4.6] Spec layer artifacts (best-effort filename match)"
-  for token in prd tech_plan ba spec_audit _archive; do
+  for token in prd tech_plan ba spec_audit archive; do
     matches=$(find "${RUN_DIR}" -maxdepth 1 -name "*${token}*" -type f 2>/dev/null | head -1)
     if [ -n "${matches}" ]; then
       ok "found spec artifact matching: ${token}"
