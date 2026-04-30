@@ -11,21 +11,20 @@
 #   - upstream handoff summaries (optional; from CAP_UPSTREAM_HANDOFFS env,
 #     newline-separated `step_id=path` pairs)
 #
-# Validation scope (minimal structural validation, NOT full JSON Schema):
-#   - target_step_id must exist in task_constitution.execution_plan
-#   - emitted ticket must have all required top-level fields per
-#     schemas/handoff-ticket.schema.yaml: ticket_id, task_id, step_id,
-#     created_at, created_by, target_capability, task_objective,
-#     rules_to_load, context_payload, acceptance_criteria,
-#     output_expectations, failure_routing
-#   - context_payload must include project_constitution_path and
-#     task_constitution_path
-#   - output_expectations must include primary_artifacts and
-#     handoff_summary_path
-#   - failure_routing must include on_fail
-#   Full JSON Schema validation is deferred until step_runtime ships a
-#   matching helper; current scope is honest minimal validation enforced
-#   as a post-build assertion before write.
+# Validation (two passes):
+#   1. Inline minimal structural assertion (pre-write, fast-fail):
+#      - target_step_id must exist in task_constitution.execution_plan
+#      - emitted ticket must have all required top-level fields
+#      - context_payload must include project_constitution_path and
+#        task_constitution_path
+#      - output_expectations must include primary_artifacts and
+#        handoff_summary_path
+#      - failure_routing must include on_fail
+#   2. Full JSON Schema validation (post-write):
+#      - Delegates to engine/step_runtime.py validate-jsonschema against
+#        schemas/handoff-ticket.schema.yaml
+#      - Catches type errors, enum violations on failure_routing.on_fail and
+#        provider_hint, and nested array-of-object shape issues.
 #
 # Behavior:
 #   - Load task constitution JSON.
@@ -296,6 +295,19 @@ if [ ${emit_rc} -ne 0 ]; then
 fi
 
 ticket_path="${ticket_payload#OK:}"
+
+# Full JSON Schema validation against schemas/handoff-ticket.schema.yaml
+# via engine/step_runtime.py validate-jsonschema. Catches type / enum / nested
+# shape issues that the inline pre-write assertion cannot see.
+SCHEMA_PATH="${CAP_ROOT}/schemas/handoff-ticket.schema.yaml"
+STEP_PY="${CAP_ROOT}/engine/step_runtime.py"
+if [ -f "${SCHEMA_PATH}" ] && [ -f "${STEP_PY}" ]; then
+  schema_result="$("${PYTHON_BIN}" "${STEP_PY}" validate-jsonschema "${ticket_path}" "${SCHEMA_PATH}" 2>&1)"
+  schema_rc=$?
+  if [ ${schema_rc} -ne 0 ]; then
+    fail_with "schema_validation_failed" "${schema_result}"
+  fi
+fi
 
 printf -- 'condition: ok\n'
 printf -- 'target_step_id: %s\n' "${target_step_id}"

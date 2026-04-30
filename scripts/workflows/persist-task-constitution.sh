@@ -8,18 +8,20 @@
 #   - upstream draft must contain JSON either in a <<<TASK_CONSTITUTION_JSON_BEGIN>>>
 #     fence or in a ```json fenced block.
 #
-# Validation scope (minimal structural validation, NOT full JSON Schema):
-#   - JSON parses cleanly
-#   - Required fields present and non-empty: task_id, project_id, goal,
-#     goal_stage, success_criteria
-#   - goal_stage is one of: informal_planning / formal_specification /
-#     implementation_preparation / implementation_and_verification
-#   - execution_plan, if present, is a non-empty array; each entry has
-#     step_id and capability fields
-#   - governance, if present, is an object
-#   Full JSON Schema validation against schemas/task-constitution.schema.yaml
-#   is deferred until the engine ships a step_runtime helper paralleling
-#   constitution_validation; current scope is honest minimal validation.
+# Validation:
+#   1. Inline minimal structural validation (fast-fail before write):
+#      - JSON parses cleanly
+#      - Required fields present and non-empty: task_id, project_id, goal,
+#        goal_stage, success_criteria
+#      - goal_stage is one of the four enum values
+#      - execution_plan, if present, is a non-empty array; each entry has
+#        step_id and capability
+#      - governance, if present, is an object
+#   2. Full JSON Schema validation (post-write):
+#      - Delegates to engine/step_runtime.py validate-jsonschema against
+#        schemas/task-constitution.schema.yaml
+#      - Catches type errors, enum violations, and nested object shape issues
+#        that the minimal pass cannot see.
 #
 # Behavior:
 #   - Locate the draft path from upstream context.
@@ -236,6 +238,19 @@ path.write_text(
     encoding="utf-8",
 )
 PY
+
+# Full JSON Schema validation against schemas/task-constitution.schema.yaml
+# via engine/step_runtime.py validate-jsonschema. Catches type / enum / nested
+# shape issues that the minimal pre-write pass cannot see.
+SCHEMA_PATH="${CAP_ROOT}/schemas/task-constitution.schema.yaml"
+STEP_PY="${CAP_ROOT}/engine/step_runtime.py"
+if [ -f "${SCHEMA_PATH}" ] && [ -f "${STEP_PY}" ]; then
+  schema_result="$("${PYTHON_BIN}" "${STEP_PY}" validate-jsonschema "${target_path}" "${SCHEMA_PATH}" 2>&1)"
+  schema_rc=$?
+  if [ ${schema_rc} -ne 0 ]; then
+    fail_with "schema_validation_failed" "${schema_result}"
+  fi
+fi
 
 printf -- 'condition: ok\n'
 printf -- 'task_id: %s\n' "${task_id}"

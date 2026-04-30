@@ -1,46 +1,68 @@
-# Task Constitution Schema (draft v1)
+# Task Constitution Schema (v1)
 #
-# 定義單次任務在 workflow 編譯前的治理基準。
+# 定義單次任務在 workflow 編譯前的治理基準（Type B）。
+# JSON-Schema 風格；可被 step_runtime.py validate-jsonschema 驗證。
 
 schema_version: 1
+title: CAP Task Constitution Schema
+description: Per-task governance contract used to drive a single workflow execution under a project constitution.
 
-fields:
+required:
+  - task_id
+  - goal
+  - goal_stage
+  - success_criteria
+
+# source_request was previously marked required in the legacy `fields:` schema
+# but is not enforced by the current persist executor or by any historic
+# fixture (including ~/.cap/projects/token-monitor/constitutions/...). It
+# remains a recommended field; tightening it back to required should be a
+# deliberate breaking change with a migration plan.
+
+properties:
+
   task_id:
     type: string
-    required: true
+    description: Stable id for this task; appears in the persisted artifact path under ~/.cap/projects/<project_id>/constitutions/.
+
+  project_id:
+    type: string
+    description: Project id; matches the parent .cap.constitution.yaml project_id.
 
   source_request:
     type: string
-    required: true
+    description: The user's original request that triggered this task.
 
   goal:
     type: string
-    required: true
+    description: One-sentence goal statement for this task.
 
   scope:
-    type: string[]
-    required: false
+    type: array
+    items:
+      type: string
 
   non_goals:
-    type: string[]
-    required: false
+    type: array
+    items:
+      type: string
 
   success_criteria:
-    type: string[]
-    required: true
+    type: array
+    items:
+      type: string
 
   constraints:
-    type: string[]
-    required: false
+    type: array
+    items:
+      type: string
 
   risk_profile:
     type: string
-    required: false
     enum: [low, medium, high, unknown]
 
   goal_stage:
     type: string
-    required: true
     enum:
       - informal_planning
       - formal_specification
@@ -48,26 +70,29 @@ fields:
       - implementation_and_verification
 
   allowed_fallbacks:
-    type: string[]
-    required: false
+    type: array
+    items:
+      type: string
     description: 允許的 unresolved policy，例如 fallback / pending / re_scope / manual
 
   stop_conditions:
-    type: string[]
-    required: false
+    type: array
+    items:
+      type: string
 
   required_questions:
-    type: string[]
-    required: false
+    type: array
+    items:
+      type: string
 
   output_expectations:
-    type: string[]
-    required: false
+    type: array
+    items:
+      type: string
 
   inferred_context:
     type: object
-    required: false
-    fields:
+    properties:
       project_kind:
         type: string
       need_ui:
@@ -79,14 +104,17 @@ fields:
       planning_only:
         type: boolean
       unknown_domains:
-        type: string[]
+        type: array
+        items:
+          type: string
       requested_deliverables:
-        type: string[]
+        type: array
+        items:
+          type: string
 
   unresolved_policy:
     type: object
-    required: false
-    fields:
+    properties:
       default_action:
         type: string
         enum: [fallback, pending, re_scope, manual, generate_agent]
@@ -94,3 +122,67 @@ fields:
         type: string
         enum: [pending, re_scope, manual]
 
+  execution_plan:
+    type: array
+    description: Per-step dispatch plan; each entry is unwrapped by emit-handoff-ticket.sh into a Type C ticket.
+    items:
+      type: object
+      required:
+        - step_id
+        - capability
+      properties:
+        step_id:
+          type: string
+        capability:
+          type: string
+        bound_to:
+          type: string
+        needs:
+          type: array
+          items:
+            type: string
+        on_fail:
+          type: string
+          enum: [halt, route_back_to, retry, escalate_user]
+        route_back_to:
+          type: string
+        max_retries:
+          type: integer
+        timeout_seconds:
+          type: integer
+        objective:
+          type: string
+        agent_skill_path:
+          type: string
+        acceptance_criteria:
+          type: array
+          items:
+            type: string
+        done_when:
+          type: array
+          items:
+            type: string
+        output_paths:
+          type: array
+          items:
+            type: object
+
+  governance:
+    type: object
+    properties:
+      watcher_mode:
+        type: string
+        enum: [always_on, milestone_gate, final_only]
+      watcher_checkpoints:
+        type: array
+        items:
+          type: string
+      logger_mode:
+        type: string
+        enum: [full_log, milestone_log, final_only]
+      logger_checkpoints:
+        type: array
+        items:
+          type: string
+      budget_sub_agent_sessions:
+        type: integer

@@ -936,6 +936,14 @@ def _build_parser() -> argparse.ArgumentParser:
     p_vc.add_argument("constitution_path")
     p_vc.add_argument("schema_path")
 
+    # 14. validate-jsonschema (generic alias)
+    p_vjs = sub.add_parser(
+        "validate-jsonschema",
+        help="generic JSON Schema validator; delegates to the same engine as validate-constitution",
+    )
+    p_vjs.add_argument("json_path")
+    p_vjs.add_argument("schema_path")
+
     return parser
 
 
@@ -1013,6 +1021,8 @@ def main(argv: list[str] | None = None) -> None:
             registry_get(args.registry_file, args.alias)
         case "validate-constitution":
             validate_constitution(args.constitution_path, args.schema_path)
+        case "validate-jsonschema":
+            validate_constitution(args.json_path, args.schema_path)
 
 
 if __name__ == "__main__":

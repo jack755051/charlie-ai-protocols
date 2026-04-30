@@ -8,6 +8,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ## [Unreleased]
 
+### Added
+- `engine/step_runtime.py` 新增 `validate-jsonschema` subcommand：對 `validate-constitution` 的 generic 別名，接 `<json_path> <schema_path>` 兩參數委派同一個 jsonschema validator function（Draft202012Validator + 無 jsonschema lib 的 manual fallback），讓任何 JSON-Schema 風格的 schema 都能被驗證；不影響 `validate-constitution` 既有行為，純 additive。
+- `scripts/workflows/persist-task-constitution.sh` 在 pretty-print 之後接入 `validate-jsonschema` 全域 schema 驗證：minimal 結構驗證做 fast-fail，schema 驗證捕捉前者看不到的 type / enum / nested shape 問題；schema 驗證失敗即 `fail_with schema_validation_failed` halt。
+- `scripts/workflows/emit-handoff-ticket.sh` 在 ticket 寫入後接入 `validate-jsonschema` 全域 schema 驗證：inline pre-write field-presence assertion + post-write full schema validation 雙層保護；schema 驗證失敗即 halt（ticket 已落地不刪除作為 audit trail）。
+
+### Changed
+- `schemas/task-constitution.schema.yaml` 從 legacy `fields:` 風格轉為 JSON-Schema 標準（`required: [...]` array + `properties: {...}`），對齊 `schemas/project-constitution.schema.yaml` 的單一 schema 慣例；補入 `execution_plan` array-of-object 結構（含 step_id / capability / needs / on_fail / route_back_to / timeout_seconds 等）與 `governance` 物件結構（含 watcher_mode enum、watcher_checkpoints、logger_mode enum、budget_sub_agent_sessions），讓 schema 真實反映 v0.19.x 引入的 task constitution 內容。`source_request` 從 required 移除（既有 token-monitor 等 historic fixture 沒有此欄位；標註為 recommended，未來收緊需走 breaking change + migration plan）。
+- `schemas/handoff-ticket.schema.yaml` 從 legacy `fields:` 風格轉為 JSON-Schema 標準；保留所有 12 個 top-level required fields 與 nested required（context_payload.{project_constitution_path, task_constitution_path}、output_expectations.{primary_artifacts, handoff_summary_path}、failure_routing.on_fail）；array-of-object 改用 JSON-Schema 標準 `items: {type: object, properties: {...}}` 寫法，可被 jsonschema 標準驗證器直接消費。
+
 ### Fixed
 - `docs/cap/ARCHITECTURE.md` 「Handoff Ticket 欄位參考」章節更新兩處過時敘述：(1) 原文寫「engine 尚未實例化」，改為「自 v0.19.x 起已由 `scripts/workflows/emit-handoff-ticket.sh` 實例化；engine `step_runtime` 自動 ticket emission hook 與 sub-agent 端的 ticket consumption end-to-end 仍待完整 e2e 驗證」，誠實反映目前狀態；(2) 原文寫「`schemas/handoff-ticket.schema.yaml` 已於 v0.10.1 降級為概念參考」，改為「v0.19.x 重新升級為一級 SSOT，不再是概念參考」；連帶補完 ticket 欄位表（從 8 欄擴為 11 欄，新增 `ticket_id` / `output_expectations` / `failure_routing` / `created_at,created_by` 等實際存在的欄位），並補上一句派工流程概覽指向 supervisor §3.6 + emit-handoff-ticket.sh + handoff-ticket-protocol.md 的閉環。
 
