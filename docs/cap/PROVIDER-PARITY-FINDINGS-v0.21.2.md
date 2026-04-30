@@ -1,6 +1,6 @@
 # Provider Parity Findings — v0.21.2 baseline
 
-> **Status (2026-05-01 closeout)**：R2 / R4 / R1 已落地（commits cf86b4d / 82e289c / eb671a7），claude e2e 從 3/16 step_failed → 16/16 completed，parity check 22 PASS / 16 FAIL → **42 PASS / 1 FAIL**。R3 latent system bug 留下一輪。本檔已完成 baseline → resolution 一輪角色，後續可由 RELEASE-NOTES v0.21.3 摘要替代。
+> **Status (2026-05-01 closeout)**：R2 / R4 / R1 已落地（commits cf86b4d / 82e289c / eb671a7），claude e2e 從 3/16 step_failed → 16/16 completed，parity check 22 PASS / 16 FAIL → **42 PASS / 1 FAIL**。Codex cross-provider 驗證 16/16 / **41 PASS / 5 FAIL**（4 FAIL 為 parity-check §4.5 工具盲點，1 FAIL 與 claude 同源於 supervisor draft non_goals=[]）。R3 latent system bug 留下一輪。本檔已完成 baseline → resolution 一輪角色，後續可由 RELEASE-NOTES v0.21.3 摘要替代。
 
 > 短收斂文件。目的是凍結 2026-05-01 跑 claude `project-spec-pipeline` 的觀察，作為 R2/R1/R4/R3 修復的引用基準。**不是長盤點**；後續修復完成後本檔可以由 RELEASE-NOTES 摘要替代。
 
@@ -56,12 +56,26 @@
 | 3. **R4** | `persist-task-constitution.sh` normalize 補 `risk_profile` object→string、`non_goals` array coercion；`fail_with` 改 exit 41 = schema_validation_failed；test 套件 18→22 assertions（82e289c） | ✓ phase 2 不再撞 risk_profile schema |
 | 4. **R1 / B** | `engine/step_runtime.py:validate_inputs` 抽 `_try_resolve` helper，新增 `optional_inputs` 欄位處理；`schemas/workflows/project-spec-pipeline.yaml` 把 `design_source` 從 `inputs` 移到 `optional_inputs`（ingest_design_source / prd / ui 共 3 step）（eb671a7） | ✓ ingest_design_source duration 0s 走 graceful no-op |
 
+**Cross-provider 驗證 (codex closeout)**：
+
+- run_id：`run_20260501023353_ce13c11d`
+- duration：1254s（claude 1217s，差 37s — 跨 provider 時間表現一致）
+- final_state：`completed` / step：**16/16 / 0 failed**
+- parity-check：**41 PASS / 5 FAIL**
+- 5 FAIL 拆解：
+  - 1 個跟 claude 同根因（supervisor draft 寫 `non_goals: []`），已標 deferred。
+  - 4 個是 parity-check §4.5 工具盲點：codex UI step 依 03-ui-agent.md §4「必交付清單」把 `token_monitor_UI_v0.1.md` / `tokens_v0.1.json` / `screens_v0.1.json` / `prototype_v0.1.html` 寫到 `docs/design/`；§4.5 對「沒宣告 design_source + docs/design/ 存在」情境硬查 ingest 4 個 sentinel（`source-summary.md` / `source-tree.txt` / `design-source.yaml` / `.source-hash.txt`），無法區分 UI agent 交付物 vs ingest 產物 → 誤報 FAIL。
+- 觀察到的 provider behavior divergence（與本批修補無關）：claude UI step 在 handoff 寫「本次未寫入，待後續專案決定」**不**寫 `docs/design/`；codex UI step 真的寫 `docs/design/`。03-ui-agent.md §4 應為強制寫檔，claude 行為偏離規範。
+
+**結論**：R1/R2/R4 三件事在 claude 與 codex 兩條 e2e 都成功落地，沒有 provider-specific regression。剩下的 deferred 與 §4.5 false positive 都不是修補的 regression，可進入下一輪。
+
 **Deferred 項目**：
 
 - **R3** 雙 project_id 解析 — 系統性 identity resolver 未統一，留下一輪。
 - **non_goals 空陣列 vs missing 判定** — 兩個方向可選：(a) 強化 supervisor §2.5 prompt「至少 1 條」；(b) 調寬 parity check §4.2 接受 `[]`。下輪選定。
 - **其他 schema-class executors exit code** — `validate-constitution` / `emit-handoff-ticket` / `ingest-design-source` / `bootstrap-constitution-defaults` / `persist-constitution` / `load-constitution-reconcile-inputs` 仍用 exit 40，可漸進改 41 完整覆蓋。
-- **codex parity run** — claude 主鏈已驗證、codex 待跑驗 cross-provider 一致性。
+- **parity-check §4.5 false positive** — 對 UI agent 交付物（`<module>_UI_v*.md` / `<module>_tokens_v*.json` 等）誤報為缺 ingest sentinel；應加白名單或拆「ingest 期望」與「整體 docs/design 期望」兩套檢查。
+- **provider behavior divergence on docs/design/ writeback** — claude UI step 不寫實檔、codex UI step 寫；應對齊 03-ui-agent.md §4 強制要求或調整 supervisor prompt。
 
 ## 隱性觀察（記錄、不立刻修）
 
