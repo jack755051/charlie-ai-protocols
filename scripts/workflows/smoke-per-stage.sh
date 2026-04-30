@@ -11,8 +11,9 @@
 #   5. tests/scripts/test-emit-handoff-ticket.sh                 (must report 15/15)
 #   6. tests/scripts/test-design-source-resolution.sh            (must report 15/15)
 #   7. tests/scripts/test-cap-workflow-design-package-forwarding.sh (must report 5/5)
-#   8. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report 40/40)
-#   9. tests/e2e/test-ticket-consumption.sh                      (must report 22/22)
+#   8. tests/scripts/test-design-source-ingest.sh                (must report 21/21)
+#   9. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report 40/40)
+#  10. tests/e2e/test-ticket-consumption.sh                      (must report 22/22)
 #
 # Resolution order for the bind command:
 #   1. `cap` on PATH (installed via cap installer)
@@ -149,6 +150,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-persist-task-constitution.sh" "pers
 run_fixture "${REPO_ROOT}/tests/scripts/test-emit-handoff-ticket.sh" "emit-handoff-ticket unit smoke"
 run_fixture "${REPO_ROOT}/tests/scripts/test-design-source-resolution.sh" "design source resolution unit smoke"
 run_fixture "${REPO_ROOT}/tests/scripts/test-cap-workflow-design-package-forwarding.sh" "cap-workflow design-package forwarding smoke"
+run_fixture "${REPO_ROOT}/tests/scripts/test-design-source-ingest.sh" "design-source ingest smoke"
 run_fixture "${REPO_ROOT}/tests/e2e/test-project-spec-pipeline-deterministic.sh" "spec-pipeline deterministic e2e"
 run_fixture "${REPO_ROOT}/tests/e2e/test-ticket-consumption.sh" "ticket consumption e2e"
 
