@@ -29,9 +29,10 @@
   - 驗收：schema 可驗證 resolved / unresolved / fallback / provider_cli / source_priority
   - 進度：done in `v0.22.0` (in-progress)；schema 對齊 `engine/runtime_binder.py:bind_semantic_plan` 既有 producer 行為。Acceptance 對應：resolved/unresolved/fallback → `step.resolution_status` enum 6 值 + `summary` 5 個聚合計數；provider_cli → `step.selected_cli`（nullable string）；source_priority → `registry_source_path` + `adapter_from_legacy` + `project_context.binding_policy`。**SSOT 邊界裁定**：`executor` 不開頂層欄位，executor 類型由 `selected_provider`（"builtin" 為 shell；其他為 AI）+ `selected_skill_id`（"builtin-shell" 為 shell）組合**隱式**表達；避免與 compiled-workflow 既有 step.executor input 重複宣告造成 SSOT 衝突。Nullable 欄位採 `type: [string, "null"]`（jsonschema 4.x Draft202012Validator 支援）表達「未解析」分支。新增 `tests/scripts/test-binding-report-schema.sh` 覆蓋 2 positive + 8 negative 共 10 cases，wire 進 `smoke-per-stage.sh`：升為 18 step / **18 passed / 0 failed / 0 skipped**。
 
-- [ ] 定義 `schemas/supervisor-orchestration.schema.yaml`
+- [x] 定義 `schemas/supervisor-orchestration.schema.yaml`（contract done; producer pending P3）
   - 交付物：Supervisor structured output JSON Schema
   - 驗收：schema 覆蓋 task_constitution / capability_graph / governance / compile_hints
+  - 進度：done as **forward contract** in `v0.22.0` (in-progress)；schema 涵蓋 envelope 9 個必填頂層欄位 + governance 4 個必填 sub-field + compile_hints optional sub-field 集合。**範圍邊界**：本 schema 只驗證 envelope 結構與 nested object presence；nested artifact 內部欄位（task_constitution / capability_graph）由 sibling schema（`task-constitution.schema.yaml` / `capability-graph.schema.yaml`）負責，避免重複宣告造成 SSOT 衝突。**Producer 狀態**：尚無 runtime producer 滿足此 envelope —— `engine/task_scoped_compiler.py:compile_task` 是 task-scoped 內部結果聚合，**不是** supervisor 對外 envelope；P3 SupervisorOrchestrator 才是目標 producer，留到 P3 cycle 實作。Acceptance 對應：本輪只接到 schema parse + fixture validation；runtime hook 由 P3 接。新增 `tests/scripts/test-supervisor-orchestration-schema.sh` 覆蓋 2 positive + 8 negative 共 10 cases，wire 進 `smoke-per-stage.sh`：升為 19 step / **19 passed / 0 failed / 0 skipped**。
 
 - [ ] 定義 `schemas/workflow-result.schema.yaml`
   - 交付物：workflow result JSON Schema
@@ -44,7 +45,7 @@
 - [ ] 新增 schema parse / validation smoke tests
   - 交付物：集中測試入口或納入 `scripts/workflows/smoke-per-stage.sh`
   - 驗收：所有新增 schema 有 positive / negative fixture
-  - 進度：partial in `v0.21.5` (`2492913`) + `v0.22.0` (in-progress, P0 #1–#3)；`provider-parity-check.sh` §4.2 已拆分 nonempty vs present-only 驗證語意；capability-graph 8 cases、compiled-workflow 9 cases、binding-report 10 cases 全進 `smoke-per-stage.sh`（18/18）。仍缺 supervisor-orchestration / workflow-result / gate-result 3 個 schema 的 positive / negative fixture。本項在 P0 全部 6 個 schema 落地後可結案。
+  - 進度：partial in `v0.21.5` (`2492913`) + `v0.22.0` (in-progress, P0 #1–#4)；`provider-parity-check.sh` §4.2 已拆分 nonempty vs present-only 驗證語意；capability-graph 8 cases、compiled-workflow 9 cases、binding-report 10 cases、supervisor-orchestration 10 cases（forward contract）全進 `smoke-per-stage.sh`（19/19）。仍缺 workflow-result / gate-result 2 個 schema 的 positive / negative fixture。本項在 P0 全部 6 個 schema 落地後可結案。
 
 ## P0a：Schema-Class Executors Exit Code 政策 ✓ resolved in v0.21.6
 

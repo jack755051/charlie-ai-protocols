@@ -20,8 +20,9 @@
 #  14. tests/scripts/test-capability-graph-schema.sh             (P0 #1 schema gate)
 #  15. tests/scripts/test-compiled-workflow-schema.sh            (P0 #2 schema gate)
 #  16. tests/scripts/test-binding-report-schema.sh               (P0 #3 schema gate)
-#  17. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report all-pass)
-#  18. tests/e2e/test-ticket-consumption.sh                      (must report all-pass)
+#  17. tests/scripts/test-supervisor-orchestration-schema.sh     (P0 #4 schema gate, forward contract)
+#  18. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report all-pass)
+#  19. tests/e2e/test-ticket-consumption.sh                      (must report all-pass)
 #
 # Resolution order for the bind command:
 #   1. `cap` on PATH (installed via cap installer)
@@ -167,6 +168,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-load-constitution-reconcile-inputs-
 run_fixture "${REPO_ROOT}/tests/scripts/test-capability-graph-schema.sh" "capability-graph schema gate (P0 #1)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-compiled-workflow-schema.sh" "compiled-workflow schema gate (P0 #2)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-binding-report-schema.sh" "binding-report schema gate (P0 #3)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-supervisor-orchestration-schema.sh" "supervisor-orchestration schema gate (P0 #4, forward contract)"
 run_fixture "${REPO_ROOT}/tests/e2e/test-project-spec-pipeline-deterministic.sh" "spec-pipeline deterministic e2e"
 run_fixture "${REPO_ROOT}/tests/e2e/test-ticket-consumption.sh" "ticket consumption e2e"
 

@@ -1,0 +1,161 @@
+# Supervisor Orchestration Output Schema (v1, FORWARD CONTRACT)
+#
+# 這份 schema 是 **forward contract**：定義未來 P3 SupervisorOrchestrator 必須產出的
+# structured output envelope，作為 supervisor → compile → bind → execute 鏈路上游入口。
+# 目前 **沒有 runtime producer 滿足此 envelope**：
+#   - `engine/task_scoped_compiler.py:compile_task` 回傳一個 dict（含 task_constitution /
+#     capability_graph / binding / unresolved_policy / compiled_workflow / plan），是
+#     「task-scoped 內部結果聚合」，不是 supervisor 對外 envelope。
+#   - SupervisorOrchestrator（P3，MISSING-IMPLEMENTATION-CHECKLIST P3 全段 pending）
+#     才是本 schema 的目標 producer。
+#
+# 為什麼**現在**先寫：
+#   1. 沒有 envelope 契約，P3 實作會自然語言派工或讓 task_scoped_compiler 內部 shape 外洩。
+#   2. P0 #1 capability-graph、#2 compiled-workflow、#3 binding-report 已就緒，#4 envelope
+#      正好把它們組成 Supervisor → Graph → Compile → Bind 的上游入口。
+#   3. Schema 是 SSOT，先寫不算超前；改契約比改實作便宜。
+#
+# 範圍邊界：
+#   - 本 schema **只驗證 envelope 結構**：哪些頂層欄位必填、nested object 必須是 object。
+#   - **不在此 schema 內**遞迴驗證 task_constitution / capability_graph 內部欄位。
+#     完整 nested 驗證由 sibling schema（task-constitution.schema.yaml /
+#     capability-graph.schema.yaml）負責；P3 producer 必須依序通過 envelope schema
+#     與所有 nested schema 才算 valid。
+#
+# JSON-Schema 風格；可被 step_runtime.py validate-jsonschema 驗證。
+
+schema_version: 1
+title: CAP Supervisor Orchestration Output Schema (forward contract)
+description: Envelope for the structured output produced by the future SupervisorOrchestrator (P3). NO CURRENT RUNTIME PRODUCER — this is a forward contract that P3 implementation must satisfy when it lands. Validates envelope shape only; nested artifact bodies (task_constitution, capability_graph, governance) are validated by their respective sibling schemas.
+
+required:
+  - schema_version
+  - task_id
+  - source_request
+  - produced_at
+  - supervisor_role
+  - task_constitution
+  - capability_graph
+  - governance
+  - compile_hints
+
+properties:
+  schema_version:
+    type: integer
+    enum: [1]
+    description: Schema version for the supervisor-orchestration envelope. Bump on breaking changes to top-level fields.
+
+  task_id:
+    type: string
+    description: Stable task id; MUST equal task_constitution.task_id. Producers should fail-fast on mismatch rather than letting drift propagate.
+
+  source_request:
+    type: string
+    description: Original user request that triggered this orchestration cycle. MUST equal task_constitution.source_request.
+
+  produced_at:
+    type: string
+    description: ISO-8601 timestamp when the supervisor finalized this envelope; consumers may use it for staleness checks.
+
+  supervisor_role:
+    type: string
+    enum: ["01-Supervisor"]
+    description: Canonical supervisor agent id. Locked to the single supervisor role; if multi-supervisor support is added later, bump schema_version.
+
+  supervisor_session_id:
+    type: [string, "null"]
+    description: |
+      Session id from AgentSessionRunner (P5 integration point). Null when running outside a registered session
+      (e.g., direct CLI invocation during P3 development). When P5 lands this becomes the join key into the
+      session ledger.
+
+  task_constitution:
+    type: object
+    description: |
+      Full Type B Task Constitution body. Producers MUST also pass this object through
+      schemas/task-constitution.schema.yaml; envelope validation only checks that this is an object,
+      preventing duplicate enforcement of nested fields here.
+
+  capability_graph:
+    type: object
+    description: |
+      Full Type capability graph body. Producers MUST also pass this object through
+      schemas/capability-graph.schema.yaml. Envelope validation only checks the object presence and type.
+
+  governance:
+    type: object
+    required:
+      - goal_stage
+      - watcher_mode
+      - logger_mode
+      - context_mode
+    description: |
+      Governance rails the supervisor commits to for this run. Mirrors compiled-workflow.governance
+      structure so the compiler can pass it through unchanged. context_mode controls how downstream sub-agents
+      receive context (typically "summary_first").
+    properties:
+      goal_stage:
+        type: string
+        enum:
+          - informal_planning
+          - formal_specification
+          - implementation_preparation
+          - implementation_and_verification
+        description: Inherited from task_constitution.goal_stage.
+      watcher_mode:
+        type: string
+        enum: [always_on, milestone_gate, final_only]
+        description: Watcher cadence per agent-skills/00-core-protocol.md §5.5.
+      logger_mode:
+        type: string
+        enum: [full_log, milestone_log, final_only]
+        description: Logger cadence per agent-skills/00-core-protocol.md §5.5.
+      context_mode:
+        type: string
+        enum: [summary_first, full_artifact]
+        description: How sub-agents receive upstream context.
+      halt_on_missing_handoff:
+        type: boolean
+        description: Whether to halt the run when a required upstream handoff summary is missing.
+      watcher_checkpoints:
+        type: array
+        description: Step ids at which watcher must run (informal_planning may omit).
+        items:
+          type: string
+      logger_checkpoints:
+        type: array
+        description: Step ids at which logger must record a milestone entry.
+        items:
+          type: string
+
+  compile_hints:
+    type: object
+    description: |
+      Directives from the supervisor to the downstream compile + bind pipeline. Optional sub-fields let the
+      supervisor tighten or relax binder defaults per task. Producers MAY emit an empty object {} when no hints
+      apply, but the field itself is required at the envelope level so consumers can rely on its presence.
+    properties:
+      registry_preference:
+        type: string
+        enum: [project_first, shared_allowed, builtin_only]
+        description: Preferred skill source priority for the binder.
+      fallback_policy:
+        type: string
+        enum: [halt, fallback_to_generic, skip_optional]
+        description: Default missing-skill policy override; binder still respects per-step missing_policy when set.
+      preferred_cli:
+        type: [string, "null"]
+        description: Preferred provider CLI (e.g., "claude", "codex"); null leaves binder default in place.
+      skip_optional_unresolved:
+        type: boolean
+        description: When true, optional steps with no skill match are silently skipped rather than producing optional_unresolved status.
+      attach_inputs:
+        type: array
+        description: Extra context artifact paths the supervisor asks the compiler to attach to downstream steps; consumer may treat unknown paths as warnings.
+        items:
+          type: string
+      notes:
+        type: array
+        description: Free-form supervisor notes carried through to the compiled workflow for governance traceability.
+        items:
+          type: string
