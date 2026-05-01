@@ -19,12 +19,18 @@
   - target step 不在 execution_plan → exit 40
   - seq 遞增（重跑同 step → `<step>-2.ticket.json`）
 
+- `test-provider-parity-check.sh` — `scripts/workflows/provider-parity-check.sh`
+  - `non_goals=[]` 視為合法 present-only 欄位
+  - `non_goals` missing/null 仍 FAIL
+  - `success_criteria=[]` 仍 FAIL，避免把 array 放寬擴散到 nonempty 欄位
+
 ## 執行
 
 ```bash
 cd /path/to/charlie-ai-protocols
 bash tests/scripts/test-persist-task-constitution.sh
 bash tests/scripts/test-emit-handoff-ticket.sh
+bash tests/scripts/test-provider-parity-check.sh
 ```
 
 每個 test 會在 `/tmp/cap-test-*` 開隔離的 sandbox（透過 `mktemp -d`），結束後自動清理。
@@ -40,15 +46,19 @@ bash tests/scripts/test-emit-handoff-ticket.sh
 bash scripts/workflows/smoke-per-stage.sh
 ```
 
-自 v0.19.6 起該 wrapper 依序執行 7 個 step：
+目前該 wrapper 依序執行 11 個 step：
 
 1. `cap workflow bind project-spec-pipeline`
 2. `cap workflow bind project-implementation-pipeline`
 3. `cap workflow bind project-qa-pipeline`
-4. `tests/scripts/test-persist-task-constitution.sh`（unit smoke 13 assertions）
-5. `tests/scripts/test-emit-handoff-ticket.sh`（unit smoke 15 assertions）
-6. `tests/e2e/test-project-spec-pipeline-deterministic.sh`（deterministic e2e 40 assertions）
-7. `tests/e2e/test-ticket-consumption.sh`（ticket consumption e2e 22 assertions）
+4. `tests/scripts/test-persist-task-constitution.sh`
+5. `tests/scripts/test-emit-handoff-ticket.sh`
+6. `tests/scripts/test-design-source-resolution.sh`
+7. `tests/scripts/test-cap-workflow-design-package-forwarding.sh`
+8. `tests/scripts/test-design-source-ingest.sh`
+9. `tests/scripts/test-provider-parity-check.sh`
+10. `tests/e2e/test-project-spec-pipeline-deterministic.sh`
+11. `tests/e2e/test-ticket-consumption.sh`
 
 `cap` CLI 不在 PATH 時 bind 檢查會 fallback 到 in-repo `scripts/cap-workflow.sh`（自 v0.19.5 起）；若 fallback 也找不到才 graceful skip。退出碼 0 = 全 PASS（含 skipped），非 0 = 至少一項 FAIL。
 

@@ -109,13 +109,28 @@ echo "[4.2] Type B Task Constitution"
 TC_PATH="${CAP_HOME}/projects/${PROJECT_ID}/constitutions/${TASK_ID}.json"
 check_file "task constitution persisted" "${TC_PATH}"
 if [ -f "${TC_PATH}" ]; then
-  required_fields=(task_id project_id source_request goal goal_stage success_criteria non_goals execution_plan)
-  for field in "${required_fields[@]}"; do
+  nonempty_fields=(task_id project_id source_request goal goal_stage success_criteria execution_plan)
+  for field in "${nonempty_fields[@]}"; do
     if "${PYTHON_BIN}" -c "
 import json, sys
 data = json.load(open(sys.argv[1]))
 val = data.get(sys.argv[2])
 if val in (None, '', []):
+    sys.exit(1)
+sys.exit(0)
+" "${TC_PATH}" "${field}" 2>/dev/null; then
+      ok "Type B has required field: ${field}"
+    else
+      miss "Type B missing required field: ${field}"
+    fi
+  done
+  present_fields=(non_goals)
+  for field in "${present_fields[@]}"; do
+    if "${PYTHON_BIN}" -c "
+import json, sys
+data = json.load(open(sys.argv[1]))
+field = sys.argv[2]
+if field not in data or data[field] is None:
     sys.exit(1)
 sys.exit(0)
 " "${TC_PATH}" "${field}" 2>/dev/null; then

@@ -1,6 +1,6 @@
 # Provider Parity Findings — v0.21.2 baseline
 
-> **Status (2026-05-01 closeout)**：R2 / R4 / R1 已落地（commits cf86b4d / 82e289c / eb671a7），claude e2e 從 3/16 step_failed → 16/16 completed，parity check 22 PASS / 16 FAIL → **42 PASS / 1 FAIL**。Codex cross-provider 驗證 16/16 / **41 PASS / 5 FAIL**（4 FAIL 為 parity-check §4.5 工具盲點，1 FAIL 與 claude 同源於 supervisor draft non_goals=[]）。R3 latent system bug 留下一輪。本檔已完成 baseline → resolution 一輪角色，後續可由 RELEASE-NOTES v0.21.3 摘要替代。
+> **Status (2026-05-01 closeout)**：R2 / R4 / R1 已落地（commits cf86b4d / 82e289c / eb671a7），claude e2e 從 3/16 step_failed → 16/16 completed，parity check 22 PASS / 16 FAIL → **42 PASS / 1 FAIL**。Codex cross-provider 驗證 16/16 / **41 PASS / 5 FAIL**（4 FAIL 為 parity-check §4.5 工具盲點，1 FAIL 與 claude 同源於 supervisor draft non_goals=[]）。後續 v0.21.5 已裁定 `non_goals=[]` 合法並修正 parity-check §4.2 present-only 判定；R3 latent system bug 另由 1425fa9 收斂。本檔已完成 baseline → resolution 一輪角色，後續可由 RELEASE-NOTES 摘要替代。
 
 > 短收斂文件。目的是凍結 2026-05-01 跑 claude `project-spec-pipeline` 的觀察，作為 R2/R1/R4/R3 修復的引用基準。**不是長盤點**；後續修復完成後本檔可以由 RELEASE-NOTES 摘要替代。
 
@@ -72,7 +72,7 @@
 **Deferred 項目**：
 
 - **R3** 雙 project_id 解析 — 系統性 identity resolver 未統一，留下一輪。
-- **non_goals 空陣列 vs missing 判定** — 兩個方向可選：(a) 強化 supervisor §2.5 prompt「至少 1 條」；(b) 調寬 parity check §4.2 接受 `[]`。下輪選定。
+- **non_goals 空陣列 vs missing 判定** — ✓ Resolved in v0.21.5：採 (b)，`non_goals=[]` 表示「沒有排除項」且合法；checker §4.2 改為只對 `non_goals` 做 present-only 檢查，`success_criteria=[]` / `execution_plan=[]` 等 nonempty 欄位仍 FAIL。
 - **其他 schema-class executors exit code** — `validate-constitution` / `emit-handoff-ticket` / `ingest-design-source` / `bootstrap-constitution-defaults` / `persist-constitution` / `load-constitution-reconcile-inputs` 仍用 exit 40，可漸進改 41 完整覆蓋。
 - **parity-check §4.5 false positive** — 對 UI agent 交付物（`<module>_UI_v*.md` / `<module>_tokens_v*.json` 等）誤報為缺 ingest sentinel；應加白名單或拆「ingest 期望」與「整體 docs/design 期望」兩套檢查。
 - **provider behavior divergence on docs/design/ writeback** — claude UI step 不寫實檔、codex UI step 寫；應對齊 03-ui-agent.md §4 強制要求或調整 supervisor prompt。
