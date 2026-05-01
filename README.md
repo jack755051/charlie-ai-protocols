@@ -400,6 +400,7 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 - v0.21.2 重點：provider parity checker 對齊 archive pattern 與 design source type-aware 判定。
 - 近期主軸：design source runtime、provider parity e2e、task constitution strict schema 與 per-stage workflow 穩定化。
 - 完整版本紀錄請看 [docs/cap/RELEASE-NOTES.md](docs/cap/RELEASE-NOTES.md)。
+- 後續尚未實現項目的工程清單見 [docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md](docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md)。
 
 ## Links
 
