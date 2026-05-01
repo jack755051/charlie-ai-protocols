@@ -1,6 +1,6 @@
 # Provider Parity Findings — v0.21.2 baseline
 
-> **Status (2026-05-01 closeout)**：R2 / R4 / R1 已落地（commits cf86b4d / 82e289c / eb671a7），claude e2e 從 3/16 step_failed → 16/16 completed，parity check 22 PASS / 16 FAIL → **42 PASS / 1 FAIL**。Codex cross-provider 驗證 16/16 / **41 PASS / 5 FAIL**（4 FAIL 為 parity-check §4.5 工具盲點，1 FAIL 與 claude 同源於 supervisor draft non_goals=[]）。後續 v0.21.5 已裁定 `non_goals=[]` 合法並修正 parity-check §4.2 present-only 判定；R3 latent system bug 另由 1425fa9 收斂。本檔已完成 baseline → resolution 一輪角色，後續可由 RELEASE-NOTES 摘要替代。
+> **Status (2026-05-01 v0.21.5 closeout)**：四個獨立打擊面全部收斂。R2 / R4 / R1 於 v0.21.3 落地（commits cf86b4d / 82e289c / eb671a7），claude e2e 從 3/16 step_failed → 16/16 completed，parity check 22 PASS / 16 FAIL → 42 PASS / 1 FAIL。R3 雙 project_id 解析於 v0.21.5 由 `1425fa9` 收斂，task constitution / handoff ticket 改以 cap-paths runtime resolver 為唯一 identity 來源。`non_goals=[]` 判定爭議於 v0.21.5 由 `2492913` 裁定合法並修正 parity-check §4.2，既有 claude / codex parity run 重跑皆為 **43 PASS / 0 FAIL**。Codex 端的 §4.5 工具盲點（4 FAIL）已於 v0.21.4 由 §4.5 lenient PASS 分支處理。本檔已完成 baseline → resolution 全鏈角色，後續可由 RELEASE-NOTES 摘要替代。
 
 > 短收斂文件。目的是凍結 2026-05-01 跑 claude `project-spec-pipeline` 的觀察，作為 R2/R1/R4/R3 修復的引用基準。**不是長盤點**；後續修復完成後本檔可以由 RELEASE-NOTES 摘要替代。
 
@@ -33,8 +33,8 @@
 |---|---|---|---|---|
 | **R1** | `ingest_design_source` 規格 vs runtime 偏差 — `schemas/workflows/project-spec-pipeline.yaml` L108-111 `done_when` 寫「design_source 缺漏 / type none 視為 graceful no-op」，但 runtime 在 step 進到 shell 前就標 `blocked / missing_input_artifact`，shell script 根本沒執行 | `runtime-state.json` `steps.ingest_design_source.execution_state=blocked, blocked_reason=missing_input_artifact` | #1（runner 閉環） | ✓ Fixed (eb671a7) |
 | **R2** | 治理信號斷裂 — `cap-workflow-exec.sh` 的 6 個 block 路徑（required_unresolved / unsupported_executor / missing_agent / invalid_shell_script / missing_input_artifact / detached_head）**不寫 workflow.log、也不寫 RUN_SUMMARY `## Steps` entry**。對比 fail 路徑（L1097/L1119/L1138/L1162/L1225）都有 `append_workflow_log`。註：exit code 已正確反映（L1310-1318 `EXIT_CODE=1`、L1380 `exit "${EXIT_CODE}"`）；先前以為 exit 0 是觀察者 background command shell 結構誤導 | run-summary.md `## Finished failed: 1` 但 `## Steps` 三個全 ok；workflow.log 完全沒有 `phase:3 step:ingest_design_source` 任一行 | #5（governance）+ #3（log 完整性） | ✓ Fixed (cf86b4d) |
-| **R3** | 雙 project_id 解析 — run dir / binding 用 cwd 解析（`charlie-ai-protocols`）；task constitution / handoff 用 supervisor 草寫的 `project_id`（`token-monitor-minimal`）。同一個 run 物件分裂兩處 | `~/.cap/projects/charlie-ai-protocols/reports/workflows/.../run_dir` 與 `~/.cap/projects/token-monitor-minimal/{constitutions,handoffs}/` 並存 | #1 + #2 + #6 | ⏸ Deferred — latent system bug，留下輪。本批 closeout 跑 supervisor 草寫對齊（`charlie-ai-protocols`）沒觸發，但 system-level identity resolver 仍未統一。 |
-| **R4** | supervisor §2.5 嚴格 schema 在實跑時漏 `non_goals` — 8 必填字段中有 1 個缺，normalize 也沒補預設值 | parity-check `[4.2] FAIL: Type B missing required field: non_goals` | #2（schema 拆乾淨） | ✓ Fixed (82e289c) — 但 closeout 跑揭露新議題：supervisor 寫 `non_goals: []` 空陣列、normalize 維持 `[]`、parity check §4.2 仍判定為 missing（檢查邏輯 `val in (None, "", [])`）。屬 supervisor draft 行為 + parity interpretation，不是 schema/runtime 能解的，標 deferred。 |
+| **R3** | 雙 project_id 解析 — run dir / binding 用 cwd 解析（`charlie-ai-protocols`）；task constitution / handoff 用 supervisor 草寫的 `project_id`（`token-monitor-minimal`）。同一個 run 物件分裂兩處 | `~/.cap/projects/charlie-ai-protocols/reports/workflows/.../run_dir` 與 `~/.cap/projects/token-monitor-minimal/{constitutions,handoffs}/` 並存 | #1 + #2 + #6 | ✓ Fixed in v0.21.5 (1425fa9) — `persist-task-constitution.sh` / `emit-handoff-ticket.sh` 改以 cap-paths runtime resolver 為唯一 identity 來源，constitution 與 cap-paths 不一致時直接 halt。 |
+| **R4** | supervisor §2.5 嚴格 schema 在實跑時漏 `non_goals` — 8 必填字段中有 1 個缺，normalize 也沒補預設值 | parity-check `[4.2] FAIL: Type B missing required field: non_goals` | #2（schema 拆乾淨） | ✓ Fixed in v0.21.3 (82e289c) + v0.21.5 (2492913) — 82e289c 補 normalize array coercion；closeout 跑揭露新議題：supervisor 寫 `non_goals: []` 空陣列、normalize 維持 `[]`、parity check §4.2 仍判定為 missing（檢查邏輯 `val in (None, "", [])`）。v0.21.5 已裁定 `non_goals=[]` 合法（對齊 supervisor §2.5「明示排除的範圍，可空陣列」契約），parity-check §4.2 拆 nonempty vs present-only，`non_goals` 走 present-only 分支。 |
 
 ## Resolution and follow-up (v0.21.3 closeout)
 
@@ -69,13 +69,14 @@
 
 **結論**：R1/R2/R4 三件事在 claude 與 codex 兩條 e2e 都成功落地，沒有 provider-specific regression。剩下的 deferred 與 §4.5 false positive 都不是修補的 regression，可進入下一輪。
 
-**Deferred 項目**：
+**v0.21.5 closeout 後 deferred / open 項目**：
 
-- **R3** 雙 project_id 解析 — 系統性 identity resolver 未統一，留下一輪。
-- **non_goals 空陣列 vs missing 判定** — ✓ Resolved in v0.21.5：採 (b)，`non_goals=[]` 表示「沒有排除項」且合法；checker §4.2 改為只對 `non_goals` 做 present-only 檢查，`success_criteria=[]` / `execution_plan=[]` 等 nonempty 欄位仍 FAIL。
-- **其他 schema-class executors exit code** — `validate-constitution` / `emit-handoff-ticket` / `ingest-design-source` / `bootstrap-constitution-defaults` / `persist-constitution` / `load-constitution-reconcile-inputs` 仍用 exit 40，可漸進改 41 完整覆蓋。
-- **parity-check §4.5 false positive** — 對 UI agent 交付物（`<module>_UI_v*.md` / `<module>_tokens_v*.json` 等）誤報為缺 ingest sentinel；應加白名單或拆「ingest 期望」與「整體 docs/design 期望」兩套檢查。
-- **provider behavior divergence on docs/design/ writeback** — claude UI step 不寫實檔、codex UI step 寫；應對齊 03-ui-agent.md §4 強制要求或調整 supervisor prompt。
+- ✓ **R3** 雙 project_id 解析 — Resolved in v0.21.5 (1425fa9)。
+- ✓ **non_goals 空陣列 vs missing 判定** — Resolved in v0.21.5 (2492913)：採 (b)，`non_goals=[]` 表示「沒有排除項」且合法；checker §4.2 改為只對 `non_goals` 做 present-only 檢查，`success_criteria=[]` / `execution_plan=[]` 等 nonempty 欄位仍 FAIL。
+- ✓ **parity-check §4.5 false positive** — Resolved in v0.21.4：合併 `none|""` 為單一 lenient PASS 分支，沒宣告 `design_source` 就不期待 ingest sentinel 跑。
+- ✓ **provider behavior divergence on docs/design/ writeback** — Resolved in v0.21.4：03-ui-agent.md §4 / §5 加硬性「必須實際寫檔」規範並要求 `output_paths` 對應實際寫入檔案。
+- ⏸ **其他 schema-class executors exit code** — `validate-constitution` / `emit-handoff-ticket` / `ingest-design-source` / `bootstrap-constitution-defaults` / `persist-constitution` / `load-constitution-reconcile-inputs` 仍用 exit 40，可漸進改 41 完整覆蓋。建議於 v0.21.6+ 由 `policies/workflow-executor-exit-codes.md` 為 SSOT 後再動。
+- ⏸ **Fresh provider e2e（v0.21.5 後）** — 本批 v0.21.5 closeout 採「既有 run + 新版 checker 重跑」確認 43/0；尚未跑一條全新 Claude / Codex e2e 觀察 1425fa9 / 55038dd / 2492913 三件事在 fresh run 是否無 regression，留待 v0.21.6 cycle。
 
 ## 隱性觀察（記錄、不立刻修）
 

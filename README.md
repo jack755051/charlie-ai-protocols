@@ -393,8 +393,8 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 
 ## Notes
 
-- 最新已驗證 tag：`v0.21.2`
-- v0.21.5 重點：parity-check §4.2 區分 Type B nonempty 欄位與 `non_goals` present-only 欄位，允許 `non_goals=[]` 表示「沒有排除項」，但 `success_criteria=[]` / `execution_plan=[]` 仍 FAIL；claude / codex 既有 parity run 重跑皆為 43/0，新增 provider parity checker smoke 並納入 `smoke-per-stage.sh`。
+- 最新已驗證 tag：`v0.21.5`
+- v0.21.5 重點：(1) `1425fa9` task project identity 對齊 cap-paths runtime resolver，收斂 v0.21.3 標的 R3 deferred；(2) `55038dd` `persist-task-constitution.sh` 自動 strip Claude / Codex 在 task constitution fence 內又包一層 ```` ```json ```` 的 nested fence，避免 JSON parse halt；(3) `2492913` parity-check §4.2 區分 Type B nonempty 欄位與 `non_goals` present-only 欄位，允許 `non_goals=[]` 表示「沒有排除項」，但 `success_criteria=[]` / `execution_plan=[]` 仍 FAIL；claude / codex 既有 parity run 重跑皆為 43/0，新增 provider parity checker smoke 並納入 `smoke-per-stage.sh`。
 - v0.21.4 重點：parity-check §4.5 合併 undeclared/none design-source 為 lenient PASS（修對 UI agent 交付物的 false positive，codex parity 41/5 → 42/1）；03-ui-agent §4 加硬性「必須實際寫檔」規範，禁止 claude UI step 用 stdout / handoff 占位語意取代真實寫檔。
 - v0.21.3 重點：claude `project-spec-pipeline` 從 3/16 step_failed 推到 16/16 completed，parity check 22/16 → 42 PASS / 1 FAIL — workflow step 新增 `optional_inputs` 欄位讓 graceful no-op 可被 shell 真正執行、`cap-workflow-exec.sh` 補 6 個 block 路徑的 log/RUN_SUMMARY 可觀測性、`persist-task-constitution.sh` 收斂 risk_profile/non_goals schema drift 並把 schema_validation_failed 從 git_operation_failed exit code 拆開。
 - v0.21.2 重點：provider parity checker 對齊 archive pattern 與 design source type-aware 判定。
