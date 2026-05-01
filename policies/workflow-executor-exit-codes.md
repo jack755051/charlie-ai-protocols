@@ -18,8 +18,34 @@
 | `20` | `ambiguous_change_type` | 變更類型無法安全判定 | 若 workflow fallback 允許，交給 AI；否則 halt |
 | `21` | `mixed_change_type` | 同次變更同時符合多種 commit type | 若 workflow fallback 允許，交給 AI 拆 commit 或選主要 type；否則 halt |
 | `30` | `policy_blocked` | detached HEAD、受保護分支、未允許的分支策略等政策阻塞 | 預設 halt；只有 workflow 明確允許才 fallback |
-| `40` | `git_operation_failed` | git 指令、hook、push 或檔案操作失敗 | 若 workflow fallback 允許，交給 AI 診斷或重試；否則 halt |
+| `40` | `git_operation_failed` | git 指令、hook、push 或檔案操作失敗（vc-class executor 專用） | 若 workflow fallback 允許，交給 AI 診斷或重試；否則 halt |
+| `41` | `schema_validation_failed` | schema 驗證、JSON parse、必填欄位或 normalize 失敗（schema-class executor 專用） | 預設 halt；治理層可區分 schema 漂移 vs git 失敗 |
 | `50` | `sensitive_file_risk` | 偵測到 `.env`、私鑰、credential 等敏感檔案風險 | 直接 halt，不得 fallback |
+
+## Executor 分類 (Script Classification)
+
+退出碼語意以**整支腳本的責任類型**為準，而非單一 fail_with call。同一支腳本內的所有失敗統一回傳該分類的退出碼，避免治理層需要跨 fail_with 細分。
+
+### vc-class executor（exit 40 = `git_operation_failed`）
+
+執行 git 操作或推送的腳本：
+
+- `scripts/workflows/vc-scan.sh`
+- `scripts/workflows/vc-apply.sh`
+
+### schema-class executor（exit 41 = `schema_validation_failed`）
+
+讀寫 JSON / YAML / Markdown artifact、執行 schema 驗證或 constitution / handoff persistence 的腳本：
+
+- `scripts/workflows/persist-task-constitution.sh`（v0.21.3 起）
+- `scripts/workflows/validate-constitution.sh`（v0.21.6 起）
+- `scripts/workflows/emit-handoff-ticket.sh`（v0.21.6 起）
+- `scripts/workflows/ingest-design-source.sh`（v0.21.6 起）
+- `scripts/workflows/bootstrap-constitution-defaults.sh`（v0.21.6 起）
+- `scripts/workflows/persist-constitution.sh`（v0.21.6 起）
+- `scripts/workflows/load-constitution-reconcile-inputs.sh`（v0.21.6 起）
+
+> 設計裁定：schema-class 腳本內的 filesystem write fail（mkdir / cp / printf）也歸為 exit 41，因為從 workflow 觀察點看「失敗在 schema-class 步驟內」就是 schema-class 失敗，不需要再細分 IO 失敗。要求更細分時應拆腳本，而非加 exit code。
 
 ## Fallback Policy
 
