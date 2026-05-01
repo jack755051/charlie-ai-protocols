@@ -19,9 +19,10 @@
   - 驗收：schema 可驗證 nodes / edges / required / depends_on / reason
   - 進度：done in `v0.22.0` (in-progress)；schema 採「implicit edge via depends_on」設計，對齊 `engine/task_scoped_compiler.py:build_capability_graph` 既有 producer 行為；新增 `tests/scripts/test-capability-graph-schema.sh` 覆蓋 2 positive（minimal / realistic full-spec）+ 6 negative（missing top-level、missing node field、bad enum、empty nodes、bad depends_on type、bad schema_version）共 8 cases。納入 `smoke-per-stage.sh`：升為 16 step / **16 passed / 0 failed / 0 skipped**。
 
-- [ ] 定義 `schemas/compiled-workflow.schema.yaml`
+- [x] 定義 `schemas/compiled-workflow.schema.yaml`
   - 交付物：compiled workflow JSON Schema
   - 驗收：schema 可驗證 workflow_id / run_id / steps / dependencies / executor / inputs / outputs
+  - 進度：done in `v0.22.0` (in-progress)；schema 對齊 `engine/task_scoped_compiler.py:build_candidate_workflow` 既有 producer 行為（workflow_id / version / name / summary / owner / triggers / governance / steps 8 個頂層欄位 + step 13 個必填欄位）。**SSOT 邊界裁定**：`run_id` 屬 workflow-result.schema（P0 #5），`executor` 屬 binding-report.schema（P0 #3），不重複宣告於本 schema 以避免 SSOT 衝突。`steps[].needs` 維持為 `capability_graph.depends_on` 的 alias（既有 RuntimeBinder 約定）。新增 `tests/scripts/test-compiled-workflow-schema.sh` 覆蓋 2 positive + 7 negative 共 9 cases，wire 進 `smoke-per-stage.sh`：升為 17 step / **17 passed / 0 failed / 0 skipped**。
 
 - [ ] 定義 `schemas/binding-report.schema.yaml`
   - 交付物：binding report JSON Schema
@@ -42,7 +43,7 @@
 - [ ] 新增 schema parse / validation smoke tests
   - 交付物：集中測試入口或納入 `scripts/workflows/smoke-per-stage.sh`
   - 驗收：所有新增 schema 有 positive / negative fixture
-  - 進度：partial in `v0.21.5` (`2492913`) + `v0.22.0` (in-progress, capability-graph)；`provider-parity-check.sh` §4.2 已拆分 nonempty vs present-only 驗證語意；capability-graph schema 已配 8 cases inline-fixture smoke test 並進 `smoke-per-stage.sh`（16/16）。仍缺 compiled-workflow / binding-report / supervisor-orchestration / workflow-result / gate-result 5 個 schema 的 positive / negative fixture。本項在 P0 全部 6 個 schema 落地後可結案。
+  - 進度：partial in `v0.21.5` (`2492913`) + `v0.22.0` (in-progress, P0 #1–#2)；`provider-parity-check.sh` §4.2 已拆分 nonempty vs present-only 驗證語意；capability-graph schema 配 8 cases inline-fixture smoke test、compiled-workflow schema 配 9 cases，皆進 `smoke-per-stage.sh`（17/17）。仍缺 binding-report / supervisor-orchestration / workflow-result / gate-result 4 個 schema 的 positive / negative fixture。本項在 P0 全部 6 個 schema 落地後可結案。
 
 ## P0a：Schema-Class Executors Exit Code 政策 ✓ resolved in v0.21.6
 

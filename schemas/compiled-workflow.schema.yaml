@@ -1,0 +1,198 @@
+# Compiled Workflow Schema (v1)
+#
+# 定義由 supervisor / task-scoped compiler 產出的「編譯後 workflow」靜態藍圖。
+# 這是 capability-graph 之後、binding 之前的中介產物，是 P3 SupervisorOrchestrator
+# 與 P4 binding pipeline 之間的契約點。
+#
+# JSON-Schema 風格；可被 step_runtime.py validate-jsonschema 驗證。
+#
+# 來源：engine/task_scoped_compiler.py:build_candidate_workflow 是當前 de facto producer。
+# 該函式以 capability_graph + task_constitution 為輸入，產出固定 8 個頂層欄位：
+#   workflow_id / version / name / summary / owner / triggers / governance / steps
+#
+# 與 sibling schema 的 SSOT 邊界（重要）：
+#   - `run_id`     屬於 workflow-result.schema（P0 #5），執行期由 cap-workflow-exec.sh 賦值。
+#   - `executor`   屬於 binding-report.schema（P0 #3），由 RuntimeBinder 解析後填入。
+#   本 schema 只描述 supervisor 編譯後、binding 之前的靜態藍圖，不包含這兩個欄位。
+#   MISSING-IMPLEMENTATION-CHECKLIST P0 #2 的 acceptance 項目 `run_id` / `executor` 因此分流
+#   到對應 sibling schema，避免同欄位被多份 schema 重複宣告造成 SSOT 衝突。
+#
+# Steps `needs` vs capability-graph `depends_on`：
+#   capability-graph 用 `depends_on` 命名邊集；compiled-workflow step 用 `needs` 命名同一語意。
+#   這是 task_scoped_compiler 既有 alias，本 schema 維持以避免向後不相容。RuntimeBinder
+#   讀 `needs`，不讀 `depends_on`。
+
+schema_version: 1
+title: CAP Compiled Workflow Schema
+description: Static workflow blueprint emitted by the supervisor / task-scoped compiler from a capability graph plus task constitution. Validates the artifact produced by engine/task_scoped_compiler.py:build_candidate_workflow before binding.
+
+required:
+  - schema_version
+  - workflow_id
+  - version
+  - name
+  - summary
+  - owner
+  - triggers
+  - governance
+  - steps
+
+properties:
+  schema_version:
+    type: integer
+    enum: [1]
+    description: Schema version for the compiled-workflow envelope. Bump on breaking changes to top-level fields.
+
+  workflow_id:
+    type: string
+    description: Stable id for the compiled workflow. By convention `compiled-<task_id>` when produced by task_scoped_compiler.
+
+  version:
+    type: integer
+    enum: [2]
+    description: Workflow content version. Currently fixed at 2 by task_scoped_compiler.build_candidate_workflow; bump only when the steps[] schema changes incompatibly.
+
+  name:
+    type: string
+    description: Human-readable workflow name; supervisor can override.
+
+  summary:
+    type: string
+    description: One-line summary of the workflow goal; typically derived from task constitution goal.
+
+  owner:
+    type: string
+    description: Responsible role or agent. De facto producer always emits "supervisor".
+
+  triggers:
+    type: array
+    minItems: 1
+    description: Trigger sources that may launch this workflow. De facto producer emits ["manual", "compiled"].
+    items:
+      type: string
+
+  governance:
+    type: object
+    required:
+      - goal_stage
+      - context_mode
+      - halt_on_missing_handoff
+      - watcher_mode
+      - logger_mode
+    description: Governance rails inherited from the task constitution and shaped by goal_stage. Watcher / logger modes follow agent-skills/00-core-protocol.md §5.5.
+    properties:
+      goal_stage:
+        type: string
+        enum:
+          - informal_planning
+          - formal_specification
+          - implementation_preparation
+          - implementation_and_verification
+        description: Inherited from the task constitution; mirrored into governance for downstream consumers.
+      context_mode:
+        type: string
+        description: How sub-agents receive upstream context. De facto producer emits "summary_first".
+      halt_on_missing_handoff:
+        type: boolean
+        description: Whether the workflow halts when a required upstream handoff summary is missing.
+      watcher_mode:
+        type: string
+        enum: [always_on, milestone_gate, final_only]
+        description: Watcher cadence per agent-skills/00-core-protocol.md §5.5.
+      logger_mode:
+        type: string
+        enum: [full_log, milestone_log, final_only]
+        description: Logger cadence per agent-skills/00-core-protocol.md §5.5.
+      watcher_checkpoints:
+        type: array
+        description: Step ids at which watcher must run; populated for non-informal stages.
+        items:
+          type: string
+      logger_checkpoints:
+        type: array
+        description: Step ids at which logger must record a milestone entry.
+        items:
+          type: string
+      step_count_budget:
+        type: integer
+        description: Optional budget cap on number of steps; populated for informal_planning to keep planning short.
+      max_primary_phases:
+        type: integer
+        description: Optional cap on primary phase count; populated for informal_planning.
+
+  steps:
+    type: array
+    minItems: 1
+    description: Compiled steps in topological order. Each step is the runtime expansion of one capability_graph node bound to its capability contract from schemas/capabilities.yaml.
+    items:
+      type: object
+      required:
+        - id
+        - name
+        - capability
+        - needs
+        - inputs
+        - outputs
+        - done_when
+        - optional
+        - on_fail
+        - record_level
+        - input_mode
+        - output_tier
+        - continue_reason
+      properties:
+        id:
+          type: string
+          description: Stable step id; matches the capability_graph node step_id.
+        name:
+          type: string
+          description: Humanized step display name; emitted by _humanize_step_name.
+        capability:
+          type: string
+          description: Capability contract name from schemas/capabilities.yaml.
+        needs:
+          type: array
+          description: Upstream step id dependencies (alias for capability-graph depends_on; used by RuntimeBinder).
+          items:
+            type: string
+        inputs:
+          type: array
+          description: Input artifact names inherited from the capability contract.
+          items:
+            type: string
+        outputs:
+          type: array
+          description: Output artifact names inherited from the capability contract.
+          items:
+            type: string
+        done_when:
+          type: array
+          description: Acceptance criteria inherited from the capability contract.
+          items:
+            type: string
+        optional:
+          type: boolean
+          description: Whether the step may be skipped under unresolved_policy. False for required nodes.
+        on_fail:
+          type: string
+          enum: [halt, route_back, skip]
+          description: Failure routing policy. De facto producer emits "halt".
+        record_level:
+          type: string
+          enum: [full_log, trace_only]
+          description: Logger record granularity for this step.
+        input_mode:
+          type: string
+          enum: [full, summary]
+          description: Whether sub-agent receives full upstream artifacts or only summaries; "full" reserved for *_audit capabilities.
+        output_tier:
+          type: string
+          enum: [planning_artifact, full_artifact, machine_metadata]
+          description: Output classification used by Logger and result-report builders.
+        continue_reason:
+          type: string
+          description: Reason carried forward from the capability_graph node; may be augmented by apply_unresolved_policy with `| unresolved_policy=...`.
+        stall_action:
+          type: string
+          enum: [warn, halt]
+          description: Optional stall handling override; populated for informal_planning to "warn" so short plans do not hard-fail.
