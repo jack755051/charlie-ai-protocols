@@ -17,8 +17,9 @@
 #  11. tests/scripts/test-bootstrap-constitution-defaults-exit-code.sh (P0a exit 41 gate)
 #  12. tests/scripts/test-persist-constitution-exit-code.sh      (P0a exit 41 gate)
 #  13. tests/scripts/test-load-constitution-reconcile-inputs-exit-code.sh (P0a exit 41 gate)
-#  14. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report all-pass)
-#  15. tests/e2e/test-ticket-consumption.sh                      (must report all-pass)
+#  14. tests/scripts/test-capability-graph-schema.sh             (P0 schema gate)
+#  15. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report all-pass)
+#  16. tests/e2e/test-ticket-consumption.sh                      (must report all-pass)
 #
 # Resolution order for the bind command:
 #   1. `cap` on PATH (installed via cap installer)
@@ -161,6 +162,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-validate-constitution-exit-code.sh"
 run_fixture "${REPO_ROOT}/tests/scripts/test-bootstrap-constitution-defaults-exit-code.sh" "bootstrap-constitution-defaults exit-41 gate (P0a)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-persist-constitution-exit-code.sh" "persist-constitution exit-41 gate (P0a)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-load-constitution-reconcile-inputs-exit-code.sh" "load-constitution-reconcile-inputs exit-41 gate (P0a)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-capability-graph-schema.sh" "capability-graph schema gate (P0 #1)"
 run_fixture "${REPO_ROOT}/tests/e2e/test-project-spec-pipeline-deterministic.sh" "spec-pipeline deterministic e2e"
 run_fixture "${REPO_ROOT}/tests/e2e/test-ticket-consumption.sh" "ticket consumption e2e"
 

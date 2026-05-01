@@ -1,0 +1,89 @@
+# Capability Graph Schema (v1)
+#
+# 定義由 supervisor / task-scoped compiler 產出的 capability 依賴圖。
+# 每個 node 是 step_id ↔ capability 的綁定；depends_on 隱式表達邊集
+# （directed edge from each item in depends_on to the node containing it）。
+#
+# JSON-Schema 風格；可被 step_runtime.py validate-jsonschema 驗證。
+#
+# 設計動機：
+#   - 把 supervisor 的 orchestration 決策從「埋在 task_scoped_compiler.py 程式碼裡的字典」
+#     升級為「磁碟上的 typed artifact」，跨 runtime（Claude / Codex / CrewAI）共用同一份語意契約。
+#   - 提供 P3 SupervisorOrchestrator structured output 與 P4 compiled workflow 之間的契約點。
+#   - 可被 RuntimeBinder 在 bind 前做拓樸驗證、做 cycle / dangling-edge 偵測。
+#
+# 來源：engine/task_scoped_compiler.py:build_capability_graph 是當前 de facto producer。
+# 未來 SupervisorOrchestrator（P3）也必須產出符合本 schema 的 artifact。
+#
+# Edges 設計裁定：
+#   採「implicit edge via depends_on」一張表，而非另開 edges 陣列。
+#   理由：dual representation（同時有 depends_on 與 edges）會造成 SSOT 混淆；
+#         current producer 只寫 depends_on，consumer 只讀 depends_on。
+#         若未來真需要 edge metadata（如 edge type / weight / fallback），
+#         應在 node 內擴 edge_metadata 欄位，而非把邊獨立成第二份表達。
+
+schema_version: 1
+title: CAP Capability Graph Schema
+description: Directed capability dependency graph emitted by the supervisor before workflow compilation. Validates the artifact produced by engine/task_scoped_compiler.py:build_capability_graph and (future) SupervisorOrchestrator structured output.
+
+required:
+  - schema_version
+  - task_id
+  - goal_stage
+  - nodes
+
+properties:
+  schema_version:
+    type: integer
+    enum: [1]
+    description: Schema version. Bump when breaking the node / edge contract.
+
+  task_id:
+    type: string
+    description: Stable task id; matches the parent task constitution task_id.
+
+  goal_stage:
+    type: string
+    enum:
+      - informal_planning
+      - formal_specification
+      - implementation_preparation
+      - implementation_and_verification
+    description: Inherited from the task constitution; controls which capability nodes are expected.
+
+  nodes:
+    type: array
+    minItems: 1
+    description: |
+      Capability invocations in topological order. Each node is one step
+      bound to one capability. The graph edges are encoded inside each
+      node's depends_on array (each entry references another node's
+      step_id within this same graph). Validators MAY additionally enforce
+      that depends_on references resolve and that the implied edge set is
+      acyclic; this schema enforces only the structural shape.
+    items:
+      type: object
+      required:
+        - step_id
+        - capability
+        - required
+        - depends_on
+        - reason
+      properties:
+        step_id:
+          type: string
+          description: Stable identifier for this node. Used as the edge target id by other nodes' depends_on entries and as the step_id in the compiled workflow.
+        capability:
+          type: string
+          description: Must reference a capability name registered in schemas/capabilities.yaml. Validators MAY cross-check; this schema enforces only string typing.
+        required:
+          type: boolean
+          description: When true the workflow halts if this node fails. When false the binder may apply unresolved_policy fallback semantics.
+        depends_on:
+          type: array
+          description: Upstream step_id references; defines incoming edges to this node. Empty array means a root node. Each entry MUST resolve to another node's step_id inside this graph.
+          items:
+            type: string
+        reason:
+          type: string
+          description: Human-readable rationale for why this capability is required at this position in the graph; supervisor explanation that survives compilation.
