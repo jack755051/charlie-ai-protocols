@@ -16,7 +16,8 @@
 #
 # Exit code contract (policies/workflow-executor-exit-codes.md):
 #   - 0  : success — defaults emitted
-#   - 40 : git_operation_failed (re-used: schema/capabilities file missing)
+#   - 41 : schema_validation_failed (schema-class executor — schema /
+#          capabilities file missing or inputs invalid)
 #
 # This step is purely deterministic; it does not consult the user prompt.
 
@@ -42,12 +43,15 @@ fi
 fail_with() {
   local reason="$1"
   shift
-  printf 'condition: git_operation_failed\n'
+  printf 'condition: schema_validation_failed\n'
   printf 'reason: %s\n' "${reason}"
   for line in "$@"; do
     printf 'detail: %s\n' "${line}"
   done
-  exit 40
+  # exit 41 = schema_validation_failed (schema-class executor per
+  # policies/workflow-executor-exit-codes.md). Distinct from 40
+  # git_operation_failed used by vc-class executors.
+  exit 41
 }
 
 [ -f "${SCHEMA_PATH}" ] || fail_with "schema_missing" "expected: ${SCHEMA_PATH}"

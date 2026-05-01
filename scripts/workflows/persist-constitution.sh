@@ -34,10 +34,13 @@
 #   - default : if .cap.constitution.yaml exists and overwrite is not set, the
 #       repo write is skipped (snapshot still recorded).
 #
-# Exit codes:
+# Exit codes (per policies/workflow-executor-exit-codes.md):
 #   - 0  : success (write performed, write skipped, or dry-run completed)
-#   - 40 : git_operation_failed-class — missing input artifact, JSON parse
-#          error, write failure, backup failure, or validation report indicates failure.
+#   - 41 : schema_validation_failed (schema-class executor) — missing input
+#          artifact, JSON parse error, write failure, backup failure, or
+#          upstream validation report indicates failure. Per the policy
+#          Script Classification ruling, all failures inside this script
+#          (including filesystem write failures) surface as exit 41.
 #
 # This step does NOT allow AI fallback; if persistence fails the workflow
 # must halt so the operator can investigate. The upstream draft is already
@@ -72,12 +75,17 @@ print_header() {
 fail_with() {
   local reason="$1"
   shift
-  printf 'condition: git_operation_failed\n'
+  printf 'condition: schema_validation_failed\n'
   printf 'reason: %s\n' "${reason}"
   for line in "$@"; do
     printf 'detail: %s\n' "${line}"
   done
-  exit 40
+  # exit 41 = schema_validation_failed (schema-class executor per
+  # policies/workflow-executor-exit-codes.md). Distinct from 40
+  # git_operation_failed used by vc-class executors. Filesystem write
+  # failures inside this script also exit 41 by design — see policy doc
+  # Script Classification ruling.
+  exit 41
 }
 
 read_current_project_id() {
@@ -142,9 +150,12 @@ extract_constitution_json_from_markdown() {
 print_header
 
 # 1. resolve validation report (if any) and refuse on failure.
+# Validate-constitution.sh emits `condition: schema_validation_failed` from v0.21.6;
+# the legacy `git_operation_failed` string is kept in the grep for backward
+# compatibility with old run dirs replayed during regression testing.
 validation_path="$(extract_artifact_path "${input_context}" "constitution_validation_report")"
 if [ -n "${validation_path}" ] && [ -f "${validation_path}" ]; then
-  if grep -q 'condition: git_operation_failed' "${validation_path}"; then
+  if grep -qE 'condition: (schema_validation_failed|git_operation_failed)' "${validation_path}"; then
     fail_with "upstream_validation_failed" \
       "validation report indicates failure: ${validation_path}"
   fi

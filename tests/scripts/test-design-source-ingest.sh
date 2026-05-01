@@ -9,7 +9,7 @@
 #   3. Real source_path with two files                      → rebuilt + 3 artifacts + sentinel
 #   4. Re-run unchanged                                     → cached, sentinel preserved
 #   5. Modify a file                                        → rebuilt, hash changes
-#   6. source_path declared but missing on disk             → halt at exit 40
+#   6. source_path declared but missing on disk             → halt at exit 41
 
 set -u
 
@@ -75,7 +75,7 @@ run_ingest() {
   local workdir="$1"
   # Subshell so the cd does not leak; explicit exit so the function's
   # return code reflects the ingest exit, not the implicit cd that would
-  # otherwise mask exit 40 with 0.
+  # otherwise mask exit 41 with 0.
   (cd "${workdir}" && HOME="${SANDBOX}/home" bash "${INGEST}" 2>&1)
 }
 
@@ -175,7 +175,7 @@ assert_eq "hash changed after source modification" "0" "$?"
 # Case 6: source_path declared but missing on disk
 # ─────────────────────────────────────────────────────────
 
-echo "Case 6: source_path missing → halt at exit 40"
+echo "Case 6: source_path missing → halt at exit 41"
 WD6="${SANDBOX}/case6"
 mkdir -p "${WD6}"
 cat > "${WD6}/.cap.constitution.yaml" <<EOF
@@ -185,7 +185,7 @@ design_source:
 EOF
 out="$(run_ingest "${WD6}")"
 rc=$?
-assert_eq "exit code 40 when source_path missing" "40" "${rc}"
+assert_eq "exit code 41 when source_path missing (schema_validation_failed)" "41" "${rc}"
 assert_contains "ingest_failed reported" "ingest_failed" "${out}"
 
 echo ""

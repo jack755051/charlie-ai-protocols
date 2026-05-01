@@ -43,21 +43,24 @@
   - 驗收：所有新增 schema 有 positive / negative fixture
   - 進度：partial in `v0.21.5` (`2492913`)；`provider-parity-check.sh` §4.2 已拆分 nonempty vs present-only 驗證語意，並補 `non_goals=[]` positive / missing-null negative cases。仍缺 P0 新增 schema 的完整 positive / negative fixture。
 
-## P0a：Schema-Class Executors Exit Code 政策
+## P0a：Schema-Class Executors Exit Code 政策 ✓ resolved in v0.21.6
 
 > 承接 v0.21.3 把 `persist-task-constitution.sh` 從 exit 40 改為 exit 41 的拆分（`schema_validation_failed` 與 `git_operation_failed` 分流），把同類 executor 的 exit code 語意統一。詳見 `docs/cap/PROVIDER-PARITY-FINDINGS-v0.21.2.md` deferred 段。
 
-- [ ] 建立 `policies/workflow-executor-exit-codes.md` SSOT
+- [x] 建立 `policies/workflow-executor-exit-codes.md` SSOT
   - 交付物：exit code 政策文件
   - 驗收：明列每個 exit code 對應的 condition（如 `40 → git_operation_failed` / `41 → schema_validation_failed` / 其他保留碼），且涵蓋所有 schema-class executor
+  - 進度：done in `v0.21.6`；新增 row 41 `schema_validation_failed` 與 Script Classification 段，明列 vc-class（`vc-scan` / `vc-apply`）vs schema-class（7 支腳本）。
 
-- [ ] 對齊 `validate-constitution` / `emit-handoff-ticket` / `ingest-design-source` / `bootstrap-constitution-defaults` / `persist-constitution` / `load-constitution-reconcile-inputs` 採用 exit 41
+- [x] 對齊 `validate-constitution` / `emit-handoff-ticket` / `ingest-design-source` / `bootstrap-constitution-defaults` / `persist-constitution` / `load-constitution-reconcile-inputs` 採用 exit 41
   - 交付物：6 個 shell executor 的 exit code 修正
   - 驗收：`cap-workflow-exec.sh:shell_exit_condition` 對應到正確分類，schema 失敗不再被誤分類為 git op 失敗
+  - 進度：done in `v0.21.6`；6 個 executor 的 `fail_with` 從 exit 40 改為 exit 41 並對齊 `condition: schema_validation_failed`；同步修補 `persist-constitution.sh:152` grep 條件以接受新舊兩種 condition 字串作為 backward compatibility。
 
-- [ ] 補對應測試
+- [x] 補對應測試
   - 交付物：`tests/scripts/` 為各 executor 補 exit code 案例
   - 驗收：每個 executor 至少一個 schema-fail 案例命中 exit 41，且 `smoke-per-stage.sh` 不退化
+  - 進度：done in `v0.21.6`；新增 4 個 exit-code 專屬測試（`test-validate-constitution-exit-code.sh` / `test-bootstrap-constitution-defaults-exit-code.sh` / `test-persist-constitution-exit-code.sh` / `test-load-constitution-reconcile-inputs-exit-code.sh`），更新 `test-emit-handoff-ticket.sh` / `test-design-source-ingest.sh` 既有斷言為 41；`smoke-per-stage.sh` 升為 15 step / **15 passed / 0 failed / 0 skipped**。
 
 ## P1：Project Storage and Identity
 

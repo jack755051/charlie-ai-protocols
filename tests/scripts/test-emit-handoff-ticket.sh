@@ -138,14 +138,14 @@ assert_eq "first ticket still preserved (audit trail)" "0" "$?"
 echo "Case 3: missing target_step_id env"
 out="$(CAP_HOME="${SANDBOX}/cap" CAP_TASK_CONSTITUTION_PATH="${TC_PATH}" bash "${EMIT_SCRIPT}" 2>&1)"
 rc=$?
-assert_eq "exit code 40" "40" "${rc}"
+assert_eq "exit code 41 (schema_validation_failed)" "41" "${rc}"
 assert_contains "missing_target_step_id detail" "missing_target_step_id" "${out}"
 
 # Case 4: target step not in execution_plan
 echo "Case 4: target step not in execution_plan"
 out="$(run_emit "ghost_step")"
 rc=$?
-assert_eq "exit code 40" "40" "${rc}"
+assert_eq "exit code 41 (schema_validation_failed)" "41" "${rc}"
 assert_contains "step_not_in_execution_plan detail" "step_not_in_execution_plan" "${out}"
 
 # Case 5: runtime project identity wins over a drifted task_constitution project_id.

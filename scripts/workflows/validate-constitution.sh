@@ -17,14 +17,13 @@
 #     constitution.
 #   - Run `step_runtime validate-constitution` with jsonschema.
 #   - On pass: emit a confirmation report and exit 0.
-#   - On fail: emit the schema errors, exit 40 (git_operation_failed-class
-#     so workflow halts; we deliberately do not allow AI fallback for
+#   - On fail: emit the schema errors, exit 41 (schema_validation_failed,
+#     schema-class executor per policies/workflow-executor-exit-codes.md).
+#     Workflow halts; we deliberately do not allow AI fallback for
 #     constitution validation — bad constitutions must surface, not be
-#     auto-rewritten).
+#     auto-rewritten.
 #
 # Exit codes follow policies/workflow-executor-exit-codes.md.
-# TODO: when the exit-code policy gains a dedicated `60: schema_validation_failed`,
-#       migrate this script away from re-using 40.
 
 set -u
 
@@ -53,12 +52,15 @@ print_header() {
 fail_with() {
   local reason="$1"
   shift
-  printf 'condition: git_operation_failed\n'
+  printf 'condition: schema_validation_failed\n'
   printf 'reason: %s\n' "${reason}"
   for line in "$@"; do
     printf 'detail: %s\n' "${line}"
   done
-  exit 40
+  # exit 41 = schema_validation_failed (schema-class executor per
+  # policies/workflow-executor-exit-codes.md). Distinct from 40
+  # git_operation_failed used by vc-class executors.
+  exit 41
 }
 
 # Resolve artifact path for `project_constitution` (or `project_constitution_json`)
@@ -218,9 +220,9 @@ for e in data.get("errors", []):
     print(f"  - {e}")
 ')"
 
-printf 'condition: git_operation_failed\n'
+printf 'condition: schema_validation_failed\n'
 printf 'reason: constitution_schema_invalid\n'
 printf 'schema_errors:\n%s\n' "${errors_pretty}"
 printf 'detail: rerun draft_constitution step with corrected supervisor prompt; do not auto-rewrite\n'
 printf '_step_runtime_exit: %s\n' "${exit_code}"
-exit 40
+exit 41

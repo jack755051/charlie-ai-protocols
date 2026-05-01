@@ -46,7 +46,10 @@ fail_with() {
   for line in "$@"; do
     printf 'detail: %s\n' "${line}"
   done
-  exit 40
+  # exit 41 = schema_validation_failed (schema-class executor per
+  # policies/workflow-executor-exit-codes.md). Distinct from 40
+  # git_operation_failed used by vc-class executors.
+  exit 41
 }
 
 read_project_meta() {

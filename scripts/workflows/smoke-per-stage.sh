@@ -7,14 +7,18 @@
 #   1. cap workflow bind project-spec-pipeline                   (must end in ready)
 #   2. cap workflow bind project-implementation-pipeline         (must end in ready)
 #   3. cap workflow bind project-qa-pipeline                     (must end in ready)
-#   4. tests/scripts/test-persist-task-constitution.sh           (must report 13/13)
-#   5. tests/scripts/test-emit-handoff-ticket.sh                 (must report 15/15)
-#   6. tests/scripts/test-design-source-resolution.sh            (must report 15/15)
-#   7. tests/scripts/test-cap-workflow-design-package-forwarding.sh (must report 5/5)
-#   8. tests/scripts/test-design-source-ingest.sh                (must report 21/21)
-#   9. tests/scripts/test-provider-parity-check.sh               (must report 8/8)
-#  10. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report 40/40)
-#  11. tests/e2e/test-ticket-consumption.sh                      (must report 22/22)
+#   4. tests/scripts/test-persist-task-constitution.sh           (must report all-pass)
+#   5. tests/scripts/test-emit-handoff-ticket.sh                 (must report all-pass)
+#   6. tests/scripts/test-design-source-resolution.sh            (must report all-pass)
+#   7. tests/scripts/test-cap-workflow-design-package-forwarding.sh (must report all-pass)
+#   8. tests/scripts/test-design-source-ingest.sh                (must report all-pass)
+#   9. tests/scripts/test-provider-parity-check.sh               (must report all-pass)
+#  10. tests/scripts/test-validate-constitution-exit-code.sh     (P0a exit 41 gate)
+#  11. tests/scripts/test-bootstrap-constitution-defaults-exit-code.sh (P0a exit 41 gate)
+#  12. tests/scripts/test-persist-constitution-exit-code.sh      (P0a exit 41 gate)
+#  13. tests/scripts/test-load-constitution-reconcile-inputs-exit-code.sh (P0a exit 41 gate)
+#  14. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report all-pass)
+#  15. tests/e2e/test-ticket-consumption.sh                      (must report all-pass)
 #
 # Resolution order for the bind command:
 #   1. `cap` on PATH (installed via cap installer)
@@ -153,6 +157,10 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-design-source-resolution.sh" "desig
 run_fixture "${REPO_ROOT}/tests/scripts/test-cap-workflow-design-package-forwarding.sh" "cap-workflow design-package forwarding smoke"
 run_fixture "${REPO_ROOT}/tests/scripts/test-design-source-ingest.sh" "design-source ingest smoke"
 run_fixture "${REPO_ROOT}/tests/scripts/test-provider-parity-check.sh" "provider parity checker smoke"
+run_fixture "${REPO_ROOT}/tests/scripts/test-validate-constitution-exit-code.sh" "validate-constitution exit-41 gate (P0a)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-bootstrap-constitution-defaults-exit-code.sh" "bootstrap-constitution-defaults exit-41 gate (P0a)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-persist-constitution-exit-code.sh" "persist-constitution exit-41 gate (P0a)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-load-constitution-reconcile-inputs-exit-code.sh" "load-constitution-reconcile-inputs exit-41 gate (P0a)"
 run_fixture "${REPO_ROOT}/tests/e2e/test-project-spec-pipeline-deterministic.sh" "spec-pipeline deterministic e2e"
 run_fixture "${REPO_ROOT}/tests/e2e/test-ticket-consumption.sh" "ticket consumption e2e"
 
