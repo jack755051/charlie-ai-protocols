@@ -393,7 +393,8 @@ workflow 目前分成兩種層級，避免把 runtime 產物塞回主程式 repo
 
 ## Notes
 
-- 最新已驗證 tag：`v0.21.5`
+- 最新已驗證 tag：`v0.21.6`
+- v0.21.6 重點：完成 P0a 並通過 v0.21.5 → v0.22.0 fresh provider parity baseline gate —— (1) `5b31856` 6 個 schema-class executor（`validate-constitution` / `emit-handoff-ticket` / `ingest-design-source` / `bootstrap-constitution-defaults` / `persist-constitution` / `load-constitution-reconcile-inputs`）`fail_with` exit 40 → 41，跟 vc-class exit 40 正式分流；4 個新 exit-41 unit smoke + 2 個既有測試斷言更新，smoke-per-stage 11 → 15 step / 15 passed；(2) `44011ad` `policies/workflow-executor-exit-codes.md` 補 row 41 + Script Classification 段，加 `PROVIDER-PARITY-FRESH-E2E-V0.21.5.md` runbook；(3) Fresh Claude + Codex `project-spec-pipeline` full run 各 16/16 完成、parity check 各 43/0、duration 差 17s，v0.21.5 三件 fix 在 fresh runtime 無 regression，v0.22.0 P0 runtime contracts 基線乾淨可開工。
 - v0.21.5 重點：(1) `1425fa9` task project identity 對齊 cap-paths runtime resolver，收斂 v0.21.3 標的 R3 deferred；(2) `55038dd` `persist-task-constitution.sh` 自動 strip Claude / Codex 在 task constitution fence 內又包一層 ```` ```json ```` 的 nested fence，避免 JSON parse halt；(3) `2492913` parity-check §4.2 區分 Type B nonempty 欄位與 `non_goals` present-only 欄位，允許 `non_goals=[]` 表示「沒有排除項」，但 `success_criteria=[]` / `execution_plan=[]` 仍 FAIL；claude / codex 既有 parity run 重跑皆為 43/0，新增 provider parity checker smoke 並納入 `smoke-per-stage.sh`。
 - v0.21.4 重點：parity-check §4.5 合併 undeclared/none design-source 為 lenient PASS（修對 UI agent 交付物的 false positive，codex parity 41/5 → 42/1）；03-ui-agent §4 加硬性「必須實際寫檔」規範，禁止 claude UI step 用 stdout / handoff 占位語意取代真實寫檔。
 - v0.21.3 重點：claude `project-spec-pipeline` 從 3/16 step_failed 推到 16/16 completed，parity check 22/16 → 42 PASS / 1 FAIL — workflow step 新增 `optional_inputs` 欄位讓 graceful no-op 可被 shell 真正執行、`cap-workflow-exec.sh` 補 6 個 block 路徑的 log/RUN_SUMMARY 可觀測性、`persist-task-constitution.sh` 收斂 risk_profile/non_goals schema drift 並把 schema_validation_failed 從 git_operation_failed exit code 拆開。

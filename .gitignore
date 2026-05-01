@@ -47,6 +47,18 @@ workspace/**
 !workspace/**/.gitkeep
 
 # ===========================
+# CAP self-hosting fresh e2e artifacts
+# When this repo is used as a fixture target for cap workflow run, the
+# spec-pipeline writes PRD / API / UI / design artifacts under docs/specs,
+# docs/architecture, docs/design relative to the project root. The platform
+# SSOT lives in docs/cap/, agent-skills/, policies/, schemas/, engine/, and
+# scripts/ — these run artifact directories are runtime output, not source.
+# ===========================
+docs/specs/
+docs/architecture/
+docs/design/
+
+# ===========================
 # Agent Skills Symlink（由 mapper.sh 產生）
 # ===========================
 .agents/skills/*

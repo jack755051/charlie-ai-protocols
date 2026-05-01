@@ -1,10 +1,10 @@
 # CAP Missing Implementation Checklist
 
-更新日期：2026-05-01（v0.21.5 closeout 後）
+更新日期：2026-05-02（v0.21.6 closeout 後）
 
 本清單承接 `TODOLIST.md` 與 `docs/cap/IMPLEMENTATION-ROADMAP.md` 的「尚未完成」項目，整理成可執行的工程工作清單。原則是先補 runtime contract 與 validator，再補 runner、orchestration、session、gate 與 promote/publish 閉環。
 
-> **v0.21.5 baseline**：本清單以 `v0.21.5` tag 為起點。R3（雙 project_id 解析）已由 `1425fa9` 收斂，task constitution 與 handoff ticket 改以 cap-paths runtime resolver 為唯一 identity 來源；nested task constitution JSON fence 已由 `55038dd` 處理；`non_goals=[]` 於 parity-check §4.2 拆 nonempty vs present-only 後合法（`2492913`）。詳見 `docs/cap/RELEASE-NOTES.md` 與 `docs/cap/PROVIDER-PARITY-FINDINGS-v0.21.2.md`。
+> **v0.21.6 baseline**：本清單以 `v0.21.6` tag 為起點。R3（雙 project_id 解析）由 v0.21.5 `1425fa9` 收斂；nested task constitution JSON fence 由 v0.21.5 `55038dd` 處理；`non_goals=[]` 於 parity-check §4.2 拆 nonempty vs present-only 後合法（v0.21.5 `2492913`）；v0.21.6 完成 P0a 6 個 schema-class executor exit 41 對齊與 fresh provider parity baseline 驗證（Claude / Codex 各 16/16 / 43 PASS / 0 FAIL）。詳見 `docs/cap/RELEASE-NOTES.md`、`docs/cap/PROVIDER-PARITY-FRESH-E2E-V0.21.5.md` 與 `docs/cap/PROVIDER-PARITY-FINDINGS-v0.21.2.md`。
 
 進度標記規則：
 
@@ -391,11 +391,11 @@
 
 ## 建議執行順序
 
-> **排序原則（v0.21.5 closeout 後）**：先做短鏈低風險的治理債清理（P0a），讓 schema 失敗訊號乾淨；再用 fresh provider e2e 驗證 v0.21.5 三件 fix（`1425fa9` / `55038dd` / `2492913`）在 Claude + Codex fresh run 無 regression，建立 v0.22.0 的乾淨基線；最後才開 P0 主體。基線未確認前不開 P0，避免 P0 做到一半時 provider drift 與新 schema 問題互相干擾、難以歸因。
+> **排序原則（v0.21.6 closeout 後）**：先做短鏈低風險的治理債清理（P0a），讓 schema 失敗訊號乾淨；再用 fresh provider e2e 驗證 v0.21.5 三件 fix（`1425fa9` / `55038dd` / `2492913`）在 Claude + Codex fresh run 無 regression，建立 v0.22.0 的乾淨基線；最後才開 P0 主體。基線未確認前不開 P0，避免 P0 做到一半時 provider drift 與新 schema 問題互相干擾、難以歸因。**v0.21.6 baseline 已確認，下一步即 P0**。
 
-1. **P0a Schema-Class Executors Exit Code 政策**（先清前置治理債：拆 schema_validation_failed=41 vs git_operation_failed=40，讓 P0 schema validator 的失敗訊號乾淨）
-2. **Fresh Claude + Codex provider parity full run**（驗證 v0.21.5 三件 fix 在 fresh run 無 regression，建立 v0.22.0 的 baseline；對應 Release Gate 同名項）
-3. **P0 Runtime Contracts**（v0.22.0 主軸，7 個 schema；牽動後續 P2/P3/P4/P7/P8，必須在基線乾淨後啟動）
+1. ✓ ~~**P0a Schema-Class Executors Exit Code 政策**~~ done in `v0.21.6`（`5b31856` / `44011ad`；6 個 executor 對齊 exit 41，policy SSOT 升級，smoke-per-stage 15/15）
+2. ✓ ~~**Fresh Claude + Codex provider parity full run**~~ done in `v0.21.6`（Claude `run_20260501192422_033a65f8` 與 Codex `run_20260501234931_27dddbce` 各 16/16 / 43 PASS / 0 FAIL）
+3. **P0 Runtime Contracts** ← **next**（v0.22.0 主軸，7 個 schema；牽動後續 P2/P3/P4/P7/P8，現在基線已乾淨可啟動）
 4. P1 Project Storage and Identity
 5. P2 Project Constitution Runner
 6. P3 Supervisor Structured Orchestration
@@ -415,5 +415,5 @@
 - [ ] 至少一條 deterministic e2e 覆蓋 Supervisor structured orchestration
 - [ ] 至少一條 deterministic e2e 覆蓋 AgentSessionRunner lifecycle
 - [ ] provider parity checker 可驗證最新 run artifact
-- [ ] fresh Claude + Codex provider parity full run 在 v0.21.5 修補（`1425fa9` / `55038dd` / `2492913`）後重跑無 regression（同建議執行順序步驟 2）
+- [x] fresh Claude + Codex provider parity full run 在 v0.21.5 修補（`1425fa9` / `55038dd` / `2492913`）後重跑無 regression（同建議執行順序步驟 2）—— done in `v0.21.6`：Claude `run_20260501192422_033a65f8`（duration 1363s / 16/16 / parity 43 PASS / 0 FAIL）、Codex `run_20260501234931_27dddbce`（duration 1346s / 16/16 / parity 43 PASS / 0 FAIL），跨 provider duration 差 17s，無 provider-specific regression。runbook：`docs/cap/PROVIDER-PARITY-FRESH-E2E-V0.21.5.md`。
 - [ ] README / TODOLIST / IMPLEMENTATION-ROADMAP 連結到本清單
