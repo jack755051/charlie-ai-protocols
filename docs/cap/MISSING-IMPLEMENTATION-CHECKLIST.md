@@ -388,18 +388,21 @@
 
 ## 建議執行順序
 
-1. P0 Runtime Contracts
-2. P0a Schema-Class Executors Exit Code 政策
-3. P1 Project Storage and Identity
-4. P2 Project Constitution Runner
-5. P3 Supervisor Structured Orchestration
-6. P4 Compiled Workflow and Binding Pipeline
-7. P5 AgentSessionRunner
-8. P6 Artifact, Handoff and Validation
-9. P8 Governance Gates
-10. P7 Result Report and Run Archive
-11. P9 Repo-specific Source Resolver
-12. P10 Detached Runtime and Promote / Publish
+> **排序原則（v0.21.5 closeout 後）**：先做短鏈低風險的治理債清理（P0a），讓 schema 失敗訊號乾淨；再用 fresh provider e2e 驗證 v0.21.5 三件 fix（`1425fa9` / `55038dd` / `2492913`）在 Claude + Codex fresh run 無 regression，建立 v0.22.0 的乾淨基線；最後才開 P0 主體。基線未確認前不開 P0，避免 P0 做到一半時 provider drift 與新 schema 問題互相干擾、難以歸因。
+
+1. **P0a Schema-Class Executors Exit Code 政策**（先清前置治理債：拆 schema_validation_failed=41 vs git_operation_failed=40，讓 P0 schema validator 的失敗訊號乾淨）
+2. **Fresh Claude + Codex provider parity full run**（驗證 v0.21.5 三件 fix 在 fresh run 無 regression，建立 v0.22.0 的 baseline；對應 Release Gate 同名項）
+3. **P0 Runtime Contracts**（v0.22.0 主軸，7 個 schema；牽動後續 P2/P3/P4/P7/P8，必須在基線乾淨後啟動）
+4. P1 Project Storage and Identity
+5. P2 Project Constitution Runner
+6. P3 Supervisor Structured Orchestration
+7. P4 Compiled Workflow and Binding Pipeline
+8. P5 AgentSessionRunner
+9. P6 Artifact, Handoff and Validation
+10. P8 Governance Gates
+11. P7 Result Report and Run Archive
+12. P9 Repo-specific Source Resolver
+13. P10 Detached Runtime and Promote / Publish
 
 ## Release Gate
 
@@ -409,5 +412,5 @@
 - [ ] 至少一條 deterministic e2e 覆蓋 Supervisor structured orchestration
 - [ ] 至少一條 deterministic e2e 覆蓋 AgentSessionRunner lifecycle
 - [ ] provider parity checker 可驗證最新 run artifact
-- [ ] fresh Claude + Codex provider parity full run 在 v0.21.5 修補（`1425fa9` / `55038dd` / `2492913`）後重跑無 regression
+- [ ] fresh Claude + Codex provider parity full run 在 v0.21.5 修補（`1425fa9` / `55038dd` / `2492913`）後重跑無 regression（同建議執行順序步驟 2）
 - [ ] README / TODOLIST / IMPLEMENTATION-ROADMAP 連結到本清單
