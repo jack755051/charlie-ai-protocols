@@ -24,9 +24,10 @@
   - 驗收：schema 可驗證 workflow_id / run_id / steps / dependencies / executor / inputs / outputs
   - 進度：done in `v0.22.0` (in-progress)；schema 對齊 `engine/task_scoped_compiler.py:build_candidate_workflow` 既有 producer 行為（workflow_id / version / name / summary / owner / triggers / governance / steps 8 個頂層欄位 + step 13 個必填欄位）。**SSOT 邊界裁定**：`run_id` 屬 workflow-result.schema（P0 #5），`executor` 屬 binding-report.schema（P0 #3），不重複宣告於本 schema 以避免 SSOT 衝突。`steps[].needs` 維持為 `capability_graph.depends_on` 的 alias（既有 RuntimeBinder 約定）。新增 `tests/scripts/test-compiled-workflow-schema.sh` 覆蓋 2 positive + 7 negative 共 9 cases，wire 進 `smoke-per-stage.sh`：升為 17 step / **17 passed / 0 failed / 0 skipped**。
 
-- [ ] 定義 `schemas/binding-report.schema.yaml`
+- [x] 定義 `schemas/binding-report.schema.yaml`
   - 交付物：binding report JSON Schema
   - 驗收：schema 可驗證 resolved / unresolved / fallback / provider_cli / source_priority
+  - 進度：done in `v0.22.0` (in-progress)；schema 對齊 `engine/runtime_binder.py:bind_semantic_plan` 既有 producer 行為。Acceptance 對應：resolved/unresolved/fallback → `step.resolution_status` enum 6 值 + `summary` 5 個聚合計數；provider_cli → `step.selected_cli`（nullable string）；source_priority → `registry_source_path` + `adapter_from_legacy` + `project_context.binding_policy`。**SSOT 邊界裁定**：`executor` 不開頂層欄位，executor 類型由 `selected_provider`（"builtin" 為 shell；其他為 AI）+ `selected_skill_id`（"builtin-shell" 為 shell）組合**隱式**表達；避免與 compiled-workflow 既有 step.executor input 重複宣告造成 SSOT 衝突。Nullable 欄位採 `type: [string, "null"]`（jsonschema 4.x Draft202012Validator 支援）表達「未解析」分支。新增 `tests/scripts/test-binding-report-schema.sh` 覆蓋 2 positive + 8 negative 共 10 cases，wire 進 `smoke-per-stage.sh`：升為 18 step / **18 passed / 0 failed / 0 skipped**。
 
 - [ ] 定義 `schemas/supervisor-orchestration.schema.yaml`
   - 交付物：Supervisor structured output JSON Schema
@@ -43,7 +44,7 @@
 - [ ] 新增 schema parse / validation smoke tests
   - 交付物：集中測試入口或納入 `scripts/workflows/smoke-per-stage.sh`
   - 驗收：所有新增 schema 有 positive / negative fixture
-  - 進度：partial in `v0.21.5` (`2492913`) + `v0.22.0` (in-progress, P0 #1–#2)；`provider-parity-check.sh` §4.2 已拆分 nonempty vs present-only 驗證語意；capability-graph schema 配 8 cases inline-fixture smoke test、compiled-workflow schema 配 9 cases，皆進 `smoke-per-stage.sh`（17/17）。仍缺 binding-report / supervisor-orchestration / workflow-result / gate-result 4 個 schema 的 positive / negative fixture。本項在 P0 全部 6 個 schema 落地後可結案。
+  - 進度：partial in `v0.21.5` (`2492913`) + `v0.22.0` (in-progress, P0 #1–#3)；`provider-parity-check.sh` §4.2 已拆分 nonempty vs present-only 驗證語意；capability-graph 8 cases、compiled-workflow 9 cases、binding-report 10 cases 全進 `smoke-per-stage.sh`（18/18）。仍缺 supervisor-orchestration / workflow-result / gate-result 3 個 schema 的 positive / negative fixture。本項在 P0 全部 6 個 schema 落地後可結案。
 
 ## P0a：Schema-Class Executors Exit Code 政策 ✓ resolved in v0.21.6
 

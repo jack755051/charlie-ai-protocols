@@ -1,0 +1,184 @@
+# Binding Report Schema (v1)
+#
+# 定義 RuntimeBinder.bind_semantic_plan 對 semantic plan 解析後產出的 binding report。
+# 這是 P4 binding pipeline 的合約面：把 capability → skill → agent_alias / prompt_file /
+# cli / executor 的解析結果固化成可審計、可比對的結構化文件。
+#
+# JSON-Schema 風格；可被 step_runtime.py validate-jsonschema 驗證。
+#
+# 來源：engine/runtime_binder.py:bind_semantic_plan 是當前 de facto producer。
+#
+# 與 sibling schema 的 SSOT 邊界：
+#   - `run_id` 屬於 workflow-result.schema（P0 #5），執行期才賦值，本 schema 不含。
+#   - `executor` 不是頂層欄位；executor 類型由以下組合**隱式**表達：
+#       * `selected_provider = "builtin"` + `selected_skill_id = "builtin-shell"` → shell executor
+#       * `selected_provider = <ai-provider>` + `selected_cli = <cli>` → AI executor
+#     這樣設計的理由：de facto producer 把 executor 視為 input（來自 semantic plan / compiled
+#     workflow），binding 結果只寫實際被選中的執行載體（provider / cli / agent_alias）；不另開
+#     `executor` 欄位避免 SSOT 衝突（同一語意被宣告兩次）。下游若要顯示 executor 類型，由
+#     consumer 從 selected_provider + selected_skill_id 推導。
+#
+# 設計裁定：nullable 欄位用 type: [string, "null"]
+#   選中 skill / provider / cli 在「未解析」分支會是 null；schema 嚴格禁用空字串占位，
+#   一律用 JSON null 表達「沒有選中」。jsonschema 4.x Draft202012Validator 支援此 union 型別。
+
+schema_version: 1
+title: CAP Binding Report Schema
+description: Output of RuntimeBinder.bind_semantic_plan; reports per-step capability resolution against the skill registry, including selected provider / cli / agent_alias / prompt_file plus aggregated counts and binding status.
+
+required:
+  - schema_version
+  - workflow_id
+  - workflow_version
+  - binding_status
+  - summary
+  - steps
+
+properties:
+  schema_version:
+    type: integer
+    enum: [1]
+    description: Schema version for the binding-report envelope. Bump on breaking changes to top-level or step fields.
+
+  workflow_id:
+    type: string
+    description: Workflow id from the semantic plan being bound.
+
+  workflow_version:
+    type: integer
+    description: Workflow content version from the semantic plan being bound.
+
+  binding_status:
+    type: string
+    enum: [ready, degraded, blocked]
+    description: |
+      Aggregate readiness gate. ready = all required steps resolved.
+      degraded = required steps resolved but some optional steps fell back
+      to generic skills. blocked = at least one required step is unresolved
+      or blocked_by_constitution; runtime must halt before execution.
+
+  registry_source_path:
+    type: [string, "null"]
+    description: Filesystem path of the skill registry that produced this binding (.cap.skills.yaml or legacy adapter source). Null when registry is missing and bootstrap path was used.
+
+  project_context:
+    type: object
+    description: Snapshot of project_constitution context used during binding (binding_policy / allowed_capabilities / source_priority). Shape mirrors ProjectContextLoader.build_runtime_summary output.
+
+  registry_missing:
+    type: boolean
+    description: True when no .cap.skills.yaml was found and binding ran in degraded / bootstrap mode.
+
+  adapter_from_legacy:
+    type: boolean
+    description: True when the registry was synthesized from .cap.agents.json via the legacy adapter rather than read from a native skill registry.
+
+  contract_missing_steps:
+    type: array
+    description: Steps from the semantic plan whose capability has no contract entry in schemas/capabilities.yaml; emitted by the loader and propagated for governance visibility.
+    items:
+      type: object
+
+  summary:
+    type: object
+    required:
+      - total_steps
+      - resolved_steps
+      - fallback_steps
+      - unresolved_required_steps
+      - unresolved_optional_steps
+    description: Aggregate counts across the steps array. binding_status is derived from these counts via _resolve_binding_status.
+    properties:
+      total_steps:
+        type: integer
+        description: Total semantic-plan step count.
+      resolved_steps:
+        type: integer
+        description: Steps with resolution_status=resolved (skill found, executable).
+      fallback_steps:
+        type: integer
+        description: Steps with resolution_status=fallback_available (no direct skill but a generic fallback exists).
+      unresolved_required_steps:
+        type: integer
+        description: Required steps that could not be resolved or are blocked by project constitution; binding_status is forced to blocked when this count is greater than zero.
+      unresolved_optional_steps:
+        type: integer
+        description: Optional steps that could not be resolved; runtime may skip these per missing_policy.
+
+  steps:
+    type: array
+    description: Per-step binding outcome in semantic-plan order. Empty array is allowed for an empty semantic plan, though the producer never emits this in practice.
+    items:
+      type: object
+      required:
+        - step_id
+        - phase
+        - capability
+        - optional
+        - resolution_status
+        - selected_skill_id
+        - selected_provider
+        - selected_agent_alias
+        - selected_prompt_file
+        - selected_cli
+        - binding_mode
+        - missing_policy
+        - reason
+      properties:
+        step_id:
+          type: string
+          description: Step id from the semantic plan.
+        phase:
+          type: integer
+          description: Phase number of this step in the semantic plan.
+        capability:
+          type: string
+          description: Capability requested by the step.
+        optional:
+          type: boolean
+          description: Whether this step is marked optional in the semantic plan.
+        resolution_status:
+          type: string
+          enum:
+            - resolved
+            - fallback_available
+            - required_unresolved
+            - optional_unresolved
+            - incompatible
+            - blocked_by_constitution
+          description: |
+            resolved: skill found and complete.
+            fallback_available: no direct skill but a generic fallback can run.
+            required_unresolved: required step has no skill or fallback.
+            optional_unresolved: optional step has no skill; runtime may skip.
+            incompatible: skill found but missing execution metadata (agent_alias / prompt_file / cli).
+            blocked_by_constitution: capability not in allowed_capabilities or running in bootstrap mode without a workflow exemption.
+        selected_skill_id:
+          type: [string, "null"]
+          description: Resolved skill id; null when unresolved or blocked. Special value "builtin-shell" denotes a shell executor binding.
+        selected_provider:
+          type: [string, "null"]
+          description: Skill provider (e.g., "claude", "codex", "builtin"). Null when unresolved. "builtin" indicates shell executor.
+        selected_agent_alias:
+          type: [string, "null"]
+          description: Agent alias for AI executors; "shell" for shell executors; null when unresolved.
+        selected_prompt_file:
+          type: [string, "null"]
+          description: Path to the agent skill prompt file; null for shell executors and unresolved steps.
+        selected_cli:
+          type: [string, "null"]
+          description: Provider CLI command (e.g., "claude", "codex"); null for shell executors and unresolved steps. Mapped to the project_constitution preferred_cli when unset on the skill.
+        binding_mode:
+          type: string
+          description: Resolved binding mode for this step (e.g., strict, prefer_skill, allow_fallback). Sourced from skill / step / defaults waterfall.
+        missing_policy:
+          type: string
+          description: Missing-skill policy for this step (e.g., halt, fallback_generic, skip_optional). Sourced from skill / step / defaults waterfall.
+        reason:
+          type: string
+          description: Human-readable explanation produced by the binder for this step's resolution outcome.
+        candidate_skill_ids:
+          type: array
+          description: Optional list of candidate skill ids the binder considered before selection. Empty when no candidates were enumerated (blocked / shell branches).
+          items:
+            type: string
