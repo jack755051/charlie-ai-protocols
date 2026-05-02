@@ -1,6 +1,6 @@
 # CAP Platform TODO List
 
-更新日期：2026-05-01
+更新日期：2026-05-02
 
 ## 目標
 
@@ -85,12 +85,14 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 - [x] 定義 `schemas/task-constitution.schema.yaml`
 - [x] 定義 `schemas/agent-session.schema.yaml`
 - [x] 定義 `schemas/capabilities.yaml`
-- [ ] 定義 `schemas/capability-graph.schema.yaml`
-- [ ] 定義 `schemas/compiled-workflow.schema.yaml`
-- [ ] 定義 `schemas/binding-report.schema.yaml`
-- [ ] 定義 `schemas/supervisor-orchestration.schema.yaml`
-- [ ] 定義 `schemas/workflow-result.schema.yaml`
-- [ ] 定義 `schemas/gate-result.schema.yaml`
+- [x] 定義 `schemas/capability-graph.schema.yaml`（v0.22.0 P0 #1，8 fixture cases）
+- [x] 定義 `schemas/compiled-workflow.schema.yaml`（v0.22.0 P0 #2，9 fixture cases）
+- [x] 定義 `schemas/binding-report.schema.yaml`（v0.22.0 P0 #3，10 fixture cases）
+- [x] 定義 `schemas/supervisor-orchestration.schema.yaml`（v0.22.0 P0 #4，forward contract，10 fixture cases；producer 留 P3 SupervisorOrchestrator）
+- [x] 定義 `schemas/workflow-result.schema.yaml`（v0.22.0 P0 #5，normalized contract，10 fixture cases；builder 留 P7 result report builder）
+- [x] 定義 `schemas/gate-result.schema.yaml`（v0.22.0 P0 #6，forward contract，10 fixture cases；producer 留 P8 governance gate runners）
+
+> Phase 1 整段於 v0.22.0 (in-progress) 全綠；6 schema 共 47 fixture cases 透過 `tests/scripts/test-*-schema.sh` 驗證並 wire 進 `scripts/workflows/smoke-per-stage.sh`（21/21 pass）。Forward / normalized contract 的 producer 落地分散在 Phase 4 / 8 / 9，但 contract 已先立。
 
 ### Phase 2: Project Storage and Identity
 
