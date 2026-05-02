@@ -1,13 +1,55 @@
 from __future__ import annotations
 
+import datetime
+import json
 import os
+import re
+import subprocess
 from pathlib import Path
 
 import yaml
 
 
+class ProjectIdResolutionError(RuntimeError):
+    """Raised when no stable project_id source is available and the legacy
+    basename fallback has not been opted in via CAP_ALLOW_BASENAME_FALLBACK."""
+
+
+class ProjectIdCollisionError(RuntimeError):
+    """Raised when an on-disk identity ledger conflicts with the current
+    project_root for the resolved project_id."""
+
+
+_LEDGER_SCHEMA_VERSION = 1
+_SANITIZE_PATTERN = re.compile(r"[^a-z0-9._-]+")
+_SANITIZE_TRIM = re.compile(r"^-+|-+$")
+_SANITIZE_DEDUP = re.compile(r"-+")
+
+
+def _sanitize_project_id(raw: str) -> str:
+    lowered = raw.strip().lower()
+    replaced = _SANITIZE_PATTERN.sub("-", lowered)
+    trimmed = _SANITIZE_TRIM.sub("", replaced)
+    return _SANITIZE_DEDUP.sub("-", trimmed)
+
+
 class ProjectContextLoader:
-    """Load repo-level CAP project config and Project Constitution."""
+    """Load repo-level CAP project config and Project Constitution.
+
+    Mirrors `scripts/cap-paths.sh` resolution semantics so engine-side
+    callers and shell executors agree on project identity:
+
+    1. ``CAP_PROJECT_ID_OVERRIDE`` env var
+    2. ``project_id`` from ``.cap.project.yaml``
+    3. ``basename(project_root)`` when inside a git repo
+    4. Legacy basename fallback when ``CAP_ALLOW_BASENAME_FALLBACK=1``;
+       otherwise raise :class:`ProjectIdResolutionError`.
+
+    After resolution the loader inspects the on-disk identity ledger at
+    ``~/.cap/projects/<project_id>/.identity.json``; mismatched origin paths
+    raise :class:`ProjectIdCollisionError`. Missing ledgers are written so
+    subsequent runs are auditable, including the legacy fallback path.
+    """
 
     DEFAULT_PROJECT_CONFIG = ".cap.project.yaml"
     DEFAULT_PROJECT_CONSTITUTION = ".cap.constitution.yaml"
@@ -18,8 +60,8 @@ class ProjectContextLoader:
     def load(self) -> dict:
         project_config_path = self.base_dir / self.DEFAULT_PROJECT_CONFIG
         project_config = self._load_yaml(project_config_path)
-        project_id_override = os.getenv("CAP_PROJECT_ID_OVERRIDE", "").strip()
-        project_id = project_config.get("project_id", project_id_override or self.base_dir.name)
+        project_id, project_id_mode = self._resolve_project_id(project_config)
+        self._verify_or_write_ledger(project_id, project_id_mode)
 
         constitution_ref = project_config.get("constitution_file", self.DEFAULT_PROJECT_CONSTITUTION)
         constitution_path = Path(constitution_ref)
@@ -30,6 +72,7 @@ class ProjectContextLoader:
 
         return {
             "project_id": project_id,
+            "project_id_mode": project_id_mode,
             "project_name": project_config.get("project_name", self.base_dir.name),
             "project_type": project_config.get("project_type", "application"),
             "project_root": str(self.base_dir),
@@ -48,6 +91,7 @@ class ProjectContextLoader:
         constitution = context["project_constitution"]
         return {
             "project_id": context["project_id"],
+            "project_id_mode": context["project_id_mode"],
             "project_name": context["project_name"],
             "project_type": context["project_type"],
             "project_root": context["project_root"],
@@ -66,6 +110,83 @@ class ProjectContextLoader:
             "workflow_policy": constitution.get("workflow_policy", {}),
             "_bootstrap": context["_bootstrap"],
         }
+
+    def _resolve_project_id(self, project_config: dict) -> tuple[str, str]:
+        override = os.getenv("CAP_PROJECT_ID_OVERRIDE", "").strip()
+        if override:
+            return _sanitize_project_id(override), "override"
+
+        configured = project_config.get("project_id")
+        if isinstance(configured, str) and configured.strip():
+            return _sanitize_project_id(configured), "config"
+
+        if self._is_inside_git_repo():
+            return _sanitize_project_id(self.base_dir.name), "git_basename"
+
+        if os.getenv("CAP_ALLOW_BASENAME_FALLBACK", "0") == "1":
+            return _sanitize_project_id(self.base_dir.name), "basename_legacy"
+
+        raise ProjectIdResolutionError(
+            "cannot resolve a stable project_id: "
+            f"base_dir={self.base_dir} is not inside a git repository, "
+            "no .cap.project.yaml, no CAP_PROJECT_ID_OVERRIDE; "
+            "set one of these or export CAP_ALLOW_BASENAME_FALLBACK=1 (legacy)."
+        )
+
+    def _is_inside_git_repo(self) -> bool:
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(self.base_dir), "rev-parse", "--is-inside-work-tree"],
+                capture_output=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            return False
+        return result.returncode == 0
+
+    def _verify_or_write_ledger(self, project_id: str, project_id_mode: str) -> None:
+        cap_home = Path(os.getenv("CAP_HOME") or (Path.home() / ".cap"))
+        project_store = cap_home / "projects" / project_id
+        ledger_file = project_store / ".identity.json"
+
+        if ledger_file.exists():
+            try:
+                ledger = json.loads(ledger_file.read_text("utf-8"))
+            except (OSError, json.JSONDecodeError):
+                ledger = {}
+            ledger_origin = ledger.get("origin_path") if isinstance(ledger, dict) else None
+            current_origin = str(self.base_dir)
+            if ledger_origin and ledger_origin != current_origin:
+                raise ProjectIdCollisionError(
+                    f"project_id collision: project_id={project_id} "
+                    f"recorded ledger_origin={ledger_origin} (at {ledger_file}) "
+                    f"differs from current_origin={current_origin}; "
+                    "set a unique project_id in .cap.project.yaml, export "
+                    "CAP_PROJECT_ID_OVERRIDE, or remove the colliding storage."
+                )
+            return
+
+        # First-time landing: persist the ledger so subsequent calls (including
+        # the legacy fallback path) become auditable.
+        try:
+            project_store.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return
+
+        payload = {
+            "schema_version": _LEDGER_SCHEMA_VERSION,
+            "project_id": project_id,
+            "resolved_mode": project_id_mode,
+            "origin_path": str(self.base_dir),
+            "created_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+        try:
+            with ledger_file.open("w", encoding="utf-8") as fh:
+                json.dump(payload, fh, indent=2, ensure_ascii=False)
+                fh.write("\n")
+        except OSError:
+            # Best-effort: ledger writes are advisory. Engine still proceeds.
+            return
 
     def _resolve_optional_path(self, raw_path: str | None) -> str | None:
         if not raw_path:

@@ -99,8 +99,8 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 - [x] `cap paths` 顯示 project storage
 - [x] `.cap.project.yaml` 作為 project identity source
 - [x] git root basename fallback
-- [ ] 支援非 git folder 的 project id 策略
-- [ ] 處理 project id collision
+- [x] 支援非 git folder 的 project id 策略（v0.22.0 P1 #1，strict mode + `CAP_ALLOW_BASENAME_FALLBACK` 後門）
+- [x] 處理 project id collision（v0.22.0 P1 #2，inline `.identity.json` ledger + shell exit 53 / Python `ProjectIdCollisionError`）
 - [ ] 記錄 storage version / migration metadata
 - [ ] 實作 storage health check
 - [ ] 新增 `cap project status`

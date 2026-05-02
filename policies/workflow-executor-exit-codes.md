@@ -21,6 +21,8 @@
 | `40` | `git_operation_failed` | git 指令、hook、push 或檔案操作失敗（vc-class executor 專用） | 若 workflow fallback 允許，交給 AI 診斷或重試；否則 halt |
 | `41` | `schema_validation_failed` | schema 驗證、JSON parse、必填欄位或 normalize 失敗（schema-class executor 專用） | 預設 halt；治理層可區分 schema 漂移 vs git 失敗 |
 | `50` | `sensitive_file_risk` | 偵測到 `.env`、私鑰、credential 等敏感檔案風險 | 直接 halt，不得 fallback |
+| `52` | `project_id_unresolvable` | 非 git 目錄且缺 `.cap.project.yaml` / `CAP_PROJECT_ID_OVERRIDE`，且未啟用 `CAP_ALLOW_BASENAME_FALLBACK=1`（identity-class executor 專用） | 直接 halt；不得 fallback。引導使用者補 identity 來源後重試 |
+| `53` | `project_id_collision` | `~/.cap/projects/<id>/.identity.json` 紀錄的 origin_path 與當前 project_root 不符（identity-class executor 專用） | 直接 halt；不得 fallback。引導使用者改 project_id 或刪除 colliding storage |
 
 ## Executor 分類 (Script Classification)
 
@@ -46,6 +48,14 @@
 - `scripts/workflows/load-constitution-reconcile-inputs.sh`（v0.21.6 起）
 
 > 設計裁定：schema-class 腳本內的 filesystem write fail（mkdir / cp / printf）也歸為 exit 41，因為從 workflow 觀察點看「失敗在 schema-class 步驟內」就是 schema-class 失敗，不需要再細分 IO 失敗。要求更細分時應拆腳本，而非加 exit code。
+
+### identity-class executor（exit 52 / 53 = `project_id_unresolvable` / `project_id_collision`）
+
+解析 CAP project identity（project_id resolution + identity ledger collision detection）的腳本：
+
+- `scripts/cap-paths.sh`（v0.22.0 起）
+
+> 設計裁定：identity-class 退出碼專屬於 project_id resolver，獨立於 schema-class（41）與 vc-class（40），因為 identity 失敗的修復路徑（補 `.cap.project.yaml` / 設 `CAP_PROJECT_ID_OVERRIDE` / 刪 colliding storage）與 schema 漂移、git 失敗皆不同；不混用 exit code 才能讓治理層快速分流。`engine/project_context_loader.py` 對應的 Python 端對等行為是拋出 `ProjectIdResolutionError` / `ProjectIdCollisionError`。
 
 ## Fallback Policy
 
