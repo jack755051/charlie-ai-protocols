@@ -1,0 +1,224 @@
+# Gate Result Schema (v1, FORWARD CONTRACT)
+#
+# 定義 governance gate（Watcher / Security / QA / Logger 等橫向監管軌）執行後的
+# machine-readable result envelope。本 schema 是 P8 Governance Gates 段落的核心
+# 契約，提供 fail route handling、rerun failed gate、enforce halt-on-risk 共同消費介面。
+#
+# JSON-Schema 風格；可被 step_runtime.py validate-jsonschema 驗證。
+#
+# Producer 邊界（重要）：
+#   - **Current state (v0.21.6)**：沒有 runtime producer 滿足此 envelope。
+#     現行 workflow 中的 gate（如 spec_audit / impl_audit / security_scan / qa_e2e）
+#     只是普通 sub-agent step，輸出走 stdout / Type D handoff summary text，
+#     沒有 machine-readable PASS / FAIL / risk / route_back_to 結構；governance
+#     決策只能靠 supervisor 讀文字後人工裁決。
+#   - **Future producer (P8)**：
+#       * P8 watcher / security / qa / logger checkpoint runner 是直接 producer，
+#         在 gate step 結束時寫出符合本 schema 的 `<step_id>.gate-result.json`。
+#       * P8 gate result validation 會以本 schema 在 cap-workflow-exec.sh 收
+#         workflow_result 前先驗 gate output；不通過視為 schema_validation_failed。
+#       * P8 fail route handling 與 enforce halt-on-risk 直接消費 `result` /
+#         `risk_level` / `route_back_to` 三欄位，不再讀自由文字。
+#
+# 為什麼**現在**先寫此 forward contract（即使 P8 runner 尚未實作）：
+#   1. 沒有 contract，P8 四個 runner（watcher / security / qa / logger）會各自
+#      發明 result shape，governance halt-on-risk 與 fail-route handling 將永遠
+#      只能讀 prose。
+#   2. P0 #4 supervisor-orchestration 與 #5 workflow-result 已分別定義「supervisor
+#      派工 envelope」與「run aggregate envelope」；#6 gate-result 補上「per-gate
+#      decision envelope」，三者組成完整 supervise → run → gate triad。
+#   3. workflow-result.failures[] 目前只記 step-level failure；gate-level decision
+#      （如「Watcher PASS 但提出 2 條 MEDIUM 建議」、「Security FAIL HIGH 觸發
+#      halt-on-risk」）需要本 schema 才能精準表達。
+#
+# 範圍邊界：
+#   - 本 schema 驗證 envelope + finding item + route_back_to + metrics 的 shape。
+#   - **不強制**領域內部 metric 結構（如 Lighthouse 4 分數、k6 p95 / error_rate
+#     具體欄位、Watcher checklist 子分類），統一塞 metrics object，由 consumer
+#     依 gate_type / gate_subtype 自行解讀；過度規定會把 schema 綁死在當下的
+#     稽核項，違反 forward contract 應預留演進空間的設計原則。
+#   - 不負責跨 gate 結果聚合（如「所有 gate 是否一起 PASS」），由 P7
+#     workflow-result builder 與 P8 governance runtime 負責。
+
+schema_version: 1
+title: CAP Gate Result Schema (forward contract)
+description: Machine-readable per-gate decision envelope for governance gates (Watcher / Security / QA / Logger). NO CURRENT RUNTIME PRODUCER — P8 governance gate runners must satisfy this contract when they land. Validates envelope + finding shape only; domain-specific metric internals stay free-form inside the metrics object.
+
+required:
+  - schema_version
+  - gate_id
+  - gate_type
+  - checkpoint
+  - run_id
+  - step_id
+  - workflow_id
+  - project_id
+  - produced_at
+  - produced_by
+  - result
+  - risk_level
+
+properties:
+  schema_version:
+    type: integer
+    enum: [1]
+    description: Schema version for the gate-result envelope. Bump on breaking changes to top-level fields.
+
+  gate_id:
+    type: string
+    description: Stable gate identifier (e.g., spec_audit / impl_audit / security_scan / qa_e2e / lighthouse_audit / logger_milestone). Producers MUST keep this stable across reruns of the same logical gate so consumers can dedupe by id.
+
+  gate_type:
+    type: string
+    enum: [watcher, security, qa, logger]
+    description: |
+      Which horizontal governance rail produced this result.
+      watcher: structural / SSOT / DDD / framework strategy audit (90).
+      security: secret leak / IDOR / injection / authz audit (08).
+      qa: behaviour / E2E / integration / k6 / Lighthouse verification (07).
+      logger: milestone archive or final-only governance log (99).
+
+  gate_subtype:
+    type: [string, "null"]
+    description: Optional finer classification (e.g., structure_audit / unit_test_audit / api_integration / e2e / k6_perf / lighthouse_audit / idor_scan / secret_scan / milestone_archive). Free-form; consumers MAY inspect but MUST NOT require any specific value.
+
+  checkpoint:
+    type: string
+    description: |
+      Where this gate fires in the pipeline (e.g., spec_phase / impl_phase /
+      pre_merge / pre_release / final / always_on). Aligns with workflow's
+      watcher_mode / logger_mode policy and the milestone_gate concept in
+      90-watcher-agent.md / 99-logger-agent.md.
+
+  workflow_id:
+    type: string
+    description: Workflow id this gate ran inside (e.g., project-spec-pipeline). Mirrors workflow-result.workflow_id so cross-artifact joins are trivial.
+
+  run_id:
+    type: string
+    description: Stable run id assigned by cap-workflow-exec.sh; MUST equal workflow-result.run_id when both artifacts exist for the same run.
+
+  step_id:
+    type: string
+    description: Step id of the gate step in the compiled workflow. Distinct from gate_id (gate_id is the logical gate identity; step_id is the workflow step that fired it).
+
+  project_id:
+    type: string
+    description: CAP project id under ~/.cap/projects/<project_id>/.
+
+  task_id:
+    type: [string, "null"]
+    description: Linked task constitution id when the gate ran inside a task-scoped flow; null for direct workflow runs.
+
+  produced_at:
+    type: string
+    description: ISO-8601 timestamp the gate finalized this result.
+
+  produced_by:
+    type: string
+    description: Agent id that produced this result (e.g., 90-Watcher / 08-Security / 07-QA / 99-Logger). Mirrors the agent_id Handoff Output convention.
+
+  target_artifacts:
+    type: array
+    description: Paths the gate audited (BA spec, API spec, source files, k6 report, Lighthouse JSON, etc.). Empty array allowed when the gate is policy-only and does not consume artifacts.
+    items:
+      type: string
+
+  result:
+    type: string
+    enum: [pass, fail, warn, blocked]
+    description: |
+      Gate decision.
+      pass: gate's required criteria met; downstream may proceed.
+      fail: at least one required criterion violated; consumer MUST consult fail_routing.
+      warn: criteria met but findings worth surfacing; downstream MAY proceed.
+      blocked: gate could not run to completion (missing inputs / environment); consumer treats as a halt requiring upstream fix, NOT a quality fail.
+
+  risk_level:
+    type: string
+    enum: [critical, high, medium, low, none]
+    description: |
+      Aggregate risk classification, independent of result so a gate can pass with low residual risk
+      or fail at high risk. P8 enforce halt-on-risk policy reads this directly: critical / high
+      block downstream regardless of result=pass; none / low never trigger halt-on-risk.
+
+  summary:
+    type: [string, "null"]
+    description: Single-line human-readable summary suitable for run-summary.md and Type D handoff bodies.
+
+  findings:
+    type: array
+    description: |
+      Discrete findings the gate produced. Empty array on a clean pass with nothing to surface.
+      Each finding's severity / category / location are required so consumers can sort, filter
+      and route-back without parsing free text. Recommendation is optional but strongly
+      encouraged so downstream fix tasks can be drafted machine-side.
+    items:
+      type: object
+      required:
+        - severity
+        - category
+        - description
+      properties:
+        finding_id:
+          type: [string, "null"]
+          description: Optional stable id (e.g., F-001) for cross-referencing in fix PRs.
+        severity:
+          type: string
+          enum: [critical, high, medium, low, info]
+        category:
+          type: string
+          description: Free-form category label (e.g., schema_drift / idor / secret_leak / lh_perf_fail / k6_threshold_breach / locator_priority). Mirrors the labelling used in 08 / 07 / 90 reports.
+        location:
+          type: [string, "null"]
+          description: File path, line number, route id, or other locator the finding refers to. Null when the finding is policy-level, not artifact-level.
+        description:
+          type: string
+          description: One- to three-sentence description of what was found.
+        recommendation:
+          type: [string, "null"]
+          description: Suggested fix or follow-up action; consumers MAY use this verbatim when drafting fix tasks.
+        target_capability:
+          type: [string, "null"]
+          description: Suggested capability to route the fix to (e.g., backend_implementation / api_contract_design). Optional; supervisor remains the final authority on routing.
+
+  metrics:
+    type: ["object", "null"]
+    description: |
+      Free-form metrics bag scoped to this gate (e.g., k6 p95_ms / error_rate / vus_max,
+      Lighthouse performance / accessibility / best_practices / seo, Watcher counts of
+      checks_passed / checks_failed). Schema deliberately does NOT prescribe inner shape;
+      gate_type + gate_subtype tell the consumer how to interpret it.
+
+  fail_routing:
+    type: ["object", "null"]
+    description: |
+      Populated when result=fail or result=blocked; null on pass / warn unless the producer
+      wants to record a "no action" decision explicitly. Drives P8 fail-route handling.
+    properties:
+      action:
+        type: string
+        enum: [halt, route_back, retry, escalate, none]
+        description: |
+          halt: stop the run immediately; do not fall through to downstream steps.
+          route_back: rerun a specific upstream step; route_back_to_step MUST be set.
+          retry: rerun the same gate without upstream changes (e.g., flaky env).
+          escalate: surface to supervisor / human; downstream halts pending decision.
+          none: producer chose not to recommend any action (consumer falls back to workflow YAML on_fail).
+      route_back_to_step:
+        type: [string, "null"]
+        description: Step id to rerun when action=route_back. Null for other actions.
+      reason:
+        type: [string, "null"]
+        description: Human-readable rationale for the routing decision; mirrors workflow-result.failures[].detail style.
+
+  remediation_status:
+    type: [string, "null"]
+    enum: [not_started, in_progress, resolved, accepted_risk, deferred, null]
+    description: Optional field for reruns to record how prior findings were resolved (e.g., resolved after fix in step `ba`, accepted_risk per supervisor decision). Null on first run.
+
+  related_gate_ids:
+    type: array
+    description: Optional cross-references to other gate_ids in the same run (e.g., qa_e2e references lighthouse_audit when both ran on the same release candidate). Empty array allowed.
+    items:
+      type: string

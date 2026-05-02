@@ -39,14 +39,15 @@
   - 驗收：schema 可驗證 run status、step results、artifacts、failures、promote candidates
   - 進度：done as **normalized contract** in `v0.22.0` (in-progress)；schema 為 machine-readable 一次 workflow run 的 normalized result，aggregate 目前散落於 `runtime-state.json` / `run-summary.md` / `agent-sessions.json` / `workflow.log` 四個 source 的資訊。**範圍邊界**：本 schema 是 contract，不是現有 producer 1:1 投影；現有 `cap-workflow-exec.sh` 寫上述 4 個 source artifact，但未 emit 滿足本 contract 的單一 `workflow-result.json`。**Producer 狀態**：P7 result report builder 才實作 producer，會把四個 source aggregate 為單一 artifact；`result.md` 是本 contract 的 human-readable projection（同樣由 P7 owner）。Acceptance 對應：run status → `final_state` (5 enum) + `final_result` (4 enum)；step results → `steps[].status` (5 enum) + execution_state / duration / paths / failure object；artifacts → `artifacts[]` with name/path/producer/promoted；failures → `failures[]` with step_id/reason/route_back_to；promote candidates → `promote_candidates[]` with target_repo_path。新增 `tests/scripts/test-workflow-result-schema.sh` 覆蓋 2 positive + 8 negative 共 10 cases，wire 進 `smoke-per-stage.sh`：升為 20 step / **20 passed / 0 failed / 0 skipped**。
 
-- [ ] 定義 `schemas/gate-result.schema.yaml`
+- [x] 定義 `schemas/gate-result.schema.yaml`
   - 交付物：governance gate result JSON Schema
   - 驗收：schema 可驗證 gate type、checkpoint、pass/fail、risk、route_back_to
+  - 進度：done as **forward contract** in `v0.22.0` (in-progress)；schema 為 P8 governance gate runner（Watcher / Security / QA / Logger）對外的 per-gate decision envelope，補齊 supervise → run → gate triad 的最後一塊。**範圍邊界**：本 schema 是 contract，不是現有 producer 1:1 投影；目前 workflow 中的 gate 只是普通 sub-agent step，輸出走 stdout / Type D handoff text，沒有 machine-readable PASS / FAIL / risk / route_back_to 結構。**Producer 狀態**：P8 watcher / security / qa / logger checkpoint runner 才是直接 producer，並由 P8 gate result validation 在 cap-workflow-exec.sh 收 workflow_result 前先驗 gate output；P8 fail-route handling 與 enforce halt-on-risk 直接消費 `result` (4 enum) / `risk_level` (5 enum) / `fail_routing.action` (5 enum) 三欄位，不再讀自由文字。Acceptance 對應：gate type → `gate_type` (4 enum) + `gate_subtype` 自由文字；checkpoint → `checkpoint`；pass/fail → `result` (pass / fail / warn / blocked)；risk → `risk_level` (critical / high / medium / low / none)；route_back_to → `fail_routing.{action, route_back_to_step, reason}`。Findings shape 採最低約束（severity / category / description required，metrics 內容刻意 free-form 以保留領域演進空間）。新增 `tests/scripts/test-gate-result-schema.sh` 覆蓋 2 positive + 8 negative 共 10 cases，wire 進 `smoke-per-stage.sh`：升為 21 step / **21 passed / 0 failed / 0 skipped**。
 
-- [ ] 新增 schema parse / validation smoke tests
+- [x] 新增 schema parse / validation smoke tests
   - 交付物：集中測試入口或納入 `scripts/workflows/smoke-per-stage.sh`
   - 驗收：所有新增 schema 有 positive / negative fixture
-  - 進度：partial in `v0.21.5` (`2492913`) + `v0.22.0` (in-progress, P0 #1–#5)；`provider-parity-check.sh` §4.2 已拆分 nonempty vs present-only 驗證語意；capability-graph 8 cases、compiled-workflow 9 cases、binding-report 10 cases、supervisor-orchestration 10 cases（forward contract）、workflow-result 10 cases（normalized contract）全進 `smoke-per-stage.sh`（20/20）。仍缺 gate-result 1 個 schema 的 positive / negative fixture。本項在 P0 全部 6 個 schema 落地後可結案。
+  - 進度：done in `v0.22.0` (in-progress)；`provider-parity-check.sh` §4.2 已拆分 nonempty vs present-only 驗證語意（`v0.21.5` `2492913`）。P0 六個 schema 全綠：capability-graph 8 cases、compiled-workflow 9 cases、binding-report 10 cases、supervisor-orchestration 10 cases（forward contract）、workflow-result 10 cases（normalized contract）、gate-result 10 cases（forward contract）全進 `smoke-per-stage.sh`（21/21）。本項可結案；後續若新增 schema 須延續 2 positive + 多 negative 的 fixture pattern。
 
 ## P0a：Schema-Class Executors Exit Code 政策 ✓ resolved in v0.21.6
 
