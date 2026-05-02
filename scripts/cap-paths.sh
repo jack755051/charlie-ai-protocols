@@ -4,14 +4,19 @@ set -euo pipefail
 
 CAP_HOME="${CAP_HOME:-${HOME}/.cap}"
 
-# project_id resolver: strict mode (P1 #1) and identity ledger (P1 #2).
+# project_id resolver: strict mode (P1 #1) and identity ledger (P1 #2 + #3).
 # Resolution chain: CAP_PROJECT_ID_OVERRIDE → .cap.project.yaml → git basename.
 # Non-git folders without override or config halt with exit 52 unless
 # CAP_ALLOW_BASENAME_FALLBACK=1 is set (legacy escape hatch — ledger still
 # written so the fallback path stays auditable).
-PROJECT_ID_LEDGER_SCHEMA_VERSION=1
+#
+# Identity ledger schema is v2 (P1 #3); v1 ledgers (P1 #2 inline shape) are
+# auto-migrated on `cap-paths ensure`. See schemas/identity-ledger.schema.yaml
+# and policies/cap-storage-metadata.md for the SSOT contract.
+PROJECT_ID_LEDGER_SCHEMA_VERSION=2
 RESOLVED_PROJECT_ID=""
 RESOLVED_PROJECT_MODE=""
+CAP_VERSION_VALUE=""
 
 usage() {
   echo "Usage: bash scripts/cap-paths.sh <ensure|get|show> [key]" >&2
@@ -38,6 +43,21 @@ read_project_id_from_config() {
   [ -f "${config_file}" ] || return 1
 
   sed -n -E 's/^project_id:[[:space:]]*"?([^"#]+)"?[[:space:]]*$/\1/p' "${config_file}" | head -n 1
+}
+
+# Read repo.manifest.yaml top-level `cap_version` field. This is the SSOT for
+# CAP release/version metadata recorded in identity ledgers; see
+# policies/cap-storage-metadata.md §2. MUST NOT fall back to git describe or
+# any dynamic state — that would mix dev tags into governance metadata.
+read_cap_version_from_manifest() {
+  local project_root="$1"
+  local manifest_file="${project_root}/repo.manifest.yaml"
+
+  [ -f "${manifest_file}" ] || return 1
+
+  # Anchor to start-of-line so we ignore commands.version (which is nested
+  # under a top-level `commands:` key and therefore indented).
+  sed -n -E 's/^cap_version:[[:space:]]*"?([^"#[:space:]]+)"?[[:space:]]*$/\1/p' "${manifest_file}" | head -n 1
 }
 
 sanitize_project_id() {
@@ -93,67 +113,135 @@ resolve_project_identity() {
   RESOLVED_PROJECT_MODE="${mode}"
 }
 
-# Halt with exit 53 if the on-disk identity ledger conflicts with the current
-# project_root. Missing ledger is silently ignored here — write_ledger_if_missing
-# creates it in the `ensure` subcommand so read-only calls have no side effects.
+# Halt with exit 41 if ledger schema_version is greater than this cap build's
+# supported maximum (forward-incompat); halt with exit 53 if origin_path
+# differs from the current PROJECT_ROOT (collision). Missing ledger is
+# silently ignored — write_or_migrate_ledger creates / updates it in the
+# `ensure` subcommand so read-only calls have no side effects.
 verify_ledger_or_halt() {
   if [ ! -f "${LEDGER_FILE}" ]; then
     return 0
   fi
 
-  local ledger_origin
-  ledger_origin="$(python3 - "${LEDGER_FILE}" <<'PY' 2>/dev/null || true
+  local parsed
+  parsed="$(python3 - "${LEDGER_FILE}" <<'PY' 2>/dev/null || true
 import json, sys
 try:
     with open(sys.argv[1], "r", encoding="utf-8") as fh:
         data = json.load(fh)
-    print(data.get("origin_path", ""))
+    sv = data.get("schema_version")
+    origin = data.get("origin_path", "")
+    if isinstance(sv, int):
+        print(f"{sv}|{origin}")
 except Exception:
     pass
 PY
 )"
 
-  if [ -z "${ledger_origin}" ] || [ "${ledger_origin}" = "${PROJECT_ROOT}" ]; then
+  # Malformed ledger: treat as missing — write_or_migrate_ledger will overwrite.
+  if [ -z "${parsed}" ]; then
     return 0
   fi
 
-  printf 'cap-paths: error — project_id collision detected\n' >&2
-  printf '  project_id=%s\n' "${PROJECT_ID}" >&2
-  printf '  ledger_origin=%s (recorded at %s)\n' "${ledger_origin}" "${LEDGER_FILE}" >&2
-  printf '  current_origin=%s\n' "${PROJECT_ROOT}" >&2
-  printf '  resolve by:\n' >&2
-  printf '    1. add a unique suffix in .cap.project.yaml (e.g. project_id: %s-<suffix>)\n' "${PROJECT_ID}" >&2
-  printf '    2. export CAP_PROJECT_ID_OVERRIDE=<unique-id>\n' >&2
-  printf '    3. remove the colliding storage (rm -rf %s) if you intend to reset\n' "${PROJECT_STORE}" >&2
-  exit 53
+  local ledger_sv ledger_origin
+  ledger_sv="${parsed%%|*}"
+  ledger_origin="${parsed#*|}"
+
+  # Forward-incompat halt: ledger was written by a newer cap that this build
+  # cannot safely read. See policies/cap-storage-metadata.md §3.2.
+  if [ "${ledger_sv}" -gt "${PROJECT_ID_LEDGER_SCHEMA_VERSION}" ]; then
+    printf 'cap-paths: error — identity ledger has unsupported schema_version=%s\n' "${ledger_sv}" >&2
+    printf '  this CAP build supports schema_version <= %s; ledger at %s\n' "${PROJECT_ID_LEDGER_SCHEMA_VERSION}" "${LEDGER_FILE}" >&2
+    printf '  upgrade CAP, or remove %s and re-run cap-paths ensure to re-init storage at the supported version\n' "${PROJECT_STORE}" >&2
+    exit 41
+  fi
+
+  # Identity collision: ledger origin_path differs from current project_root.
+  if [ -n "${ledger_origin}" ] && [ "${ledger_origin}" != "${PROJECT_ROOT}" ]; then
+    printf 'cap-paths: error — project_id collision detected\n' >&2
+    printf '  project_id=%s\n' "${PROJECT_ID}" >&2
+    printf '  ledger_origin=%s (recorded at %s)\n' "${ledger_origin}" "${LEDGER_FILE}" >&2
+    printf '  current_origin=%s\n' "${PROJECT_ROOT}" >&2
+    printf '  resolve by:\n' >&2
+    printf '    1. add a unique suffix in .cap.project.yaml (e.g. project_id: %s-<suffix>)\n' "${PROJECT_ID}" >&2
+    printf '    2. export CAP_PROJECT_ID_OVERRIDE=<unique-id>\n' >&2
+    printf '    3. remove the colliding storage (rm -rf %s) if you intend to reset\n' "${PROJECT_STORE}" >&2
+    exit 53
+  fi
 }
 
-write_ledger_if_missing() {
-  if [ -f "${LEDGER_FILE}" ]; then
-    return 0
-  fi
-
+# write_or_migrate_ledger handles three cases atomically inside Python so we
+# never leave a half-written ledger on disk:
+#   1. First-time landing → write a fresh v2 ledger with all required fields.
+#   2. Existing v1 ledger → migrate to v2 (preserve immutable created_at /
+#      origin_path / project_id / resolved_mode, append previous_versions[],
+#      stamp migrated_at, fill last_resolved_at and cap_version).
+#   3. Existing v2 ledger → only update last_resolved_at; keep cap_version and
+#      created_at immutable so historical metadata stays clean.
+#
+# This MUST be called only from the `ensure` subcommand; read-only subcommands
+# (get / show) MUST NOT touch the ledger. See policies/cap-storage-metadata.md §4.
+write_or_migrate_ledger() {
   mkdir -p "${PROJECT_STORE}"
   python3 - \
     "${LEDGER_FILE}" \
     "${PROJECT_ID}" \
     "${PROJECT_ROOT}" \
     "${RESOLVED_PROJECT_MODE}" \
-    "${PROJECT_ID_LEDGER_SCHEMA_VERSION}" <<'PY'
+    "${PROJECT_ID_LEDGER_SCHEMA_VERSION}" \
+    "${CAP_VERSION_VALUE}" <<'PY'
 import datetime
 import json
 import sys
 
-ledger_file, project_id, origin_path, mode, schema_version = sys.argv[1:6]
-data = {
-    "schema_version": int(schema_version),
-    "project_id": project_id,
-    "resolved_mode": mode,
-    "origin_path": origin_path,
-    "created_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-}
+(ledger_file, project_id, origin_path, mode,
+ target_sv_raw, cap_version) = sys.argv[1:7]
+target_sv = int(target_sv_raw)
+now_iso = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+cap_version_value = cap_version.strip() if cap_version else ""
+
+import os
+if not os.path.exists(ledger_file):
+    payload = {
+        "schema_version": target_sv,
+        "project_id": project_id,
+        "resolved_mode": mode,
+        "origin_path": origin_path,
+        "created_at": now_iso,
+        "last_resolved_at": now_iso,
+        "migrated_at": None,
+        "cap_version": cap_version_value if cap_version_value else None,
+        "previous_versions": [],
+    }
+else:
+    with open(ledger_file, "r", encoding="utf-8") as fh:
+        payload = json.load(fh)
+    current_sv = payload.get("schema_version", 1)
+    if current_sv < target_sv:
+        # v1 → v2 migration. created_at / origin_path / project_id /
+        # resolved_mode are immutable and preserved as-is.
+        previous = payload.get("previous_versions", [])
+        if not isinstance(previous, list):
+            previous = []
+        previous.append({
+            "schema_version": current_sv,
+            "migrated_to_at": now_iso,
+        })
+        payload["schema_version"] = target_sv
+        payload["last_resolved_at"] = now_iso
+        payload["migrated_at"] = now_iso
+        payload["previous_versions"] = previous
+        # cap_version is recorded at first migration to v2; subsequent ensure
+        # calls do not overwrite it (see policies/cap-storage-metadata.md §2).
+        if "cap_version" not in payload:
+            payload["cap_version"] = cap_version_value if cap_version_value else None
+    else:
+        # Already at target schema_version: only refresh last_resolved_at.
+        payload["last_resolved_at"] = now_iso
+        # Preserve cap_version, migrated_at, previous_versions as-is.
+
 with open(ledger_file, "w", encoding="utf-8") as fh:
-    json.dump(data, fh, indent=2, ensure_ascii=False)
+    json.dump(payload, fh, indent=2, ensure_ascii=False)
     fh.write("\n")
 PY
 }
@@ -161,6 +249,7 @@ PY
 PROJECT_ROOT="$(find_project_root)"
 resolve_project_identity "${PROJECT_ROOT}"
 PROJECT_ID="${RESOLVED_PROJECT_ID}"
+CAP_VERSION_VALUE="$(read_cap_version_from_manifest "${PROJECT_ROOT}" 2>/dev/null || true)"
 PROJECT_STORE="${CAP_HOME}/projects/${PROJECT_ID}"
 LEDGER_FILE="${PROJECT_STORE}/.identity.json"
 TRACE_DIR="${PROJECT_STORE}/traces"
@@ -176,8 +265,9 @@ WORKSPACE_DIR="${PROJECT_STORE}/workspace"
 CACHE_DIR="${PROJECT_STORE}/cache"
 SESSION_DIR="${PROJECT_STORE}/sessions"
 
-# Read-only subcommands still validate the ledger — collision must surface
-# before any caller consumes a path under the wrong project storage.
+# Read-only subcommands still validate the ledger — schema forward-incompat
+# and origin collisions must surface before any caller consumes a path under
+# the wrong project storage.
 verify_ledger_or_halt
 
 ensure_dirs() {
@@ -197,7 +287,7 @@ ensure_dirs() {
     "${WORKSPACE_DIR}" \
     "${CACHE_DIR}" \
     "${SESSION_DIR}"
-  write_ledger_if_missing
+  write_or_migrate_ledger
 }
 
 get_key() {
@@ -206,6 +296,7 @@ get_key() {
     project_root) printf '%s\n' "${PROJECT_ROOT}" ;;
     project_id) printf '%s\n' "${PROJECT_ID}" ;;
     project_id_mode) printf '%s\n' "${RESOLVED_PROJECT_MODE}" ;;
+    cap_version) printf '%s\n' "${CAP_VERSION_VALUE}" ;;
     project_store) printf '%s\n' "${PROJECT_STORE}" ;;
     ledger_file) printf '%s\n' "${LEDGER_FILE}" ;;
     trace_dir) printf '%s\n' "${TRACE_DIR}" ;;
@@ -233,6 +324,7 @@ cap_home=${CAP_HOME}
 project_root=${PROJECT_ROOT}
 project_id=${PROJECT_ID}
 project_id_mode=${RESOLVED_PROJECT_MODE}
+cap_version=${CAP_VERSION_VALUE}
 project_store=${PROJECT_STORE}
 ledger_file=${LEDGER_FILE}
 trace_dir=${TRACE_DIR}

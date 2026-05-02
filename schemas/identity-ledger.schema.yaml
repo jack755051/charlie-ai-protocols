@@ -1,0 +1,134 @@
+# Identity Ledger Schema (v2, NORMALIZED CONTRACT)
+#
+# 定義 `~/.cap/projects/<project_id>/.identity.json` 的 storage metadata shape。
+# 本 schema 是 P1 #3 Project Storage and Identity 的核心契約，承接 P1 #2 引入的
+# inline ledger，並把它升級為可演進的正式 metadata SSOT。
+#
+# JSON-Schema 風格；可被 step_runtime.py validate-jsonschema 驗證。
+#
+# Producer 邊界（重要）：
+#   - **Current state (v0.22.0)**：`scripts/cap-paths.sh:write_or_migrate_ledger`
+#     與 `engine/project_context_loader.py:_verify_or_write_ledger` 是直接 producer。
+#     兩者 lock-step 寫出符合本 schema 的 v2 ledger，並在讀到 v1 ledger 時自動
+#     migrate 到 v2（補 last_resolved_at + migrated_at + previous_versions[]）。
+#   - **Future producer (P1 #4 health check)**：health check 會消費 ledger 的
+#     `last_resolved_at` 與 `previous_versions[]` 判定 staleness 與 migration 歷史。
+#
+# Forward compatibility 規則：
+#   1. 增量加 optional 欄位**不**需 bump `schema_version`；舊 cap 讀新欄位時
+#      應安全忽略未知 key。
+#   2. 改動 required 欄位、enum、語意才 bump `schema_version`。
+#   3. 舊 cap 讀到不認識的 `schema_version`（>當前支援上限）必須 halt
+#      （exit 41 / schema_validation_failed），**不**做 best-effort 解析；
+#      理由：ledger 是治理 artifact，被舊版誤寫會破壞後續 audit 一致性。
+#   4. 新 cap 讀到舊 `schema_version` 應自動 migrate 到當前版本（補必要欄位、
+#      把舊版本記到 `previous_versions[]`、寫回時 schema_version 升級）。
+#
+# 範圍邊界：
+#   - 本 schema 驗證 ledger envelope 的結構與型別。
+#   - **不**驗證 cross-cutting 一致性（如 origin_path 是否真的存在於檔案系統、
+#     project_id 是否與 .cap.project.yaml 對齊）；那些屬於 cap-paths.sh
+#     resolver 的責任。
+#   - 不負責跨 project storage 聚合（如「是否兩個 project 共用同一個
+#     storage」）；collision detection 由 cap-paths.sh 在 verify_ledger_or_halt
+#     階段處理（exit 53 / project_id_collision）。
+
+schema_version: 2
+title: CAP Identity Ledger Schema (project storage metadata SSOT)
+description: Machine-readable storage metadata for `~/.cap/projects/<id>/.identity.json`. Producer is cap-paths.sh / project_context_loader.py lock-step. Validates envelope shape, schema_version forward-compat, and resolved_mode enum; does not enforce cross-cutting consistency (origin existence, .cap.project.yaml alignment).
+
+required:
+  - schema_version
+  - project_id
+  - resolved_mode
+  - origin_path
+  - created_at
+  - last_resolved_at
+
+additionalProperties: false
+
+properties:
+  schema_version:
+    type: integer
+    enum: [2]
+    description: |
+      Ledger schema version. Currently only v2 is the active producer target.
+      v1 ledgers (from P1 #2 inline shape) are auto-migrated by cap-paths
+      and never persisted in v1 form again. Schema_version > 2 is a
+      forward-incompatible state that the current cap build MUST halt on.
+
+  project_id:
+    type: string
+    pattern: ^[a-z0-9._-]+$
+    description: |
+      Sanitized project identifier matching the `~/.cap/projects/<id>/`
+      storage path. Must equal the cap-paths resolver output (override →
+      .cap.project.yaml → git basename → optional CAP_ALLOW_BASENAME_FALLBACK).
+
+  resolved_mode:
+    type: string
+    enum: [override, config, git_basename, basename_legacy]
+    description: |
+      Identity source mode at ledger creation time. Mirrors cap-paths
+      RESOLVED_PROJECT_MODE.
+      - override: CAP_PROJECT_ID_OVERRIDE env var.
+      - config: project_id from .cap.project.yaml.
+      - git_basename: basename(git_root).
+      - basename_legacy: CAP_ALLOW_BASENAME_FALLBACK=1 escape hatch (audited).
+
+  origin_path:
+    type: string
+    description: |
+      Absolute filesystem path of the project root recorded at ledger creation.
+      cap-paths verify_ledger_or_halt compares this to the current PROJECT_ROOT
+      and halts with exit 53 (project_id_collision) on mismatch.
+
+  created_at:
+    type: string
+    description: ISO-8601 UTC timestamp when the ledger was first written. Immutable across migrations.
+
+  last_resolved_at:
+    type: string
+    description: |
+      ISO-8601 UTC timestamp of the most recent `cap-paths ensure` call that
+      touched this storage. Only updated on `ensure` (write subcommand) — never
+      on read-only `get` / `show` — so health checks can distinguish "actively
+      used by workflow" from "merely inspected by tooling".
+
+  migrated_at:
+    type: [string, "null"]
+    description: |
+      ISO-8601 UTC timestamp of the most recent schema migration. Null for
+      ledgers that were born at the current schema_version (no migration
+      yet). Updated each time the ledger schema_version is bumped.
+
+  cap_version:
+    type: [string, "null"]
+    description: |
+      CAP release/version metadata recorded at ledger creation or last
+      migration. Read from repo.manifest.yaml top-level `cap_version` field
+      (the SSOT). Null when the manifest has no cap_version (e.g. consumer
+      repos that adopt CAP without owning the manifest). cap-paths MUST NOT
+      fall back to `git describe --tags` — that mixes development state into
+      governance metadata.
+
+  previous_versions:
+    type: array
+    description: |
+      Migration history. Each entry records a schema_version that the ledger
+      was at before being migrated, plus when the migration happened. New
+      entries are appended; existing entries are immutable. Empty array
+      allowed for ledgers that have never been migrated.
+    items:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - migrated_to_at
+      properties:
+        schema_version:
+          type: integer
+          description: The schema_version the ledger was at *before* this migration.
+        migrated_to_at:
+          type: string
+          description: ISO-8601 UTC timestamp when the migration to the next schema_version completed.

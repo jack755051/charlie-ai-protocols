@@ -5,6 +5,11 @@ display_name: AI 多代理協作系統
 summary: >
   本地 AI agent 協作規範與 CLI 工具。定義 agent 角色邊界、交接協議與 workflow 契約，
   搭配 Shell CLI（cap）與 runtime storage，把角色分工、執行紀錄與常用流程整理成可追蹤的形式。
+# CAP release/version metadata SSOT — read by cap-paths.sh and
+# project_context_loader.py when writing identity ledgers
+# (~/.cap/projects/<id>/.identity.json). See policies/cap-storage-metadata.md §2.
+# Release workflow MUST bump this in lock-step with git tag and CHANGELOG.md.
+cap_version: v0.22.0-rc1
 owner: jack755051
 maintainers:
   - jack755051

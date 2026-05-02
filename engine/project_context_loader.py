@@ -20,7 +20,13 @@ class ProjectIdCollisionError(RuntimeError):
     project_root for the resolved project_id."""
 
 
-_LEDGER_SCHEMA_VERSION = 1
+class ProjectIdLedgerSchemaError(RuntimeError):
+    """Raised when an on-disk identity ledger is at a schema_version greater
+    than this engine build supports (forward-incompat halt). See
+    ``policies/cap-storage-metadata.md`` §3.2."""
+
+
+_LEDGER_SCHEMA_VERSION = 2
 _SANITIZE_PATTERN = re.compile(r"[^a-z0-9._-]+")
 _SANITIZE_TRIM = re.compile(r"^-+|-+$")
 _SANITIZE_DEDUP = re.compile(r"-+")
@@ -144,30 +150,78 @@ class ProjectContextLoader:
             return False
         return result.returncode == 0
 
+    def _read_cap_version_from_manifest(self) -> str | None:
+        """Read repo.manifest.yaml top-level ``cap_version``. SSOT for CAP
+        release/version metadata (see ``policies/cap-storage-metadata.md`` §2).
+        Never falls back to ``git describe`` or other dynamic state. Returns
+        ``None`` when the manifest is absent or the field is missing/empty."""
+        manifest_path = self.base_dir / "repo.manifest.yaml"
+        manifest = self._load_yaml(manifest_path)
+        value = manifest.get("cap_version")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        return None
+
     def _verify_or_write_ledger(self, project_id: str, project_id_mode: str) -> None:
+        """Verify, migrate, or first-time-write the identity ledger.
+
+        Mirrors ``scripts/cap-paths.sh:verify_ledger_or_halt`` +
+        ``write_or_migrate_ledger``. Forward-incompat ledgers raise
+        :class:`ProjectIdLedgerSchemaError`; mismatched origins raise
+        :class:`ProjectIdCollisionError`. v1 ledgers are auto-migrated to v2
+        on landing here (engine-side first-touch is treated as ensure).
+        """
         cap_home = Path(os.getenv("CAP_HOME") or (Path.home() / ".cap"))
         project_store = cap_home / "projects" / project_id
         ledger_file = project_store / ".identity.json"
+        current_origin = str(self.base_dir)
+        now_iso = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
         if ledger_file.exists():
             try:
                 ledger = json.loads(ledger_file.read_text("utf-8"))
             except (OSError, json.JSONDecodeError):
                 ledger = {}
-            ledger_origin = ledger.get("origin_path") if isinstance(ledger, dict) else None
-            current_origin = str(self.base_dir)
-            if ledger_origin and ledger_origin != current_origin:
-                raise ProjectIdCollisionError(
-                    f"project_id collision: project_id={project_id} "
-                    f"recorded ledger_origin={ledger_origin} (at {ledger_file}) "
-                    f"differs from current_origin={current_origin}; "
-                    "set a unique project_id in .cap.project.yaml, export "
-                    "CAP_PROJECT_ID_OVERRIDE, or remove the colliding storage."
-                )
+
+            if isinstance(ledger, dict):
+                ledger_sv = ledger.get("schema_version")
+                if isinstance(ledger_sv, int) and ledger_sv > _LEDGER_SCHEMA_VERSION:
+                    raise ProjectIdLedgerSchemaError(
+                        f"identity ledger has unsupported schema_version={ledger_sv} "
+                        f"(this engine supports schema_version <= {_LEDGER_SCHEMA_VERSION}); "
+                        f"ledger at {ledger_file}; upgrade CAP or remove the storage and re-init."
+                    )
+
+                ledger_origin = ledger.get("origin_path")
+                if ledger_origin and ledger_origin != current_origin:
+                    raise ProjectIdCollisionError(
+                        f"project_id collision: project_id={project_id} "
+                        f"recorded ledger_origin={ledger_origin} (at {ledger_file}) "
+                        f"differs from current_origin={current_origin}; "
+                        "set a unique project_id in .cap.project.yaml, export "
+                        "CAP_PROJECT_ID_OVERRIDE, or remove the colliding storage."
+                    )
+
+                # v1 → v2 migration: preserve immutable fields, append history.
+                if isinstance(ledger_sv, int) and ledger_sv < _LEDGER_SCHEMA_VERSION:
+                    previous = ledger.get("previous_versions") or []
+                    if not isinstance(previous, list):
+                        previous = []
+                    previous.append({
+                        "schema_version": ledger_sv,
+                        "migrated_to_at": now_iso,
+                    })
+                    ledger["schema_version"] = _LEDGER_SCHEMA_VERSION
+                    ledger["last_resolved_at"] = now_iso
+                    ledger["migrated_at"] = now_iso
+                    ledger["previous_versions"] = previous
+                    if "cap_version" not in ledger:
+                        ledger["cap_version"] = self._read_cap_version_from_manifest()
+                    self._persist_ledger(ledger_file, ledger)
             return
 
-        # First-time landing: persist the ledger so subsequent calls (including
-        # the legacy fallback path) become auditable.
+        # First-time landing: persist a fresh v2 ledger so subsequent calls
+        # (including the legacy fallback path) are auditable.
         try:
             project_store.mkdir(parents=True, exist_ok=True)
         except OSError:
@@ -177,9 +231,17 @@ class ProjectContextLoader:
             "schema_version": _LEDGER_SCHEMA_VERSION,
             "project_id": project_id,
             "resolved_mode": project_id_mode,
-            "origin_path": str(self.base_dir),
-            "created_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "origin_path": current_origin,
+            "created_at": now_iso,
+            "last_resolved_at": now_iso,
+            "migrated_at": None,
+            "cap_version": self._read_cap_version_from_manifest(),
+            "previous_versions": [],
         }
+        self._persist_ledger(ledger_file, payload)
+
+    @staticmethod
+    def _persist_ledger(ledger_file: Path, payload: dict) -> None:
         try:
             with ledger_file.open("w", encoding="utf-8") as fh:
                 json.dump(payload, fh, indent=2, ensure_ascii=False)

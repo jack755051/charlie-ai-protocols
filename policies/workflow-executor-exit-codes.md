@@ -57,6 +57,8 @@
 
 > 設計裁定：identity-class 退出碼專屬於 project_id resolver，獨立於 schema-class（41）與 vc-class（40），因為 identity 失敗的修復路徑（補 `.cap.project.yaml` / 設 `CAP_PROJECT_ID_OVERRIDE` / 刪 colliding storage）與 schema 漂移、git 失敗皆不同；不混用 exit code 才能讓治理層快速分流。`engine/project_context_loader.py` 對應的 Python 端對等行為是拋出 `ProjectIdResolutionError` / `ProjectIdCollisionError`。
 
+> 設計裁定（v0.22.0 P1 #3 增補）：identity ledger schema 失敗（`~/.cap/projects/<id>/.identity.json` 的 `schema_version` 大於本 cap build 已知最高版本，即 forward-incompat halt）走 **exit 41 / `schema_validation_failed`**，不開新 code。理由：ledger schema validation 屬於 schema 治理範疇（與 P0a schema-class executor 一致），與 identity resolution 失敗（缺 source）、collision（origin 不符）兩者語意不同；混用 52/53 會讓治理層難以分辨「身份不可解析」、「身份衝突」與「ledger 格式無法相容」三種獨立故障。Python 端對等行為是拋出 `ProjectIdLedgerSchemaError`。完整規則見 `policies/cap-storage-metadata.md` §3.2。
+
 ## Fallback Policy
 
 workflow step 可用 `fallback.when` 明確宣告哪些條件可交給 AI：

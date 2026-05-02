@@ -23,9 +23,10 @@
 #  17. tests/scripts/test-supervisor-orchestration-schema.sh     (P0 #4 schema gate, forward contract)
 #  18. tests/scripts/test-workflow-result-schema.sh              (P0 #5 schema gate, normalized contract)
 #  19. tests/scripts/test-gate-result-schema.sh                  (P0 #6 schema gate, forward contract)
-#  20. tests/scripts/test-project-id-resolver.sh                 (P1 #1 + #2 strict-mode + collision gate)
-#  21. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report all-pass)
-#  22. tests/e2e/test-ticket-consumption.sh                      (must report all-pass)
+#  20. tests/scripts/test-project-id-resolver.sh                 (P1 #1 + #2 + #3 resolver + ledger gate)
+#  21. tests/scripts/test-identity-ledger-schema.sh              (P1 #3 ledger schema gate, normalized contract)
+#  22. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report all-pass)
+#  23. tests/e2e/test-ticket-consumption.sh                      (must report all-pass)
 #
 # Resolution order for the bind command:
 #   1. `cap` on PATH (installed via cap installer)
@@ -174,7 +175,8 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-binding-report-schema.sh" "binding-
 run_fixture "${REPO_ROOT}/tests/scripts/test-supervisor-orchestration-schema.sh" "supervisor-orchestration schema gate (P0 #4, forward contract)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-workflow-result-schema.sh" "workflow-result schema gate (P0 #5, normalized contract)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-gate-result-schema.sh" "gate-result schema gate (P0 #6, forward contract)"
-run_fixture "${REPO_ROOT}/tests/scripts/test-project-id-resolver.sh" "project-id resolver gate (P1 #1 strict-mode + #2 collision)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-project-id-resolver.sh" "project-id resolver + ledger gate (P1 #1/#2/#3)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-identity-ledger-schema.sh" "identity-ledger schema gate (P1 #3, normalized contract)"
 run_fixture "${REPO_ROOT}/tests/e2e/test-project-spec-pipeline-deterministic.sh" "spec-pipeline deterministic e2e"
 run_fixture "${REPO_ROOT}/tests/e2e/test-ticket-consumption.sh" "ticket consumption e2e"
 

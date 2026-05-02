@@ -1,6 +1,6 @@
 # CAP Missing Implementation Checklist
 
-更新日期：2026-05-02（v0.22.0 P1 #1 + #2 closeout 後）
+更新日期：2026-05-02（v0.22.0 P1 #1 + #2 + #3 closeout 後）
 
 本清單承接 `TODOLIST.md` 與 `docs/cap/IMPLEMENTATION-ROADMAP.md` 的「尚未完成」項目，整理成可執行的工程工作清單。原則是先補 runtime contract 與 validator，再補 runner、orchestration、session、gate 與 promote/publish 閉環。
 
@@ -80,9 +80,10 @@
   - 驗收：同名資料夾不會共用同一個 `~/.cap/projects/<project_id>/`
   - 進度：done in `v0.22.0` (in-progress)；每個 project 第一次落地時於 `~/.cap/projects/<id>/.identity.json` 建立 inline ledger（`schema_version` / `project_id` / `resolved_mode` / `origin_path` / `created_at`），後續 resolve 比對 `origin_path`：mismatch 時 shell 端 exit 53、Python 端 raise `ProjectIdCollisionError`，stderr 列出 recorded vs current origin 與三條解法。新 exit code 53 `project_id_collision` 已併入 `policies/workflow-executor-exit-codes.md`。`.identity.json` 暫不獨立 schema 化，等 P1 #3 storage version metadata 一起 SSOT 設計。新增 `tests/scripts/test-project-id-resolver.sh` 覆蓋 8 cases / 25 assertions（git happy path、config override 各情境、strict halt、legacy fallback ledger、first-time idempotence、collision halt），wire 進 `smoke-per-stage.sh`：升為 22 step / **22 passed / 0 failed / 0 skipped**。
 
-- [ ] 記錄 storage version / migration metadata
+- [x] 記錄 storage version / migration metadata
   - 交付物：project storage metadata file
   - 驗收：`cap paths` 或 project status 可讀出 version / created_at / migrated_at
+  - 進度：done in `v0.22.0` (in-progress)；新增 `schemas/identity-ledger.schema.yaml`（v2 normalized contract，6 required + nullable optional + `previous_versions[]`）作為 storage metadata SSOT，搭配 `policies/cap-storage-metadata.md` 規範 schema versioning 政策、`cap_version` 來源（`repo.manifest.yaml` top-level 唯一）、`last_resolved_at` 只在 `ensure` 寫入、forward-incompat halt（exit 41）等治理鐵則。`scripts/cap-paths.sh:write_or_migrate_ledger` 與 `engine/project_context_loader.py:_verify_or_write_ledger` lock-step 升級為 v2 producer，三狀態（fresh / v1→v2 migrate / v2 re-entry）對齊；新增 `ProjectIdLedgerSchemaError` 對應 shell 端 exit 41。`repo.manifest.yaml` 補上 `cap_version: v0.22.0-rc1` 作為 SSOT 起點。新增 `tests/scripts/test-identity-ledger-schema.sh` 覆蓋 2 positive + 9 negative 共 11 cases；既有 `tests/scripts/test-project-id-resolver.sh` 擴充至 12 cases / **47 assertions**（補 v2 fresh ledger / v1→v2 migration / forward-incompat halt / read-only 不更新 / cap_version 來源 4 個新 case）。`policies/workflow-executor-exit-codes.md` identity 章節補一條設計裁定，明示 ledger schema fail 走 exit 41 不開新 code。`smoke-per-stage.sh` 升為 23 step / **23 passed / 0 failed / 0 skipped**。同時補修 `scripts/cap-paths.sh` 與 `tests/scripts/test-project-id-resolver.sh` 的 git index +x 位元（P1 #2 commit `1acda13` 遺漏，導致 persist-task-constitution.sh 走 fallback path 出現 cascade fail）。
 
 - [ ] 實作 storage health check
   - 交付物：health check routine
@@ -402,7 +403,7 @@
 1. ✓ ~~**P0a Schema-Class Executors Exit Code 政策**~~ done in `v0.21.6`（`5b31856` / `44011ad`；6 個 executor 對齊 exit 41，policy SSOT 升級，smoke-per-stage 15/15）
 2. ✓ ~~**Fresh Claude + Codex provider parity full run**~~ done in `v0.21.6`（Claude `run_20260501192422_033a65f8` 與 Codex `run_20260501234931_27dddbce` 各 16/16 / 43 PASS / 0 FAIL）
 3. ✓ ~~**P0 Runtime Contracts**~~ done in `v0.22.0-rc1`（6 個 schema 共 47 fixture cases，smoke 21/21）
-4. **P1 Project Storage and Identity** ← **in progress**（v0.22.0；#1 strict-mode resolver + #2 identity ledger collision done，剩 storage version metadata / health check / `cap project status|init|doctor`）
+4. **P1 Project Storage and Identity** ← **in progress**（v0.22.0；#1 strict-mode resolver + #2 identity ledger collision + #3 storage version metadata done，剩 #4 health check / #5–7 `cap project status|init|doctor`）
 5. P2 Project Constitution Runner
 6. P3 Supervisor Structured Orchestration
 7. P4 Compiled Workflow and Binding Pipeline
