@@ -478,6 +478,35 @@ schemas/workflows/
 skills/
 ```
 
+### Phase 10 前置決策：roles / skills / policies 語意分層
+
+目前 `agent-skills/` 仍是 builtin 開發角色的 SSOT，語意上比較接近「AI 角色」而不是廣義 skill。後續 repo-specific source resolver 需要支援三種使用者擴充：
+
+1. 使用者自行引入角色（例如 product owner、domain reviewer）。
+2. 使用者覆寫或調整既有開發角色。
+3. 使用者新增非角色型 skill，也就是可套用到多個角色的工作規範。
+
+因此長期模型應拆成：
+
+```text
+Role     = AI 的身份、責任與輸出邊界
+Skill    = 可被角色套用的工作能力或行為規範
+Policy   = 必須遵守的治理規則
+Workflow = 把 roles + skills + policies 編排成任務流程
+```
+
+實作順序不要求等到 Phase 10 全部完成才開始設計，但實體資料夾重構必須等 source resolver 具備 `project > shared > builtin > legacy` priority 與 conflict detection 後再做。Phase 10 之前只做文件化與 registry contract 準備，避免先搬動 `agent-skills/` 造成 CrewAI / Claude / Codex 入口與 legacy binding 斷裂。
+
+過渡期保留 `agent-skills/` 作為 builtin role legacy path；新的 repo-local 結構由 Phase 10 resolver 正式承接，例如：
+
+```text
+.cap/
+  roles/
+  skills/
+  policies/
+  workflows/
+```
+
 來源層級：
 
 ```text
