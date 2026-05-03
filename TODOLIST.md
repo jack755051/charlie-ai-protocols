@@ -138,10 +138,10 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
   - 完成於 P2 #2-b commit `4e8c753`；走 `plan()` 純值路徑，無 disk write。
 - [x] 新增 `cap project constitution --from-file`
   - 完成於 P2 #2-b commit `4e8c753`；同時收 JSON / YAML（依 Q3 = A），smoke 8 cases / 40 assertions 覆蓋。
-- [ ] 文件化 `constitution / compile / run-task / run` 的差異
-  - 進度：boundary memo §5 已寫對照表（P2 #1 commit `01cc993`）；尚需從 memo 落地到 `cap-entry.sh` help 與 `docs/cap/ARCHITECTURE.md`（P2 #7 動作項）。
-- [ ] 更新 CLI help，避免 Project Constitution 與 Task Constitution 混用
-  - 進度：`cap project` 端 help 已更新（commit `4e8c753`）；`cap workflow constitution` 端 deprecation warning 留 P2 #6。
+- [x] 文件化 `constitution / compile / run-task / run` 的差異
+  - 完成於 P2 #7 commit (current branch)；boundary memo §5 仍是 SSOT，`docs/cap/ARCHITECTURE.md` 新增「🪪 Constitution Command Boundary」章節（概述 + mini 對照表 + link 回 boundary memo §5），`scripts/cap-entry.sh [Task]` block 補一行 hint 指向該章節。Mini 對照表不複製完整 6-command body，避免雙寫漂移。
+- [x] 更新 CLI help，避免 Project Constitution 與 Task Constitution 混用
+  - `cap project` 端 help 於 commit `4e8c753` 更新；`cap workflow constitution` 端 deprecation warning 於 P2 #6 commit `0314663` 落地（`CAP_DEPRECATION_SILENT=1` 抑制）；`cap-entry.sh` 的入口 help 於 P2 #7 commit (current branch) 加一行邊界 hint。
 
 ### Phase 4: Supervisor Structured Orchestration
 

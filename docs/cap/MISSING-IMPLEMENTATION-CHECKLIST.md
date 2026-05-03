@@ -110,7 +110,7 @@
 - [x] 拆清 Project Constitution 與 Task Constitution 語意
   - 交付物：CLI / docs / workflow naming 調整
   - 驗收：`constitution / compile / run-task / run` 差異清楚可查
-  - 進度：boundary 與 5-surface 分流定於 P2 #1 commit `01cc993`（`docs/cap/CONSTITUTION-BOUNDARY.md`）；CLI 落地於 P2 #6 commit (current branch) — 新增 `scripts/cap-task.sh` 與 `cap task constitution` 入口（透過 `scripts/cap-entry.sh task)` 路由），舊 `cap workflow constitution` 加 deprecation warning 且行為與 exit code 不變，`CAP_DEPRECATION_SILENT=1` 可抑制；`cap workflow compile` / `cap workflow run-task` 命名合理，依 boundary memo §4.1 KEEP 標記**不動**。`cap task plan / compile / run` 已在 `cap-task.sh` usage 中標為 (planned) 並回 exit 2，避免使用者誤以為已實作。文件對照表的 cap-entry / ARCHITECTURE 鏡像版本由 P2 #7 處理。
+  - 進度：boundary 與 5-surface 分流定於 P2 #1 commit `01cc993`（`docs/cap/CONSTITUTION-BOUNDARY.md`）；CLI 落地於 P2 #6 commit `0314663` — 新增 `scripts/cap-task.sh` 與 `cap task constitution` 入口（透過 `scripts/cap-entry.sh task)` 路由），舊 `cap workflow constitution` 加 deprecation warning 且行為與 exit code 不變，`CAP_DEPRECATION_SILENT=1` 可抑制；`cap workflow compile` / `cap workflow run-task` 命名合理，依 boundary memo §4.1 KEEP 標記**不動**。`cap task plan / compile / run` 已在 `cap-task.sh` usage 中標為 (planned) 並回 exit 2，避免使用者誤以為已實作。文件對照表於 P2 #7 commit (current branch) 落地：`docs/cap/ARCHITECTURE.md` 新增「🪪 Constitution Command Boundary」章節（概述 + mini 對照表 + link 回 boundary memo §5 作為 SSOT），`cap-entry.sh [Task]` block 加一行邊界 hint 指向該章節，避免在 entry help 重複完整對照表。
 
 - [ ] 調整 `schemas/workflows/project-constitution.yaml` 輸出契約
   - 交付物：workflow output contract

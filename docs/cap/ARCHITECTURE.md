@@ -318,11 +318,13 @@ Handoff ticket（Type C 派工單）是 supervisor 派工給單一 sub-agent ste
 ### CLI 指令
 
 ```bash
-cap workflow constitution "用 Tauri 做個小工具"    # 只產出任務憲法
-cap workflow compile "用 Tauri 做個小工具"          # 編譯最小 workflow
+cap task constitution "用 Tauri 做個小工具"          # 只產出任務憲章（取代 cap workflow constitution）
+cap workflow compile "用 Tauri 做個小工具"           # 編譯最小 workflow
 cap workflow run-task "用 Tauri 做個小工具"          # 編譯並執行
 cap workflow run-task --dry-run "用 Tauri 做個小工具" # 只顯示編譯結果
 ```
+
+> ⚠️ `cap workflow constitution` 自 P2 #6 起 **deprecated**，行為與 exit code 不變但會在 stderr emit `[deprecated]` 提示；新代碼一律改用 `cap task constitution`。可設 `CAP_DEPRECATION_SILENT=1` 抑制過渡期警告。
 
 ### 與固定 workflow 的關係
 
@@ -330,6 +332,37 @@ cap workflow run-task --dry-run "用 Tauri 做個小工具" # 只顯示編譯結
 - **Compiled workflow**：新需求、不確定是否需要完整流程、skill 可用性變動
 
 兩者雙軌並存，不互相取代。
+
+---
+
+## 🪪 Constitution Command Boundary
+
+CAP 在 v0.21+ 將 "constitution" 一詞的雙語意拆清：
+
+- **Project Constitution** — repo 級長期治理憲章。命令家族：`cap project constitution ...`。落地在 `<repo>/.cap.constitution.yaml`（SSOT）+ `~/.cap/projects/<id>/constitutions/project/<stamp>/` 4 件套 snapshot。
+- **Task Constitution** — 單次任務憲章。命令家族：`cap task constitution`（正式名稱）/ `cap workflow constitution`（deprecated alias）。落地在 `~/.cap/projects/<id>/constitutions/constitution-<stamp>.json`（不寫 repo）。
+
+兩者 schema、storage 層、capability 都已分流；唯一的歷史包袱是 CLI 命名（`cap workflow constitution` 字面像 project 但實際 task）。P2 #6 已透過 alias + deprecation 收斂這條線。
+
+### Mini 對照表
+
+| Command | 屬於 | 用途 | 是否寫 repo SSOT |
+|---|---|---|---|
+| `cap project constitution --prompt` / `--from-file` | Project | 產出或匯入 4 件套 snapshot | ✗（需 `--promote`）|
+| `cap project constitution --promote STAMP` / `--latest` | Project | 把 valid snapshot 寫回 `.cap.constitution.yaml` | ✓（覆寫前自動備份）|
+| `cap task constitution "<prompt>"` | Task | 產出任務憲章 JSON | ✗ |
+| `cap workflow constitution "<prompt>"` ⚠️ deprecated | Task | 同上；保留行為但 emit deprecation warning | ✗ |
+| `cap workflow compile "<prompt>"` | Task | 任務憲章 + capability graph + compiled workflow + binding | ✗ |
+| `cap workflow run-task "<prompt>"` | Task | compile + 執行 | ✗（除非 workflow step 寫）|
+
+完整 6-command mapping、5-surface（CLI / workflow / capability / schema / storage）邊界與 storage layout 規則，以 [`docs/cap/CONSTITUTION-BOUNDARY.md`](./CONSTITUTION-BOUNDARY.md) §5（差異對照表）與 §4.5（storage layout）為單一事實來源。本章節故意不複製完整內容，避免雙寫漂移。
+
+### 命令選擇 cheat sheet
+
+- 設專案長期治理規則 → `cap project constitution`
+- 把單一 prompt 拆解成任務憲章草稿 → `cap task constitution`（不要再用 `cap workflow constitution`）
+- 把 prompt 變成可跑的 workflow → `cap workflow run-task`
+- 跑既有 fixed workflow → `cap workflow run <id>`
 
 ---
 

@@ -40,6 +40,7 @@ COMMAND                            DESCRIPTION
   cap task plan "<需求>"             (planned) task constitution + capability graph 預覽
   cap task compile "<需求>"          (planned) task constitution + graph + compiled workflow + binding bundle
   cap task run "<需求>"              (planned) compile + execute via runtime binder
+  -> cap task ... 與 cap workflow ... 命令邊界詳見 docs/cap/ARCHITECTURE.md "Constitution Command Boundary" 章節
 
 [Workflow]
   cap workflow list                列出所有 workflow（靜態清單）
