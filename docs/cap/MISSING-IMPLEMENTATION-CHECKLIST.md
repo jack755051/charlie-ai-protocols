@@ -138,7 +138,7 @@
 - [x] 新增 `cap project constitution "<prompt>"`
   - 交付物：CLI command
   - 驗收：能跑 project constitution workflow 並保存 snapshot
-  - 進度：done in P2 #2-b commits `d127efd` (CLI skeleton) + `4e8c753` (workflow wrap + 四件套寫入)。`scripts/cap-project.sh constitution` dispatcher 已通；prompt-mode 內部 subprocess wrap 已實作但**整合 smoke 留 P2 #8**（依 Q1 = A 的 ratification）。
+  - 進度：done in P2 #2-b commits `d127efd` (CLI skeleton) + `4e8c753` (workflow wrap + 四件套寫入)。`scripts/cap-project.sh constitution` dispatcher 已通；prompt-mode subprocess wrap 已實作；P2 #8 commit (current branch) 補 deterministic e2e（`engine/project_constitution_runner.py:_invoke_workflow` 加 `CAP_PROJECT_CONSTITUTION_WORKFLOW_STUB` env seam + `tests/e2e/fixtures/project-constitution-stub.sh` 4 mode + `tests/e2e/test-cap-project-constitution-prompt.sh` 4 cases / 36 assertions），無 AI / 無 network 跑通 happy / missing-fence / invalid-schema / nonzero-exit 全部失敗路徑。
 
 - [x] 新增 `cap project constitution --dry-run`
   - 交付物：dry-run mode
@@ -154,6 +154,8 @@
   - 交付物：promote mode
   - 驗收：只有 valid snapshot 可寫回 `.cap.constitution.yaml` 或指定目標
   - 進度：done in P2 #5 commit (current branch)。`engine/project_constitution_runner.py:_run_promote` 在寫入前永遠重跑 jsonschema（P2 #5 Q3 = A：不信任 snapshot 內 `validation.json`），失敗時 repo SSOT 完全不動；既有 `.cap.constitution.yaml` 在覆寫前先複製成 `.cap.constitution.yaml.backup-<TIMESTAMP>`（P2 #5 Q2 = B：對齊 `scripts/workflows/persist-constitution.sh:296`）。`--promote STAMP` 強制顯式指定（P2 #5 Q1 = A），`--latest` 為獨立便利旗標、不會自動套用。本 commit 故意只寫 `.cap.constitution.yaml`，不寫 `docs/cap/constitution.md`（依 P2 #1 §4.5 與本輪 ratification 邊界，markdown 副本留待專屬 `--write-markdown` 旗標）。
+
+> **P2 closeout (P2 #8, current branch)**：CLI / runtime / docs / smoke gate 已對齊。`cap project constitution` 與 `cap task constitution` 兩條 CLI 落地、`--from-file` / `--promote` / `--latest` 全 wire；prompt-mode 走 `CAP_PROJECT_CONSTITUTION_WORKFLOW_STUB` deterministic stub e2e（4 cases / 36 assertions）、alias 等價走 stdout byte-equal + canonical JSON parity e2e（9 assertions）；`scripts/workflows/smoke-per-stage.sh` 升為 31 step / **31 passed / 0 failed / 0 skipped**。仍開放：constitution snapshot versioning、Project Constitution workflow YAML 輸出契約調整（Markdown + JSON 直接 emit，不需 runner 自抽）— 兩項屬於 P2 後續加值，不阻擋 P3 開工。
 
 ## P3：Supervisor Structured Orchestration
 

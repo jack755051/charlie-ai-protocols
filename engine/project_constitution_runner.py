@@ -727,14 +727,33 @@ def _invoke_workflow(prompt: str, project_root: Path) -> WorkflowOutcome:
     not want to re-host inside the runner process. The runner only cares
     about the exit code and the run dir produced under
     ``~/.cap/projects/project-constitution-bootstrap/...``.
+
+    Test seam: ``CAP_PROJECT_CONSTITUTION_WORKFLOW_STUB`` may point at a
+    deterministic stub script that mimics cap-workflow.sh's contract
+    (write ``<idx>-draft_constitution.md`` under the bootstrap project's
+    run dir and exit with the desired code). Used by P2 #8 e2e fixtures
+    so prompt-mode coverage does not require a real AI agent. The stub
+    receives the prompt as ``$1`` and is invoked under the same ``cwd``
+    so any ``CAP_HOME`` / ``CAP_STUB_*`` environment overrides apply
+    consistently.
     """
-    if not _CAP_WORKFLOW_SH.is_file():
+    stub_override = os.environ.get("CAP_PROJECT_CONSTITUTION_WORKFLOW_STUB")
+    if stub_override:
+        stub_path = Path(stub_override)
+        if not stub_path.is_file():
+            raise ProjectConstitutionRunnerError(
+                f"CAP_PROJECT_CONSTITUTION_WORKFLOW_STUB={stub_override} "
+                "does not point to a regular file"
+            )
+        cmd = ["bash", str(stub_path), prompt]
+    elif _CAP_WORKFLOW_SH.is_file():
+        cmd = ["bash", str(_CAP_WORKFLOW_SH), "run", "project-constitution", prompt]
+    else:
         raise ProjectConstitutionRunnerError(
             f"cap-workflow.sh not found at {_CAP_WORKFLOW_SH}; "
             "the runner must be invoked from a cap installation tree."
         )
 
-    cmd = ["bash", str(_CAP_WORKFLOW_SH), "run", "project-constitution", prompt]
     proc = subprocess.run(
         cmd,
         cwd=str(project_root),

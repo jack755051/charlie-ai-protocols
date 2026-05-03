@@ -31,8 +31,10 @@
 #  25. tests/scripts/test-project-doctor.sh                      (P1 #7 cap project doctor)
 #  26. tests/scripts/test-cap-project-constitution.sh            (P2 #2 + #5 cap project constitution: dry-run + from-file + validation + promote)
 #  27. tests/scripts/test-cap-task-constitution.sh               (P2 #6 cap task constitution alias + cap workflow constitution deprecation)
-#  28. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report all-pass)
-#  29. tests/e2e/test-ticket-consumption.sh                      (must report all-pass)
+#  28. tests/e2e/test-cap-project-constitution-prompt.sh         (P2 #8 prompt-mode e2e via CAP_PROJECT_CONSTITUTION_WORKFLOW_STUB; deterministic, no AI)
+#  29. tests/e2e/test-cap-task-constitution-equivalence.sh       (P2 #8 cap task / cap workflow constitution byte-equal stdout + canonical JSON parity)
+#  30. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report all-pass)
+#  31. tests/e2e/test-ticket-consumption.sh                      (must report all-pass)
 #
 # Resolution order for the bind command:
 #   1. `cap` on PATH (installed via cap installer)
@@ -189,6 +191,8 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-project-status.sh" "cap project sta
 run_fixture "${REPO_ROOT}/tests/scripts/test-project-doctor.sh" "cap project doctor (P1 #7)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-cap-project-constitution.sh" "cap project constitution (P2 #2 + #5: dry-run + from-file + validation + promote)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-cap-task-constitution.sh" "cap task constitution alias + cap workflow constitution deprecation (P2 #6)"
+run_fixture "${REPO_ROOT}/tests/e2e/test-cap-project-constitution-prompt.sh" "cap project constitution prompt-mode e2e (P2 #8, stub-driven)"
+run_fixture "${REPO_ROOT}/tests/e2e/test-cap-task-constitution-equivalence.sh" "cap task constitution alias equivalence e2e (P2 #8)"
 run_fixture "${REPO_ROOT}/tests/e2e/test-project-spec-pipeline-deterministic.sh" "spec-pipeline deterministic e2e"
 run_fixture "${REPO_ROOT}/tests/e2e/test-ticket-consumption.sh" "ticket consumption e2e"
 

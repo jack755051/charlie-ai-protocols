@@ -131,7 +131,7 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 - [x] 決定 `cap workflow constitution` 是否保留為 task constitution 入口
   - 完成於 P2 #6 commit (current branch)；保留行為與 exit code，加 stderr 一行 `[deprecated] cap workflow constitution is deprecated; use cap task constitution`，並支援 `CAP_DEPRECATION_SILENT=1` 抑制。`cap workflow compile` / `cap workflow run-task` 命名合理，**不動**（依 boundary memo §4.1 KEEP 標記）。
 - [x] 新增或規劃 `cap project constitution "<prompt>"`
-  - 完成於 P2 #2-b commits `d127efd` + `4e8c753`；prompt-mode integration smoke 留 P2 #8（依 Q1 = A）。
+  - 完成於 P2 #2-b commits `d127efd` + `4e8c753`；prompt-mode integration smoke 由 P2 #8 commit (current branch) 補上（`tests/e2e/test-cap-project-constitution-prompt.sh` 4 cases / 36 assertions，env-driven stub 完全 deterministic，無 AI / 無 network）。
 - [x] 新增 `cap project constitution --promote`
   - 完成於 P2 #5 commit (current branch)；`--promote STAMP` 強制顯式 stamp，`--latest` 是獨立便利旗標。重跑 jsonschema、寫入前自動備份、markdown 副本留待 `--write-markdown` opt-in。
 - [x] 新增 `cap project constitution --dry-run`
@@ -142,6 +142,8 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
   - 完成於 P2 #7 commit (current branch)；boundary memo §5 仍是 SSOT，`docs/cap/ARCHITECTURE.md` 新增「🪪 Constitution Command Boundary」章節（概述 + mini 對照表 + link 回 boundary memo §5），`scripts/cap-entry.sh [Task]` block 補一行 hint 指向該章節。Mini 對照表不複製完整 6-command body，避免雙寫漂移。
 - [x] 更新 CLI help，避免 Project Constitution 與 Task Constitution 混用
   - `cap project` 端 help 於 commit `4e8c753` 更新；`cap workflow constitution` 端 deprecation warning 於 P2 #6 commit `0314663` 落地（`CAP_DEPRECATION_SILENT=1` 抑制）；`cap-entry.sh` 的入口 help 於 P2 #7 commit (current branch) 加一行邊界 hint。
+
+> **Phase 3 closeout (P2 #8, current branch)**：`cap project constitution` 與 `cap task constitution` CLI 全 wire（含 `--from-file` / `--promote STAMP` / `--latest`）、Project vs Task constitution 5-surface 邊界文件化（`docs/cap/CONSTITUTION-BOUNDARY.md` + `docs/cap/ARCHITECTURE.md` Constitution Command Boundary 章節）、`cap workflow constitution` 加 deprecation banner（`CAP_DEPRECATION_SILENT=1` 抑制）、deterministic release-gate smoke 落地（prompt-mode e2e 4 cases / 36 assertions + alias equivalence e2e 9 assertions），全部不依賴 AI / network。`scripts/workflows/smoke-per-stage.sh` **31 passed / 0 failed / 0 skipped**。仍開放但不阻擋 Phase 4：constitution snapshot versioning、Project Constitution workflow YAML 直接 emit Markdown / JSON 契約調整。
 
 ### Phase 4: Supervisor Structured Orchestration
 
@@ -270,7 +272,7 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 
 - [x] `cap project init` — P1 #6 commit `982ca90`
 - [x] `cap project status` — P1 #5 commit `f0eebc0`
-- [x] `cap project constitution "<prompt>"` — P2 #2-b commits `d127efd` + `4e8c753`（prompt-mode integration smoke 留 P2 #8）
+- [x] `cap project constitution "<prompt>"` — P2 #2-b commits `d127efd` + `4e8c753`；prompt-mode deterministic e2e 由 P2 #8 補上（current branch）。
 - [x] `cap task constitution "<prompt>"` — P2 #6 commit (current branch)；thin alias 委派 `cap workflow constitution`，舊路徑保留並 emit deprecation warning。
 - [ ] `cap task plan "<prompt>"` — (planned) `cap task` 入口已建立，subcommand 尚未實作。
 - [ ] `cap task compile "<prompt>"` — (planned) 同上。
