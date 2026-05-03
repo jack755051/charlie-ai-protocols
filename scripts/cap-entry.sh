@@ -61,6 +61,12 @@ COMMAND                            DESCRIPTION
   cap workflow run --dry-run <id> [prompt]  只顯示執行計畫，不真的執行
   cap workflow <id> "<prompt>"     run 的簡寫
 
+[Supervisor Orchestration]
+  cap workflow bind supervisor-orchestration       envelope schema + drift gate（P3 #4-#5-c 已落地的最小 wiring）
+  -> P3 目前提供 envelope validation / extract / xref / resolve helpers + four-part snapshot writer + envelope-driven compile entry
+     runtime dispatcher（halt / retry / route_back / escalate 在 step 真正失敗時的行為）尚未接通，屬 P5 範疇
+     詳見 docs/cap/ARCHITECTURE.md "Supervisor Orchestration" 章節與 docs/cap/SUPERVISOR-ORCHESTRATION-BOUNDARY.md
+
 [Execution]
   cap run                          啟動 CrewAI 引擎 (FRAMEWORK=nextjs|angular|nuxt)
   cap agent <agent> [prompt]       啟動指定 agent 互動 session

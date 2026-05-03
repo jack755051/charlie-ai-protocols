@@ -366,6 +366,91 @@ CAP 在 v0.21+ 將 "constitution" 一詞的雙語意拆清：
 
 ---
 
+## 🎼 Supervisor Orchestration
+
+P3 系列把 supervisor 對單一 prompt 的「整體結構化決策」固化成 Supervisor Orchestration Envelope，並沿著 producer → schema → runtime gate → snapshot → compile 的鏈路把 envelope 接進 CAP 的執行基礎建設。**目前已落地的是 envelope flow 的「驗證 + 結構化資料路由」半邊；runtime dispatcher（step 失敗時實際 halt / retry / route_back / escalate）尚未接通**，屬 P5 AgentSessionRunner 範疇 — 不要把現況讀成「supervisor 能控制 runtime 的 retry 策略」。
+
+### Envelope flow 現況
+
+```text
+supervisor sub-agent  →  envelope JSON (fence-wrapped)
+                               │
+                               ▼
+                  validate-supervisor-envelope.sh  (schema-class executor, exit 41 on fail)
+                               │
+                               ▼
+                  engine.supervisor_envelope helpers
+                  ├─ extract_envelope            (fence parse)
+                  ├─ validate_envelope           (jsonschema + drift baseline)
+                  ├─ check_envelope_drift        (envelope vs task_constitution)
+                  ├─ check_failure_routing_xrefs (failure_routing → graph node id)
+                  └─ resolve_failure_routing     (per-step routing 對應表)
+                               │
+            ┌──────────────────┴──────────────────┐
+            ▼                                     ▼
+  engine.orchestration_snapshot           engine.task_scoped_compiler
+  └─ write_snapshot                       └─ compile_task_from_envelope
+     four-part on disk                       envelope-driven compile path
+     (envelope.json / .md /                  + failure_routing_resolved
+      validation.json / source-prompt.txt)   + compile_hints_applied
+                                                │
+                                                ▼
+                               ⚠ runtime dispatcher (P5 territory, NOT yet wired)
+                                  - actual halt / retry / route_back / escalate
+                                  - per-step ticket failure_routing injection
+                                  - workflow YAML wiring beyond the minimal
+                                    supervisor-orchestration.yaml binding test
+```
+
+### P3 已落地的 commit 一覽
+
+| 階段 | 內容 | 主要 commit |
+|---|---|---|
+| P3 #1 | Boundary memo（5-surface 切分）| `e81a203` (`docs/cap/SUPERVISOR-ORCHESTRATION-BOUNDARY.md`) |
+| P3 #2 | Schema tightening（envelope `failure_routing` required） | `619e913` |
+| P3 #3 | Producer 規範（`agent-skills/01-supervisor-agent.md` §3.8）+ envelope helpers | `4bf13a0` |
+| P3 #4 | Runtime validation hook（schema-class shell executor + capability） | `d7e5358` |
+| P3 #5 boundary memo | Storage / compile-bind transition 邊界 | `4e3b4b1` (`docs/cap/ORCHESTRATION-STORAGE-BOUNDARY.md`) |
+| P3 #5-a | Storage writer（four-part snapshot 模組）| `0adc2da` |
+| P3 #5-b | Compile entry（`compile_task_from_envelope`） | `79bfc88` |
+| P3 #5-c | Workflow YAML wire（minimal binding test） | `6acb9a8` |
+| P3 #6 | Failure routing resolver + xref + compile entry gate | `e9b5b05` |
+
+### Module map（agent 查 repo 時先看這裡，不要全 repo grep）
+
+| Path | 職責 |
+|---|---|
+| [`engine/supervisor_envelope.py`](../../engine/supervisor_envelope.py) | Envelope helpers：`extract_envelope` / `validate_envelope` / `check_envelope_drift` / `check_failure_routing_xrefs` / `resolve_failure_routing` + CLI（`extract` / `validate` / `drift` / `xref` / `resolve` 五 subcommand）。Pure helpers，無 I/O 副作用以外的 disk write，是 envelope 操作的 SSOT |
+| [`engine/orchestration_snapshot.py`](../../engine/orchestration_snapshot.py) | Four-part snapshot writer：`write_snapshot` 寫 `~/.cap/projects/<id>/orchestrations/<stamp>/` 下 `envelope.json` / `envelope.md` / `validation.json` / `source-prompt.txt`，validation fail 仍落地（doctor / status 觀察 partial state） |
+| [`engine/task_scoped_compiler.py`](../../engine/task_scoped_compiler.py) | 雙路徑 compile：legacy `compile_task(source_request)` 永久保留 + 新 `compile_task_from_envelope(envelope)`（入口跑 schema validate + drift + xref 三 gate；output dict 9 keys 含 `failure_routing_resolved` / `compile_hints_applied`） |
+| [`scripts/workflows/validate-supervisor-envelope.sh`](../../scripts/workflows/validate-supervisor-envelope.sh) | Schema-class executor wrapper，委派 `engine.supervisor_envelope` 三 stage（extract / validate / drift），任一失敗 exit 41（對齊 `policies/workflow-executor-exit-codes.md` schema-class 政策）。**Pure thin wrapper — 不重寫 Python domain logic** |
+| [`schemas/workflows/supervisor-orchestration.yaml`](../../schemas/workflows/supervisor-orchestration.yaml) | Minimal binding workflow：單一 step `validate_supervisor_envelope` 引用 `supervisor_envelope_validation` capability。P3 #5-c 的 wiring smoke 對象 — 不接 storage / compile / failure routing dispatch，那是後續 cycle 的範圍 |
+
+### 已知未接通（避免誤讀）
+
+- **Runtime dispatcher 行為**（halt / retry / route_back_to / escalate_user 在 step 真正失敗時被執行）尚未接 — P5 AgentSessionRunner 範疇。
+- **Envelope → Type C ticket 鏈路** 尚未連通：`emit-handoff-ticket.sh` 不讀 envelope.failure_routing；envelope 解析出來的 routing 資訊還沒有 producer 把它注入 ticket。
+- **Per-stage pipeline 整合**：既有 `project-spec-pipeline` / `project-implementation-pipeline` / `project-qa-pipeline` 不引用 envelope flow；它們繼續走 task constitution + handoff ticket 老路。
+- **Snapshot writer + compile entry 的 capability 包裝**：兩個模組目前是 standalone Python helpers，沒有 capability registration、沒有 shell executor，因此不能被 workflow YAML 直接引用。
+
+完整 boundary 細節在 [`docs/cap/SUPERVISOR-ORCHESTRATION-BOUNDARY.md`](./SUPERVISOR-ORCHESTRATION-BOUNDARY.md) 與 [`docs/cap/ORCHESTRATION-STORAGE-BOUNDARY.md`](./ORCHESTRATION-STORAGE-BOUNDARY.md)；本章節故意只摘要 + 引用，避免雙寫漂移。
+
+---
+
+## ⛽ Runtime Cost & Token Budget Guardrails
+
+CAP 的多層 helper / executor / workflow 結構容易誘發「重複實作」（同一條邏輯在 Python helper、shell executor、workflow YAML 各寫一份）與「掃描成本浪費」（agent 第一刀就全 repo grep 找入口）。下列 5 條紀律是 P3 收斂後的 engineering discipline，所有後續 cycle（包含 Codex / Claude / 任何 sub-agent）都應遵守：
+
+1. **Reusable core helper, not one-shot script** — 新增 Python module 必須是 reusable core helper（被多個 caller import / CLI / executor 共用），不能為單一 workflow case 新增一次性 script。同一條邏輯出現在第二處時，先抽 helper 再寫第二個 caller。
+2. **Shell executor as wrapper only** — `scripts/workflows/*.sh` 是 thin wrapper，職責是接 `CAP_WORKFLOW_INPUT_CONTEXT` 與處理 exit code（per `policies/workflow-executor-exit-codes.md`），**不重寫** Python domain logic。如果 shell 要做的事超過 input parsing + subprocess invocation + exit-code mapping，應該抽 Python helper。
+3. **Workflow YAML 重用 capability / executor** — 新 workflow 優先引用既有 capability 與 executor，不為單一 case 新增 capability。引入新 capability 必須在 `schemas/capabilities.yaml` 註冊，並在 `.cap.constitution.yaml` `allowed_capabilities` 列入（缺第二步會永遠 `blocked_by_constitution`）。
+4. **Smoke 分層**：每個 commit 跑 focused fixture（該 commit 改的部分），**只在收斂點 / release gate 跑** `scripts/workflows/smoke-per-stage.sh` full smoke（避免 commit 級別反覆跑全 36 step）。Full smoke 用於 phase closeout、release tag 前、或跨多 module 改動的最終確認。
+5. **Module map first, grep second** — agent 查 repo 時先看本檔的 module map（前一章節）以及目標 phase 的 boundary memo（如 `docs/cap/CONSTITUTION-BOUNDARY.md` / `docs/cap/SUPERVISOR-ORCHESTRATION-BOUNDARY.md` / `docs/cap/ORCHESTRATION-STORAGE-BOUNDARY.md`），確認入口模組 / 既有 capability 後再開 grep；避免從 0 重新探索 repo 結構。
+
+違反這 5 條的 commit 會增加 token / 維護成本，且容易讓「同一邏輯三處實作」變成隱性技術債。Watcher / Logger 在 milestone gate 應審視這條 discipline，PR review 也應引用本章節作為簡要審視 checklist。
+
+---
+
 ## 🏗 DDD 整合策略與演進路線 (DDD Integration Strategy)
 
 ### 現狀 (v0.2.0)
