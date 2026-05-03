@@ -90,9 +90,10 @@
   - 驗收：可偵測缺目錄、壞 metadata、不可寫 storage
   - 進度：done in `v0.22.0` (in-progress)；新增 `engine/storage_health.py` 作為 read-only diagnostic core（`StorageHealthChecker` + `run_health_check`），`HealthIssueKind` 12 種分類涵蓋 missing_storage_root / unwritable_storage / missing_directory / missing_ledger / malformed_ledger / forward_incompat_ledger / ledger_schema_drift / ledger_origin_mismatch / legacy_ledger_pending_migration / cap_version_mismatch / stale_storage / unknown_ledger_field。Exit code 對齊 `policies/workflow-executor-exit-codes.md`：schema-class issue→41、collision→53、generic error→1、warning-only→0。**Read-only 鐵則**：嚴禁寫 ledger（特別是 `last_resolved_at`），避免污染 P1 #4/#7 與 P10 promote 的「實際使用 vs 工具掃描」訊號。新增 `scripts/cap-storage-health.sh` 薄 wrapper（`--format text|json|yaml` + `--strict`），底層直接呼叫 Python core。新增 `tests/scripts/test-storage-health.sh` 覆蓋 10 cases + 1 conditional unwritable case（root 環境跳過），共 26 assertions，wire 進 `smoke-per-stage.sh`：升為 24 step / **24 passed / 0 failed / 0 skipped**。`policies/cap-storage-metadata.md` §6 補上 P1 #4 落地狀態與後續 #5/#6/#7/P10 規劃，明示 read-only 鐵則。
 
-- [ ] 新增 `cap project status`
+- [x] 新增 `cap project status`
   - 交付物：CLI command
   - 驗收：顯示 project id、storage path、constitution status、latest run
+  - 進度：done in `v0.22.0` (in-progress)；新增 `engine/project_status.py` 作為 read-only summary builder（重用 `engine/storage_health.run_health_check`，**禁止重做 health 判斷**），對外 `cap project status` 由 `scripts/cap-project.sh` 分派；輸出欄位：`project_id` / `project_root` / `project_store` / `ledger_path` / `cap_home` / `manifest_cap_version` / `ledger_snapshot` / `constitutions[]` / `constitution_count` / `latest_run` / 嵌套 `health{}`，`--format text|json|yaml` 三種輸出皆支援。Exit code 對齊 storage-health：schema-class issue→41、collision→53、generic error→1、warning-only→0。新增 `tests/scripts/test-project-status.sh` 8 cases / 21 assertions（healthy / ledger snapshot / 多 constitution / latest run mtime 排序 / json+yaml round-trip / malformed→41 / collision→53）；wire 進 `smoke-per-stage.sh`：升為 26 step / **26 passed / 0 failed / 0 skipped**。
 
 - [x] 新增 `cap project init`
   - 交付物：CLI command
@@ -405,7 +406,7 @@
 1. ✓ ~~**P0a Schema-Class Executors Exit Code 政策**~~ done in `v0.21.6`（`5b31856` / `44011ad`；6 個 executor 對齊 exit 41，policy SSOT 升級，smoke-per-stage 15/15）
 2. ✓ ~~**Fresh Claude + Codex provider parity full run**~~ done in `v0.21.6`（Claude `run_20260501192422_033a65f8` 與 Codex `run_20260501234931_27dddbce` 各 16/16 / 43 PASS / 0 FAIL）
 3. ✓ ~~**P0 Runtime Contracts**~~ done in `v0.22.0-rc1`（6 個 schema 共 47 fixture cases，smoke 21/21）
-4. **P1 Project Storage and Identity** ← **in progress**（v0.22.0；#1 strict-mode resolver + #2 identity ledger collision + #3 storage version metadata + #4 storage health check core + #6 `cap project init` done，剩 #5 status / #7 doctor）
+4. **P1 Project Storage and Identity** ← **in progress**（v0.22.0；#1 strict-mode resolver + #2 identity ledger collision + #3 storage version metadata + #4 storage health check core + #5 `cap project status` + #6 `cap project init` done，剩 #7 doctor）
 5. P2 Project Constitution Runner
 6. P3 Supervisor Structured Orchestration
 7. P4 Compiled Workflow and Binding Pipeline

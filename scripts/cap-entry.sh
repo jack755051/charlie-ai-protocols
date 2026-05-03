@@ -30,6 +30,7 @@ COMMAND                            DESCRIPTION
 
 [Project]
   cap project init [--project-id ID] [--force]   初始化 .cap.project.yaml 與 CAP storage
+  cap project status [--format text|json|yaml]  顯示 project_id / 路徑 / ledger / 最新 run
 
 [Workflow]
   cap workflow list                列出所有 workflow（靜態清單）
