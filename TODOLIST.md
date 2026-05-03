@@ -147,7 +147,10 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 
 ### Phase 4: Supervisor Structured Orchestration
 
-- [ ] 定義 Supervisor orchestration output schema
+- [x] **P3 #1 boundary memo (current branch)**：`docs/cap/SUPERVISOR-ORCHESTRATION-BOUNDARY.md` 鎖定 envelope 與 task constitution / capability graph / compiled workflow / handoff ticket / handoff summary 5 個鄰居在 producer / schema / consumer / validation / storage 5 surface 的分流。三項拍板：(Q1=A) producer 是 supervisor sub-agent 自身，envelope JSON 包在 `<<<SUPERVISOR_ORCHESTRATION_BEGIN/END>>>` fence 內；(Q2=A) storage 走 `~/.cap/projects/<id>/orchestrations/<stamp>/` 四件套（envelope.json / envelope.md / validation.json / source-prompt.txt），對稱 P2；(Q3=A) `failure_routing` 補入 envelope schema 為 required。
+- [x] **P3 #2 schema tightening (current branch)**：`schemas/supervisor-orchestration.schema.yaml` 加 `failure_routing` block 為 envelope-level required，含 `default_action` enum (halt / route_back_to / retry / escalate_user，對齊 `handoff-ticket.schema.yaml` enum)、`default_route_back_to_step` / `default_max_retries` 條件欄位、`overrides[]` per-step override array（每筆 require step_id + on_fail）；`tests/scripts/test-supervisor-orchestration-schema.sh` 從 10 cases 擴到 15 cases（補 P3 + N9-N12 涵蓋 routing valid / 缺欄位 / enum 違反 / overrides 缺 step_id）。schema 仍維持 envelope-only validation 分層，nested artifact body 由 sibling schema 各自驗。
+- [x] 定義 Supervisor orchestration output schema
+  - 完成 schema body：P0 #4 commit `82ad424`（v0.22.0-rc1，10 fixture cases，envelope shape forward contract）；P3 #2 commit (current branch) 加 `failure_routing` required block + 5 新 fixture cases (Positive 3 / Negative 9-12)。Producer 接通由 P3 #3 後續處理。
 - [ ] 實作 `SupervisorOrchestrator`
 - [ ] 實作 supervisor prompt builder
 - [ ] Supervisor 讀取 Project Constitution、user prompt、repo context

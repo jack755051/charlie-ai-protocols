@@ -159,6 +159,10 @@
 
 ## P3：Supervisor Structured Orchestration
 
+> **P3 #1 boundary memo (current branch)**：`docs/cap/SUPERVISOR-ORCHESTRATION-BOUNDARY.md` 鎖定 supervisor envelope 與 5 個鄰居（Task Constitution / Capability Graph / Compiled Workflow / Handoff Ticket Type C / Handoff Summary Type D）在 producer / schema / consumer / validation / storage 5 surface 的分流。三件拍板：(Q1=A) producer 是 supervisor sub-agent，envelope JSON 走 `<<<SUPERVISOR_ORCHESTRATION_BEGIN/END>>>` fence；(Q2=A) storage 走 `~/.cap/projects/<id>/orchestrations/<stamp>/` four-part snapshot，與 P2 對稱；(Q3=A) `failure_routing` 補入 envelope schema 為 required。
+>
+> **P3 #2 schema tightening (current branch)**：`schemas/supervisor-orchestration.schema.yaml` 加 `failure_routing` block（`default_action` enum 對齊 `handoff-ticket.schema.yaml`、`default_route_back_to_step` / `default_max_retries` 條件欄位、`overrides[]` per-step override array），`tests/scripts/test-supervisor-orchestration-schema.sh` 從 10 cases 擴到 15 cases / **15 passed / 0 failed**。Schema 仍是 envelope-only validation；producer / runtime hook / storage writer 留 P3 #3-#4-#5 處理。
+
 - [ ] 實作 `SupervisorOrchestrator`
   - 交付物：engine module
   - 驗收：讀取 user prompt、Project Constitution、repo context 後產生 structured output

@@ -26,6 +26,11 @@
 #   Negative 6: schema_version not in enum
 #   Negative 7: task_constitution wrong type (string instead of object)
 #   Negative 8: governance.context_mode not in enum
+#   Positive 3: full failure_routing with default_action + per-step overrides (P3 #2)
+#   Negative 9: missing failure_routing entirely (P3 #2 envelope-level required)
+#   Negative 10: failure_routing.default_action not in enum (P3 #2)
+#   Negative 11: failure_routing.overrides[].on_fail not in enum (P3 #2)
+#   Negative 12: failure_routing.overrides[] missing required step_id (P3 #2)
 
 set -u
 
@@ -110,7 +115,11 @@ fixture="$(write_fixture "pos-min" '{
     "logger_mode": "milestone_log",
     "context_mode": "summary_first"
   },
-  "compile_hints": {}
+  "compile_hints": {},
+  "failure_routing": {
+    "default_action": "halt",
+    "overrides": []
+  }
 }')"
 rc="$(validate_fixture "${fixture}")"
 assert_eq "exit 0 on minimal valid envelope" "0" "${rc}"
@@ -172,6 +181,10 @@ fixture="$(write_fixture "pos-fullspec" '{
     "skip_optional_unresolved": false,
     "attach_inputs": [],
     "notes": ["supervisor confirmed v0.21.6 baseline; no unresolved P0a items."]
+  },
+  "failure_routing": {
+    "default_action": "halt",
+    "overrides": []
   }
 }')"
 rc="$(validate_fixture "${fixture}")"
@@ -192,7 +205,8 @@ fixture="$(write_fixture "neg-no-graph" '{
     "logger_mode": "milestone_log",
     "context_mode": "summary_first"
   },
-  "compile_hints": {}
+  "compile_hints": {},
+  "failure_routing": {"default_action": "halt", "overrides": []}
 }')"
 rc="$(validate_fixture "${fixture}")"
 assert_eq "exit 1 when capability_graph missing" "1" "${rc}"
@@ -212,7 +226,8 @@ fixture="$(write_fixture "neg-gov-no-logger" '{
     "watcher_mode": "final_only",
     "context_mode": "summary_first"
   },
-  "compile_hints": {}
+  "compile_hints": {},
+  "failure_routing": {"default_action": "halt", "overrides": []}
 }')"
 rc="$(validate_fixture "${fixture}")"
 assert_eq "exit 1 when governance.logger_mode missing" "1" "${rc}"
@@ -233,7 +248,8 @@ fixture="$(write_fixture "neg-bad-role" '{
     "logger_mode": "milestone_log",
     "context_mode": "summary_first"
   },
-  "compile_hints": {}
+  "compile_hints": {},
+  "failure_routing": {"default_action": "halt", "overrides": []}
 }')"
 rc="$(validate_fixture "${fixture}")"
 assert_eq "exit 1 when supervisor_role not in enum" "1" "${rc}"
@@ -254,7 +270,8 @@ fixture="$(write_fixture "neg-bad-goal-stage" '{
     "logger_mode": "milestone_log",
     "context_mode": "summary_first"
   },
-  "compile_hints": {}
+  "compile_hints": {},
+  "failure_routing": {"default_action": "halt", "overrides": []}
 }')"
 rc="$(validate_fixture "${fixture}")"
 assert_eq "exit 1 when governance.goal_stage not in enum" "1" "${rc}"
@@ -275,7 +292,8 @@ fixture="$(write_fixture "neg-bad-fallback" '{
     "logger_mode": "milestone_log",
     "context_mode": "summary_first"
   },
-  "compile_hints": {"fallback_policy": "yolo"}
+  "compile_hints": {"fallback_policy": "yolo"},
+  "failure_routing": {"default_action": "halt", "overrides": []}
 }')"
 rc="$(validate_fixture "${fixture}")"
 assert_eq "exit 1 when compile_hints.fallback_policy not in enum" "1" "${rc}"
@@ -296,7 +314,8 @@ fixture="$(write_fixture "neg-bad-version" '{
     "logger_mode": "milestone_log",
     "context_mode": "summary_first"
   },
-  "compile_hints": {}
+  "compile_hints": {},
+  "failure_routing": {"default_action": "halt", "overrides": []}
 }')"
 rc="$(validate_fixture "${fixture}")"
 assert_eq "exit 1 when schema_version unsupported" "1" "${rc}"
@@ -317,7 +336,8 @@ fixture="$(write_fixture "neg-tc-string" '{
     "logger_mode": "milestone_log",
     "context_mode": "summary_first"
   },
-  "compile_hints": {}
+  "compile_hints": {},
+  "failure_routing": {"default_action": "halt", "overrides": []}
 }')"
 rc="$(validate_fixture "${fixture}")"
 assert_eq "exit 1 when task_constitution is string" "1" "${rc}"
@@ -338,10 +358,161 @@ fixture="$(write_fixture "neg-bad-ctx-mode" '{
     "logger_mode": "milestone_log",
     "context_mode": "interactive_chat"
   },
-  "compile_hints": {}
+  "compile_hints": {},
+  "failure_routing": {"default_action": "halt", "overrides": []}
 }')"
 rc="$(validate_fixture "${fixture}")"
 assert_eq "exit 1 when governance.context_mode not in enum" "1" "${rc}"
+
+# ── Positive 3: full failure_routing with default + overrides (P3 #2) ──
+echo "Positive 3: full failure_routing with per-step overrides"
+fixture="$(write_fixture "pos-failure-routing" '{
+  "schema_version": 1,
+  "task_id": "p3-routing-001",
+  "source_request": "exercise full failure_routing block",
+  "produced_at": "2026-05-03T20:30:00Z",
+  "supervisor_role": "01-Supervisor",
+  "task_constitution": {
+    "task_id": "p3-routing-001",
+    "project_id": "smoke-proj",
+    "source_request": "exercise full failure_routing block",
+    "goal": "verify routing fixture lands valid",
+    "goal_stage": "implementation_preparation",
+    "success_criteria": ["routing surfaces at envelope level"],
+    "non_goals": [],
+    "execution_plan": [
+      {"step_id": "prd",        "capability": "prd_generation"},
+      {"step_id": "tech_plan",  "capability": "technical_planning"},
+      {"step_id": "spec_audit", "capability": "tool_spec_audit"}
+    ]
+  },
+  "capability_graph": {
+    "schema_version": 1,
+    "task_id": "p3-routing-001",
+    "goal_stage": "implementation_preparation",
+    "nodes": [
+      {"step_id": "prd",        "capability": "prd_generation",     "required": true, "depends_on": [],            "reason": "scope"},
+      {"step_id": "tech_plan",  "capability": "technical_planning", "required": true, "depends_on": ["prd"],       "reason": "stack"},
+      {"step_id": "spec_audit", "capability": "tool_spec_audit",    "required": true, "depends_on": ["tech_plan"], "reason": "consistency"}
+    ]
+  },
+  "governance": {
+    "goal_stage": "implementation_preparation",
+    "watcher_mode": "milestone_gate",
+    "logger_mode": "milestone_log",
+    "context_mode": "summary_first"
+  },
+  "compile_hints": {},
+  "failure_routing": {
+    "default_action": "halt",
+    "default_route_back_to_step": null,
+    "default_max_retries": null,
+    "overrides": [
+      {"step_id": "tech_plan",  "on_fail": "route_back_to", "route_back_to_step": "prd",      "max_retries": null},
+      {"step_id": "spec_audit", "on_fail": "retry",         "route_back_to_step": null,        "max_retries": 2},
+      {"step_id": "prd",        "on_fail": "escalate_user", "route_back_to_step": null,        "max_retries": null}
+    ]
+  }
+}')"
+rc="$(validate_fixture "${fixture}")"
+assert_eq "exit 0 on full failure_routing fixture" "0" "${rc}"
+
+# ── Negative 9: missing failure_routing entirely (P3 #2) ──────────────
+echo "Negative 9: missing failure_routing (envelope-level required)"
+fixture="$(write_fixture "neg-no-failure-routing" '{
+  "schema_version": 1,
+  "task_id": "x",
+  "source_request": "x",
+  "produced_at": "2026-05-03T20:30:00Z",
+  "supervisor_role": "01-Supervisor",
+  "task_constitution": {},
+  "capability_graph": {},
+  "governance": {
+    "goal_stage": "informal_planning",
+    "watcher_mode": "final_only",
+    "logger_mode": "milestone_log",
+    "context_mode": "summary_first"
+  },
+  "compile_hints": {}
+}')"
+rc="$(validate_fixture "${fixture}")"
+assert_eq "exit 1 when failure_routing missing" "1" "${rc}"
+
+# ── Negative 10: failure_routing.default_action not in enum (P3 #2) ───
+echo "Negative 10: failure_routing.default_action not in enum"
+fixture="$(write_fixture "neg-bad-default-action" '{
+  "schema_version": 1,
+  "task_id": "x",
+  "source_request": "x",
+  "produced_at": "2026-05-03T20:30:00Z",
+  "supervisor_role": "01-Supervisor",
+  "task_constitution": {},
+  "capability_graph": {},
+  "governance": {
+    "goal_stage": "informal_planning",
+    "watcher_mode": "final_only",
+    "logger_mode": "milestone_log",
+    "context_mode": "summary_first"
+  },
+  "compile_hints": {},
+  "failure_routing": {"default_action": "ignore", "overrides": []}
+}')"
+rc="$(validate_fixture "${fixture}")"
+assert_eq "exit 1 when failure_routing.default_action not in enum" "1" "${rc}"
+
+# ── Negative 11: overrides[].on_fail not in enum (P3 #2) ──────────────
+echo "Negative 11: failure_routing.overrides[].on_fail not in enum"
+fixture="$(write_fixture "neg-override-bad-on-fail" '{
+  "schema_version": 1,
+  "task_id": "x",
+  "source_request": "x",
+  "produced_at": "2026-05-03T20:30:00Z",
+  "supervisor_role": "01-Supervisor",
+  "task_constitution": {},
+  "capability_graph": {},
+  "governance": {
+    "goal_stage": "informal_planning",
+    "watcher_mode": "final_only",
+    "logger_mode": "milestone_log",
+    "context_mode": "summary_first"
+  },
+  "compile_hints": {},
+  "failure_routing": {
+    "default_action": "halt",
+    "overrides": [
+      {"step_id": "prd", "on_fail": "yolo"}
+    ]
+  }
+}')"
+rc="$(validate_fixture "${fixture}")"
+assert_eq "exit 1 when overrides[].on_fail not in enum" "1" "${rc}"
+
+# ── Negative 12: overrides[] missing required step_id (P3 #2) ─────────
+echo "Negative 12: failure_routing.overrides[] missing required step_id"
+fixture="$(write_fixture "neg-override-missing-step-id" '{
+  "schema_version": 1,
+  "task_id": "x",
+  "source_request": "x",
+  "produced_at": "2026-05-03T20:30:00Z",
+  "supervisor_role": "01-Supervisor",
+  "task_constitution": {},
+  "capability_graph": {},
+  "governance": {
+    "goal_stage": "informal_planning",
+    "watcher_mode": "final_only",
+    "logger_mode": "milestone_log",
+    "context_mode": "summary_first"
+  },
+  "compile_hints": {},
+  "failure_routing": {
+    "default_action": "halt",
+    "overrides": [
+      {"on_fail": "halt"}
+    ]
+  }
+}')"
+rc="$(validate_fixture "${fixture}")"
+assert_eq "exit 1 when overrides[] missing step_id" "1" "${rc}"
 
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"

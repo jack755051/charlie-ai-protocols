@@ -38,6 +38,7 @@ required:
   - capability_graph
   - governance
   - compile_hints
+  - failure_routing
 
 properties:
   schema_version:
@@ -159,3 +160,62 @@ properties:
         description: Free-form supervisor notes carried through to the compiled workflow for governance traceability.
         items:
           type: string
+
+  failure_routing:
+    type: object
+    required:
+      - default_action
+    description: |
+      Run-level failure policy plus optional per-step overrides. Mirrors the enum used by
+      schemas/handoff-ticket.schema.yaml `failure_routing.on_fail` so runtime can propagate the
+      supervisor's intent through to per-step Type C tickets verbatim. Producers MUST emit at least
+      `default_action`; an empty `overrides: []` is allowed when the run has no per-step exceptions.
+      Per the P3 #1 boundary memo §4.4 / §7 Q3 = A ratification, routing is a first-class envelope
+      field rather than scattered across sub-agent free-text.
+    properties:
+      default_action:
+        type: string
+        enum:
+          - halt
+          - route_back_to
+          - retry
+          - escalate_user
+        description: |
+          Default behaviour when any step fails and no per-step override applies. Same semantics as
+          `handoff-ticket.failure_routing.on_fail` so runtime can pass the value through unchanged
+          (P3 #5 mapping).
+      default_route_back_to_step:
+        type: [string, "null"]
+        description: Required at producer level when default_action = route_back_to; otherwise null. Step id MUST refer to a node in `capability_graph`; envelope schema only checks shape, cross-reference is verified by P3 #4 runtime hook.
+      default_max_retries:
+        type: [integer, "null"]
+        description: Required at producer level when default_action = retry; otherwise null. Recommended upper bound 1-2 to avoid runaway loops.
+      overrides:
+        type: array
+        description: |
+          Per-step overrides. Each entry replaces `default_action` for the named step. Empty array
+          is allowed; do not omit the field when the run has no overrides — keep it as `[]` so
+          consumers do not have to special-case missing-vs-empty.
+        items:
+          type: object
+          required:
+            - step_id
+            - on_fail
+          properties:
+            step_id:
+              type: string
+              description: Step id matching a node in `capability_graph`. Cross-reference enforced by P3 #4 runtime hook, not by this schema.
+            on_fail:
+              type: string
+              enum:
+                - halt
+                - route_back_to
+                - retry
+                - escalate_user
+              description: Override action; same enum and semantics as `default_action`.
+            route_back_to_step:
+              type: [string, "null"]
+              description: Required when on_fail = route_back_to.
+            max_retries:
+              type: [integer, "null"]
+              description: Required when on_fail = retry.
