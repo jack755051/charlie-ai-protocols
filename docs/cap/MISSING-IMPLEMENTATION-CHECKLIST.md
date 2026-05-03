@@ -100,9 +100,10 @@
   - 驗收：可初始化 `.cap.project.yaml` 與 local storage
   - 進度：done in `v0.22.0` (in-progress)；新增 `scripts/cap-project.sh` 作為 `cap project` subcommand 統一入口（init / status / doctor 三 subcommand 預留），cap-entry.sh `project)` case 路由。Init 純 shell：`--project-id` / `--force` / `--format` / `--project-root` flag；先寫 `.cap.project.yaml`（已存在預設 halt，`--force` 走 in-place rewrite 保留無關 keys），再委派 `scripts/cap-paths.sh ensure` 建 storage + ledger（**重用 P1 #3 v2 producer，不重做 ledger 邏輯**）。Identity-class exit code（41/52/53）一律 propagate verbatim，下游自動化可正確分流。新增 `tests/scripts/test-project-init.sh` 10 cases / 33 assertions（git happy / non-git+--project-id / 缺 id halt / 既存 halt / --force preserve unrelated keys / --force replace id / json+yaml / collision halt 走 cap-paths 53）；wire 進 `smoke-per-stage.sh`：升為 25 step / **25 passed / 0 failed / 0 skipped**。
 
-- [ ] 新增 `cap project doctor`
+- [x] 新增 `cap project doctor`
   - 交付物：CLI command
   - 驗收：可輸出修復建議與 exit code
+  - 進度：done in `v0.22.0` (in-progress)；新增 `engine/project_doctor.py`（**read-only by design**，per P1 #7 brief：`--fix` 接受但不自動修復，僅輸出 `fix_notes` guidance，留待後續 iteration）；`REMEDIATIONS` 字典覆蓋全部 12 種 `HealthIssueKind`（每種至少 2 條具體 remediation step，引用真實 CLI 命令如 `cap project init` / `cap-paths.sh ensure`）。Exit code 對齊 storage-health：schema-class→41、collision→53、generic error→1、warning-only→0。新增 `tests/scripts/test-project-doctor.sh` 10 cases / 31 assertions（healthy / missing storage root / missing subdir / missing ledger / malformed→41 / forward-incompat→41 / origin mismatch→53 / legacy v1→0 warning / json round-trip / --fix read-only contract）；wire 進 `smoke-per-stage.sh`：升為 27 step / **27 passed / 0 failed / 0 skipped**。`scripts/cap-entry.sh` 補 `cap project doctor` 進 `[Project]` 區塊；`policies/cap-storage-metadata.md` §6 重構為「6.1 P1 #4 落地 / 6.2 P1 #5/#6/#7 已落地 / 6.3 後續規劃」三段，明示 doctor read-only 鐵則與 `--fix` 後續 iteration 邊界。
 
 ## P2：Project Constitution Runner
 
@@ -406,7 +407,7 @@
 1. ✓ ~~**P0a Schema-Class Executors Exit Code 政策**~~ done in `v0.21.6`（`5b31856` / `44011ad`；6 個 executor 對齊 exit 41，policy SSOT 升級，smoke-per-stage 15/15）
 2. ✓ ~~**Fresh Claude + Codex provider parity full run**~~ done in `v0.21.6`（Claude `run_20260501192422_033a65f8` 與 Codex `run_20260501234931_27dddbce` 各 16/16 / 43 PASS / 0 FAIL）
 3. ✓ ~~**P0 Runtime Contracts**~~ done in `v0.22.0-rc1`（6 個 schema 共 47 fixture cases，smoke 21/21）
-4. **P1 Project Storage and Identity** ← **in progress**（v0.22.0；#1 strict-mode resolver + #2 identity ledger collision + #3 storage version metadata + #4 storage health check core + #5 `cap project status` + #6 `cap project init` done，剩 #7 doctor）
+4. **P1 Project Storage and Identity** ← **done in v0.22.0**（#1 strict-mode resolver + #2 identity ledger collision + #3 storage version metadata + #4 storage health check core + #5 `cap project status` + #6 `cap project init` + #7 `cap project doctor` 全部落地；smoke 27/27 全綠）
 5. P2 Project Constitution Runner
 6. P3 Supervisor Structured Orchestration
 7. P4 Compiled Workflow and Binding Pipeline

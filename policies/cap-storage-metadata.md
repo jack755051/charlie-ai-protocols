@@ -78,9 +78,13 @@
 - **Read-only 鐵則**：health check **嚴禁**寫 ledger，特別是 `last_resolved_at`；違反這條會把 §4 的「實際使用 vs 工具掃描」訊號污染掉，導致後續 P10 promote 與 staleness 判定失準。Producer-side 的 collision halt（cap-paths exit 53）仍走原路徑；health check 只是同一語意在 read-only 視角的回報，兩者不互相取代。
 - **健康狀態分類**：`HealthIssueKind` 9 種 error + 4 種 warning（含 `legacy_ledger_pending_migration`、`cap_version_mismatch`、`stale_storage`、`unknown_ledger_field`），每一種都有對應 fixture 在 `tests/scripts/test-storage-health.sh`（10 cases + 1 conditional）。
 
-### 6.2 後續規劃（仍未實作）
+### 6.2 P1 #5/#6/#7 已落地（v0.22.0-rc）
 
-- **P1 #5 `cap project init`**：互動式建立 `.cap.project.yaml` + ledger，給 non-git folder 補 identity 來源。
-- **P1 #6 `cap project status`**：CLI 命令，讀取 health-check 報告 + constitution / latest run 狀態。
-- **P1 #7 `cap project doctor`**：在 health-check 的基礎上輸出修復建議（含 ledger orphaned、`.cap.project.yaml` 不一致等場景），exit code 與 health-check 同源。
+- **P1 #5 `cap project status`**：`engine/project_status.py`，重用 health-check core，輸出 project_id / 路徑 / ledger snapshot / constitution[] / latest_run / 嵌套 `health{}`；`--format text|json|yaml`；exit code 與 storage-health 同源（schema-class→41、collision→53、generic error→1、warning-only→0）。
+- **P1 #6 `cap project init`**：`scripts/cap-project.sh init`，純 shell；建 `.cap.project.yaml` + 委派 `scripts/cap-paths.sh ensure` 建 storage + ledger，**完全不重做 P1 #3 ledger 邏輯**。`--force` 走 in-place rewrite，保留 `.cap.project.yaml` 中的無關 keys；identity-class exit code（41/52/53）verbatim propagate。
+- **P1 #7 `cap project doctor`**：`engine/project_doctor.py`，**read-only by design**——`--fix` flag accepted but never auto-mutates state（留待後續 iteration）；`REMEDIATIONS` 字典覆蓋全部 12 種 `HealthIssueKind`，每條 remediation 必須引用真實 CLI 命令（如 `cap project init` / `cap-paths.sh ensure`），不得指向尚未實作的命令。
+
+### 6.3 後續規劃（仍未實作）
+
 - **P10 promote workflow**：promote validated artifact 時讀取 `cap_version` 判定來源 cap 版本，避免跨版本污染 shared registry。
+- **P1 #7 `--fix` 自動修復**：在後續 iteration 中為部分 HealthIssueKind 提供 idempotent auto-remediation（如缺目錄、legacy v1 ledger migration），但 schema-class（malformed / forward-incompat）與 collision 永遠維持 read-only，避免破壞治理 artifact。

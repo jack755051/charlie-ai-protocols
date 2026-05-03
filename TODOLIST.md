@@ -105,7 +105,7 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 - [x] 實作 storage health check（v0.22.0 P1 #4，`engine/storage_health.py` read-only diagnostic core + `scripts/cap-storage-health.sh` shell wrapper；12 種 `HealthIssueKind` 涵蓋缺目錄 / 缺 ledger / 壞 metadata / forward-incompat / schema drift / origin collision / cap_version 漂移 / 不可寫 storage 等場景；exit code 對齊 `policies/workflow-executor-exit-codes.md`：schema-class→41、collision→53、generic error→1、warning-only→0；read-only 嚴禁寫 ledger；10 cases + 1 conditional / 26 assertions / smoke 24/24）
 - [x] 新增 `cap project status`（v0.22.0 P1 #5，`engine/project_status.py` 重用 P1 #4 health-check core，**禁止重做 health 判斷**；輸出 project_id / 路徑 / ledger snapshot / constitution[] / latest_run / 嵌套 health{}；`--format text|json|yaml`；exit code 對齊 storage-health；`scripts/cap-project.sh` 統一入口；8 cases / 21 assertions / smoke 26/26）
 - [x] 新增 `cap project init`（v0.22.0 P1 #6，`scripts/cap-project.sh` 純 shell init；`--project-id` / `--force` / `--format` / `--project-root` flag；既存 config 預設 halt，`--force` 走 in-place rewrite 保留無關 keys；委派 `cap-paths.sh ensure` 建 storage + ledger，**重用 P1 #3 v2 producer 不重做 ledger 邏輯**；identity-class exit code 41/52/53 verbatim propagate；10 cases / 33 assertions / smoke 25/25）
-- [ ] 新增 `cap project doctor`
+- [x] 新增 `cap project doctor`（v0.22.0 P1 #7，`engine/project_doctor.py` **read-only by design**，`--fix` flag accepted but read-only contract enforced；`REMEDIATIONS` 字典覆蓋全部 12 種 `HealthIssueKind`，每種至少 2 條具體 remediation 引用真實 CLI 命令；exit code 對齊 storage-health；10 cases / 31 assertions / smoke 27/27 全綠）
 
 ### Phase 3: Project Constitution Runner
 
