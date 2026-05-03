@@ -137,19 +137,15 @@ install CAP
 - [x] `cap paths`
 - [x] `.cap.project.yaml` 作為 project identity source
 - [x] git root basename fallback
-- [ ] 非 git folder 的 project id 策略
-- [ ] project id collision 處理
-- [ ] storage version / migration metadata
-- [ ] storage health check
+- [x] 非 git folder 的 project id 策略（v0.22.0 P1 #1，cap-paths strict mode + `CAP_ALLOW_BASENAME_FALLBACK` 後門）
+- [x] project id collision 處理（v0.22.0 P1 #2，inline `.identity.json` ledger + shell exit 53 / Python `ProjectIdCollisionError`）
+- [x] storage version / migration metadata（v0.22.0 P1 #3，`schemas/identity-ledger.schema.yaml` v2 + `policies/cap-storage-metadata.md`）
+- [x] storage health check（v0.22.0 P1 #4，`engine/storage_health.py` read-only diagnostic core + `scripts/cap-storage-health.sh`）
+- [x] `cap project status`（v0.22.0 P1 #5，`engine/project_status.py`，重用 health-check core）
+- [x] `cap project init`（v0.22.0 P1 #6，`scripts/cap-project.sh init`，委派 cap-paths ensure 不重做 ledger 邏輯）
+- [x] `cap project doctor`（v0.22.0 P1 #7，`engine/project_doctor.py`，read-only by design，`REMEDIATIONS` 覆蓋全部 12 種 HealthIssueKind）
 
-建議 CLI：
-
-```bash
-cap project status
-cap project init
-cap project paths
-cap project doctor
-```
+> Phase 2 整段於 v0.22.0-rc2 全綠：smoke 27/27、`scripts/cap-project.sh` 統一入口分派 init / status / doctor。`cap project paths` 並未獨立實作（既有 `cap paths` 已涵蓋此行為，避免重複命令）。
 
 ## 5. Phase 3: Project Constitution Runner
 

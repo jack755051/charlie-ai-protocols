@@ -6,6 +6,36 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.22.0-rc2] - 2026-05-03
+
+> Release candidate — close P1「Project Storage and Identity」整段 7 個 milestone（#1–#7）。本 tag 不取代 `v0.22.0` 正式版，僅標示 P1 整段落地的乾淨節點。
+
+### Added
+
+- **P1 #1 cap-paths strict-mode resolver** (`1acda13`)：`scripts/cap-paths.sh:resolve_project_identity` + `engine/project_context_loader.py:_resolve_project_id` 同步 strict resolution chain（override → `.cap.project.yaml` → git basename），非 git 目錄無 identity 來源時 shell 端 exit 52、Python 端 `ProjectIdResolutionError`；`CAP_ALLOW_BASENAME_FALLBACK=1` 為 legacy escape hatch。
+- **P1 #2 identity ledger collision detection** (`1acda13`)：每個 project 第一次落地時於 `~/.cap/projects/<id>/.identity.json` 建立 inline ledger，後續 resolve 比對 `origin_path`；mismatch 時 shell 端 exit 53、Python 端 `ProjectIdCollisionError`。
+- **P1 #3 storage version metadata SSOT** (`02a60c0`)：`schemas/identity-ledger.schema.yaml` v2 normalized contract（6 required + nullable optional + `previous_versions[]`）+ `policies/cap-storage-metadata.md` 政策 SSOT。cap-paths.sh 與 project_context_loader.py lock-step v1→v2 auto-migrate。Ledger 記錄 `schema_version` / `created_at` / `last_resolved_at` / `migrated_at` / `cap_version` / `previous_versions[]`。`repo.manifest.yaml` 補 top-level `cap_version: v0.22.0-rc1` 作為 SSOT 起點。11 schema fixture cases + 47 resolver assertions。
+- **P1 #4 storage health-check core** (`0f27324`)：新增 `engine/storage_health.py` 作為 read-only diagnostic core（`StorageHealthChecker` + `run_health_check`）。12 種 `HealthIssueKind` 涵蓋 missing storage root / unwritable storage / missing directory / missing ledger / malformed ledger / forward-incompat ledger / ledger schema drift / ledger origin mismatch / legacy v1 / cap_version mismatch / staleness / unknown field。Exit code 對齊 `policies/workflow-executor-exit-codes.md`：schema-class→41、collision→53、generic error→1、warning-only→0。**Read-only 嚴禁寫 ledger** 是治理鐵則（避免污染 `last_resolved_at` 訊號）。新增 `scripts/cap-storage-health.sh` 薄 wrapper（`--format text|json|yaml` + `--strict`）。`tests/scripts/test-storage-health.sh` 10 cases + 1 conditional / 26 assertions。
+- **P1 #6 `cap project init`** (`982ca90`)：新增 `scripts/cap-project.sh` 作為 `cap project` subcommand 統一入口（init / status / doctor 三 subcommand），`scripts/cap-entry.sh` `project)` case 路由 + `[Project]` help 區塊。Init 純 shell：`--project-id` / `--force` / `--format` / `--project-root` flag。既存 `.cap.project.yaml` 預設 halt，`--force` 走 in-place rewrite 保留無關 keys。委派 `scripts/cap-paths.sh ensure` 建 storage + ledger，**重用 P1 #3 v2 producer 不重做 ledger 邏輯**。Identity-class exit code（41/52/53）verbatim propagate。`tests/scripts/test-project-init.sh` 10 cases / 33 assertions。
+- **P1 #5 `cap project status`** (`f0eebc0`)：新增 `engine/project_status.py` 作為 read-only summary builder（重用 `engine/storage_health.run_health_check`，**禁止重做 health 判斷**）。輸出 project_id / 路徑 / ledger snapshot / `constitutions[]` / `latest_run`（mtime 排序選最新跨 workflow） / 嵌套 `health{}`。`--format text|json|yaml`。Exit code 對齊 storage-health。`tests/scripts/test-project-status.sh` 8 cases / 21 assertions。
+- **P1 #7 `cap project doctor`** (`a9174bc`)：新增 `engine/project_doctor.py`，**read-only by design**——`--fix` flag accepted but never auto-mutates state（schema-class / collision findings 永遠 read-only，避免破壞治理 artefact）。`REMEDIATIONS` 字典覆蓋全部 12 種 `HealthIssueKind`，每條 remediation 引用真實 CLI 命令（`cap project init` / `cap-paths.sh ensure` 等）。Exit code 對齊 storage-health。`tests/scripts/test-project-doctor.sh` 10 cases / 31 assertions。
+
+### Changed
+
+- `policies/cap-storage-metadata.md` §6 重構為三段：6.1（P1 #4 health-check 落地）/ 6.2（P1 #5/#6/#7 落地）/ 6.3（後續規劃含 P10 promote 與 deferred `--fix` 自動修復）。明示 schema-class 與 collision findings 永遠 read-only 的鐵則。
+- `policies/workflow-executor-exit-codes.md` identity-class executor 區段補 `scripts/cap-project.sh`（v0.22.0-rc2 起）。
+- `docs/cap/IMPLEMENTATION-ROADMAP.md` Phase 2 全部 7 條 ticked，並注記 `cap project paths` 並未獨立實作（既有 `cap paths` 已涵蓋此行為）。
+
+### Verified
+
+- `scripts/workflows/smoke-per-stage.sh` 從 23 step（v0.22.0-rc1 baseline）升至 27 step：新增 storage-health-check core gate（P1 #4）+ cap project init / status / doctor 三 gate（P1 #5/#6/#7）。本 repo smoke：**27 passed / 0 failed / 0 skipped**。
+- CLI happy path：`cap project init` → `cap project status` → `cap project doctor` 三步序列在 hermetic CAP_HOME 下全部 exit 0、JSON envelope 正確 parse、`overall_status=ok`。
+
+### Notes
+
+- 本 tag 為 release candidate，仍未取代 `v0.22.0` 正式版。後續 P2（Project Constitution Runner）開工後再評估是否升 stable。
+- `0f27324` / `982ca90` 兩筆新增 .sh 檔在初次 `git add` 時 index mode 為 100644（`core.filemode=false` 環境下 `git add` 不會自動帶入 +x，與 v0.21.6 `d0d0a64` 同一坑），事後以 `git update-index --chmod=+x` 補回 100755（`762c7d5`）。後續 P1 #5/#6/#7 三筆 commit 已在 commit 前主動 `git update-index --chmod=+x` 預設 100755，避免再踩。
+
 ## [v0.21.4] - 2026-05-01
 
 ### Fixed

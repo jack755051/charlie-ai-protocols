@@ -54,6 +54,7 @@
 解析 CAP project identity（project_id resolution + identity ledger collision detection）的腳本：
 
 - `scripts/cap-paths.sh`（v0.22.0 起）
+- `scripts/cap-project.sh`（v0.22.0-rc2 起，`init` subcommand 委派 cap-paths.sh ensure，identity-class exit code 41/52/53 verbatim propagate；`status` / `doctor` 則由 Python core `engine/project_status.py` / `engine/project_doctor.py` 對齊同套 exit code 對映）
 
 > 設計裁定：identity-class 退出碼專屬於 project_id resolver，獨立於 schema-class（41）與 vc-class（40），因為 identity 失敗的修復路徑（補 `.cap.project.yaml` / 設 `CAP_PROJECT_ID_OVERRIDE` / 刪 colliding storage）與 schema 漂移、git 失敗皆不同；不混用 exit code 才能讓治理層快速分流。`engine/project_context_loader.py` 對應的 Python 端對等行為是拋出 `ProjectIdResolutionError` / `ProjectIdCollisionError`。
 
