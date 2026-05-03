@@ -32,6 +32,14 @@ COMMAND                            DESCRIPTION
   cap project init [--project-id ID] [--force]   初始化 .cap.project.yaml 與 CAP storage
   cap project status [--format text|json|yaml]  顯示 project_id / 路徑 / ledger / 最新 run
   cap project doctor [--format text|json|yaml]  以 storage health-check 結果輸出修復建議
+  cap project constitution (--prompt "<需求>" | --from-file PATH | --promote STAMP | --latest)
+                                                   產出 / 匯入 / 將 Project Constitution snapshot 寫回 repo SSOT
+
+[Task]
+  cap task constitution "<需求>"     從一句話需求產出 Task Constitution（取代 cap workflow constitution）
+  cap task plan "<需求>"             (planned) task constitution + capability graph 預覽
+  cap task compile "<需求>"          (planned) task constitution + graph + compiled workflow + binding bundle
+  cap task run "<需求>"              (planned) compile + execute via runtime binder
 
 [Workflow]
   cap workflow list                列出所有 workflow（靜態清單）
@@ -41,7 +49,7 @@ COMMAND                            DESCRIPTION
   cap workflow inspect <run-id>    顯示單次 workflow run 詳情
   cap workflow plan <id>           顯示 semantic plan、phase 與 binding 摘要
   cap workflow bind <id> [registry]  顯示 skill binding report
-  cap workflow constitution "<需求>"   產出 task constitution
+  cap workflow constitution "<需求>"   [DEPRECATED] 產出 task constitution — 改用 cap task constitution
   cap workflow compile "<需求>"        從一句話需求編譯最小 workflow
   cap workflow run-task "<需求>"       從一句話需求直接 compile 並執行
   cap workflow run <id> [prompt]   前景執行（預設 CLI: claude）
@@ -122,6 +130,10 @@ case "${COMMAND}" in
   project)
     shift || true
     exec bash "${SCRIPT_DIR}/cap-project.sh" "$@"
+    ;;
+  task)
+    shift || true
+    exec bash "${SCRIPT_DIR}/cap-task.sh" "$@"
     ;;
   promote)
     shift || true

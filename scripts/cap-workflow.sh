@@ -279,6 +279,19 @@ case "${1:-}" in
     ;;
   constitution)
     shift || true
+    # P2 #6: this CLI surface is being phased out — `cap task constitution`
+    # is the canonical name. Behaviour and exit code are unchanged so the
+    # alias is a transparent rename. CAP_DEPRECATION_SILENT=1 suppresses the
+    # notice (the cap-task.sh wrapper sets it; smoke fixtures may also opt
+    # out when warning text would pollute fixture diffs).
+    #
+    # Emitted before the usage check so even users who reach this branch
+    # by accident learn the new name; suppressing the check would risk
+    # masking the deprecation entirely from anyone running the legacy
+    # form without arguments to remind themselves of the syntax.
+    if [ "${CAP_DEPRECATION_SILENT:-}" != "1" ]; then
+      echo "[deprecated] cap workflow constitution is deprecated; use cap task constitution" >&2
+    fi
     [ "$#" -ge 1 ] || {
       echo "Usage: cap workflow constitution <request...>" >&2
       exit 1

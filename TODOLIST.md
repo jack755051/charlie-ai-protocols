@@ -65,7 +65,8 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 
 - [ ] Project Constitution schema 尚未接上正式 validator
 - [ ] `project-constitution.yaml` 尚未成為完整 Project Constitution runner
-- [ ] `cap workflow constitution` 目前較接近 task constitution 產生器，語意需拆清楚
+- [x] `cap workflow constitution` 目前較接近 task constitution 產生器，語意需拆清楚
+  - 完成於 P2 #6 commit (current branch)；新增 `cap task constitution` 作為正式名稱，舊路徑加 deprecation warning（行為不變，可由 `CAP_DEPRECATION_SILENT=1` 抑制）。
 - [ ] Supervisor 尚未真正負責 structured orchestration
 - [ ] Supervisor 尚未輸出可驗證的 task constitution / capability graph / compiled workflow draft
 - [ ] sub-agent 尚未升級為完整 AgentSessionRunner
@@ -127,8 +128,8 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 - [x] 提供 promote 或 init 路徑，將正式 Project Constitution 寫回 repo
   - 完成於 P2 #5 commit (current branch)；`cap project constitution --promote STAMP` / `--latest` 寫回 `.cap.constitution.yaml`，覆寫前備份成 `.cap.constitution.yaml.backup-<TIMESTAMP>`，jsonschema fail 時 repo SSOT 完全不動。
 
-- [ ] 決定 `cap workflow constitution` 是否保留為 task constitution 入口
-  - 規劃：保留路徑但 emit deprecation warning（P2 #6 動作項；boundary memo §4.1 已定）。
+- [x] 決定 `cap workflow constitution` 是否保留為 task constitution 入口
+  - 完成於 P2 #6 commit (current branch)；保留行為與 exit code，加 stderr 一行 `[deprecated] cap workflow constitution is deprecated; use cap task constitution`，並支援 `CAP_DEPRECATION_SILENT=1` 抑制。`cap workflow compile` / `cap workflow run-task` 命名合理，**不動**（依 boundary memo §4.1 KEEP 標記）。
 - [x] 新增或規劃 `cap project constitution "<prompt>"`
   - 完成於 P2 #2-b commits `d127efd` + `4e8c753`；prompt-mode integration smoke 留 P2 #8（依 Q1 = A）。
 - [x] 新增 `cap project constitution --promote`
@@ -270,9 +271,10 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 - [x] `cap project init` — P1 #6 commit `982ca90`
 - [x] `cap project status` — P1 #5 commit `f0eebc0`
 - [x] `cap project constitution "<prompt>"` — P2 #2-b commits `d127efd` + `4e8c753`（prompt-mode integration smoke 留 P2 #8）
-- [ ] `cap task plan "<prompt>"`
-- [ ] `cap task compile "<prompt>"`
-- [ ] `cap task run "<prompt>"`
+- [x] `cap task constitution "<prompt>"` — P2 #6 commit (current branch)；thin alias 委派 `cap workflow constitution`，舊路徑保留並 emit deprecation warning。
+- [ ] `cap task plan "<prompt>"` — (planned) `cap task` 入口已建立，subcommand 尚未實作。
+- [ ] `cap task compile "<prompt>"` — (planned) 同上。
+- [ ] `cap task run "<prompt>"` — (planned) 同上。
 - [ ] `cap session list <run-id>`
 - [ ] `cap session inspect <session-id>`
 
