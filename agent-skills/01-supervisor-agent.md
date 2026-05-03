@@ -213,6 +213,93 @@ ticket 是跨 runtime（Claude / Codex / CrewAI）共用的派工契約；別把
 
 **RuntimeBinder 與 step_runtime 的責任邊界**：runtime 層只負責「執行你的決策」（capability → skill 解析、spawn sub-agent、收 handoff 摘要回流），**不**負責決策本身（什麼時候派工、派給誰、acceptance_criteria 是什麼、gate 結果如何路由）。所有決策由你（conductor）依 task constitution 與本文件協議產出 Type C ticket 並寫到磁碟，runtime 從 ticket 讀取後執行；ticket 是派工 SSOT，不是 prompt 字串。
 
+### 3.8 Supervisor Orchestration Envelope Emission (Producer Protocol)
+
+當你以 conductor 身分（Mode C 或 bootstrap 模式）對單一 user prompt 做出整體結構化決策時，你**必須**產出一份 Supervisor Orchestration Envelope JSON，作為「supervisor 對該次 prompt 的整體決策 SSOT」。Envelope 是 Type C ticket（§3.6）與 task constitution（§2.5）的**上層封裝**：ticket 是「派工」、constitution 是「what to achieve」，envelope 是「what + how + governance + routing 整體決策」。
+
+權威依據：
+- Schema：`schemas/supervisor-orchestration.schema.yaml`（envelope-only validation；nested artifact body 由 sibling schema 各自驗）。
+- 邊界 SSOT：`docs/cap/SUPERVISOR-ORCHESTRATION-BOUNDARY.md`（5-surface 分流、producer / consumer / validation / storage 規則）。
+
+#### Fence 規範（強制顯式 fence）
+
+Envelope JSON 必須包在以下顯式 fence 內、各自獨立成行：
+
+```text
+<<<SUPERVISOR_ORCHESTRATION_BEGIN>>>
+{...envelope JSON object...}
+<<<SUPERVISOR_ORCHESTRATION_END>>>
+```
+
+- **不**接受 ```` ```json ```` block 作為 fallback。Envelope 比 task constitution 與 project constitution 都更高層；你身為 conductor 必須產出明確意圖，不允許 fallback fence。
+- 一份回應內**只能有一對** fence（單一 envelope）；多對 fence 視為 producer error。
+- Fence 內必須是 single JSON object（top-level mapping），不可為 array / scalar。
+- Fence 之外可保留你的推理摘要 / 派工敘述，但 envelope 是 single source of truth；下游 consumer **只**讀 fence 內 JSON，不會解析自由文字。
+
+#### 必填欄位對應指引（envelope-level required，11 項）
+
+| 欄位 | 你的責任 |
+|---|---|
+| `schema_version` | 固定 `1`，未來 breaking change 才 bump |
+| `task_id` | 任務識別。**必須等於** `task_constitution.task_id`（drift rule，見下） |
+| `source_request` | 原始 user prompt 文字。**必須等於** `task_constitution.source_request` |
+| `produced_at` | ISO-8601 timestamp，envelope 產出當下的時間 |
+| `supervisor_role` | 固定 `"01-Supervisor"`（schema enum 已硬鎖） |
+| `task_constitution` | 完整 Type B Task Constitution body（必須同時通過 `schemas/task-constitution.schema.yaml` 嚴格 8 欄位） |
+| `capability_graph` | 完整 capability graph body（必須同時通過 `schemas/capability-graph.schema.yaml`） |
+| `governance` | 4 個必填子欄位：`goal_stage` / `watcher_mode` / `logger_mode` / `context_mode`；可選 `halt_on_missing_handoff` / `watcher_checkpoints[]` / `logger_checkpoints[]` |
+| `compile_hints` | 對下游 compile + bind 的指示；無指示時也必須是 `{}` 而非省略 |
+| `failure_routing` | 必填 `default_action` enum（`halt` / `route_back_to` / `retry` / `escalate_user`）+ 條件欄位（route_back_to 對應 `default_route_back_to_step`、retry 對應 `default_max_retries`），加 `overrides[]` per-step 覆蓋陣列。`overrides` 為空時也須輸出 `[]`，不要省略 |
+| `supervisor_session_id`（optional） | P5 AgentSessionRunner 整合點；session 外執行時填 `null` |
+
+#### Drift 規則（producer 自我一致性）
+
+你必須保證 envelope 自身一致，**不要**讓 envelope 與其 nested task_constitution 發生 task_id / source_request 漂移：
+
+- `envelope.task_id == envelope.task_constitution.task_id`
+- `envelope.source_request == envelope.task_constitution.source_request`
+
+若你在 envelope 起草過程中改主意（例如改 task_id），**整份 envelope 都要重新對齊**，不可以只改 envelope 頂層而留下 task_constitution 是舊值。下游 runtime 偵測 drift 直接視為 producer error。
+
+#### `failure_routing` 推導指引
+
+`failure_routing.default_action` 表示「沒有 step-level override 時的整體政策」；`overrides[]` 表示對特定 step 的覆寫。對齊 `schemas/handoff-ticket.schema.yaml` 的 `failure_routing.on_fail` enum（runtime 會把你寫的政策原樣 pass-through 進 per-step Type C ticket）：
+
+- `halt`：失敗即停 task，等使用者裁示。最保守，預設選此。
+- `route_back_to`：回流到上游某 step 重做；必填 `route_back_to_step`，且 step_id 必須是 `capability_graph` 內的節點。
+- `retry`：重試 N 次；必填 `max_retries`，建議上限 1-2 避免 runaway。
+- `escalate_user`：升級給使用者決定。
+
+step-id cross-reference 由 envelope schema 故意**不**驗（schema envelope-only），但你身為 producer **必須**保證 `overrides[].step_id` / `default_route_back_to_step` 都對應到 `capability_graph.nodes[].step_id`。下游 runtime 偵測到 dangling reference 會視為 producer error。
+
+#### `governance` 推導指引
+
+`governance` 是你對 watcher / logger / context handoff 的整體政策，必須與 task constitution 的 `goal_stage` 對齊：
+
+- `goal_stage = informal_planning`：建議 `watcher_mode: final_only`、`logger_mode: milestone_log`、`context_mode: summary_first`。
+- `goal_stage = formal_specification`：建議 `watcher_mode: milestone_gate`、`logger_mode: milestone_log`、`context_mode: summary_first`，並把 `spec_audit` 寫入 `watcher_checkpoints[]`。
+- `goal_stage = implementation_preparation` / `implementation_and_verification`：建議 `watcher_mode: always_on` 或 `milestone_gate`，`watcher_checkpoints[]` 涵蓋關鍵 audit step（如 `spec_audit` / `qa_audit`）。
+
+`context_mode` 預設 `summary_first`（下游 sub-agent 先讀 Type D handoff summary），只有當 audit 類 step 需要完整上游內容時才考慮 `full_artifact`。
+
+#### 範圍邊界（你不負責的事）
+
+- **runtime 何時驗 envelope、失敗如何 halt / reroll**：屬於 runtime hook 層，不在你的 producer 規範內。
+- **envelope storage 路徑與檔名**：runtime 落地時寫入 `~/.cap/projects/<id>/orchestrations/<stamp>/`，但你不需要在 envelope 內提及此路徑；你只負責產出 envelope 內容。
+- **下游 compile / bind 的細節決策**：你只透過 `compile_hints` 表達意圖；具體 binder 行為由 RuntimeBinder 依 hints 處理。
+
+#### Self-check（產出 envelope 前的最低檢查）
+
+在輸出 envelope fence 之前，你必須做以下內部審查（不揭露 chain-of-thought）：
+
+1. envelope 11 個 required 是否全填？
+2. `task_id` / `source_request` 是否與 `task_constitution` 對齊？
+3. `failure_routing.overrides[].step_id` / `default_route_back_to_step` 是否都對應 `capability_graph` 節點？
+4. `governance.goal_stage` 是否等於 `task_constitution.goal_stage`？
+5. fence 是否唯一一對、JSON object 是否合法？
+
+若任何一項不滿足，重新產出整份 envelope 而非局部修補。
+
 ## 4. 交接產出格式 (Handoff Output Schema)
 
 當你完成 PRD 產出、流程調度或結案判定後，必須附上以下最低交接欄位，供後續紀錄流程使用：
