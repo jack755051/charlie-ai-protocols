@@ -109,24 +109,36 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 
 ### Phase 3: Project Constitution Runner
 
-- [ ] 明確區分 Project Constitution 與 Task Constitution
+- [x] 明確區分 Project Constitution 與 Task Constitution
+  - 完成於 P2 #1 commit `01cc993` (`docs/cap/CONSTITUTION-BOUNDARY.md`)，鎖定 5-surface (CLI / workflow / capability / schema / storage) 邊界。
 - [ ] 調整 `schemas/workflows/project-constitution.yaml` 的輸出契約
 - [ ] 讓 Project Constitution workflow 產出 Markdown 與 JSON
-- [ ] 實作 Project Constitution validator
-- [ ] 實作 agent output JSON extraction
-- [ ] 對 Project Constitution JSON 做 schema validation
-- [ ] validation failure 時 halt
-- [ ] 將通過驗證的 Project Constitution snapshot 保存到 CAP storage
+- [x] 實作 Project Constitution validator
+  - 完成於 P2 #2-b commit `4e8c753` (`engine/project_constitution_runner.py:_run_jsonschema`)，與 `engine/step_runtime.py:validate_constitution` 同源行為。
+- [x] 實作 agent output JSON extraction
+  - 完成於 P2 #2-b commit `4e8c753` (`_extract_constitution_json`)，對齊 `validate-constitution.sh` 的 fence 規則。
+- [x] 對 Project Constitution JSON 做 schema validation
+  - 完成於 P2 #2-b commit `4e8c753`；CLI / from-file / prompt 三條路徑都會跑 jsonschema 驗證。
+- [x] validation failure 時 halt
+  - 完成於 P2 #2-b commit `4e8c753`；validation 失敗仍寫四件套（doctor 可觀測），但 CLI exit 1（依 P2 #2-b Q2 = A）。
+- [x] 將通過驗證的 Project Constitution snapshot 保存到 CAP storage
+  - 完成於 P2 #2-b commit `4e8c753`；snapshot 落於 `~/.cap/projects/<id>/constitutions/project/<stamp>/`，含 `.md`、`.json`、`validation.json`、`source-prompt.txt`。
 - [ ] 實作 constitution snapshot versioning
 - [ ] 提供 promote 或 init 路徑，將正式 Project Constitution 寫回 repo
 
 - [ ] 決定 `cap workflow constitution` 是否保留為 task constitution 入口
-- [ ] 新增或規劃 `cap project constitution "<prompt>"`
+  - 規劃：保留路徑但 emit deprecation warning（P2 #6 動作項；boundary memo §4.1 已定）。
+- [x] 新增或規劃 `cap project constitution "<prompt>"`
+  - 完成於 P2 #2-b commits `d127efd` + `4e8c753`；prompt-mode integration smoke 留 P2 #8（依 Q1 = A）。
 - [ ] 新增 `cap project constitution --promote`
-- [ ] 新增 `cap project constitution --dry-run`
-- [ ] 新增 `cap project constitution --from-file`
+- [x] 新增 `cap project constitution --dry-run`
+  - 完成於 P2 #2-b commit `4e8c753`；走 `plan()` 純值路徑，無 disk write。
+- [x] 新增 `cap project constitution --from-file`
+  - 完成於 P2 #2-b commit `4e8c753`；同時收 JSON / YAML（依 Q3 = A），smoke 8 cases / 40 assertions 覆蓋。
 - [ ] 文件化 `constitution / compile / run-task / run` 的差異
+  - 進度：boundary memo §5 已寫對照表（P2 #1 commit `01cc993`）；尚需從 memo 落地到 `cap-entry.sh` help 與 `docs/cap/ARCHITECTURE.md`（P2 #7 動作項）。
 - [ ] 更新 CLI help，避免 Project Constitution 與 Task Constitution 混用
+  - 進度：`cap project` 端 help 已更新（commit `4e8c753`）；`cap workflow constitution` 端 deprecation warning 留 P2 #6。
 
 ### Phase 4: Supervisor Structured Orchestration
 
@@ -253,9 +265,9 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 
 ### Phase 13: CLI Final Shape
 
-- [ ] `cap project init`
-- [ ] `cap project status`
-- [ ] `cap project constitution "<prompt>"`
+- [x] `cap project init` — P1 #6 commit `982ca90`
+- [x] `cap project status` — P1 #5 commit `f0eebc0`
+- [x] `cap project constitution "<prompt>"` — P2 #2-b commits `d127efd` + `4e8c753`（prompt-mode integration smoke 留 P2 #8）
 - [ ] `cap task plan "<prompt>"`
 - [ ] `cap task compile "<prompt>"`
 - [ ] `cap task run "<prompt>"`

@@ -29,8 +29,9 @@
 #  23. tests/scripts/test-project-init.sh                        (P1 #6 cap project init)
 #  24. tests/scripts/test-project-status.sh                      (P1 #5 cap project status)
 #  25. tests/scripts/test-project-doctor.sh                      (P1 #7 cap project doctor)
-#  26. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report all-pass)
-#  27. tests/e2e/test-ticket-consumption.sh                      (must report all-pass)
+#  26. tests/scripts/test-cap-project-constitution.sh            (P2 #2 cap project constitution: dry-run + from-file + validation)
+#  27. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report all-pass)
+#  28. tests/e2e/test-ticket-consumption.sh                      (must report all-pass)
 #
 # Resolution order for the bind command:
 #   1. `cap` on PATH (installed via cap installer)
@@ -185,6 +186,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-storage-health.sh" "storage health-
 run_fixture "${REPO_ROOT}/tests/scripts/test-project-init.sh" "cap project init (P1 #6)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-project-status.sh" "cap project status (P1 #5)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-project-doctor.sh" "cap project doctor (P1 #7)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-cap-project-constitution.sh" "cap project constitution (P2 #2: dry-run + from-file + validation)"
 run_fixture "${REPO_ROOT}/tests/e2e/test-project-spec-pipeline-deterministic.sh" "spec-pipeline deterministic e2e"
 run_fixture "${REPO_ROOT}/tests/e2e/test-ticket-consumption.sh" "ticket consumption e2e"
 

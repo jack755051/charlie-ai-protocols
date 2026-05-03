@@ -115,34 +115,39 @@
   - 交付物：workflow output contract
   - 驗收：明確產出 Markdown 與 JSON artifact
 
-- [ ] 實作 Project Constitution validator
+- [x] 實作 Project Constitution validator
   - 交付物：validator command 或 `engine/step_runtime.py` subcommand
   - 驗收：通過 `schemas/project-constitution.schema.yaml` 才能 promote
+  - 進度：done in P2 #2-b commit `4e8c753`。`engine/project_constitution_runner.py:_run_jsonschema` 對齊 `engine/step_runtime.py:validate_constitution` 的 Draft 2020-12 行為（含 fallback required-only 模式），所有 runner 入口都會跑驗證；validation 失敗時 `validation.json` 會記錄 `status="failed"` 並使 CLI exit 1。
 
-- [ ] 實作 agent output JSON extraction
+- [x] 實作 agent output JSON extraction
   - 交付物：Markdown / fenced JSON extraction routine
   - 驗收：可處理純 JSON、fenced JSON、Markdown 中嵌 JSON
-  - 進度：partial in `v0.21.5` (`55038dd`)；`persist-task-constitution.sh` 已處理 `<<<TASK_CONSTITUTION_JSON_BEGIN>>>` fence 內再包一層 ```json nested fence 的 case。仍缺 Project Constitution runner 使用的通用 extraction routine，並需覆蓋純 JSON、一般 fenced JSON、Markdown 中嵌 JSON。
+  - 進度：done in P2 #2-b commit `4e8c753`。`engine/project_constitution_runner.py:_extract_constitution_json` 對齊 `scripts/workflows/validate-constitution.sh` 的 fence 規則（先抓 `<<<CONSTITUTION_JSON_BEGIN/END>>>`，再 fallback 單一 ```json``` block）。Task Constitution 端的 nested-fence 處理仍由 `v0.21.5` (`55038dd`) 的 `persist-task-constitution.sh` 負責，與本 routine 各司其職。
 
-- [ ] 實作 Project Constitution snapshot storage
+- [x] 實作 Project Constitution snapshot storage
   - 交付物：`~/.cap/projects/<project_id>/constitutions/project/<stamp>/`
   - 驗收：保存 `.md`、`.json`、`validation.json`、`source-prompt.txt`
+  - 進度：done in P2 #2-b commit `4e8c753`。`engine/project_constitution_runner.py:_write_artifacts` 一律寫四件套；schema fail 時仍寫入但 `validation.json` 標記 `status="failed"`（依 P2 #2-b Q2 = A 的 doctor 可觀測性裁示）。
 
 - [ ] 實作 constitution snapshot versioning
   - 交付物：snapshot index 或 metadata
   - 驗收：可列出、比對、回溯不同版本
 
-- [ ] 新增 `cap project constitution "<prompt>"`
+- [x] 新增 `cap project constitution "<prompt>"`
   - 交付物：CLI command
   - 驗收：能跑 project constitution workflow 並保存 snapshot
+  - 進度：done in P2 #2-b commits `d127efd` (CLI skeleton) + `4e8c753` (workflow wrap + 四件套寫入)。`scripts/cap-project.sh constitution` dispatcher 已通；prompt-mode 內部 subprocess wrap 已實作但**整合 smoke 留 P2 #8**（依 Q1 = A 的 ratification）。
 
-- [ ] 新增 `cap project constitution --dry-run`
+- [x] 新增 `cap project constitution --dry-run`
   - 交付物：dry-run mode
   - 驗收：產生 draft 與 validation，不寫回 repo
+  - 進度：done in P2 #2-b commit `4e8c753`。`--dry-run` 走 `plan()` 純值計算路徑，不觸發 disk write，亦不會呼叫 workflow；smoke `tests/scripts/test-cap-project-constitution.sh` Case 1 覆蓋。
 
-- [ ] 新增 `cap project constitution --from-file`
+- [x] 新增 `cap project constitution --from-file`
   - 交付物：file input mode
   - 驗收：可從指定 prompt / draft 檔案產生 snapshot
+  - 進度：done in P2 #2-b commit `4e8c753`。同時收 JSON / YAML（依 Q3 = A 先試 JSON、fallback YAML，並 normalize 成 JSON 寫入 snapshot）；smoke Case 2-3 覆蓋 happy path、Case 4 覆蓋 schema 失敗仍寫四件套、Case 5-8 覆蓋邊界錯誤。
 
 - [ ] 新增 `cap project constitution --promote`
   - 交付物：promote mode
