@@ -200,6 +200,19 @@ capabilities:
       - 已從 draft artifact 抓取 constitution JSON 區段
       - 驗證通過時輸出 validation_report；失敗時 halt 並列出 schema 錯誤
 
+  supervisor_envelope_validation:
+    description: 從 supervisor sub-agent 產出的回應中抽取 supervisor orchestration envelope JSON（強制 <<<SUPERVISOR_ORCHESTRATION_BEGIN/END>>> fence），對照 schemas/supervisor-orchestration.schema.yaml 進行 jsonschema 驗證，並檢查 envelope.task_id / source_request 與 nested task_constitution 是否一致（drift check）。任一階段（extract / validate / drift）失敗都回 exit 41 schema_validation_failed，與 P0a schema-class executor 對齊；不允許 AI fallback。屬於 P3 #4 runtime hook 的 producer-side gate；P3 #5 才把本 capability wire 進實際 workflow YAML 與 compile/bind 流程。
+    default_agent: shell
+    allowed_agents: [shell]
+    inputs:
+      - supervisor_orchestration_envelope
+    outputs:
+      - supervisor_envelope_validation_report
+    done_when:
+      - 已從 envelope artifact 抓取唯一一對 SUPERVISOR_ORCHESTRATION_BEGIN/END fence 內的 JSON
+      - jsonschema 驗證通過（含 envelope.failure_routing required 與 governance / compile_hints required sub-fields）
+      - drift check 通過：envelope.task_id == task_constitution.task_id，envelope.source_request == task_constitution.source_request
+
   constitution_persistence:
     description: 把驗證通過的 Project Constitution JSON 寫成 repo 級 .cap.constitution.yaml 與 ~/.cap/projects/&lt;id&gt;/constitutions/ 快照，完成 bootstrap 收尾
     default_agent: shell

@@ -34,8 +34,9 @@
 #  28. tests/e2e/test-cap-project-constitution-prompt.sh         (P2 #8 prompt-mode e2e via CAP_PROJECT_CONSTITUTION_WORKFLOW_STUB; deterministic, no AI)
 #  29. tests/e2e/test-cap-task-constitution-equivalence.sh       (P2 #8 cap task / cap workflow constitution byte-equal stdout + canonical JSON parity)
 #  30. tests/scripts/test-supervisor-envelope-helper.sh          (P3 #3 supervisor envelope pure helpers: extract / validate / drift)
-#  31. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report all-pass)
-#  32. tests/e2e/test-ticket-consumption.sh                      (must report all-pass)
+#  31. tests/scripts/test-validate-supervisor-envelope-exit-code.sh (P3 #4 schema-class executor exit-41 gate: missing artifact / extract fail / schema fail / drift)
+#  32. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report all-pass)
+#  33. tests/e2e/test-ticket-consumption.sh                      (must report all-pass)
 #
 # Resolution order for the bind command:
 #   1. `cap` on PATH (installed via cap installer)
@@ -195,6 +196,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-cap-task-constitution.sh" "cap task
 run_fixture "${REPO_ROOT}/tests/e2e/test-cap-project-constitution-prompt.sh" "cap project constitution prompt-mode e2e (P2 #8, stub-driven)"
 run_fixture "${REPO_ROOT}/tests/e2e/test-cap-task-constitution-equivalence.sh" "cap task constitution alias equivalence e2e (P2 #8)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-supervisor-envelope-helper.sh" "supervisor envelope helper smoke (P3 #3: extract / validate / drift)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-validate-supervisor-envelope-exit-code.sh" "validate-supervisor-envelope exit-41 gate (P3 #4)"
 run_fixture "${REPO_ROOT}/tests/e2e/test-project-spec-pipeline-deterministic.sh" "spec-pipeline deterministic e2e"
 run_fixture "${REPO_ROOT}/tests/e2e/test-ticket-consumption.sh" "ticket consumption e2e"
 
