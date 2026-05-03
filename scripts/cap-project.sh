@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 #
-# cap-project.sh — Subcommand dispatcher for `cap project` (P1 #5/#6/#7).
+# cap-project.sh — Subcommand dispatcher for `cap project` (P1 #5/#6/#7 + P2 #2).
 #
 # Subcommands:
-#   init    Bootstrap a project: write .cap.project.yaml + initialise CAP storage.
-#   status  Read-only project summary: id, paths, ledger, constitution, latest run.
-#   doctor  Read-only diagnostic with remediation suggestions.
+#   init          Bootstrap a project: write .cap.project.yaml + initialise CAP storage.
+#   status        Read-only project summary: id, paths, ledger, constitution, latest run.
+#   doctor        Read-only diagnostic with remediation suggestions.
+#   constitution  Generate or import a Project Constitution snapshot under
+#                 ~/.cap/projects/<id>/constitutions/project/<stamp>/.
 #
 # Design boundaries:
 #   - init is pure shell (writes .cap.project.yaml, delegates to cap-paths.sh
 #     ensure for storage + ledger creation; never duplicates ledger logic).
-#   - status / doctor delegate to Python helpers that consume P1 #4
-#     engine/storage_health.py — health logic must NOT be re-implemented in
+#   - status / doctor / constitution delegate to Python helpers; we never
+#     re-implement health, validation or workflow-orchestration logic in
 #     shell, per the consumer/producer contract in
 #     policies/cap-storage-metadata.md §6.
 
@@ -22,6 +24,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CAP_PATHS="${SCRIPT_DIR}/cap-paths.sh"
 STATUS_MODULE="${REPO_ROOT}/engine/project_status.py"
 DOCTOR_MODULE="${REPO_ROOT}/engine/project_doctor.py"
+CONSTITUTION_MODULE="${REPO_ROOT}/engine/project_constitution_runner.py"
 
 usage() {
   cat <<'EOF'
@@ -39,10 +42,21 @@ Subcommands:
           Read-only diagnostic with remediation suggestions for every
           HealthIssueKind reported by the storage health check.
 
+  constitution  (--prompt "<text>" | --from-file PATH) [--project-root PATH]
+                [--cap-home PATH] [--project-id ID] [--stamp YYYYMMDDTHHMMSSZ]
+                [--schema-path PATH] [--dry-run] [--format text|json|yaml]
+                Generate or import a Project Constitution snapshot under
+                ~/.cap/projects/<id>/constitutions/project/<stamp>/. Writes
+                the four-part snapshot (project-constitution.md / .json,
+                validation.json, source-prompt.txt). Validation failure
+                still produces all four artefacts and exits 1.
+
 Common notes:
   - storage health logic is single-sourced in engine/storage_health.py;
     status and doctor never re-implement health checks.
   - init delegates storage / ledger creation to scripts/cap-paths.sh ensure.
+  - constitution requires `cap project init` to have written
+    .cap.project.yaml first (the runner refuses to invent an id).
 EOF
 }
 
@@ -298,6 +312,12 @@ cmd_doctor() {
   exec python3 "${DOCTOR_MODULE}" "$@"
 }
 
+cmd_constitution() {
+  [ -f "${CONSTITUTION_MODULE}" ] \
+    || die "engine/project_constitution_runner.py missing"
+  exec python3 "${CONSTITUTION_MODULE}" "$@"
+}
+
 # ─────────────────────────────────────────────────────────
 # Dispatcher
 # ─────────────────────────────────────────────────────────
@@ -316,6 +336,10 @@ main() {
     doctor)
       shift
       cmd_doctor "$@"
+      ;;
+    constitution)
+      shift
+      cmd_constitution "$@"
       ;;
     -h|--help|help|"")
       usage

@@ -1,22 +1,33 @@
-"""project_constitution_runner — Plan-only skeleton for ``cap project constitution`` (P2 #2-b commit 1).
+"""project_constitution_runner — Runner for ``cap project constitution`` (P2 #2).
 
-This module is the home of the Project Constitution runner introduced in
-P2 #2. It is split across two commits:
+This module owns the Project Constitution runner introduced in P2 #2 and
+landed across two commits:
 
-* **Commit 1 (this file)** — pure value computation. We build the dataclasses
-  for the request / result, derive ``project_id`` from ``.cap.project.yaml``,
-  compute the canonical snapshot directory at
-  ``<cap_home>/projects/<id>/constitutions/project/<stamp>/`` and the four
-  artifact paths inside it, and expose a ``plan()`` entry point that returns
-  the planned layout without touching disk or invoking the workflow runtime.
-  The standalone CLI is gated behind ``--dry-run`` so an accidental invocation
-  never half-writes a snapshot.
-* **Commit 2 (follow-up)** — wire ``run()`` to subprocess
-  ``cap workflow run project-constitution``, copy the produced artefacts into
-  the snapshot dir, run the JSON Schema validator from
-  ``schemas/project-constitution.schema.yaml``, and add the ``--from-file``
-  ingestion path. The dispatcher hook in ``scripts/cap-project.sh`` and the
-  smoke tests in ``tests/scripts/`` also land in commit 2.
+* **Commit 1** — pure value computation: dataclasses for the request /
+  result, ``project_id`` resolution from ``.cap.project.yaml``, canonical
+  snapshot directory under
+  ``<cap_home>/projects/<id>/constitutions/project/<stamp>/``, fixed
+  four-part artifact filenames, and a ``plan()`` entry point that never
+  touches disk.
+* **Commit 2 (this revision)** — implements ``run()`` end-to-end:
+  ``--from-file`` ingestion (JSON or YAML, normalised to JSON), runner-owned
+  jsonschema validation against
+  ``schemas/project-constitution.schema.yaml``, four-part snapshot write,
+  and a subprocess wrap of ``cap workflow run project-constitution`` for
+  the prompt path. Failure semantics follow P2 #2-b sub-decision A: when
+  validation fails the runner still writes all four artefacts (so doctor /
+  status can observe partial state), records ``status: failed`` in
+  ``validation.json``, returns a result with ``status="failed"`` and exits
+  with code 1. The standalone CLI moves ``--dry-run`` from a hard gate to
+  a preview-only flag (it now invokes ``plan()``).
+
+Out of scope, deferred to follow-up commits:
+
+* Promote behaviour (``--promote`` / writing back to ``.cap.constitution.yaml``)
+  lands in P2 #5.
+* Prompt-mode end-to-end smoke (real workflow + AI agent) is verified
+  manually for now and gets an integration test in P2 #8 per the Q1
+  ratification.
 
 Design references:
 
@@ -30,6 +41,10 @@ Design references:
   under ``~/.cap/projects/<id>/``; the new ``constitutions/project/<stamp>/``
   sub-tree is the P2 #1 §4.5 boundary so Project Constitution snapshots stop
   sharing a flat directory with Task Constitution snapshots.
+* Validator parity: jsonschema invocation mirrors
+  ``engine.step_runtime.validate_constitution`` (Draft 2020-12 with a
+  required-only fallback for degraded environments) so workflow-side and
+  runner-side validation produce the same verdict.
 """
 
 from __future__ import annotations
@@ -39,6 +54,7 @@ import datetime
 import json
 import os
 import re
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -74,7 +90,7 @@ _PROJECT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 
 
 RunMode = Literal["prompt", "from_file"]
-RunStatus = Literal["planned", "not_implemented"]
+RunStatus = Literal["planned", "ok", "failed"]
 
 
 def compute_stamp(now: datetime.datetime | None = None) -> str:
@@ -245,12 +261,11 @@ class ProjectConstitutionRunRequest:
 class ProjectConstitutionRunResult:
     """Outcome of a planned or executed run.
 
-    In commit 1 we only return ``status='planned'``. Commit 2 will add
-    ``ok`` / ``failed`` once the workflow wrapper and validator land.
-    Per sub-decision A in P2 #2 a failed run still yields a populated
-    ``artifacts`` block (with ``validation.json`` recording the failure)
-    so the doctor command can surface partial state — but that disk write
-    is commit 2 territory.
+    ``status='planned'`` is returned by :func:`plan`; ``ok`` / ``failed``
+    by :func:`run`. Per P2 #2 sub-decision A a failed run still writes the
+    full four-part snapshot — ``validation.json`` records the failure
+    detail and ``written_paths`` lists every artefact that landed on disk
+    so doctor / status can surface partial state.
     """
 
     request: ProjectConstitutionRunRequest
@@ -259,6 +274,7 @@ class ProjectConstitutionRunResult:
     workflow_run_id: str | None = None
     failure_reason: str | None = None
     written_paths: list[str] = field(default_factory=list)
+    validation: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -268,6 +284,7 @@ class ProjectConstitutionRunResult:
             "workflow_run_id": self.workflow_run_id,
             "failure_reason": self.failure_reason,
             "written_paths": list(self.written_paths),
+            "validation": dict(self.validation),
             "request": self.request.to_dict(),
         }
 
@@ -396,20 +413,518 @@ def plan(request: ProjectConstitutionRunRequest) -> ProjectConstitutionRunResult
     )
 
 
-def run(request: ProjectConstitutionRunRequest) -> ProjectConstitutionRunResult:
+# ─────────────────────────────────────────────────────────
+# Schema location
+# ─────────────────────────────────────────────────────────
+
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_DEFAULT_SCHEMA_PATH = _REPO_ROOT / "schemas" / "project-constitution.schema.yaml"
+_CAP_WORKFLOW_SH = _REPO_ROOT / "scripts" / "cap-workflow.sh"
+
+
+def resolve_schema_path(override: Path | None = None) -> Path:
+    """Locate ``schemas/project-constitution.schema.yaml``.
+
+    Defaults to the schema bundled with the cap installation that hosts
+    this module. Tests can override via ``--schema-path``.
+    """
+    if override is not None:
+        return override
+    return _DEFAULT_SCHEMA_PATH
+
+
+# ─────────────────────────────────────────────────────────
+# Validation
+# ─────────────────────────────────────────────────────────
+
+
+@dataclass
+class ValidationVerdict:
+    ok: bool
+    errors: list[str]
+    schema_path: str
+    validator: Literal["jsonschema", "fallback_required_only"]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "ok": self.ok,
+            "errors": list(self.errors),
+            "schema_path": self.schema_path,
+            "validator": self.validator,
+        }
+
+
+def _run_jsonschema(payload: Any, schema_path: Path) -> ValidationVerdict:
+    """Validate ``payload`` against the schema at ``schema_path``.
+
+    Mirrors ``engine.step_runtime.validate_constitution`` so workflow-side
+    and runner-side validation agree on the verdict shape:
+
+    * Schema YAML is loaded with PyYAML.
+    * jsonschema 4.x ``Draft202012Validator`` is preferred; when absent we
+      fall back to a required-only check so the runner does not blow up
+      in degraded environments (matching step_runtime parity).
+
+    Errors are surfaced as ``"<path>: <message>"`` strings sorted by
+    absolute path so output is stable across runs.
+    """
+    if not schema_path.is_file():
+        return ValidationVerdict(
+            ok=False,
+            errors=[f"schema file not found: {schema_path}"],
+            schema_path=str(schema_path),
+            validator="jsonschema",
+        )
+    try:
+        schema = yaml.safe_load(schema_path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        return ValidationVerdict(
+            ok=False,
+            errors=[f"schema YAML parse error: {exc}"],
+            schema_path=str(schema_path),
+            validator="jsonschema",
+        )
+
+    errors: list[str] = []
+    try:
+        from jsonschema import Draft202012Validator  # type: ignore[import]
+
+        validator_obj = Draft202012Validator(schema)
+        for err in sorted(
+            validator_obj.iter_errors(payload),
+            key=lambda e: list(e.absolute_path),
+        ):
+            loc = "/".join(str(p) for p in err.absolute_path) or "<root>"
+            errors.append(f"{loc}: {err.message}")
+        which: Literal["jsonschema", "fallback_required_only"] = "jsonschema"
+    except ImportError:
+        which = "fallback_required_only"
+        if not isinstance(payload, dict):
+            errors.append("<root>: payload must be a JSON object")
+        else:
+            for key in schema.get("required") or []:
+                if key not in payload:
+                    errors.append(f"<root>: missing required field '{key}'")
+
+    return ValidationVerdict(
+        ok=not errors,
+        errors=errors,
+        schema_path=str(schema_path),
+        validator=which,
+    )
+
+
+# ─────────────────────────────────────────────────────────
+# from_file ingestion
+# ─────────────────────────────────────────────────────────
+
+
+def _load_from_file(path: Path) -> dict[str, Any]:
+    """Read a Project Constitution payload from disk and normalise to dict.
+
+    Per P2 #2 sub-decision A (Q3) we accept both JSON and YAML by trying
+    JSON first (strict mode, surfaces structural errors precisely) and
+    falling back to YAML when JSON parsing fails. The normalised dict is
+    what we then schema-validate and persist as ``project-constitution.json``
+    — so a YAML input is silently re-emitted as JSON inside the snapshot,
+    which keeps downstream consumers free of YAML loaders.
+    """
+    text = path.read_text(encoding="utf-8")
+
+    json_error: str | None = None
+    try:
+        loaded = json.loads(text)
+    except json.JSONDecodeError as exc:
+        json_error = str(exc)
+        try:
+            loaded = yaml.safe_load(text)
+        except yaml.YAMLError as yexc:
+            raise ProjectConstitutionRunnerError(
+                f"--from-file payload is neither valid JSON ({json_error}) "
+                f"nor valid YAML ({yexc}): {path}"
+            ) from yexc
+
+    if not isinstance(loaded, dict):
+        raise ProjectConstitutionRunnerError(
+            f"--from-file payload must be a mapping at top level; "
+            f"got {type(loaded).__name__} from {path}"
+        )
+    return loaded
+
+
+# ─────────────────────────────────────────────────────────
+# Markdown rendering
+# ─────────────────────────────────────────────────────────
+
+
+_PLACEHOLDER_NOTICE_PROMPT = (
+    "Generated via `cap project constitution --prompt`; the constitution "
+    "JSON is canonical (see project-constitution.json)."
+)
+_PLACEHOLDER_NOTICE_FROM_FILE = (
+    "Imported via `cap project constitution --from-file`; the constitution "
+    "JSON is canonical (see project-constitution.json)."
+)
+
+
+def _render_placeholder_markdown(payload: dict[str, Any], notice: str) -> str:
+    """Render a minimal human-readable markdown view of the constitution.
+
+    Commit 2 ships a placeholder so the four-part snapshot is whole even
+    when ``--from-file`` skipped the workflow's own markdown step. P2 #5
+    promote will swap this for a richer renderer when we wire markdown
+    promotion to ``docs/cap/constitution.md``.
+    """
+    name = payload.get("name") or payload.get("constitution_id") or "Project Constitution"
+    summary = payload.get("summary") or ""
+    project_id = payload.get("project_id") or "<unknown>"
+    constitution_id = payload.get("constitution_id") or "<unknown>"
+    lines = [
+        f"# {name}",
+        "",
+        f"**project_id**: `{project_id}`",
+        f"**constitution_id**: `{constitution_id}`",
+        "",
+    ]
+    if summary:
+        lines.append(summary)
+        lines.append("")
+    lines.append(f"> {notice}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+# ─────────────────────────────────────────────────────────
+# Workflow wrap (prompt mode)
+# ─────────────────────────────────────────────────────────
+
+
+@dataclass
+class WorkflowOutcome:
+    exit_code: int
+    stdout: str
+    stderr: str
+    run_dir: Path | None
+    run_id: str | None
+    draft_markdown_path: Path | None
+
+
+_FENCE_EXPLICIT_BEGIN = re.compile(r"^<<<CONSTITUTION_JSON_BEGIN>>>\s*$", re.MULTILINE)
+_FENCE_EXPLICIT_END = re.compile(r"^<<<CONSTITUTION_JSON_END>>>\s*$", re.MULTILINE)
+_FENCE_JSON_BLOCK = re.compile(r"```json\s*\n(.*?)```", re.DOTALL)
+
+
+def _extract_constitution_json(markdown: str) -> str | None:
+    """Pull the canonical constitution JSON block out of a draft markdown.
+
+    Mirrors the fence rules in
+    ``scripts/workflows/validate-constitution.sh``: prefer the explicit
+    ``<<<CONSTITUTION_JSON_BEGIN/END>>>`` pair, fall back to a single
+    ```json``` fenced block. Returns the inner text or ``None`` if the
+    expected fences are missing.
+    """
+    begin = list(_FENCE_EXPLICIT_BEGIN.finditer(markdown))
+    end = list(_FENCE_EXPLICIT_END.finditer(markdown))
+    if len(begin) == 1 and len(end) == 1 and end[0].start() > begin[0].end():
+        return markdown[begin[0].end():end[0].start()].strip()
+    json_blocks = _FENCE_JSON_BLOCK.findall(markdown)
+    if len(json_blocks) == 1:
+        return json_blocks[0].strip()
+    return None
+
+
+def _bootstrap_run_dir(cap_home: Path) -> Path:
+    """Where the project-constitution workflow writes its run reports.
+
+    The workflow forces ``CAP_PROJECT_ID_OVERRIDE=project-constitution-bootstrap``
+    (see scripts/cap-workflow.sh:482-485) so its artefacts always land in
+    the bootstrap project — independent of the caller's project_id.
+    """
+    return cap_home / "projects" / "project-constitution-bootstrap" \
+        / "reports" / "workflows" / "project-constitution"
+
+
+def _find_latest_run_dir(parent: Path) -> Path | None:
+    if not parent.is_dir():
+        return None
+    candidates = [p for p in parent.iterdir() if p.is_dir() and p.name.startswith("run_")]
+    if not candidates:
+        return None
+    candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidates[0]
+
+
+def _find_draft_markdown(run_dir: Path) -> Path | None:
+    """Locate the ``draft_constitution`` step output inside a workflow run dir.
+
+    Workflow steps write ``<index>-<step_id>.md``; the index varies because
+    bootstrap / normalize / draft / validate / persist are numbered in
+    execution order. Glob for ``*-draft_constitution.md`` and pick the
+    deterministic match.
+    """
+    matches = sorted(run_dir.glob("*-draft_constitution.md"))
+    return matches[0] if matches else None
+
+
+def _invoke_workflow(prompt: str, project_root: Path) -> WorkflowOutcome:
+    """Run ``cap workflow run project-constitution "<prompt>"`` as a subprocess.
+
+    We deliberately spawn the shell entrypoint instead of importing the
+    workflow loader because the workflow has its own
+    ``CAP_PROJECT_ID_OVERRIDE`` lifecycle plus AI-agent fan-out that we do
+    not want to re-host inside the runner process. The runner only cares
+    about the exit code and the run dir produced under
+    ``~/.cap/projects/project-constitution-bootstrap/...``.
+    """
+    if not _CAP_WORKFLOW_SH.is_file():
+        raise ProjectConstitutionRunnerError(
+            f"cap-workflow.sh not found at {_CAP_WORKFLOW_SH}; "
+            "the runner must be invoked from a cap installation tree."
+        )
+
+    cmd = ["bash", str(_CAP_WORKFLOW_SH), "run", "project-constitution", prompt]
+    proc = subprocess.run(
+        cmd,
+        cwd=str(project_root),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    cap_home = resolve_cap_home(None)
+    run_parent = _bootstrap_run_dir(cap_home)
+    run_dir = _find_latest_run_dir(run_parent)
+    run_id = run_dir.name if run_dir else None
+    draft_md = _find_draft_markdown(run_dir) if run_dir else None
+
+    return WorkflowOutcome(
+        exit_code=proc.returncode,
+        stdout=proc.stdout,
+        stderr=proc.stderr,
+        run_dir=run_dir,
+        run_id=run_id,
+        draft_markdown_path=draft_md,
+    )
+
+
+# ─────────────────────────────────────────────────────────
+# Snapshot write
+# ─────────────────────────────────────────────────────────
+
+
+def _write_artifacts(
+    request: ProjectConstitutionRunRequest,
+    *,
+    payload: dict[str, Any] | None,
+    markdown: str,
+    verdict: ValidationVerdict,
+    source_prompt_text: str,
+) -> list[str]:
+    """Write the four-part snapshot under ``request.snapshot_dir``.
+
+    Per P2 #2-b sub-decision A (Q2), we write **all four** artefacts even
+    when ``verdict.ok`` is False so doctor / status can observe partial
+    state. ``payload`` may be ``None`` when JSON extraction failed (e.g.
+    workflow draft missing canonical fences) — in that case we still
+    create a placeholder ``project-constitution.json`` containing only
+    the failure context, and ``validation.json`` records why.
+    """
+    snapshot_dir = request.snapshot_dir
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+
+    written: list[str] = []
+
+    # 1. project-constitution.md
+    md_path = request.artifacts.markdown
+    md_path.write_text(markdown, encoding="utf-8")
+    written.append(str(md_path))
+
+    # 2. project-constitution.json
+    json_path = request.artifacts.json
+    json_body = payload if payload is not None else {
+        "_runner_note": "payload unavailable; see validation.json for why",
+    }
+    json_path.write_text(
+        json.dumps(json_body, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    written.append(str(json_path))
+
+    # 3. validation.json
+    validation_path = request.artifacts.validation
+    validation_payload: dict[str, Any] = {
+        "status": "ok" if verdict.ok else "failed",
+        "verdict": verdict.to_dict(),
+        "stamp": request.stamp,
+    }
+    validation_path.write_text(
+        json.dumps(validation_payload, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    written.append(str(validation_path))
+
+    # 4. source-prompt.txt
+    sp_path = request.artifacts.source_prompt
+    sp_path.write_text(source_prompt_text, encoding="utf-8")
+    written.append(str(sp_path))
+
+    return written
+
+
+# ─────────────────────────────────────────────────────────
+# run() — end-to-end execution
+# ─────────────────────────────────────────────────────────
+
+
+def _run_from_file(
+    request: ProjectConstitutionRunRequest,
+    schema_path: Path,
+) -> ProjectConstitutionRunResult:
+    assert request.from_file is not None
+    payload = _load_from_file(request.from_file)
+    verdict = _run_jsonschema(payload, schema_path)
+    markdown = _render_placeholder_markdown(payload, _PLACEHOLDER_NOTICE_FROM_FILE)
+    source_prompt_text = (
+        f"Imported via `cap project constitution --from-file` "
+        f"from {request.from_file} at {request.stamp}.\n"
+        "See project-constitution.json for the canonical content.\n"
+    )
+    written = _write_artifacts(
+        request,
+        payload=payload,
+        markdown=markdown,
+        verdict=verdict,
+        source_prompt_text=source_prompt_text,
+    )
+    return ProjectConstitutionRunResult(
+        request=request,
+        status="ok" if verdict.ok else "failed",
+        note=f"mode=from_file; validation_ok={verdict.ok}",
+        failure_reason=None if verdict.ok else "; ".join(verdict.errors[:3]),
+        written_paths=written,
+        validation=verdict.to_dict(),
+    )
+
+
+def _run_prompt(
+    request: ProjectConstitutionRunRequest,
+    schema_path: Path,
+) -> ProjectConstitutionRunResult:
+    assert request.prompt is not None
+    outcome = _invoke_workflow(request.prompt, request.project_root)
+
+    payload: dict[str, Any] | None = None
+    extraction_error: str | None = None
+    if outcome.draft_markdown_path is not None:
+        try:
+            draft_md_text = outcome.draft_markdown_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            extraction_error = f"failed to read draft markdown: {exc}"
+            draft_md_text = ""
+        else:
+            json_text = _extract_constitution_json(draft_md_text)
+            if json_text is None:
+                extraction_error = (
+                    "draft markdown lacks the canonical "
+                    "<<<CONSTITUTION_JSON_BEGIN/END>>> fence and a single "
+                    "```json``` block could not be located"
+                )
+            else:
+                try:
+                    payload = json.loads(json_text)
+                except json.JSONDecodeError as exc:
+                    extraction_error = f"draft constitution JSON parse error: {exc}"
+    else:
+        extraction_error = (
+            "workflow did not produce a draft_constitution markdown "
+            "artefact under the run report directory"
+        )
+
+    if payload is None:
+        verdict = ValidationVerdict(
+            ok=False,
+            errors=[extraction_error or "unknown extraction failure"],
+            schema_path=str(schema_path),
+            validator="jsonschema",
+        )
+        markdown = (
+            f"# Project Constitution (extraction failed)\n\n"
+            f"> Workflow exit code: {outcome.exit_code}\n"
+            f"> Reason: {extraction_error}\n"
+        )
+    else:
+        verdict = _run_jsonschema(payload, schema_path)
+        markdown = _render_placeholder_markdown(payload, _PLACEHOLDER_NOTICE_PROMPT)
+
+    source_prompt_text = (
+        f"Captured via `cap project constitution --prompt` at {request.stamp}.\n"
+        f"workflow_run_id={outcome.run_id or '<missing>'}\n"
+        f"workflow_exit_code={outcome.exit_code}\n"
+        "----- prompt -----\n"
+        f"{request.prompt}\n"
+    )
+    written = _write_artifacts(
+        request,
+        payload=payload,
+        markdown=markdown,
+        verdict=verdict,
+        source_prompt_text=source_prompt_text,
+    )
+
+    if outcome.exit_code != 0 and verdict.ok:
+        # Workflow halted but we somehow still got a valid payload — the
+        # runner cannot honour that as success. Coerce to failed and
+        # surface the workflow stderr as the failure reason.
+        verdict = ValidationVerdict(
+            ok=False,
+            errors=[
+                f"workflow exited with code {outcome.exit_code}",
+                outcome.stderr.strip().splitlines()[-1] if outcome.stderr.strip() else "",
+            ],
+            schema_path=verdict.schema_path,
+            validator=verdict.validator,
+        )
+
+    return ProjectConstitutionRunResult(
+        request=request,
+        status="ok" if verdict.ok else "failed",
+        note=(
+            f"mode=prompt; workflow_exit={outcome.exit_code}; "
+            f"validation_ok={verdict.ok}"
+        ),
+        workflow_run_id=outcome.run_id,
+        failure_reason=None if verdict.ok else "; ".join(
+            e for e in verdict.errors[:3] if e
+        ),
+        written_paths=written,
+        validation=verdict.to_dict(),
+    )
+
+
+def run(
+    request: ProjectConstitutionRunRequest,
+    *,
+    schema_path: Path | None = None,
+) -> ProjectConstitutionRunResult:
     """Execute the runner end-to-end.
 
-    Not implemented in commit 1. The follow-up commit will subprocess
-    ``cap workflow run project-constitution`` for ``mode='prompt'``,
-    schema-validate the ``mode='from_file'`` payload, write the four-part
-    snapshot under ``request.snapshot_dir`` and update
-    ``.cap.constitution.yaml`` only when ``--promote`` is added in P2 #5.
+    * ``mode='from_file'`` reads / normalises / validates / writes — fully
+      deterministic, smoke-covered.
+    * ``mode='prompt'`` shells out to ``cap workflow run project-constitution``,
+      extracts the constitution JSON from the draft step, validates it
+      against the bundled schema, and writes the four-part snapshot.
+      Manual verification only in commit 2; an integration test is
+      scheduled for P2 #8 (per Q1 of the P2 #2-b ratification).
+
+    A failure (validation or extraction) still leaves all four artefacts
+    on disk; the result reports ``status="failed"`` and the caller is
+    expected to map that to a non-zero exit code.
     """
-    raise NotImplementedError(
-        "run() is intentionally unimplemented in P2 #2-b commit 1; "
-        "artifact write and schema validation land in the follow-up commit. "
-        "Pass --dry-run to inspect the planned layout."
-    )
+    schema = resolve_schema_path(schema_path)
+    if request.mode == "from_file":
+        return _run_from_file(request, schema)
+    return _run_prompt(request, schema)
 
 
 # ─────────────────────────────────────────────────────────
@@ -438,10 +953,25 @@ def _format_text(result: ProjectConstitutionRunResult) -> str:
         lines.append(f"from_file={req.from_file}")
     if req.prompt is not None:
         # Show only that a prompt is present plus its character count; the
-        # full text is preserved by the source_prompt artifact (commit 2).
+        # full text is preserved by the source_prompt artifact.
         lines.append(f"prompt_chars={len(req.prompt)}")
+    if result.workflow_run_id:
+        lines.append(f"workflow_run_id={result.workflow_run_id}")
     if result.note:
         lines.append(f"note={result.note}")
+    if result.validation:
+        lines.append(
+            "validation:"
+            f" ok={result.validation.get('ok')}"
+            f" validator={result.validation.get('validator')}"
+        )
+        errs = result.validation.get("errors") or []
+        if errs:
+            lines.append("validation_errors:")
+            for e in errs[:10]:
+                lines.append(f"  - {e}")
+            if len(errs) > 10:
+                lines.append(f"  - ... ({len(errs) - 10} more)")
     if result.failure_reason:
         lines.append(f"failure_reason={result.failure_reason}")
     if result.written_paths:
@@ -455,10 +985,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cap project constitution",
         description=(
-            "Plan-only runner for Project Constitution snapshot layout. "
-            "P2 #2-b commit 1 only implements --dry-run; actual run "
-            "(workflow wrap + four-part write + jsonschema validation) "
-            "lands in the follow-up commit."
+            "Generate or import a Project Constitution snapshot under "
+            "<cap_home>/projects/<id>/constitutions/project/<stamp>/. "
+            "Pass --dry-run to preview the planned layout without "
+            "writing anything."
         ),
     )
     src = parser.add_mutually_exclusive_group(required=True)
@@ -466,7 +996,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--prompt",
         type=str,
         default=None,
-        help="User prompt fed to the project-constitution workflow.",
+        help=(
+            "User prompt forwarded to `cap workflow run project-constitution`. "
+            "Drives the AI-backed draft path."
+        ),
     )
     src.add_argument(
         "--from-file",
@@ -474,8 +1007,8 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help=(
-            "Pre-drafted Project Constitution JSON / YAML file. Bypasses "
-            "the AI draft step (commit 2)."
+            "Pre-drafted Project Constitution JSON or YAML file. Bypasses "
+            "the AI draft step; the runner just validates and persists."
         ),
     )
     parser.add_argument(
@@ -506,12 +1039,22 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--schema-path",
+        dest="schema_path",
+        type=Path,
+        default=None,
+        help=(
+            "Override the JSON Schema file for validation "
+            "(default: schemas/project-constitution.schema.yaml)."
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help=(
-            "Required in commit 1. Computes the snapshot layout without "
-            "writing anything. Commit 2 will make the default mode an actual "
-            "run and keep --dry-run for preview."
+            "Compute the snapshot layout via plan() without touching disk "
+            "or invoking the workflow. Useful for previewing where a real "
+            "run would write."
         ),
     )
     parser.add_argument(
@@ -525,17 +1068,6 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-
-    # Commit 1 hard-gates execution behind --dry-run so a follow-up branch
-    # cannot accidentally take a half-implemented runner into production.
-    if not args.dry_run:
-        sys.stderr.write(
-            "cap project constitution: --dry-run is required in P2 #2-b commit 1; "
-            "the actual run path (workflow wrap + four-part write + validator) "
-            "lands in the follow-up commit. See "
-            "docs/cap/CONSTITUTION-BOUNDARY.md §6 for the P2 split.\n"
-        )
-        return 2
 
     try:
         request = build_request(
@@ -551,7 +1083,14 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"cap project constitution: {exc}\n")
         return 1
 
-    result = plan(request)
+    if args.dry_run:
+        result = plan(request)
+    else:
+        try:
+            result = run(request, schema_path=args.schema_path)
+        except ProjectConstitutionRunnerError as exc:
+            sys.stderr.write(f"cap project constitution: {exc}\n")
+            return 1
 
     if args.format == "json":
         sys.stdout.write(result.to_json() + "\n")
@@ -559,6 +1098,12 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write(result.to_yaml())
     else:
         sys.stdout.write(_format_text(result))
+
+    # Per Q2 ratification: validation failure still leaves all four
+    # artefacts on disk, but the CLI surfaces the failure as exit 1 so
+    # callers (cap-project.sh / CI) can branch on it.
+    if result.status == "failed":
+        return 1
     return 0
 
 
