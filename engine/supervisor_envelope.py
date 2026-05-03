@@ -364,6 +364,215 @@ def check_envelope_drift(payload: dict[str, Any]) -> DriftReport:
 
 
 # ─────────────────────────────────────────────────────────
+# Failure routing resolution
+# ─────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class XrefReport:
+    """Cross-reference result between envelope.failure_routing and
+    envelope.capability_graph.
+
+    Per the P3 #6 ratification (Q2 = B), this is a separate failure
+    class from drift: drift covers envelope-vs-task_constitution
+    consistency, xref covers internal envelope-field consistency
+    between failure_routing and capability_graph.
+    """
+
+    ok: bool
+    mismatches: list[str]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"ok": self.ok, "mismatches": list(self.mismatches)}
+
+
+def _capability_graph_step_ids(payload: dict[str, Any]) -> list[str] | None:
+    """Best-effort extraction of step ids from envelope.capability_graph.
+
+    Returns ``None`` when the structure is malformed enough that xref
+    checking cannot proceed; callers should treat that as "schema
+    validation should have caught this" and report it as an xref
+    mismatch rather than raising.
+    """
+    graph = payload.get("capability_graph")
+    if not isinstance(graph, dict):
+        return None
+    nodes = graph.get("nodes")
+    if not isinstance(nodes, list):
+        return None
+    return [
+        node.get("step_id")
+        for node in nodes
+        if isinstance(node, dict) and isinstance(node.get("step_id"), str)
+    ]
+
+
+def check_failure_routing_xrefs(payload: dict[str, Any]) -> XrefReport:
+    """Verify failure_routing step_id references against capability_graph.
+
+    Per the P3 #1 boundary memo §4.4 / §7 Q3 = A and the P3 #2 schema
+    rationale, the envelope schema deliberately does NOT enforce
+    cross-references between failure_routing and capability_graph
+    nodes — schema validation is envelope-shape-only. This helper
+    closes the gap by reading both sub-objects and reporting any
+    dangling reference. Three classes of dangling reference are
+    detected:
+
+    1. ``failure_routing.default_route_back_to_step`` set but
+       not in ``capability_graph.nodes[].step_id``. Only checked
+       when ``default_action == "route_back_to"`` (the field is
+       null-tolerated otherwise per the schema).
+    2. ``failure_routing.overrides[].step_id`` not in graph nodes.
+    3. ``failure_routing.overrides[].route_back_to_step`` set but
+       not in graph nodes (only when ``on_fail == "route_back_to"``).
+
+    Mirrors the read-only / never-raise contract of
+    :func:`check_envelope_drift`: malformed input yields an
+    ``ok=False`` report with descriptive mismatches rather than a
+    Python exception.
+    """
+    mismatches: list[str] = []
+
+    if not isinstance(payload, dict):
+        return XrefReport(
+            ok=False,
+            mismatches=["payload is not a JSON object; cannot check xref"],
+        )
+
+    fr = payload.get("failure_routing")
+    if not isinstance(fr, dict):
+        return XrefReport(
+            ok=False,
+            mismatches=[
+                "failure_routing missing or not an object; "
+                "schema validation should have rejected this earlier"
+            ],
+        )
+
+    step_ids = _capability_graph_step_ids(payload)
+    if step_ids is None:
+        return XrefReport(
+            ok=False,
+            mismatches=[
+                "capability_graph.nodes missing or malformed; "
+                "schema validation should have rejected this earlier"
+            ],
+        )
+    valid_step_ids = set(step_ids)
+
+    default_action = fr.get("default_action")
+    default_route_back = fr.get("default_route_back_to_step")
+    if default_action == "route_back_to" and default_route_back is not None:
+        if default_route_back not in valid_step_ids:
+            mismatches.append(
+                "dangling default_route_back_to_step: "
+                f"{default_route_back!r} not in capability_graph step_ids "
+                f"{sorted(valid_step_ids)}"
+            )
+
+    overrides = fr.get("overrides")
+    if isinstance(overrides, list):
+        for idx, ov in enumerate(overrides):
+            if not isinstance(ov, dict):
+                continue  # schema validation owns shape errors
+            ov_step_id = ov.get("step_id")
+            if isinstance(ov_step_id, str) and ov_step_id not in valid_step_ids:
+                mismatches.append(
+                    f"dangling overrides[{idx}].step_id: "
+                    f"{ov_step_id!r} not in capability_graph step_ids "
+                    f"{sorted(valid_step_ids)}"
+                )
+            ov_on_fail = ov.get("on_fail")
+            ov_route_back = ov.get("route_back_to_step")
+            if (
+                ov_on_fail == "route_back_to"
+                and ov_route_back is not None
+                and ov_route_back not in valid_step_ids
+            ):
+                mismatches.append(
+                    f"dangling overrides[{idx}].route_back_to_step: "
+                    f"{ov_route_back!r} not in capability_graph step_ids "
+                    f"{sorted(valid_step_ids)}"
+                )
+
+    return XrefReport(ok=not mismatches, mismatches=mismatches)
+
+
+def resolve_failure_routing(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Resolve per-step failure routing by merging defaults + overrides.
+
+    For every node in ``envelope.capability_graph.nodes`` the resolver
+    produces one entry describing the effective routing the runtime
+    should apply when that step fails. Entries are aligned with the
+    graph node order so callers can iterate them positionally.
+
+    Resolution rule:
+
+    * If a per-step override exists in ``failure_routing.overrides[]``
+      whose ``step_id`` matches the node's ``step_id``, it wins:
+      ``source = "override"`` and the override's
+      ``on_fail`` / ``route_back_to_step`` / ``max_retries`` carry over.
+    * Otherwise fall back to ``failure_routing.default_action`` plus
+      ``default_route_back_to_step`` / ``default_max_retries``:
+      ``source = "default"``.
+
+    Per the P3 #6 ratification (Q1 = A) this resolver is a pure
+    helper in :mod:`engine.supervisor_envelope`; it does NOT validate
+    the envelope and does NOT cross-reference dangling step_ids.
+    Callers that need those guarantees should run
+    :func:`validate_envelope` and :func:`check_failure_routing_xrefs`
+    first; the resolver is happy-path-only.
+
+    The resolver tolerates missing optional fields (e.g. an override
+    with ``on_fail == "halt"`` carries no route_back_to_step or
+    max_retries) by emitting ``None`` for them — the schema already
+    enforces conditional presence at the producer side.
+    """
+    if not isinstance(payload, dict):
+        return []
+    fr = payload.get("failure_routing")
+    if not isinstance(fr, dict):
+        return []
+    step_ids = _capability_graph_step_ids(payload)
+    if step_ids is None:
+        return []
+
+    overrides = fr.get("overrides")
+    override_by_step: dict[str, dict[str, Any]] = {}
+    if isinstance(overrides, list):
+        for ov in overrides:
+            if isinstance(ov, dict) and isinstance(ov.get("step_id"), str):
+                override_by_step[ov["step_id"]] = ov
+
+    default_action = fr.get("default_action")
+    default_route_back = fr.get("default_route_back_to_step")
+    default_max_retries = fr.get("default_max_retries")
+
+    resolved: list[dict[str, Any]] = []
+    for sid in step_ids:
+        if sid is None:
+            continue
+        if sid in override_by_step:
+            ov = override_by_step[sid]
+            resolved.append({
+                "step_id": sid,
+                "on_fail": ov.get("on_fail"),
+                "route_back_to_step": ov.get("route_back_to_step"),
+                "max_retries": ov.get("max_retries"),
+                "source": "override",
+            })
+        else:
+            resolved.append({
+                "step_id": sid,
+                "on_fail": default_action,
+                "route_back_to_step": default_route_back,
+                "max_retries": default_max_retries,
+                "source": "default",
+            })
+    return resolved
+
+
+# ─────────────────────────────────────────────────────────
 # CLI
 # ─────────────────────────────────────────────────────────
 
@@ -419,6 +628,36 @@ def _cmd_drift(args: argparse.Namespace) -> int:
     return 0 if report.ok else 1
 
 
+def _cmd_xref(args: argparse.Namespace) -> int:
+    text = _read_input(args.input)
+    extraction = extract_envelope(text)
+    if not extraction.ok or extraction.payload is None:
+        _print_json({
+            "stage": "extract",
+            "ok": False,
+            "error": extraction.error,
+        })
+        return 1
+    report = check_failure_routing_xrefs(extraction.payload)
+    _print_json({"stage": "xref", **report.to_dict()})
+    return 0 if report.ok else 1
+
+
+def _cmd_resolve(args: argparse.Namespace) -> int:
+    text = _read_input(args.input)
+    extraction = extract_envelope(text)
+    if not extraction.ok or extraction.payload is None:
+        _print_json({
+            "stage": "extract",
+            "ok": False,
+            "error": extraction.error,
+        })
+        return 1
+    resolved = resolve_failure_routing(extraction.payload)
+    _print_json({"stage": "resolve", "ok": True, "resolved": resolved})
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m engine.supervisor_envelope",
@@ -470,6 +709,27 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     drift.add_argument("--input", default=None)
     drift.set_defaults(func=_cmd_drift)
+
+    xref = sub.add_parser(
+        "xref",
+        help=(
+            "Extract + check failure_routing step_id references against "
+            "capability_graph nodes (P3 #6 producer-side cross-reference)."
+        ),
+    )
+    xref.add_argument("--input", default=None)
+    xref.set_defaults(func=_cmd_xref)
+
+    resolve = sub.add_parser(
+        "resolve",
+        help=(
+            "Extract + resolve per-step failure routing by merging "
+            "default_action with overrides[]; output one entry per "
+            "capability_graph node."
+        ),
+    )
+    resolve.add_argument("--input", default=None)
+    resolve.set_defaults(func=_cmd_resolve)
 
     return parser
 

@@ -33,6 +33,16 @@
 #   Case 5 hint pass-through: envelope with empty compile_hints={} still
 #                           returns compile_hints_applied={}, not missing
 #                           or None — caller can rely on the key.
+#   Case 6 (P3 #6) routing resolved: output dict gains a 9th key
+#                           `failure_routing_resolved` aligned with the
+#                           capability_graph node order, with one entry
+#                           per node carrying source=default|override
+#                           and the merged on_fail / route_back_to_step
+#                           / max_retries values.
+#   Case 7 (P3 #6) xref dangling step_id: envelope override referencing
+#                           a non-existent step_id raises
+#                           CompileFromEnvelopeError with "xref" in the
+#                           message; output dict is never produced.
 #
 # Determinism: all cases run in-process via `python3 - <<EOF` against
 # the engine module; no AI / no network / no installed cap. Each case
@@ -113,7 +123,7 @@ print('hints_applied_keys=' + ','.join(sorted(out['compile_hints_applied'].keys(
 print('hints_registry=' + str(out['compile_hints_applied']['registry_preference']))
 print('hints_notes=' + str(out['compile_hints_applied']['notes']))
 ")"
-assert_contains "case 0 returns 8-key dict" "keys=binding,capability_graph,compile_hints_applied,compiled_workflow,plan,project_context,task_constitution,unresolved_policy" "${out0}"
+assert_contains "case 0 returns 9-key dict (legacy 7 + compile_hints_applied + failure_routing_resolved)" "keys=binding,capability_graph,compile_hints_applied,compiled_workflow,failure_routing_resolved,plan,project_context,task_constitution,unresolved_policy" "${out0}"
 assert_contains "case 0 envelope task_id wins" "task_id=env-happy" "${out0}"
 assert_contains "case 0 envelope goal wins" "goal=envelope-supplied goal text" "${out0}"
 assert_contains "case 0 envelope goal_stage wins" "goal_stage=formal_specification" "${out0}"
@@ -270,6 +280,104 @@ print('type=' + type(out['compile_hints_applied']).__name__)
 assert_contains "case 5 key present" "present=True" "${out5}"
 assert_contains "case 5 value is empty dict" "value={}" "${out5}"
 assert_contains "case 5 type is dict" "type=dict" "${out5}"
+
+# ── Case 6 ──────────────────────────────────────────────────────────────
+# P3 #6: output dict gains a 9th key `failure_routing_resolved` aligned
+# with capability_graph node order. Two-step graph + per-step override
+# proves the resolver runs through compile_task_from_envelope and merges
+# default + override at the right step.
+echo "Case 6: failure_routing_resolved appears in output, resolver merges per-step override"
+out6="$(run_py "
+from engine.task_scoped_compiler import TaskScopedWorkflowCompiler
+c = TaskScopedWorkflowCompiler()
+envelope = {
+  'schema_version': 1, 'task_id': 'env-route-001', 'source_request': 'two-step routing',
+  'produced_at': '2026-05-03T22:00:00Z', 'supervisor_role': '01-Supervisor',
+  'task_constitution': {
+    'task_id': 'env-route-001', 'project_id': 'p', 'source_request': 'two-step routing',
+    'goal': 'g', 'goal_stage': 'informal_planning',
+    'success_criteria': ['x'], 'non_goals': [],
+    'execution_plan': [
+        {'step_id':'prd','capability':'prd_generation'},
+        {'step_id':'tech','capability':'technical_planning'},
+    ]
+  },
+  'capability_graph': {
+    'schema_version': 1, 'task_id': 'env-route-001', 'goal_stage': 'informal_planning',
+    'nodes': [
+        {'step_id':'prd','capability':'prd_generation','required':True,'depends_on':[],'reason':'scope'},
+        {'step_id':'tech','capability':'technical_planning','required':True,'depends_on':['prd'],'reason':'select stack'},
+    ]
+  },
+  'governance': {'goal_stage':'informal_planning','watcher_mode':'final_only','logger_mode':'milestone_log','context_mode':'summary_first'},
+  'compile_hints': {},
+  'failure_routing': {
+    'default_action': 'halt',
+    'overrides': [
+      {'step_id':'tech','on_fail':'retry','max_retries':2},
+    ],
+  },
+}
+out = c.compile_task_from_envelope(envelope)
+print('keys=' + ','.join(sorted(out.keys())))
+fr = out['failure_routing_resolved']
+print('count=' + str(len(fr)))
+print('order=' + ','.join(e['step_id'] for e in fr))
+print('prd_source=' + fr[0]['source'])
+print('prd_on_fail=' + fr[0]['on_fail'])
+print('tech_source=' + fr[1]['source'])
+print('tech_on_fail=' + fr[1]['on_fail'])
+print('tech_max_retries=' + str(fr[1]['max_retries']))
+")"
+assert_contains "case 6 9-key dict including failure_routing_resolved" \
+  "keys=binding,capability_graph,compile_hints_applied,compiled_workflow,failure_routing_resolved,plan,project_context,task_constitution,unresolved_policy" \
+  "${out6}"
+assert_contains "case 6 resolver entry count matches graph" "count=2" "${out6}"
+assert_contains "case 6 entries aligned with graph order" "order=prd,tech" "${out6}"
+assert_contains "case 6 prd uses default branch" "prd_source=default" "${out6}"
+assert_contains "case 6 prd inherits default halt" "prd_on_fail=halt" "${out6}"
+assert_contains "case 6 tech uses override branch" "tech_source=override" "${out6}"
+assert_contains "case 6 tech adopts override on_fail" "tech_on_fail=retry" "${out6}"
+assert_contains "case 6 tech preserves override max_retries" "tech_max_retries=2" "${out6}"
+
+# ── Case 7 ──────────────────────────────────────────────────────────────
+# P3 #6: dangling step_id in failure_routing.overrides triggers the new
+# xref gate, raising CompileFromEnvelopeError before the output dict is
+# even constructed. Distinguishable from schema-fail / drift-fail by the
+# "xref" substring.
+echo "Case 7: xref dangling overrides[].step_id → CompileFromEnvelopeError"
+out7="$(run_py "
+from engine.task_scoped_compiler import TaskScopedWorkflowCompiler, CompileFromEnvelopeError
+c = TaskScopedWorkflowCompiler()
+dangling = {
+  'schema_version': 1, 'task_id': 'env-dangling', 'source_request': 'xref demo',
+  'produced_at': '2026-05-03T22:00:00Z', 'supervisor_role': '01-Supervisor',
+  'task_constitution': {
+    'task_id': 'env-dangling', 'project_id': 'p', 'source_request': 'xref demo',
+    'goal': 'g', 'goal_stage': 'informal_planning',
+    'success_criteria': ['x'], 'non_goals': [],
+    'execution_plan': [{'step_id':'prd','capability':'prd_generation'}]
+  },
+  'capability_graph': {
+    'schema_version': 1, 'task_id': 'env-dangling', 'goal_stage': 'informal_planning',
+    'nodes': [{'step_id':'prd','capability':'prd_generation','required':True,'depends_on':[],'reason':'scope'}]
+  },
+  'governance': {'goal_stage':'informal_planning','watcher_mode':'final_only','logger_mode':'milestone_log','context_mode':'summary_first'},
+  'compile_hints': {},
+  'failure_routing': {
+    'default_action': 'halt',
+    'overrides': [{'step_id':'phantom-step','on_fail':'halt'}],
+  },
+}
+try:
+    c.compile_task_from_envelope(dangling)
+    print('UNEXPECTED_PASS')
+except CompileFromEnvelopeError as e:
+    print('raised=' + str(e)[:200])
+")"
+assert_contains "case 7 raised CompileFromEnvelopeError" "raised=" "${out7}"
+assert_contains "case 7 message names xref class" "xref" "${out7}"
+assert_contains "case 7 surfaces phantom step name" "phantom-step" "${out7}"
 
 # ── Summary ─────────────────────────────────────────────────────────────
 echo ""

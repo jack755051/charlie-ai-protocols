@@ -374,11 +374,15 @@ class TaskScopedWorkflowCompiler:
         try:
             from .supervisor_envelope import (
                 check_envelope_drift,
+                check_failure_routing_xrefs,
+                resolve_failure_routing,
                 validate_envelope,
             )
         except ImportError:  # pragma: no cover
             from supervisor_envelope import (  # type: ignore[no-redef]
                 check_envelope_drift,
+                check_failure_routing_xrefs,
+                resolve_failure_routing,
                 validate_envelope,
             )
 
@@ -398,6 +402,18 @@ class TaskScopedWorkflowCompiler:
             raise CompileFromEnvelopeError(
                 "envelope drift detected: "
                 + "; ".join(drift.mismatches)
+            )
+        # P3 #6: failure_routing step_id cross-reference check. The
+        # envelope schema deliberately does not enforce xrefs (P3 #1
+        # boundary memo §4.4 / §7 Q3 = A); we close the gap here so a
+        # producer error (dangling step_id) surfaces at the same gate
+        # as schema / drift failures rather than waiting for runtime
+        # to choke on an unmatched route_back_to_step.
+        xref = check_failure_routing_xrefs(envelope)
+        if not xref.ok:
+            raise CompileFromEnvelopeError(
+                "envelope failure_routing xref failed: "
+                + "; ".join(xref.mismatches)
             )
 
         envelope_constitution = envelope["task_constitution"]
@@ -445,6 +461,7 @@ class TaskScopedWorkflowCompiler:
             "compiled_workflow": compiled_workflow,
             "plan": plan,
             "compile_hints_applied": dict(compile_hints),
+            "failure_routing_resolved": resolve_failure_routing(envelope),
         }
 
     def build_unresolved_policy(self, constitution: dict, capability_graph: dict, binding: dict) -> dict:

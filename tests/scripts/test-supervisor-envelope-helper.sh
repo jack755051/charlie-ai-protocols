@@ -27,6 +27,20 @@
 #     Case 14: source_request drift → ok=false, mismatches names "source_request drift"
 #     Case 15: missing task_constitution body → ok=false, mismatches names "task_constitution missing"
 #
+#   Failure-routing xref (P3 #6, CLI `xref` subcommand):
+#     Case 16: clean envelope (default-only, no overrides) → ok=true
+#     Case 17: dangling default_route_back_to_step → mismatches names "dangling default"
+#     Case 18: dangling overrides[].step_id → mismatches names "dangling overrides[" + step_id
+#     Case 19: dangling overrides[].route_back_to_step → mismatches names "route_back_to_step"
+#     Case 20: missing failure_routing entirely → mismatches names "failure_routing missing"
+#
+#   Failure-routing resolve (P3 #6, CLI `resolve` subcommand):
+#     Case 21: default-only envelope → all entries source=default, on_fail=halt
+#     Case 22: per-step override → matched step source=override with override fields,
+#              non-matched stays source=default
+#     Case 23: empty overrides=[] → all entries source=default
+#     Case 24: extract failure short-circuits resolve → stage=extract surfaced
+#
 # Determinism: pure helper module, no I/O beyond reading the schema. No
 # AI / no network / no installed `cap`. All fixtures are inline strings
 # piped via stdin so cross-case state cannot leak.
@@ -284,6 +298,172 @@ result="$(run_helper drift "$(with_fence "${no_tc}")")"
 out15="${result%%|*}"; rest="${result#*|}"; exit15="${rest##*|}"
 assert_eq "case 15 exit 1" "1" "${exit15}"
 assert_contains "case 15 names missing task_constitution" "task_constitution missing" "${out15}"
+
+# ── Case 16 ─────────────────────────────────────────────────────────────
+# P3 #6 xref helper: aligned envelope (default halt, no overrides) → ok.
+# Reuse VALID_BODY whose capability_graph has node step_id="prd" and a
+# default_action=halt with overrides=[].
+echo "Case 16: xref — clean default-only envelope"
+result="$(run_helper xref "$(with_fence "${VALID_BODY}")")"
+out16="${result%%|*}"; rest="${result#*|}"; exit16="${rest##*|}"
+assert_eq "case 16 exit 0" "0" "${exit16}"
+assert_contains "case 16 stage=xref" '"stage": "xref"' "${out16}"
+assert_contains "case 16 ok=true" '"ok": true' "${out16}"
+
+# ── Case 17 ─────────────────────────────────────────────────────────────
+echo "Case 17: xref — dangling default_route_back_to_step"
+dangling_default="$(printf '%s' "${VALID_BODY}" \
+  | python3 -c '
+import json, sys
+d = json.loads(sys.stdin.read())
+d["failure_routing"] = {
+    "default_action": "route_back_to",
+    "default_route_back_to_step": "no-such-step",
+    "overrides": [],
+}
+print(json.dumps(d))
+')"
+result="$(run_helper xref "$(with_fence "${dangling_default}")")"
+out17="${result%%|*}"; rest="${result#*|}"; exit17="${rest##*|}"
+assert_eq "case 17 exit 1" "1" "${exit17}"
+assert_contains "case 17 ok=false" '"ok": false' "${out17}"
+assert_contains "case 17 names dangling default" \
+  "dangling default_route_back_to_step" "${out17}"
+
+# ── Case 18 ─────────────────────────────────────────────────────────────
+echo "Case 18: xref — dangling overrides[].step_id"
+dangling_step="$(printf '%s' "${VALID_BODY}" \
+  | python3 -c '
+import json, sys
+d = json.loads(sys.stdin.read())
+d["failure_routing"] = {
+    "default_action": "halt",
+    "overrides": [{"step_id": "phantom-step", "on_fail": "halt"}],
+}
+print(json.dumps(d))
+')"
+result="$(run_helper xref "$(with_fence "${dangling_step}")")"
+out18="${result%%|*}"; rest="${result#*|}"; exit18="${rest##*|}"
+assert_eq "case 18 exit 1" "1" "${exit18}"
+assert_contains "case 18 names dangling overrides step_id" \
+  "dangling overrides[" "${out18}"
+assert_contains "case 18 surfaces phantom step name" "phantom-step" "${out18}"
+
+# ── Case 19 ─────────────────────────────────────────────────────────────
+echo "Case 19: xref — dangling overrides[].route_back_to_step"
+dangling_back="$(printf '%s' "${VALID_BODY}" \
+  | python3 -c '
+import json, sys
+d = json.loads(sys.stdin.read())
+d["failure_routing"] = {
+    "default_action": "halt",
+    "overrides": [{
+        "step_id": "prd",
+        "on_fail": "route_back_to",
+        "route_back_to_step": "phantom-target",
+    }],
+}
+print(json.dumps(d))
+')"
+result="$(run_helper xref "$(with_fence "${dangling_back}")")"
+out19="${result%%|*}"; rest="${result#*|}"; exit19="${rest##*|}"
+assert_eq "case 19 exit 1" "1" "${exit19}"
+assert_contains "case 19 names route_back_to_step" \
+  "route_back_to_step" "${out19}"
+assert_contains "case 19 surfaces phantom target" "phantom-target" "${out19}"
+
+# ── Case 20 ─────────────────────────────────────────────────────────────
+echo "Case 20: xref — missing failure_routing block"
+no_routing="$(printf '%s' "${VALID_BODY}" \
+  | python3 -c '
+import json, sys
+d = json.loads(sys.stdin.read())
+del d["failure_routing"]
+print(json.dumps(d))
+')"
+result="$(run_helper xref "$(with_fence "${no_routing}")")"
+out20="${result%%|*}"; rest="${result#*|}"; exit20="${rest##*|}"
+assert_eq "case 20 exit 1" "1" "${exit20}"
+assert_contains "case 20 names failure_routing missing" \
+  "failure_routing missing" "${out20}"
+
+# ── Case 21 ─────────────────────────────────────────────────────────────
+echo "Case 21: resolve — default-only → all entries source=default, on_fail=halt"
+result="$(run_helper resolve "$(with_fence "${VALID_BODY}")")"
+out21="${result%%|*}"; rest="${result#*|}"; exit21="${rest##*|}"
+assert_eq "case 21 exit 0" "0" "${exit21}"
+assert_contains "case 21 stage=resolve" '"stage": "resolve"' "${out21}"
+assert_contains "case 21 first entry step_id=prd" '"step_id": "prd"' "${out21}"
+assert_contains "case 21 source=default" '"source": "default"' "${out21}"
+assert_contains "case 21 on_fail=halt" '"on_fail": "halt"' "${out21}"
+
+# ── Case 22 ─────────────────────────────────────────────────────────────
+# Two-step graph + per-step override: matched step gets source=override
+# with override fields; non-matched stays source=default.
+echo "Case 22: resolve — per-step override"
+two_step="$(printf '%s' "${VALID_BODY}" \
+  | python3 -c '
+import json, sys
+d = json.loads(sys.stdin.read())
+d["task_constitution"]["execution_plan"] = [
+    {"step_id":"prd","capability":"prd_generation"},
+    {"step_id":"tech","capability":"technical_planning"},
+]
+d["capability_graph"]["nodes"] = [
+    {"step_id":"prd","capability":"prd_generation","required":True,"depends_on":[],"reason":""},
+    {"step_id":"tech","capability":"technical_planning","required":True,"depends_on":["prd"],"reason":""},
+]
+d["failure_routing"] = {
+    "default_action": "halt",
+    "overrides": [{"step_id":"tech","on_fail":"retry","max_retries":2}],
+}
+print(json.dumps(d))
+')"
+result="$(run_helper resolve "$(with_fence "${two_step}")")"
+out22="${result%%|*}"; rest="${result#*|}"; exit22="${rest##*|}"
+assert_eq "case 22 exit 0" "0" "${exit22}"
+# Validate full ordered structure via Python so positional alignment is
+# verified, not just substring presence.
+ordered_check="$(printf '%s' "${out22}" \
+  | python3 -c '
+import json, sys
+data = json.loads(sys.stdin.read())
+r = data.get("resolved", [])
+ok = (
+    len(r) == 2
+    and r[0]["step_id"] == "prd"  and r[0]["source"] == "default"  and r[0]["on_fail"] == "halt"
+    and r[1]["step_id"] == "tech" and r[1]["source"] == "override" and r[1]["on_fail"] == "retry" and r[1]["max_retries"] == 2
+)
+print("aligned" if ok else "misaligned")
+')"
+assert_eq "case 22 resolved order + per-step override" "aligned" "${ordered_check}"
+
+# ── Case 23 ─────────────────────────────────────────────────────────────
+echo "Case 23: resolve — empty overrides=[] → all entries source=default"
+empty_ov="$(printf '%s' "${VALID_BODY}" \
+  | python3 -c '
+import json, sys
+d = json.loads(sys.stdin.read())
+d["failure_routing"] = {"default_action": "halt", "overrides": []}
+print(json.dumps(d))
+')"
+result="$(run_helper resolve "$(with_fence "${empty_ov}")")"
+out23="${result%%|*}"; rest="${result#*|}"; exit23="${rest##*|}"
+assert_eq "case 23 exit 0" "0" "${exit23}"
+assert_contains "case 23 source=default" '"source": "default"' "${out23}"
+# Make sure no stray override accidentally surfaces.
+if printf '%s' "${out23}" | grep -qE '"source":[[:space:]]*"override"'; then
+  echo "  FAIL: case 23 unexpected override entry"; fail_count=$((fail_count + 1))
+else
+  echo "  PASS: case 23 no override entries"; pass_count=$((pass_count + 1))
+fi
+
+# ── Case 24 ─────────────────────────────────────────────────────────────
+echo "Case 24: resolve — extract failure short-circuits"
+result="$(run_helper resolve "no fence here")"
+out24="${result%%|*}"; rest="${result#*|}"; exit24="${rest##*|}"
+assert_eq "case 24 exit 1" "1" "${exit24}"
+assert_contains "case 24 stage=extract surfaced" '"stage": "extract"' "${out24}"
 
 # ── Summary ─────────────────────────────────────────────────────────────
 echo ""
