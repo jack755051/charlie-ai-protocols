@@ -38,8 +38,9 @@
 #  31. tests/scripts/test-validate-supervisor-envelope-exit-code.sh (P3 #4 schema-class executor exit-41 gate: missing artifact / extract fail / schema fail / drift)
 #  32. tests/scripts/test-orchestration-snapshot.sh              (P3 #5-a four-part snapshot writer: happy + extract/schema/drift fails still land + invalid stamp + pure helper)
 #  33. tests/scripts/test-compile-task-from-envelope.sh          (P3 #5-b envelope-driven compile entry: legacy untouched + hint round-trip + drift / schema raises)
-#  34. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report all-pass)
-#  35. tests/e2e/test-ticket-consumption.sh                      (must report all-pass)
+#  34. tests/e2e/test-supervisor-orchestration-release-gate.sh  (P3 #8 release gate: end-to-end envelope flow across all P3 modules + binding ready)
+#  35. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report all-pass)
+#  36. tests/e2e/test-ticket-consumption.sh                      (must report all-pass)
 #
 # Resolution order for the bind command:
 #   1. `cap` on PATH (installed via cap installer)
@@ -203,6 +204,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-supervisor-envelope-helper.sh" "sup
 run_fixture "${REPO_ROOT}/tests/scripts/test-validate-supervisor-envelope-exit-code.sh" "validate-supervisor-envelope exit-41 gate (P3 #4)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-orchestration-snapshot.sh" "orchestration four-part snapshot writer (P3 #5-a)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-compile-task-from-envelope.sh" "compile_task_from_envelope (P3 #5-b)"
+run_fixture "${REPO_ROOT}/tests/e2e/test-supervisor-orchestration-release-gate.sh" "supervisor orchestration release-gate e2e (P3 #8)"
 run_fixture "${REPO_ROOT}/tests/e2e/test-project-spec-pipeline-deterministic.sh" "spec-pipeline deterministic e2e"
 run_fixture "${REPO_ROOT}/tests/e2e/test-ticket-consumption.sh" "ticket consumption e2e"
 
