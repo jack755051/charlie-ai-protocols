@@ -149,9 +149,10 @@
   - 驗收：可從指定 prompt / draft 檔案產生 snapshot
   - 進度：done in P2 #2-b commit `4e8c753`。同時收 JSON / YAML（依 Q3 = A 先試 JSON、fallback YAML，並 normalize 成 JSON 寫入 snapshot）；smoke Case 2-3 覆蓋 happy path、Case 4 覆蓋 schema 失敗仍寫四件套、Case 5-8 覆蓋邊界錯誤。
 
-- [ ] 新增 `cap project constitution --promote`
+- [x] 新增 `cap project constitution --promote`
   - 交付物：promote mode
   - 驗收：只有 valid snapshot 可寫回 `.cap.constitution.yaml` 或指定目標
+  - 進度：done in P2 #5 commit (current branch)。`engine/project_constitution_runner.py:_run_promote` 在寫入前永遠重跑 jsonschema（P2 #5 Q3 = A：不信任 snapshot 內 `validation.json`），失敗時 repo SSOT 完全不動；既有 `.cap.constitution.yaml` 在覆寫前先複製成 `.cap.constitution.yaml.backup-<TIMESTAMP>`（P2 #5 Q2 = B：對齊 `scripts/workflows/persist-constitution.sh:296`）。`--promote STAMP` 強制顯式指定（P2 #5 Q1 = A），`--latest` 為獨立便利旗標、不會自動套用。本 commit 故意只寫 `.cap.constitution.yaml`，不寫 `docs/cap/constitution.md`（依 P2 #1 §4.5 與本輪 ratification 邊界，markdown 副本留待專屬 `--write-markdown` 旗標）。
 
 ## P3：Supervisor Structured Orchestration
 

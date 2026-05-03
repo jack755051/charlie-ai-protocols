@@ -124,13 +124,15 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 - [x] 將通過驗證的 Project Constitution snapshot 保存到 CAP storage
   - 完成於 P2 #2-b commit `4e8c753`；snapshot 落於 `~/.cap/projects/<id>/constitutions/project/<stamp>/`，含 `.md`、`.json`、`validation.json`、`source-prompt.txt`。
 - [ ] 實作 constitution snapshot versioning
-- [ ] 提供 promote 或 init 路徑，將正式 Project Constitution 寫回 repo
+- [x] 提供 promote 或 init 路徑，將正式 Project Constitution 寫回 repo
+  - 完成於 P2 #5 commit (current branch)；`cap project constitution --promote STAMP` / `--latest` 寫回 `.cap.constitution.yaml`，覆寫前備份成 `.cap.constitution.yaml.backup-<TIMESTAMP>`，jsonschema fail 時 repo SSOT 完全不動。
 
 - [ ] 決定 `cap workflow constitution` 是否保留為 task constitution 入口
   - 規劃：保留路徑但 emit deprecation warning（P2 #6 動作項；boundary memo §4.1 已定）。
 - [x] 新增或規劃 `cap project constitution "<prompt>"`
   - 完成於 P2 #2-b commits `d127efd` + `4e8c753`；prompt-mode integration smoke 留 P2 #8（依 Q1 = A）。
-- [ ] 新增 `cap project constitution --promote`
+- [x] 新增 `cap project constitution --promote`
+  - 完成於 P2 #5 commit (current branch)；`--promote STAMP` 強制顯式 stamp，`--latest` 是獨立便利旗標。重跑 jsonschema、寫入前自動備份、markdown 副本留待 `--write-markdown` opt-in。
 - [x] 新增 `cap project constitution --dry-run`
   - 完成於 P2 #2-b commit `4e8c753`；走 `plan()` 純值路徑，無 disk write。
 - [x] 新增 `cap project constitution --from-file`

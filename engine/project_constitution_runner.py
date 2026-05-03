@@ -54,6 +54,7 @@ import datetime
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -89,7 +90,7 @@ _STAMP_RE = re.compile(r"^\d{8}T\d{6}Z$")
 _PROJECT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 
 
-RunMode = Literal["prompt", "from_file"]
+RunMode = Literal["prompt", "from_file", "promote"]
 RunStatus = Literal["planned", "ok", "failed"]
 
 
@@ -300,11 +301,40 @@ class ProjectConstitutionRunResult:
 # ─────────────────────────────────────────────────────────
 
 
+def _resolve_latest_stamp(project_id: str, cap_home: Path) -> str:
+    """Pick the lexicographically newest stamp under
+    ``<cap_home>/projects/<id>/constitutions/project/``.
+
+    Stamps are zero-padded ``YYYYMMDDTHHMMSSZ`` strings, so lexicographic
+    sort agrees with chronological order. Raises if the directory does not
+    exist or contains no valid stamps — ``--latest`` is opt-in and we never
+    silently fall back.
+    """
+    parent = cap_home / "projects" / project_id / "constitutions" / "project"
+    if not parent.is_dir():
+        raise ProjectConstitutionRunnerError(
+            f"--latest: no project-constitution snapshot directory at {parent}; "
+            "run `cap project constitution --prompt ...` or `--from-file ...` first."
+        )
+    stamps = sorted(
+        p.name for p in parent.iterdir()
+        if p.is_dir() and is_valid_stamp(p.name)
+    )
+    if not stamps:
+        raise ProjectConstitutionRunnerError(
+            f"--latest: no YYYYMMDDTHHMMSSZ subdirectories under {parent}; "
+            "snapshot directory is empty."
+        )
+    return stamps[-1]
+
+
 def build_request(
     *,
     project_root: Path,
     prompt: str | None = None,
     from_file: Path | None = None,
+    promote: bool = False,
+    promote_stamp: str | None = None,
     cap_home: Path | None = None,
     project_id_override: str | None = None,
     stamp: str | None = None,
@@ -312,7 +342,12 @@ def build_request(
 ) -> ProjectConstitutionRunRequest:
     """Resolve every input the runner needs into a frozen request.
 
-    Validates that exactly one of ``prompt`` / ``from_file`` is provided.
+    Validates that exactly one of ``prompt`` / ``from_file`` / ``promote``
+    is provided. For ``promote`` mode either ``promote_stamp`` (explicit)
+    or no stamp at all (resolve via ``_resolve_latest_stamp``) is required;
+    the caller layer (CLI) is responsible for translating ``--latest`` into
+    ``promote=True, promote_stamp=None``.
+
     All paths are returned in absolute form so the result is independent
     of subsequent ``chdir`` calls.
     """
@@ -322,13 +357,15 @@ def build_request(
             f"project_root does not exist or is not a directory: {project_root}"
         )
 
-    if prompt is None and from_file is None:
+    sources = sum([prompt is not None, from_file is not None, bool(promote)])
+    if sources == 0:
         raise ProjectConstitutionRunnerError(
-            "either --prompt or --from-file must be provided"
+            "exactly one of --prompt / --from-file / --promote / --latest "
+            "must be provided"
         )
-    if prompt is not None and from_file is not None:
+    if sources > 1:
         raise ProjectConstitutionRunnerError(
-            "--prompt and --from-file are mutually exclusive"
+            "--prompt / --from-file / --promote are mutually exclusive"
         )
 
     mode: RunMode
@@ -337,15 +374,16 @@ def build_request(
         mode = "prompt"
         if not prompt.strip():
             raise ProjectConstitutionRunnerError("--prompt must not be empty")
-    else:
+    elif from_file is not None:
         mode = "from_file"
-        assert from_file is not None
         resolved_from_file = from_file.resolve()
         if not resolved_from_file.is_file():
             raise ProjectConstitutionRunnerError(
                 f"--from-file path does not exist or is not a regular file: "
                 f"{resolved_from_file}"
             )
+    else:
+        mode = "promote"
 
     if project_id_override is not None:
         if not _PROJECT_ID_RE.match(project_id_override):
@@ -360,15 +398,28 @@ def build_request(
     cap_home_resolved = resolve_cap_home(cap_home).resolve() \
         if cap_home is not None else resolve_cap_home(None)
     # ``Path.resolve()`` would error on a non-existent CAP_HOME (e.g. fresh
-    # machine before any run); we deliberately accept that — commit 2 will
-    # mkdir on first run, commit 1 just records the intended path.
+    # machine before any run); we deliberately accept that.
     cap_home_resolved = Path(os.path.abspath(cap_home_resolved))
 
-    effective_stamp = stamp if stamp is not None else compute_stamp()
-    if not is_valid_stamp(effective_stamp):
-        raise ProjectConstitutionRunnerError(
-            f"stamp {effective_stamp!r} does not match {_STAMP_FMT!r}"
-        )
+    if mode == "promote":
+        # In promote mode the stamp identifies an *existing* snapshot dir,
+        # not a new run. ``--stamp`` from the CLI is irrelevant here; we
+        # honour ``promote_stamp`` (explicit) or fall back to latest.
+        if promote_stamp is not None:
+            if not is_valid_stamp(promote_stamp):
+                raise ProjectConstitutionRunnerError(
+                    f"--promote stamp {promote_stamp!r} does not match "
+                    f"{_STAMP_FMT!r}"
+                )
+            effective_stamp = promote_stamp
+        else:
+            effective_stamp = _resolve_latest_stamp(project_id, cap_home_resolved)
+    else:
+        effective_stamp = stamp if stamp is not None else compute_stamp()
+        if not is_valid_stamp(effective_stamp):
+            raise ProjectConstitutionRunnerError(
+                f"stamp {effective_stamp!r} does not match {_STAMP_FMT!r}"
+            )
 
     snapshot_dir = compute_snapshot_dir(project_id, effective_stamp, cap_home_resolved)
     artifacts = ArtifactPaths.under(snapshot_dir)
@@ -902,6 +953,120 @@ def _run_prompt(
     )
 
 
+# ─────────────────────────────────────────────────────────
+# promote
+# ─────────────────────────────────────────────────────────
+
+
+def _promote_to_repo_ssot(
+    project_root: Path,
+    payload: dict[str, Any],
+    backup_stamp: str,
+) -> tuple[Path, Path | None]:
+    """Write ``payload`` to ``<project_root>/.cap.constitution.yaml``.
+
+    Mirrors ``scripts/workflows/persist-constitution.sh`` line 296: when
+    the target already exists we copy it to
+    ``<target>.backup-<backup_stamp>`` *before* overwriting so a botched
+    promote can always be rolled back. ``backup_stamp`` is the runner's
+    current-time stamp (not the snapshot's) to avoid same-snapshot
+    re-promotes shadowing each other's backups.
+
+    Returns ``(target_path, backup_path_or_none)``.
+    """
+    target = project_root / ".cap.constitution.yaml"
+    backup_path: Path | None = None
+    if target.exists():
+        backup_path = target.parent / f"{target.name}.backup-{backup_stamp}"
+        # Use copy2 so we keep the original mtime / permissions in the
+        # backup; then truncate-write the new YAML over the original.
+        shutil.copy2(target, backup_path)
+
+    yaml_text = yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
+    target.write_text(yaml_text, encoding="utf-8")
+    return target, backup_path
+
+
+def _run_promote(
+    request: ProjectConstitutionRunRequest,
+    schema_path: Path,
+) -> ProjectConstitutionRunResult:
+    """Promote a previously-written snapshot into the repo SSOT.
+
+    Hard rules (P2 #5 ratification A/B/A):
+
+    * The snapshot's ``project-constitution.json`` is the single source
+      we read; the on-disk ``validation.json`` is *not* trusted (it could
+      have been hand-edited). We re-run jsonschema before any disk write
+      to the repo.
+    * If validation fails we **do not** touch the repo. ``written_paths``
+      stays empty and ``status='failed'``; the snapshot dir itself is
+      left untouched (we only read from it).
+    * If validation passes we copy any existing
+      ``.cap.constitution.yaml`` to ``.backup-<TIMESTAMP>`` (current time,
+      not the snapshot stamp) before writing the new YAML, matching the
+      backup convention in ``scripts/workflows/persist-constitution.sh``.
+    """
+    snapshot_json = request.artifacts.json
+    if not snapshot_json.is_file():
+        raise ProjectConstitutionRunnerError(
+            f"--promote: snapshot JSON not found at {snapshot_json}; "
+            f"check the stamp or run --prompt / --from-file first."
+        )
+
+    try:
+        payload = json.loads(snapshot_json.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ProjectConstitutionRunnerError(
+            f"--promote: failed to parse snapshot JSON at {snapshot_json}: {exc}"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise ProjectConstitutionRunnerError(
+            f"--promote: snapshot at {snapshot_json} is not a JSON object "
+            f"(got {type(payload).__name__})"
+        )
+
+    verdict = _run_jsonschema(payload, schema_path)
+    if not verdict.ok:
+        # Repo SSOT untouched. The snapshot dir is also untouched — promote
+        # only ever reads from it, never writes back.
+        return ProjectConstitutionRunResult(
+            request=request,
+            status="failed",
+            note=(
+                f"mode=promote; stamp={request.stamp}; "
+                "refused to write repo SSOT — validation failed"
+            ),
+            failure_reason="; ".join(e for e in verdict.errors[:3] if e),
+            written_paths=[],
+            validation=verdict.to_dict(),
+        )
+
+    backup_stamp = compute_stamp()
+    target, backup = _promote_to_repo_ssot(
+        request.project_root, payload, backup_stamp,
+    )
+    written = [str(target)]
+    if backup is not None:
+        written.append(str(backup))
+
+    note_parts = [
+        f"mode=promote",
+        f"stamp={request.stamp}",
+        f"target={target}",
+    ]
+    if backup is not None:
+        note_parts.append(f"backup={backup}")
+
+    return ProjectConstitutionRunResult(
+        request=request,
+        status="ok",
+        note="; ".join(note_parts),
+        written_paths=written,
+        validation=verdict.to_dict(),
+    )
+
+
 def run(
     request: ProjectConstitutionRunRequest,
     *,
@@ -914,16 +1079,24 @@ def run(
     * ``mode='prompt'`` shells out to ``cap workflow run project-constitution``,
       extracts the constitution JSON from the draft step, validates it
       against the bundled schema, and writes the four-part snapshot.
-      Manual verification only in commit 2; an integration test is
-      scheduled for P2 #8 (per Q1 of the P2 #2-b ratification).
+      Manual verification only at this point; an integration test is
+      scheduled for P2 #8.
+    * ``mode='promote'`` reads the snapshot's ``project-constitution.json``,
+      re-runs jsonschema, and (only on success) writes the YAML form back
+      to ``<project_root>/.cap.constitution.yaml`` after backing up any
+      pre-existing repo SSOT.
 
     A failure (validation or extraction) still leaves all four artefacts
-    on disk; the result reports ``status="failed"`` and the caller is
-    expected to map that to a non-zero exit code.
+    on disk for ``prompt`` / ``from_file`` modes; ``promote`` mode never
+    touches the repo SSOT on failure. In every case the result reports
+    ``status="failed"`` and the caller is expected to map that to a
+    non-zero exit code.
     """
     schema = resolve_schema_path(schema_path)
     if request.mode == "from_file":
         return _run_from_file(request, schema)
+    if request.mode == "promote":
+        return _run_promote(request, schema)
     return _run_prompt(request, schema)
 
 
@@ -1011,6 +1184,30 @@ def _build_parser() -> argparse.ArgumentParser:
             "the AI draft step; the runner just validates and persists."
         ),
     )
+    src.add_argument(
+        "--promote",
+        type=str,
+        default=None,
+        metavar="STAMP",
+        help=(
+            "Promote the four-part snapshot at <STAMP> into "
+            "<project_root>/.cap.constitution.yaml. STAMP must be a "
+            "YYYYMMDDTHHMMSSZ string identifying an existing snapshot. "
+            "Validation is re-run before writing; an existing repo "
+            "constitution is backed up to .cap.constitution.yaml.backup-"
+            "<TIMESTAMP> first."
+        ),
+    )
+    src.add_argument(
+        "--latest",
+        action="store_true",
+        help=(
+            "Promote the most recent snapshot under "
+            "<cap_home>/projects/<id>/constitutions/project/. Mutually "
+            "exclusive with --prompt / --from-file / --promote; never "
+            "applied implicitly."
+        ),
+    )
     parser.add_argument(
         "--project-root",
         type=Path,
@@ -1069,11 +1266,19 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
 
+    # Translate --promote / --latest into build_request kwargs. The
+    # mutually-exclusive group already guarantees that at most one source
+    # flag is set, so we only need to set the promote arguments.
+    promote_flag = bool(args.promote) or bool(args.latest)
+    promote_stamp_value: str | None = args.promote if args.promote else None
+
     try:
         request = build_request(
             project_root=args.project_root,
             prompt=args.prompt,
             from_file=args.from_file,
+            promote=promote_flag,
+            promote_stamp=promote_stamp_value,
             cap_home=args.cap_home,
             project_id_override=args.project_id,
             stamp=args.stamp,

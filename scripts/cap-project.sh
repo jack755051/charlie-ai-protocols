@@ -42,14 +42,30 @@ Subcommands:
           Read-only diagnostic with remediation suggestions for every
           HealthIssueKind reported by the storage health check.
 
-  constitution  (--prompt "<text>" | --from-file PATH) [--project-root PATH]
-                [--cap-home PATH] [--project-id ID] [--stamp YYYYMMDDTHHMMSSZ]
-                [--schema-path PATH] [--dry-run] [--format text|json|yaml]
-                Generate or import a Project Constitution snapshot under
-                ~/.cap/projects/<id>/constitutions/project/<stamp>/. Writes
-                the four-part snapshot (project-constitution.md / .json,
-                validation.json, source-prompt.txt). Validation failure
-                still produces all four artefacts and exits 1.
+  constitution  (--prompt "<text>" | --from-file PATH | --promote STAMP | --latest)
+                [--project-root PATH] [--cap-home PATH] [--project-id ID]
+                [--stamp YYYYMMDDTHHMMSSZ] [--schema-path PATH]
+                [--dry-run] [--format text|json|yaml]
+                Generate, import, or promote a Project Constitution.
+
+                  --prompt    runs the project-constitution workflow and
+                              writes a four-part snapshot under
+                              ~/.cap/projects/<id>/constitutions/project/<stamp>/.
+                  --from-file validates an existing JSON/YAML payload and
+                              writes the same four-part snapshot.
+                  --promote STAMP
+                              re-validates the snapshot at <STAMP> and
+                              writes its YAML form back to
+                              <project_root>/.cap.constitution.yaml. An
+                              existing repo SSOT is backed up to
+                              .cap.constitution.yaml.backup-<TIMESTAMP>.
+                  --latest    same as --promote with the most recent
+                              snapshot under the project sub-tree; never
+                              applied implicitly.
+
+                Validation failure leaves snapshot artefacts on disk for
+                --prompt / --from-file (exit 1) but never writes the repo
+                SSOT for --promote / --latest.
 
 Common notes:
   - storage health logic is single-sourced in engine/storage_health.py;
