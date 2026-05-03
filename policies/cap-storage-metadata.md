@@ -68,9 +68,19 @@
 
 兩個分類獨立：collision 不該被誤判為 schema_validation_failed，反之亦然。`policies/workflow-executor-exit-codes.md` 的 identity-class executor 章節為權威分類來源。
 
-## 6. 未來規劃（不在本 policy 範圍）
+## 6. Health Check Consumer 與後續規劃
 
-- **P1 #4 health check**：消費 `last_resolved_at`、`previous_versions[]`、`cap_version` 判定 staleness 與 migration 異常。
+### 6.1 P1 #4 health check（已落地，v0.22.0-rc）
+
+- **核心 routine**：`engine/storage_health.py`（`StorageHealthChecker` + `run_health_check`）。
+- **Shell 入口**：`scripts/cap-storage-health.sh`，`--format text|json|yaml` + `--strict`。
+- **Exit code**：error→`1`、schema-class issue（malformed / forward-incompat / drift）→`41`、collision→`53`、warning-only→`0`，與 `policies/workflow-executor-exit-codes.md` 對齊。
+- **Read-only 鐵則**：health check **嚴禁**寫 ledger，特別是 `last_resolved_at`；違反這條會把 §4 的「實際使用 vs 工具掃描」訊號污染掉，導致後續 P10 promote 與 staleness 判定失準。Producer-side 的 collision halt（cap-paths exit 53）仍走原路徑；health check 只是同一語意在 read-only 視角的回報，兩者不互相取代。
+- **健康狀態分類**：`HealthIssueKind` 9 種 error + 4 種 warning（含 `legacy_ledger_pending_migration`、`cap_version_mismatch`、`stale_storage`、`unknown_ledger_field`），每一種都有對應 fixture 在 `tests/scripts/test-storage-health.sh`（10 cases + 1 conditional）。
+
+### 6.2 後續規劃（仍未實作）
+
 - **P1 #5 `cap project init`**：互動式建立 `.cap.project.yaml` + ledger，給 non-git folder 補 identity 來源。
-- **P1 #7 `cap project doctor`**：偵測 ledger 與 `.cap.project.yaml` 不一致、ledger orphaned（origin_path 已不存在）等異常。
+- **P1 #6 `cap project status`**：CLI 命令，讀取 health-check 報告 + constitution / latest run 狀態。
+- **P1 #7 `cap project doctor`**：在 health-check 的基礎上輸出修復建議（含 ledger orphaned、`.cap.project.yaml` 不一致等場景），exit code 與 health-check 同源。
 - **P10 promote workflow**：promote validated artifact 時讀取 `cap_version` 判定來源 cap 版本，避免跨版本污染 shared registry。

@@ -102,7 +102,7 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 - [x] 支援非 git folder 的 project id 策略（v0.22.0 P1 #1，strict mode + `CAP_ALLOW_BASENAME_FALLBACK` 後門）
 - [x] 處理 project id collision（v0.22.0 P1 #2，inline `.identity.json` ledger + shell exit 53 / Python `ProjectIdCollisionError`）
 - [x] 記錄 storage version / migration metadata（v0.22.0 P1 #3，`schemas/identity-ledger.schema.yaml` v2 normalized contract + `policies/cap-storage-metadata.md` 政策 SSOT；cap-paths.sh 與 project_context_loader.py lock-step v1→v2 auto-migrate；ledger 記錄 schema_version / created_at / last_resolved_at / migrated_at / cap_version / previous_versions[]，11 schema fixture cases + resolver 47 assertions / smoke 23/23）
-- [ ] 實作 storage health check
+- [x] 實作 storage health check（v0.22.0 P1 #4，`engine/storage_health.py` read-only diagnostic core + `scripts/cap-storage-health.sh` shell wrapper；12 種 `HealthIssueKind` 涵蓋缺目錄 / 缺 ledger / 壞 metadata / forward-incompat / schema drift / origin collision / cap_version 漂移 / 不可寫 storage 等場景；exit code 對齊 `policies/workflow-executor-exit-codes.md`：schema-class→41、collision→53、generic error→1、warning-only→0；read-only 嚴禁寫 ledger；10 cases + 1 conditional / 26 assertions / smoke 24/24）
 - [ ] 新增 `cap project status`
 - [ ] 新增 `cap project init`
 - [ ] 新增 `cap project doctor`
