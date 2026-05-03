@@ -28,6 +28,9 @@ COMMAND                            DESCRIPTION
   cap skill check-aliases          驗證 alias 映射是否正確
   cap paths                        顯示 CAP 本機儲存路徑
 
+[Project]
+  cap project init [--project-id ID] [--force]   初始化 .cap.project.yaml 與 CAP storage
+
 [Workflow]
   cap workflow list                列出所有 workflow（靜態清單）
   cap workflow ps                  列出正在執行的 workflow run
@@ -113,6 +116,10 @@ case "${COMMAND}" in
   workflow)
     shift || true
     exec bash "${SCRIPT_DIR}/cap-workflow.sh" "$@"
+    ;;
+  project)
+    shift || true
+    exec bash "${SCRIPT_DIR}/cap-project.sh" "$@"
     ;;
   promote)
     shift || true

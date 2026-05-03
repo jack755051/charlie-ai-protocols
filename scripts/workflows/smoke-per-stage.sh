@@ -26,8 +26,9 @@
 #  20. tests/scripts/test-project-id-resolver.sh                 (P1 #1 + #2 + #3 resolver + ledger gate)
 #  21. tests/scripts/test-identity-ledger-schema.sh              (P1 #3 ledger schema gate, normalized contract)
 #  22. tests/scripts/test-storage-health.sh                      (P1 #4 storage health-check core)
-#  23. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report all-pass)
-#  24. tests/e2e/test-ticket-consumption.sh                      (must report all-pass)
+#  23. tests/scripts/test-project-init.sh                        (P1 #6 cap project init)
+#  24. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report all-pass)
+#  25. tests/e2e/test-ticket-consumption.sh                      (must report all-pass)
 #
 # Resolution order for the bind command:
 #   1. `cap` on PATH (installed via cap installer)
@@ -179,6 +180,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-gate-result-schema.sh" "gate-result
 run_fixture "${REPO_ROOT}/tests/scripts/test-project-id-resolver.sh" "project-id resolver + ledger gate (P1 #1/#2/#3)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-identity-ledger-schema.sh" "identity-ledger schema gate (P1 #3, normalized contract)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-storage-health.sh" "storage health-check core (P1 #4)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-project-init.sh" "cap project init (P1 #6)"
 run_fixture "${REPO_ROOT}/tests/e2e/test-project-spec-pipeline-deterministic.sh" "spec-pipeline deterministic e2e"
 run_fixture "${REPO_ROOT}/tests/e2e/test-ticket-consumption.sh" "ticket consumption e2e"
 
