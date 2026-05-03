@@ -7,6 +7,7 @@
 #   1. cap workflow bind project-spec-pipeline                   (must end in ready)
 #   2. cap workflow bind project-implementation-pipeline         (must end in ready)
 #   3. cap workflow bind project-qa-pipeline                     (must end in ready)
+#   3a. cap workflow bind supervisor-orchestration               (P3 #5-c, must end in ready)
 #   4. tests/scripts/test-persist-task-constitution.sh           (must report all-pass)
 #   5. tests/scripts/test-emit-handoff-ticket.sh                 (must report all-pass)
 #   6. tests/scripts/test-design-source-resolution.sh            (must report all-pass)
@@ -171,6 +172,7 @@ echo ""
 run_bind "project-spec-pipeline"
 run_bind "project-implementation-pipeline"
 run_bind "project-qa-pipeline"
+run_bind "supervisor-orchestration"
 run_fixture "${REPO_ROOT}/tests/scripts/test-persist-task-constitution.sh" "persist-task-constitution unit smoke"
 run_fixture "${REPO_ROOT}/tests/scripts/test-emit-handoff-ticket.sh" "emit-handoff-ticket unit smoke"
 run_fixture "${REPO_ROOT}/tests/scripts/test-design-source-resolution.sh" "design source resolution unit smoke"

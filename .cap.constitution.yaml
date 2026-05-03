@@ -126,6 +126,7 @@ binding_policy:
     - version_control_tag
     - technical_logging
     - readme_normalization
+    - supervisor_envelope_validation
 
 workflow_policy:
   enforce_allowed_source_roots: true

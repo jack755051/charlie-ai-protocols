@@ -1,0 +1,36 @@
+workflow_id: supervisor-orchestration
+version: 1
+name: Supervisor Orchestration Envelope Validation
+summary: 對 supervisor 產出的 orchestration envelope artifact 跑 schema + drift gate（P3 #4 落地的 supervisor_envelope_validation capability）。本 workflow 為 P3 #5-c 的最小 envelope flow wiring；snapshot writer (P3 #5-a)、envelope-driven compile (P3 #5-b)、failure routing dispatch (P3 #6) 等 step 將於後續 cycle 逐步加入 — 目前刻意保持單一 step，避免在尚未為 5-a / 5-b 補 capability + shell wrapper 之前擴大 workflow surface。
+owner: supervisor
+triggers:
+  - manual
+  - supervisor-orchestration
+
+artifacts:
+  supervisor_orchestration_envelope: Producer-supplied envelope artifact（markdown / 自由文字格式，含唯一一對 <<<SUPERVISOR_ORCHESTRATION_BEGIN/END>>> fence 包裹的 envelope JSON；fence 規範見 agent-skills/01-supervisor-agent.md §3.8）
+  supervisor_envelope_validation_report: schema + drift gate 的驗證報告，由 scripts/workflows/validate-supervisor-envelope.sh 產出；任一 stage 失敗 executor 自身會以 exit 41 schema_validation_failed halt（對齊 policies/workflow-executor-exit-codes.md schema-class executor 政策）
+
+governance:
+  watcher_mode: final_only
+  logger_mode: milestone_log
+  watcher_checkpoints: [validate_supervisor_envelope]
+  logger_checkpoints: [validate_supervisor_envelope]
+  halt_on_missing_handoff: false
+  context_mode: summary_first
+  goal_stage: informal_planning
+
+steps:
+  - id: validate_supervisor_envelope
+    name: Validate Supervisor Orchestration Envelope
+    capability: supervisor_envelope_validation
+    executor: shell
+    script: scripts/workflows/validate-supervisor-envelope.sh
+    inputs:
+      - supervisor_orchestration_envelope
+    outputs:
+      - supervisor_envelope_validation_report
+    done_when:
+      - 已從 envelope artifact 抓取唯一一對 SUPERVISOR_ORCHESTRATION_BEGIN/END fence 內的 JSON
+      - jsonschema 驗證通過（含 envelope.failure_routing required 與 governance / compile_hints required sub-fields）
+      - drift check 通過：envelope.task_id == task_constitution.task_id，envelope.source_request == task_constitution.source_request
