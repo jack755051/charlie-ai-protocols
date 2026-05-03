@@ -14,6 +14,18 @@ except ImportError:  # pragma: no cover
     from workflow_loader import WorkflowLoader
 
 
+class CompileFromEnvelopeError(Exception):
+    """Raised when ``compile_task_from_envelope`` rejects the envelope.
+
+    Distinguishes envelope-driven compile failures (schema-invalid or
+    task_id / source_request drift) from generic Python errors so
+    callers can branch on the failure class. Per the P3 #5 boundary memo
+    §4.3 (Q1 = A on doctor visibility) the runtime is still expected
+    to surface this as a schema-class failure when wired into a
+    workflow step in P3 #5-c.
+    """
+
+
 class TaskScopedWorkflowCompiler:
     """Compile a task-scoped request into a minimal executable workflow."""
 
@@ -285,6 +297,154 @@ class TaskScopedWorkflowCompiler:
             "unresolved_policy": unresolved_policy,
             "compiled_workflow": compiled_workflow,
             "plan": plan,
+        }
+
+    def compile_task_from_envelope(
+        self,
+        envelope: dict,
+        registry_ref: str | None = None,
+    ) -> dict:
+        """Compile from a supervisor-produced orchestration envelope.
+
+        New entry per the P3 #5-b ratification — envelope-driven path
+        runs alongside the legacy ``compile_task(source_request)`` flow
+        without modifying it. Per the P3 #5 boundary memo §4.3 / §4.4
+        ratification (Q2 = A: full envelope only; Q3 = A: legacy path
+        is permanent), this method:
+
+        1. Re-runs the supervisor envelope schema + drift checks at the
+           entry point. The runtime hook in P3 #4 already validates
+           envelopes coming off disk, but that gate is not always on
+           the path of a Python caller; re-running here makes the
+           method safe to call from any context (CLI, tests, future
+           runtime layers) without external preconditions.
+        2. Treats ``envelope["task_constitution"]`` and
+           ``envelope["capability_graph"]`` as the authoritative source
+           for "what the supervisor decided" — task_id, goal,
+           goal_stage, success_criteria, non_goals, execution_plan,
+           graph nodes — and refuses to second-guess them.
+        3. Reuses the deterministic compiler's
+           ``build_task_constitution(source_request)`` output **only**
+           to fill in internal compile-only hints the envelope schema
+           does not require (risk_profile, unresolved_policy,
+           inferred_context, output_expectations). Envelope-authoritative
+           fields override deterministic ones via dict-spread merge so
+           task_id / goal / etc. always come from the supervisor, not
+           the deterministic shortcut.
+        4. Calls steps 3-5 (build_candidate_workflow / binder /
+           build_unresolved_policy / apply_unresolved_policy /
+           build_bound_execution_phases_from_workflow) on the merged
+           constitution and the envelope's capability_graph — the
+           shared backbone with legacy ``compile_task``.
+        5. Returns the same dict shape as ``compile_task`` plus an
+           additional ``compile_hints_applied`` key carrying
+           ``envelope["compile_hints"]`` verbatim for traceability.
+           The binder signature is unchanged (Q from the boundary memo
+           §4.3); ``compile_hints`` flow into the binder layer in this
+           commit only as a pass-through trace, not a behaviour change.
+           A future commit may translate specific hints
+           (registry_preference / fallback_policy / preferred_cli)
+           into binder kwargs; doing so requires its own ratification.
+
+        Out of scope (per the P3 #5-b ratification scope guard):
+
+        * No write to ``orchestrations/<stamp>/`` storage — that is
+          the caller's responsibility, owned by P3 #5-a's
+          ``engine/orchestration_snapshot.py``.
+        * No workflow YAML reference to this method — that lands in
+          P3 #5-c.
+        * No failure routing dispatch — P3 #6 wires
+          ``envelope["failure_routing"]`` into the runtime; this
+          method just records the hint passthrough.
+        * No change to ``compile_task``, ``build_task_constitution``,
+          ``build_capability_graph``, or any of steps 3-5. Their
+          existing callers see zero behavioural difference.
+
+        Raises ``CompileFromEnvelopeError`` on schema-invalid or drift
+        detected. Callers that want the canonical exit-41 schema-class
+        contract should wrap this method in a shell executor (analogous
+        to ``scripts/workflows/validate-supervisor-envelope.sh``); the
+        Python-level callers can branch on the exception type instead.
+        """
+        # Lazy-import the supervisor envelope helpers to keep
+        # task_scoped_compiler usable when supervisor_envelope is not
+        # importable for some degraded reason. Package vs script paths
+        # are both supported, mirroring the project_context_loader /
+        # runtime_binder / workflow_loader try-except above.
+        try:
+            from .supervisor_envelope import (
+                check_envelope_drift,
+                validate_envelope,
+            )
+        except ImportError:  # pragma: no cover
+            from supervisor_envelope import (  # type: ignore[no-redef]
+                check_envelope_drift,
+                validate_envelope,
+            )
+
+        if not isinstance(envelope, dict):
+            raise CompileFromEnvelopeError(
+                f"envelope must be a dict; got {type(envelope).__name__}"
+            )
+
+        verdict = validate_envelope(envelope)
+        if not verdict.ok:
+            raise CompileFromEnvelopeError(
+                "envelope failed schema validation: "
+                + "; ".join(verdict.errors[:5])
+            )
+        drift = check_envelope_drift(envelope)
+        if not drift.ok:
+            raise CompileFromEnvelopeError(
+                "envelope drift detected: "
+                + "; ".join(drift.mismatches)
+            )
+
+        envelope_constitution = envelope["task_constitution"]
+        capability_graph = envelope["capability_graph"]
+        compile_hints = envelope.get("compile_hints") or {}
+        source_request = envelope.get("source_request", "")
+
+        # Hybrid merge: deterministic compiler is the only place that
+        # knows how to derive risk_profile / unresolved_policy /
+        # inferred_context / output_expectations from a prompt; we let
+        # it produce a baseline and then let the envelope's
+        # authoritative fields override on dict-spread. This keeps the
+        # supervisor in charge of "what to achieve" while still
+        # guaranteeing steps 3-5 see every internal hint they were
+        # designed to read.
+        deterministic_baseline = self.build_task_constitution(source_request)
+        enriched_constitution = {
+            **deterministic_baseline,
+            **envelope_constitution,
+        }
+
+        candidate_workflow = self.build_candidate_workflow(enriched_constitution, capability_graph)
+        candidate_semantic = self.loader.build_semantic_plan_from_workflow(
+            self.loader.normalize_workflow_data(
+                candidate_workflow,
+                f"<compiled-from-envelope:{enriched_constitution['task_id']}:candidate>",
+            )
+        )
+        binding = self.binder.bind_semantic_plan(candidate_semantic, registry_ref=registry_ref)
+        unresolved_policy = self.build_unresolved_policy(
+            enriched_constitution, capability_graph, binding
+        )
+        compiled_workflow = self.apply_unresolved_policy(candidate_workflow, unresolved_policy)
+        plan = self.binder.build_bound_execution_phases_from_workflow(
+            compiled_workflow,
+            registry_ref=registry_ref,
+            source_path=f"<compiled-from-envelope:{enriched_constitution['task_id']}>",
+        )
+        return {
+            "task_constitution": enriched_constitution,
+            "project_context": enriched_constitution.get("project_context", {}),
+            "capability_graph": capability_graph,
+            "binding": binding,
+            "unresolved_policy": unresolved_policy,
+            "compiled_workflow": compiled_workflow,
+            "plan": plan,
+            "compile_hints_applied": dict(compile_hints),
         }
 
     def build_unresolved_policy(self, constitution: dict, capability_graph: dict, binding: dict) -> dict:
