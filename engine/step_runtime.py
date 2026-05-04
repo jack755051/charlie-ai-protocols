@@ -1459,6 +1459,37 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Override handoff schema path; defaults to schemas/handoff-ticket.schema.yaml",
     )
 
+    # 17. resolve-handoff-routing (P6 #8 — opt-in route_back_to gate)
+    p_rhr = sub.add_parser(
+        "resolve-handoff-routing",
+        help=(
+            "P6 #8 ticket-level failure routing resolver; reads the "
+            "ticket's failure_routing block, validates target against "
+            "the workflow plan, applies max_retries cap, and prints a "
+            "single decision line consumed by cap-workflow-exec.sh."
+        ),
+    )
+    p_rhr.add_argument("ticket_path")
+    p_rhr.add_argument(
+        "--plan-steps",
+        dest="plan_steps",
+        required=True,
+        help="Comma-separated list of step ids in the active plan (used to validate route_back_to_step).",
+    )
+    p_rhr.add_argument(
+        "--visits",
+        dest="visits",
+        default=None,
+        help="Comma-separated step=count pairs recording how many times each step has been entered.",
+    )
+    p_rhr.add_argument(
+        "--max-retries",
+        dest="max_retries",
+        type=int,
+        default=1,
+        help="Default max retries when the ticket does not declare failure_routing.max_retries.",
+    )
+
     return parser
 
 
@@ -1545,6 +1576,17 @@ def main(argv: list[str] | None = None) -> None:
             validate_capability_output_cli(args.capability, args.artifact_path)
         case "validate-handoff-ticket":
             validate_handoff_ticket_cli(args.ticket_path, args.schema_path)
+        case "resolve-handoff-routing":
+            try:
+                from .handoff_route_resolver import resolve_handoff_routing_cli
+            except ImportError:  # pragma: no cover — same fallback as siblings
+                from handoff_route_resolver import resolve_handoff_routing_cli  # type: ignore[no-redef]
+            resolve_handoff_routing_cli(
+                args.ticket_path,
+                args.plan_steps,
+                args.visits,
+                args.max_retries,
+            )
 
 
 if __name__ == "__main__":

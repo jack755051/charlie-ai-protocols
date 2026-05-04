@@ -202,6 +202,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-cap-artifact-inspect.sh" "cap artif
 run_fixture "${REPO_ROOT}/tests/scripts/test-capability-validator.sh" "capability validator registry (P6 #5+#6+#7)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-required-output-enforcement.sh" "required-output enforcement opt-in gate (P6 #4)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-handoff-schema-gate.sh" "handoff schema pre-dispatch opt-in gate (P6 #3)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-handoff-route-back.sh" "handoff route_back_to opt-in control flow (P6 #8)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-binding-report-schema.sh" "binding-report schema gate (P0 #3)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-supervisor-orchestration-schema.sh" "supervisor-orchestration schema gate (P0 #4, forward contract)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-workflow-result-schema.sh" "workflow-result schema gate (P0 #5, normalized contract)"

@@ -955,9 +955,106 @@ echo "  Output dir: ${WORKFLOW_OUTPUT_DIR}"
 # phase_num|total|step_ids|agents|step_id|capability|agent_alias|prompt_file|step_cli|inputs|optional|resolution_status|timeout_seconds|stall_seconds|stall_action|input_mode|output_tier|continue_reason|executor|script|fallback_executor|fallback_when
 STEP_LINES="$("${PYTHON_BIN}" "${STEP_PY}" flatten-steps "${PLAN_JSON}")"
 
-PREV_PHASE=""
+# ── P6 #8 step iteration: array + index pointer ──
+# Replaces the prior `while ... <&3 ... done <<< STEP_LINES` stream
+# loop so the runtime can rewind to a route_back_to_step target. The
+# loop uses an "advance-first, then read" pattern: step_idx is
+# incremented *before* the body executes, so existing `break` /
+# `continue` calls keep their original semantics. route_back_to fires
+# from a single hook at the central halt point (search for
+# CAP_ENFORCE_ROUTE_BACK below) and overwrites step_idx + continue.
+mapfile -t STEP_ARRAY <<< "${STEP_LINES}"
 
-while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id capability agent_alias prompt_file step_cli inputs optional resolution_status timeout_seconds stall_seconds stall_action input_mode output_tier continue_reason executor script_ref fallback_executor fallback_when <&3; do
+# ROUTE_BACK_PLAN_STEPS — comma-separated step ids fed to
+# resolve-handoff-routing as `--plan-steps`, used by the resolver to
+# reject route_back_to_step values that point outside the active
+# plan (invalid_target).
+ROUTE_BACK_PLAN_STEPS=""
+for __step_line in "${STEP_ARRAY[@]}"; do
+  __step_field="$(printf '%s' "${__step_line}" | cut -d'|' -f5)"
+  [ -z "${__step_field}" ] && continue
+  if [ -z "${ROUTE_BACK_PLAN_STEPS}" ]; then
+    ROUTE_BACK_PLAN_STEPS="${__step_field}"
+  else
+    ROUTE_BACK_PLAN_STEPS="${ROUTE_BACK_PLAN_STEPS},${__step_field}"
+  fi
+done
+unset __step_line __step_field
+
+# VISIT_COUNTS — per-run visit counter consumed by the resolver as
+# the `--visits` arg. Each step's count is incremented *on entry*;
+# the resolver compares against the ticket's max_retries (default 1)
+# so route_back_to_step: <self> cycles halt after one rerun.
+declare -A VISIT_COUNTS
+
+# ROUTE_HISTORY_FILE — append-only JSONL audit trail of route_back
+# decisions (one line per resolver verdict). cap session inspect
+# / cap analyze can later surface this; for now it is observability
+# scaffolding for human review.
+ROUTE_HISTORY_FILE="${WORKFLOW_OUTPUT_DIR}/route-history.jsonl"
+
+# find_step_idx_in_array <step_id> — locate the index of the first
+# STEP_ARRAY entry whose 5th pipe-delimited field matches step_id.
+# Stdout: index (integer) on hit, empty on miss; rc 0 always.
+find_step_idx_in_array() {
+  local target="$1"
+  local i sid
+  for i in "${!STEP_ARRAY[@]}"; do
+    sid="$(printf '%s' "${STEP_ARRAY[${i}]}" | cut -d'|' -f5)"
+    if [ "${sid}" = "${target}" ]; then
+      printf '%s' "${i}"
+      return 0
+    fi
+  done
+  return 0
+}
+
+# format_visit_counts — render the VISIT_COUNTS associative array
+# as the comma-separated `step=count` form the resolver consumes.
+format_visit_counts() {
+  local out=""
+  local key
+  for key in "${!VISIT_COUNTS[@]}"; do
+    if [ -z "${out}" ]; then
+      out="${key}=${VISIT_COUNTS[${key}]}"
+    else
+      out="${out},${key}=${VISIT_COUNTS[${key}]}"
+    fi
+  done
+  printf '%s' "${out}"
+}
+
+# record_route_history <from_step> <to_step> <reason> <action> —
+# append one JSONL row. Reason carries the resolver verdict tag
+# (ok / max_retries_exhausted / invalid_target / unsupported_action /
+# missing_target). action is "route_back_to" on a successful jump or
+# "halt" when the resolver refuses.
+record_route_history() {
+  local from="$1"
+  local to="$2"
+  local reason="$3"
+  local action="$4"
+  local ts
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf '{"ts":"%s","from_step":"%s","to_step":"%s","reason":"%s","action":"%s","visit_count":%d}\n' \
+    "${ts}" "${from}" "${to}" "${reason}" "${action}" "${VISIT_COUNTS[${to}]:-0}" \
+    >> "${ROUTE_HISTORY_FILE}"
+}
+
+PREV_PHASE=""
+step_idx=0
+
+while [ "${step_idx}" -lt "${#STEP_ARRAY[@]}" ]; do
+  # Advance pointer FIRST so existing `break` / `continue` calls in
+  # the body keep working. route_back_to overwrites step_idx + continue
+  # at the halt hook (line search: CAP_ENFORCE_ROUTE_BACK).
+  CURRENT_STEP_IDX="${step_idx}"
+  step_idx=$((step_idx + 1))
+  IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id capability agent_alias prompt_file step_cli inputs optional resolution_status timeout_seconds stall_seconds stall_action input_mode output_tier continue_reason executor script_ref fallback_executor fallback_when <<< "${STEP_ARRAY[${CURRENT_STEP_IDX}]}"
+
+  # Visit counter — incremented on every entry (forward execution and
+  # route_back reruns alike) so the resolver can detect cycles.
+  VISIT_COUNTS["${step_id}"]=$(( ${VISIT_COUNTS["${step_id}"]:-0} + 1 ))
 
   # Show phase header once per phase
   if [ "${phase_num}" != "${PREV_PHASE}" ]; then
@@ -1574,10 +1671,61 @@ Release / governed-mode requirements:
   } >> "${RUN_SUMMARY}"
 
   if [ "${SHOULD_HALT}" -eq 1 ]; then
+    # ── P6 #8 opt-in route_back_to handling ──
+    # Default behavior is unchanged (flag off → break out as before).
+    # When CAP_ENFORCE_ROUTE_BACK=1 we consult the failed ticket's
+    # failure_routing block via resolve-handoff-routing. Verdicts:
+    #   * action=route_back_to + valid target → step_idx jumps back,
+    #     SHOULD_HALT clears, control flow re-enters target step.
+    #     Forward steps after target re-execute on next iteration
+    #     because they sit ahead in STEP_ARRAY.
+    #   * action=halt (incl. max_retries_exhausted, invalid_target,
+    #     unsupported_action, missing_target) → break as usual but
+    #     log the verdict to route-history.jsonl + workflow.log so
+    #     audit trails surface why route_back was refused.
+    # Scope: only ai-executor steps with a ticket on disk. Pure-shell
+    # steps and steps without an emitted ticket short-circuit to
+    # halt (no route_back semantics defined for them in P6 #8).
+    if [ "${CAP_ENFORCE_ROUTE_BACK:-0}" = "1" ] && [ "${effective_executor}" = "ai" ]; then
+      ROUTE_BACK_TICKET_PATH="$(resolve_latest_ticket "${HANDOFFS_DIR}" "${step_id}")"
+      if [ -n "${ROUTE_BACK_TICKET_PATH}" ]; then
+        ROUTE_VISITS_ARG="$(format_visit_counts)"
+        ROUTE_OUT="$("${PYTHON_BIN}" "${STEP_PY}" resolve-handoff-routing "${ROUTE_BACK_TICKET_PATH}" --plan-steps "${ROUTE_BACK_PLAN_STEPS}" --visits "${ROUTE_VISITS_ARG}" 2>&1)"
+        ROUTE_RC=$?
+        if [ "${ROUTE_RC}" -eq 0 ]; then
+          ROUTE_ACTION="$(printf '%s' "${ROUTE_OUT}" | sed -E 's/^action=([^;]*).*$/\1/')"
+          ROUTE_TARGET="$(printf '%s' "${ROUTE_OUT}" | sed -E 's/^.*target=([^;]*);reason=.*$/\1/')"
+          ROUTE_REASON="$(printf '%s' "${ROUTE_OUT}" | sed -E 's/^.*reason=([^;]*);remaining=.*$/\1/')"
+          if [ "${ROUTE_ACTION}" = "route_back_to" ] && [ -n "${ROUTE_TARGET}" ]; then
+            ROUTE_TARGET_IDX="$(find_step_idx_in_array "${ROUTE_TARGET}")"
+            if [ -n "${ROUTE_TARGET_IDX}" ]; then
+              record_route_history "${step_id}" "${ROUTE_TARGET}" "${ROUTE_REASON}" "route_back_to"
+              printf "  ${YELLOW}│ route_back_to: %s → %s (reason=%s, visits=%s)${RESET}\n" "${step_id}" "${ROUTE_TARGET}" "${ROUTE_REASON}" "${VISIT_COUNTS[${ROUTE_TARGET}]:-0}"
+              append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} route_back_to:${ROUTE_TARGET} reason:${ROUTE_REASON} visits:${VISIT_COUNTS[${ROUTE_TARGET}]:-0}" "重路由"
+              bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} route_back_to:${ROUTE_TARGET} reason:${ROUTE_REASON}" "重路由" >/dev/null 2>&1 || true
+              # Reset SHOULD_HALT and rewind step_idx to target.
+              # Visit counter for ${ROUTE_TARGET} will increment
+              # again on the next iteration's entry.
+              step_idx="${ROUTE_TARGET_IDX}"
+              SHOULD_HALT=0
+              FAILED=$(( FAILED > 0 ? FAILED - 1 : 0 ))
+              continue
+            fi
+          fi
+          # Halt verdict: log non-trivial reasons (skip "no_routing"
+          # which is the default halt and not noteworthy).
+          if [ "${ROUTE_ACTION}" = "halt" ] && [ "${ROUTE_REASON}" != "no_routing" ]; then
+            record_route_history "${step_id}" "${ROUTE_TARGET}" "${ROUTE_REASON}" "halt"
+            printf "  ${YELLOW}│ route_back halted: reason=%s${RESET}\n" "${ROUTE_REASON}"
+            append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} route_back_halt reason:${ROUTE_REASON} target:${ROUTE_TARGET}" "失敗"
+          fi
+        fi
+      fi
+    fi
     break
   fi
 
-done 3<<< "${STEP_LINES}"
+done
 
 TOTAL_DURATION="$(( $(date '+%s') - START_TOTAL ))"
 
