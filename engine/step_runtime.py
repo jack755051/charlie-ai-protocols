@@ -965,6 +965,7 @@ _FALLBACK_TYPE_MAP: dict[str, type | tuple[type, ...]] = {
     "boolean": bool,
     "array": list,
     "object": dict,
+    "null": type(None),
 }
 
 
@@ -974,7 +975,8 @@ def validate_jsonschema_fallback(data: Any, schema: Any) -> list[str]:
     Supports the keywords actually used by CAP schemas:
 
     * ``required`` (recursive into nested objects via ``properties``)
-    * ``type`` (recursive)
+    * ``type`` (recursive; accepts both single ``"string"`` and union
+      ``["string", "null"]`` forms; ``"null"`` matches Python ``None``)
     * ``enum`` (recursive)
     * ``minItems`` for arrays
     * ``properties`` (recursive into object properties)
@@ -988,6 +990,31 @@ def validate_jsonschema_fallback(data: Any, schema: Any) -> list[str]:
     return _check_against_schema(data, schema, [])
 
 
+def _resolve_allowed_types(
+    expected: Any,
+) -> list[type | tuple[type, ...]]:
+    """Resolve a schema ``type`` keyword into the Python types we accept.
+
+    Returns an empty list when the keyword is missing or unrecognized so
+    callers can treat "no type assertion" and "unknown type label" as
+    no-ops (matching ``Draft202012Validator``'s permissive handling of
+    unknown type labels).
+    """
+    if isinstance(expected, str):
+        py = _FALLBACK_TYPE_MAP.get(expected)
+        return [py] if py is not None else []
+    if isinstance(expected, list):
+        resolved: list[type | tuple[type, ...]] = []
+        for label in expected:
+            if not isinstance(label, str):
+                continue
+            py = _FALLBACK_TYPE_MAP.get(label)
+            if py is not None:
+                resolved.append(py)
+        return resolved
+    return []
+
+
 def _check_against_schema(data: Any, schema: Any, path: list[str]) -> list[str]:
     if not isinstance(schema, dict):
         return []
@@ -996,10 +1023,13 @@ def _check_against_schema(data: Any, schema: Any, path: list[str]) -> list[str]:
     loc = "/".join(path) or "<root>"
 
     expected = schema.get("type")
-    py_type = _FALLBACK_TYPE_MAP.get(expected) if isinstance(expected, str) else None
-    if py_type is not None and not isinstance(data, py_type):
+    allowed = _resolve_allowed_types(expected)
+    if allowed and not any(isinstance(data, t) for t in allowed):
+        label = expected if isinstance(expected, str) else "|".join(
+            str(x) for x in expected
+        )
         errors.append(
-            f"{loc}: expected type '{expected}', got '{type(data).__name__}'"
+            f"{loc}: expected type '{label}', got '{type(data).__name__}'"
         )
         return errors
 
