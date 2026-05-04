@@ -1,6 +1,6 @@
 # CAP Missing Implementation Checklist
 
-更新日期：2026-05-04（P4 #1/#2/#3 compiled workflow + binding report validation hooks 落地 + jsonschema fallback hardening）
+更新日期：2026-05-04（P4 #1-#9 compile-pipeline policy gates 落地，#5 deferred、#8 為語意 alignment doc）
 
 本清單承接 `TODOLIST.md` 與 `docs/cap/IMPLEMENTATION-ROADMAP.md` 的「尚未完成」項目，整理成可執行的工程工作清單。原則是先補 runtime contract 與 validator，再補 runner、orchestration、session、gate 與 promote/publish 閉環。
 
@@ -270,9 +270,10 @@
   - 驗收：未允許來源不能被載入
   - 進度：done in `feat/binding-report-validation`；既有 `engine/runtime_binder.py:_assert_workflow_source_allowed` 已會 raise，但用裸 `ValueError`，CLI 會吐 traceback 不可機器解析。本輪新增 `engine/runtime_binder.py:WorkflowSourcePolicyError(stage='workflow_source_policy')`，把 raise 換成這個自訂類別；**檢查邏輯本身不動**（仍保留 synthetic `<...>` source path 短路、`enforce_allowed_source_roots=False` 短路、空 `allowed_source_roots` 短路、real path 落在任一 allowed root 的子樹內視為合法）。`engine/workflow_cli.py:cmd_compile_json` 加第四個 except 分支：`{"ok": false, "error": "workflow_source_policy_error", "stage": "workflow_source_policy", "errors": [...]}`，exit 1。`tests/scripts/test-workflow-policy-gates.sh` Case 5 / Case 6 覆蓋短路 / 合法 / 違規 / CLI 契約。
 
-- [ ] enforce fallback policy
+- [x] enforce fallback policy
   - 交付物：fallback policy check
   - 驗收：strict / preferred / fallback_allowed 與 missing_policy 的行為在 bind / run 前一致套用
+  - 進度：done in `feat/binding-report-validation` 為**語意文件化**（Option B），不改 runtime 行為。釐清現行 `binding_mode` 與 `missing_policy` 的真實語意：(1) `binding_mode='strict'`（`engine/runtime_binder.py:DEFAULT_BINDING_MODE` 與 `_get_binding_mode`）= **fallback 搜尋停用**；若 capability 在 skill registry 有 direct / preferred match，仍照常選用，**只是不主動展開 generic-* fallback 候選**；line 212 的 `self._find_fallback(...) if binding_mode == "fallback_allowed" else None` 是唯一決策點。(2) `binding_mode='fallback_allowed'` = **fallback 搜尋開放**，無 direct match 時會嘗試 `generic-*` 備援。(3) `missing_policy` 字串記入 binding report，由下游 `task_scoped_compiler.apply_unresolved_policy` 與 main.py 的 `binding_status` halt 判斷決定 halt / skip / pending；binder 自身不在 bind 階段拒絕。**未做 rename**（`binding_mode` → `fallback_search_mode`）以避免打開 `binding-report.schema.yaml` / 既有 fixture / supervisor envelope 的連動破壞；rename 留給未來真正需要再現 fallback rejection 行為時再做。Option A（actively reject in strict）與 Option C（新增獨立 `fallback_rejection_policy`）皆評估後延後：A 會改變既有 binding 結果造成 regression，C 會重開剛 close 的 P4 #2 schema 與 fixture。本條視為 alignment doc，**不引入新 runtime 行為**。
 
 - [x] 強化 unresolved handling
   - 交付物：error model 與 report
