@@ -1,8 +1,10 @@
 # 架構設計與設計理念
 
 > 本文件說明 Charlie's AI Protocols 的架構決策與設計原則。
-> 使用手冊請見 [README.md](../../README.md)。
-> 完整平台實現路線請見 [IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md)。
+>
+> **導覽**：使用手冊看 [README.md](../../README.md)；目前實作進度看 [MISSING-IMPLEMENTATION-CHECKLIST.md](MISSING-IMPLEMENTATION-CHECKLIST.md)；其他工程文件入口看 [docs/cap/README.md](README.md)。
+>
+> **跨模組邊界**：要動 capability、storage layout、執行流程之前，請先讀對應 boundary memo（[CONSTITUTION-BOUNDARY.md](CONSTITUTION-BOUNDARY.md) / [SUPERVISOR-ORCHESTRATION-BOUNDARY.md](SUPERVISOR-ORCHESTRATION-BOUNDARY.md) / [ORCHESTRATION-STORAGE-BOUNDARY.md](ORCHESTRATION-STORAGE-BOUNDARY.md) / [EXECUTION-LAYERING.md](EXECUTION-LAYERING.md)）。本文件涵蓋整體架構，不重複 boundary 細節。
 
 ---
 
