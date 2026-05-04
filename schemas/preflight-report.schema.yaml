@@ -1,0 +1,130 @@
+# Preflight Report Schema (v1)
+#
+# Machine-readable summary emitted by engine.preflight_report.build_preflight_report
+# after the compile pipeline's validation + policy gates pass. Captures
+# whether the compiled workflow is executable today, what gates have
+# been confirmed, the resolved-step counts, and any non-blocking warnings
+# downstream consumers (cap workflow run-task --dry-run, supervisor
+# inspectors, future preflight CLI surfaces) should display.
+#
+# Producer: engine/preflight_report.py:build_preflight_report
+# Consumed by:
+#   - engine/task_scoped_compiler.compile_task / compile_task_from_envelope
+#     (returned dict gains a `preflight_report` key)
+#   - engine/workflow_cli.cmd_compile_json (output JSON includes preflight)
+#   - scripts/cap-workflow.sh run-task --dry-run (renders preflight summary)
+#
+# Scope boundary (important):
+#   This artifact only exists when the compile pipeline reached a
+#   "non-blocked" terminal state. Blocked cases halt earlier via
+#   BindingPolicyError / CompiledWorkflowSchemaError / BindingReportSchemaError /
+#   WorkflowSourcePolicyError and never produce a preflight report. So
+#   `is_executable: false` is reserved for future scenarios where the
+#   builder is given partial state — at present the gate-passing path
+#   always emits `is_executable: true`. `blocking_reasons` is therefore
+#   typically empty; it is kept in the contract for forward symmetry
+#   with the envelope-style policy result format.
+
+schema_version: 1
+title: CAP Preflight Report Schema
+description: Machine-readable workflow execution-readiness snapshot emitted after compile + bind + policy gates pass. Mirrors what cap workflow run-task --dry-run shows the user.
+
+required:
+  - schema_version
+  - workflow_id
+  - binding_status
+  - is_executable
+  - gates
+  - unresolved_summary
+  - warnings
+  - blocking_reasons
+
+properties:
+  schema_version:
+    type: integer
+    enum: [1]
+    description: Schema version for the preflight envelope. Bump on breaking changes to top-level fields.
+
+  workflow_id:
+    type: string
+    description: Workflow id from the compiled workflow being inspected.
+
+  binding_status:
+    type: string
+    enum: [ready, degraded]
+    description: |
+      Aggregate readiness from the binding report. `ready` means all required steps
+      resolved cleanly. `degraded` means required steps resolved but one or more
+      optional steps fell back to generic skills or remained unresolved. `blocked`
+      is intentionally excluded — blocked bindings halt earlier via BindingPolicyError
+      and never reach the preflight builder.
+
+  is_executable:
+    type: boolean
+    description: |
+      True when the workflow can be safely passed to a step executor. Always true
+      today because the builder only runs after the policy gate has accepted
+      the binding; reserved for future scenarios where partial state is inspected.
+
+  gates:
+    type: object
+    required:
+      - compiled_workflow_schema
+      - binding_report_schema
+      - binding_policy
+      - source_root_policy
+    description: |
+      Per-gate confirmation that the compile pipeline cleared each validation
+      and policy check. Each value is the gate's terminal state at the time the
+      preflight was built. Today only `passed` appears — failed gates raise and
+      the preflight is never built. Forward-compat for richer states.
+    properties:
+      compiled_workflow_schema:
+        type: string
+        enum: [passed]
+        description: P4 #1 compiled-workflow schema validation gate (post_build + post_unresolved_policy).
+      binding_report_schema:
+        type: string
+        enum: [passed]
+        description: P4 #2 binding-report schema validation gate (post_bind).
+      binding_policy:
+        type: string
+        enum: [passed]
+        description: P4 #6 / P4 #9 binding policy gate (allowed_capabilities + unresolved-required halt).
+      source_root_policy:
+        type: string
+        enum: [passed]
+        description: P4 #7 workflow source-root policy gate (allowed_source_roots check).
+
+  unresolved_summary:
+    type: object
+    required:
+      - total_steps
+      - resolved_steps
+      - fallback_steps
+      - unresolved_optional_steps
+    description: Verbatim copy of binding.summary's resolution counts so consumers don't have to dig into binding.
+    properties:
+      total_steps:
+        type: integer
+      resolved_steps:
+        type: integer
+      fallback_steps:
+        type: integer
+      unresolved_optional_steps:
+        type: integer
+
+  warnings:
+    type: array
+    description: Non-blocking concerns (optional unresolved steps, fallback skills selected, etc.) the user should know before running.
+    items:
+      type: string
+
+  blocking_reasons:
+    type: array
+    description: |
+      Reasons the workflow cannot execute. Always empty when the preflight is
+      built via the standard compile path because blocking conditions raise
+      earlier. Kept for forward symmetry with envelope-style policy results.
+    items:
+      type: string

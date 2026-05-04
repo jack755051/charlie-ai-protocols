@@ -280,9 +280,10 @@
   - 驗收：required unresolved halt，optional unresolved 可降級
   - 進度：done in `feat/binding-report-validation`；與 P4 #6 共用同一條 `binding_status='blocked'` 路徑。required unresolved step 會推升 `binding_status` 至 `blocked`，新 `ensure_binding_status_executable` halt 在 `compile_task` / `compile_task_from_envelope` 內生效。optional unresolved 維持原本「不推升 binding_status，可降級執行」語意：optional unresolved 只進 `unresolved_optional_steps` 計數，`binding_status` 落在 `degraded`（不算 blocked），不被新 hard halt 影響，下游 `apply_unresolved_policy` 仍按原本 `optional_unresolved → action='skip|fallback'` 處理。新 `tests/scripts/test-workflow-policy-gates.sh` Case 3 覆蓋 required-unresolved → halt + 不進入 bound phases。
 
-- [ ] 產出 preflight report
+- [x] 產出 preflight report
   - 交付物：preflight artifact
   - 驗收：run 前能看到 capability、binding、policy、artifact 風險
+  - 進度：done in `feat/binding-report-validation`；新增 `schemas/preflight-report.schema.yaml` v1（8 個必填頂層欄位 `schema_version` / `workflow_id` / `binding_status` / `is_executable` / `gates` / `unresolved_summary` / `warnings` / `blocking_reasons`）+ `engine/preflight_report.py:build_preflight_report(compiled_workflow, binding)` builder。`engine/task_scoped_compiler.py` 兩個 compile path 在所有 validation + policy gate 通過後（`ensure_binding_status_executable` 之後、`build_bound_execution_phases_from_workflow` 之後）建立 preflight，回傳 dict 多一個 `preflight_report` key（legacy compile_task 從 7 鍵升 8 鍵；envelope path 從 9 鍵升 10 鍵；對應的 `tests/scripts/test-compile-task-from-envelope.sh` Case 0 / 3 / 6 key 斷言同步更新）。**範圍邊界**：blocked binding 仍由 P4 #6/#9 的 `BindingPolicyError` 在 `apply_unresolved_policy` 前 halt，preflight 不會被建立；`is_executable: true` 與 `blocking_reasons: []` 是現行架構的常態，contract 保留 `false` / non-empty 給未來部分狀態檢視場景。fallback / optional unresolved 只透過 `warnings` 表達，不影響 `is_executable`。新 `tests/scripts/test-preflight-report.sh` 6 cases / **21 passed / 0 failed**（happy path / envelope path / schema 驗證 / optional unresolved warning / fallback skill warning / blocked-deterministic-halt 不漏 preflight）。
 
 - [ ] 強化 dry-run inspection
   - 交付物：dry-run inspection output

@@ -13,6 +13,7 @@ try:
         CompiledWorkflowSchemaError,
         ensure_valid_compiled_workflow,
     )
+    from .preflight_report import build_preflight_report
     from .project_context_loader import ProjectContextLoader
     from .runtime_binder import (
         BindingPolicyError,
@@ -29,6 +30,7 @@ except ImportError:  # pragma: no cover
         CompiledWorkflowSchemaError,
         ensure_valid_compiled_workflow,
     )
+    from preflight_report import build_preflight_report  # type: ignore[no-redef]
     from project_context_loader import ProjectContextLoader
     from runtime_binder import (  # type: ignore[no-redef]
         BindingPolicyError,
@@ -319,6 +321,7 @@ class TaskScopedWorkflowCompiler:
             registry_ref=registry_ref,
             source_path=f"<compiled:{constitution['task_id']}>",
         )
+        preflight_report = build_preflight_report(compiled_workflow, binding)
         return {
             "task_constitution": constitution,
             "project_context": constitution.get("project_context", {}),
@@ -327,6 +330,7 @@ class TaskScopedWorkflowCompiler:
             "unresolved_policy": unresolved_policy,
             "compiled_workflow": compiled_workflow,
             "plan": plan,
+            "preflight_report": preflight_report,
         }
 
     def compile_task_from_envelope(
@@ -485,6 +489,7 @@ class TaskScopedWorkflowCompiler:
             registry_ref=registry_ref,
             source_path=f"<compiled-from-envelope:{enriched_constitution['task_id']}>",
         )
+        preflight_report = build_preflight_report(compiled_workflow, binding)
         return {
             "task_constitution": enriched_constitution,
             "project_context": enriched_constitution.get("project_context", {}),
@@ -493,6 +498,7 @@ class TaskScopedWorkflowCompiler:
             "unresolved_policy": unresolved_policy,
             "compiled_workflow": compiled_workflow,
             "plan": plan,
+            "preflight_report": preflight_report,
             "compile_hints_applied": dict(compile_hints),
             "failure_routing_resolved": resolve_failure_routing(envelope),
         }

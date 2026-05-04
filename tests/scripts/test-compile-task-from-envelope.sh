@@ -123,7 +123,7 @@ print('hints_applied_keys=' + ','.join(sorted(out['compile_hints_applied'].keys(
 print('hints_registry=' + str(out['compile_hints_applied']['registry_preference']))
 print('hints_notes=' + str(out['compile_hints_applied']['notes']))
 ")"
-assert_contains "case 0 returns 9-key dict (legacy 7 + compile_hints_applied + failure_routing_resolved)" "keys=binding,capability_graph,compile_hints_applied,compiled_workflow,failure_routing_resolved,plan,project_context,task_constitution,unresolved_policy" "${out0}"
+assert_contains "case 0 returns 10-key dict (legacy 7 + compile_hints_applied + failure_routing_resolved + preflight_report)" "keys=binding,capability_graph,compile_hints_applied,compiled_workflow,failure_routing_resolved,plan,preflight_report,project_context,task_constitution,unresolved_policy" "${out0}"
 assert_contains "case 0 envelope task_id wins" "task_id=env-happy" "${out0}"
 assert_contains "case 0 envelope goal wins" "goal=envelope-supplied goal text" "${out0}"
 assert_contains "case 0 envelope goal_stage wins" "goal_stage=formal_specification" "${out0}"
@@ -195,7 +195,7 @@ assert_contains "case 2 names drift" "drift" "${out2}"
 assert_contains "case 2 names task_id" "task_id" "${out2}"
 
 # ── Case 3 ──────────────────────────────────────────────────────────────
-echo "Case 3: legacy compile_task unchanged → 7-key dict, no compile_hints_applied"
+echo "Case 3: legacy compile_task → 8-key dict (7 legacy + preflight_report), no compile_hints_applied"
 out3="$(run_py "
 from engine.task_scoped_compiler import TaskScopedWorkflowCompiler
 c = TaskScopedWorkflowCompiler()
@@ -204,7 +204,7 @@ print('keys=' + ','.join(sorted(result.keys())))
 print('has_hints=' + str('compile_hints_applied' in result))
 print('has_constitution=' + str('task_constitution' in result))
 ")"
-assert_contains "case 3 legacy returns 7 keys" "keys=binding,capability_graph,compiled_workflow,plan,project_context,task_constitution,unresolved_policy" "${out3}"
+assert_contains "case 3 legacy returns 8 keys" "keys=binding,capability_graph,compiled_workflow,plan,preflight_report,project_context,task_constitution,unresolved_policy" "${out3}"
 assert_contains "case 3 legacy has no compile_hints_applied" "has_hints=False" "${out3}"
 assert_contains "case 3 legacy still produces task_constitution" "has_constitution=True" "${out3}"
 
@@ -329,8 +329,8 @@ print('tech_source=' + fr[1]['source'])
 print('tech_on_fail=' + fr[1]['on_fail'])
 print('tech_max_retries=' + str(fr[1]['max_retries']))
 ")"
-assert_contains "case 6 9-key dict including failure_routing_resolved" \
-  "keys=binding,capability_graph,compile_hints_applied,compiled_workflow,failure_routing_resolved,plan,project_context,task_constitution,unresolved_policy" \
+assert_contains "case 6 10-key dict including failure_routing_resolved + preflight_report" \
+  "keys=binding,capability_graph,compile_hints_applied,compiled_workflow,failure_routing_resolved,plan,preflight_report,project_context,task_constitution,unresolved_policy" \
   "${out6}"
 assert_contains "case 6 resolver entry count matches graph" "count=2" "${out6}"
 assert_contains "case 6 entries aligned with graph order" "order=prd,tech" "${out6}"
