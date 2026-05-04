@@ -184,6 +184,93 @@ assert_contains "ok=False"                     "ok=False"                       
 assert_contains "binding_policy_error tag"     "error=binding_policy_error"        "${out4}"
 assert_contains "stage=post_bind_policy"       "stage=post_bind_policy"            "${out4}"
 
+# ── Case 5 (P4 #7) ──────────────────────────────────────────────────────
+echo "Case 5 (P4 #7): _assert_workflow_source_allowed raises typed error on violation"
+out5="$(run_py "
+from engine.runtime_binder import RuntimeBinder, WorkflowSourcePolicyError
+b = RuntimeBinder()
+
+# Synthetic compiled-workflow source path: must short-circuit (no raise).
+b._assert_workflow_source_allowed('<compiled:t1:candidate>', {'workflow_policy': {'enforce_allowed_source_roots': True, 'allowed_source_roots': ['/tmp/none']}})
+print('synthetic_short_circuit_ok')
+
+# Real path inside allowed root: no raise.
+import tempfile, pathlib
+with tempfile.TemporaryDirectory() as td:
+    root = pathlib.Path(td)
+    inside = root / 'sub' / 'wf.yaml'
+    inside.parent.mkdir(parents=True, exist_ok=True)
+    inside.write_text('# fixture')
+    b._assert_workflow_source_allowed(str(inside), {'workflow_policy': {'enforce_allowed_source_roots': True, 'allowed_source_roots': [str(root)]}})
+    print('inside_root_ok')
+
+    # Real path outside allowed root: must raise WorkflowSourcePolicyError.
+    outside_dir = root.parent
+    outside = outside_dir / 'phantom-wf.yaml'
+    outside.write_text('# outside fixture')
+    try:
+        b._assert_workflow_source_allowed(str(outside), {'workflow_policy': {'enforce_allowed_source_roots': True, 'allowed_source_roots': [str(root)]}})
+        print('NO_RAISE')
+    except WorkflowSourcePolicyError as exc:
+        print('stage=' + exc.stage)
+        print('error_head=' + exc.errors[0])
+    finally:
+        outside.unlink(missing_ok=True)
+")"
+assert_contains "synthetic path short-circuits"     "synthetic_short_circuit_ok"   "${out5}"
+assert_contains "real path inside root passes"      "inside_root_ok"               "${out5}"
+assert_contains "raised at workflow_source_policy"  "stage=workflow_source_policy" "${out5}"
+assert_contains "error mentions allowed_source_roots" "allowed_source_roots"        "${out5}"
+
+# ── Case 6 (P4 #7) ──────────────────────────────────────────────────────
+echo "Case 6 (P4 #7): cmd_compile_json on source policy fail → JSON error + exit 1"
+out6="$(REPO_ROOT="${REPO_ROOT}" python3 - <<'PY' 2>&1
+import json
+import os
+import sys
+from pathlib import Path
+
+repo_root = Path(os.environ['REPO_ROOT'])
+sys.path.insert(0, str(repo_root))
+
+from engine.runtime_binder import RuntimeBinder, WorkflowSourcePolicyError  # noqa: E402
+
+orig = RuntimeBinder._assert_workflow_source_allowed
+def forced(self, source_path, project_context):
+    raise WorkflowSourcePolicyError(
+        f"forced denial for testing: {source_path}",
+        stage="workflow_source_policy",
+        errors=[f"source_path '{source_path}' rejected by test patch"],
+    )
+RuntimeBinder._assert_workflow_source_allowed = forced
+
+from engine import workflow_cli  # noqa: E402
+import io
+buf = io.StringIO()
+sys.stdout = buf
+exit_code = 0
+try:
+    workflow_cli.cmd_compile_json(str(repo_root), 'add new feature for testing')
+except SystemExit as e:
+    exit_code = e.code or 0
+sys.stdout = sys.__stdout__
+out = buf.getvalue().strip()
+print('exit_code=' + str(exit_code))
+try:
+    payload = json.loads(out)
+    print('ok=' + str(payload.get('ok')))
+    print('error=' + str(payload.get('error')))
+    print('stage=' + str(payload.get('stage')))
+except Exception as exc:
+    print('JSON_PARSE_FAIL: ' + str(exc))
+    print('raw=' + out[:200])
+PY
+)"
+assert_contains "exit code 1"                       "exit_code=1"                            "${out6}"
+assert_contains "ok=False"                          "ok=False"                               "${out6}"
+assert_contains "workflow_source_policy_error tag"  "error=workflow_source_policy_error"     "${out6}"
+assert_contains "stage=workflow_source_policy"      "stage=workflow_source_policy"           "${out6}"
+
 # ── Summary ─────────────────────────────────────────────────────────────
 echo ""
 echo "workflow-policy-gates: ${pass_count} passed, ${fail_count} failed"

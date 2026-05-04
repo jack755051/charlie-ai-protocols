@@ -31,6 +31,23 @@ class BindingPolicyError(Exception):
         self.errors = list(errors)
 
 
+class WorkflowSourcePolicyError(Exception):
+    """Raised when a workflow's source path is outside the constitution's allowed roots.
+
+    Replaces the bare ``ValueError`` previously raised by
+    ``RuntimeBinder._assert_workflow_source_allowed`` so the CLI can
+    surface a deterministic JSON error class instead of a raw
+    traceback. The actual policy decision (which roots are allowed,
+    whether enforcement is on) is unchanged; this is purely an
+    error-class promotion plus CLI-level handling.
+    """
+
+    def __init__(self, message: str, *, stage: str, errors: list[str]) -> None:
+        super().__init__(message)
+        self.stage = stage
+        self.errors = list(errors)
+
+
 def ensure_binding_status_executable(
     binding: dict, *, stage: str = "post_bind_policy"
 ) -> None:
@@ -695,7 +712,13 @@ class RuntimeBinder:
             if source == root_path or root_path in source.parents:
                 return
 
-        raise ValueError(f"workflow 來源不符合 project constitution 限制: {source_path}")
+        raise WorkflowSourcePolicyError(
+            f"workflow 來源不符合 project constitution 限制: {source_path}",
+            stage="workflow_source_policy",
+            errors=[
+                f"source_path '{source_path}' is not under any of the configured allowed_source_roots: {list(allowed_roots)}"
+            ],
+        )
 
     @staticmethod
     def _has_execution_metadata(skill: dict) -> bool:

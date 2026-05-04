@@ -265,9 +265,10 @@
   - 驗收：憲法未允許的 capability 會 halt
   - 進度：done in `feat/binding-report-validation`；既有 `engine/runtime_binder.py` 已會把 `binding_policy.allowed_capabilities` 不允許的 step 標記為 `resolution_status='blocked_by_constitution'` 並計入 `unresolved_required_steps`（line 88, 140-173），但這只升到 `binding_status='blocked'` 標籤、過去只有 `main.py:105` 軟認帳。本輪新增 `engine/runtime_binder.py:BindingPolicyError` + `ensure_binding_status_executable(binding, *, stage)`，掛在 `engine/task_scoped_compiler.py` 兩個 compile path 的 `ensure_valid_binding_report` 之後、`apply_unresolved_policy` 之前；blocked 時即時 raise，不會進入 `apply_unresolved_policy` 或 `build_bound_execution_phases_from_workflow`。`engine/workflow_cli.py:cmd_compile_json` 接成 `{"ok": false, "error": "binding_policy_error", "stage": "post_bind_policy", "errors": [...]}`，exit 1。
 
-- [ ] enforce allowed workflow source roots
+- [x] enforce allowed workflow source roots
   - 交付物：source root policy check
   - 驗收：未允許來源不能被載入
+  - 進度：done in `feat/binding-report-validation`；既有 `engine/runtime_binder.py:_assert_workflow_source_allowed` 已會 raise，但用裸 `ValueError`，CLI 會吐 traceback 不可機器解析。本輪新增 `engine/runtime_binder.py:WorkflowSourcePolicyError(stage='workflow_source_policy')`，把 raise 換成這個自訂類別；**檢查邏輯本身不動**（仍保留 synthetic `<...>` source path 短路、`enforce_allowed_source_roots=False` 短路、空 `allowed_source_roots` 短路、real path 落在任一 allowed root 的子樹內視為合法）。`engine/workflow_cli.py:cmd_compile_json` 加第四個 except 分支：`{"ok": false, "error": "workflow_source_policy_error", "stage": "workflow_source_policy", "errors": [...]}`，exit 1。`tests/scripts/test-workflow-policy-gates.sh` Case 5 / Case 6 覆蓋短路 / 合法 / 違規 / CLI 契約。
 
 - [ ] enforce fallback policy
   - 交付物：fallback policy check
