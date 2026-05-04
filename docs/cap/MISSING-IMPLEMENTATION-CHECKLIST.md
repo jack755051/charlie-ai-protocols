@@ -292,6 +292,21 @@
 
 ## P5：AgentSessionRunner
 
+> **Baseline 現況（盤點於 `feat(preflight)` / `feat(workflow)` rc6 closeout 後）**：本段並非從零開工。既有設施：
+> - `schemas/agent-session.schema.yaml` v1（18 必填頂層欄位 + lifecycle enum 7 值：`planned / running / completed / failed / blocked / cancelled / recycled`）已落地。
+> - `engine/step_runtime.py:upsert_session`（line 645-746）負責寫入 `~/.cap/projects/<id>/reports/workflows/<workflow_id>/<run_label>/agent-sessions.json`，session_id / run_id / workflow_id / step_id / capability / role / provider / provider_cli / executor / lifecycle / inputs / outputs / scratch_paths / started_at / completed_at / failure_reason / duration_seconds 等欄位皆已寫入。
+> - **Production executor 在 shell**：`scripts/cap-workflow-exec.sh:1000-1150` 是目前唯一的 step execution 主迴圈（build prompt → spawn provider CLI → capture output → 呼叫 `step_runtime upsert-session`）。`run_step_claude` / `run_step_codex` / `run_shell_step` 為三條 provider dispatch 分支；timeout / stall enforce 也在 shell loop（line 1044 / 1049）。
+> - `engine/project_context_loader` / `project_constitution_runner` 內亦有少量 Python 端的 subprocess 呼叫 provider CLI（如 `runner.py:757`），與 shell executor 形成兩條並存的 dispatch 路徑。
+>
+> **本批（rc6 後 P5 #0-#3）scope 紅線**：
+> 1. **不重構** `scripts/cap-workflow-exec.sh`：現行 production execution path 不動，避免打壞 provider dispatch / timeout / stall / temp file / background process 等已能跑的 shell 行為。
+> 2. **新增 Python additive layer**：`engine/provider_adapter.py` + `engine/agent_session_runner.py` 作為「未來可程式化呼叫的 deterministic runner」，不取代 shell executor。
+> 3. **ShellAdapter 為 Python 端對齊版**：與 shell 的 `run_shell_step` 行為對齊（`subprocess.run` 包裝），目的是測試與未來 migration 用，不替換 shell 路徑。
+> 4. **本批不接** Codex / Claude adapter、不做 prompt snapshot / hash、不做 parent / child session relation 寫入、不做 `cap session inspect` CLI。這些屬後續批次。
+> 5. **寫 ledger 重用 `step_runtime.upsert_session`**：直接 import 呼叫 Python 函式，不重做 schema 寫入規則。
+>
+> 換句話說，shell 是 production runner、Python AgentSessionRunner 是 future programmable execution layer，兩者並存且邊界清楚。
+
 - [ ] 定義 `ProviderAdapter` interface
   - 交付物：provider adapter contract
   - 驗收：Codex / Claude / Shell 可共用同一 runner 介面
