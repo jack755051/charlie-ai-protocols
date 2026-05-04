@@ -950,36 +950,85 @@ def validate_constitution(constitution_path: str, schema_path: str) -> None:
             loc = "/".join(str(p) for p in err.absolute_path) or "<root>"
             errors.append(f"{loc}: {err.message}")
     except ImportError:
-        required = schema.get("required") or []
-        for key in required:
-            if key not in constitution:
-                errors.append(f"<root>: missing required field '{key}'")
-        properties = schema.get("properties") or {}
-        type_map = {
-            "string": str,
-            "integer": int,
-            "number": (int, float),
-            "boolean": bool,
-            "array": list,
-            "object": dict,
-        }
-        for key, spec in properties.items():
-            if key not in constitution or not isinstance(spec, dict):
-                continue
-            expected = spec.get("type")
-            py_type = type_map.get(expected) if isinstance(expected, str) else None
-            if py_type is not None and not isinstance(constitution[key], py_type):
-                errors.append(
-                    f"{key}: expected type '{expected}', got '{type(constitution[key]).__name__}'"
-                )
-            enum = spec.get("enum")
-            if isinstance(enum, list) and constitution[key] not in enum:
-                errors.append(f"{key}: value '{constitution[key]}' not in enum {enum}")
+        errors.extend(validate_jsonschema_fallback(constitution, schema))
 
     ok = not errors
     print(json.dumps({"ok": ok, "errors": errors}, ensure_ascii=False))
     if not ok:
         sys.exit(1)
+
+
+_FALLBACK_TYPE_MAP: dict[str, type | tuple[type, ...]] = {
+    "string": str,
+    "integer": int,
+    "number": (int, float),
+    "boolean": bool,
+    "array": list,
+    "object": dict,
+}
+
+
+def validate_jsonschema_fallback(data: Any, schema: Any) -> list[str]:
+    """Lightweight JSON Schema validator used when ``jsonschema`` is absent.
+
+    Supports the keywords actually used by CAP schemas:
+
+    * ``required`` (recursive into nested objects via ``properties``)
+    * ``type`` (recursive)
+    * ``enum`` (recursive)
+    * ``minItems`` for arrays
+    * ``properties`` (recursive into object properties)
+    * ``items`` (recursive into array items)
+
+    Returns a list of ``"loc: message"`` strings (empty when valid).
+    Location format mirrors ``Draft202012Validator``'s ``"/"``-joined
+    absolute path, with ``<root>`` for the empty path, so callers can
+    format both branches identically.
+    """
+    return _check_against_schema(data, schema, [])
+
+
+def _check_against_schema(data: Any, schema: Any, path: list[str]) -> list[str]:
+    if not isinstance(schema, dict):
+        return []
+
+    errors: list[str] = []
+    loc = "/".join(path) or "<root>"
+
+    expected = schema.get("type")
+    py_type = _FALLBACK_TYPE_MAP.get(expected) if isinstance(expected, str) else None
+    if py_type is not None and not isinstance(data, py_type):
+        errors.append(
+            f"{loc}: expected type '{expected}', got '{type(data).__name__}'"
+        )
+        return errors
+
+    enum = schema.get("enum")
+    if isinstance(enum, list) and data not in enum:
+        errors.append(f"{loc}: value '{data}' not in enum {enum}")
+
+    if isinstance(data, dict):
+        for key in schema.get("required") or []:
+            if key not in data:
+                errors.append(f"{loc}: missing required field '{key}'")
+        for key, sub in (schema.get("properties") or {}).items():
+            if key in data and isinstance(sub, dict):
+                errors.extend(_check_against_schema(data[key], sub, path + [key]))
+
+    if isinstance(data, list):
+        min_items = schema.get("minItems")
+        if isinstance(min_items, int) and len(data) < min_items:
+            errors.append(
+                f"{loc}: array length {len(data)} less than minItems {min_items}"
+            )
+        items_schema = schema.get("items")
+        if isinstance(items_schema, dict):
+            for index, item in enumerate(data):
+                errors.extend(
+                    _check_against_schema(item, items_schema, path + [str(index)])
+                )
+
+    return errors
 
 
 # ─────────────────────────────────────────────────────────

@@ -8,8 +8,9 @@ validation called from inside the Python compile path
 Mirrors the loader convention in ``engine/step_runtime.py::validate_constitution``:
 
 * Prefer ``jsonschema.Draft202012Validator`` when the package is
-  installed; fall back to a minimal required + type + enum top-level
-  checker so the engine still gates degraded environments.
+  installed; otherwise delegate to ``step_runtime.validate_jsonschema_fallback``
+  so degraded environments still get a recursive (nested) verdict that
+  matches what ``validate-jsonschema`` produces from the shell side.
 * Schema YAML is loaded once per process and cached in-module —
   callers can pass ``schema_path`` to override (used by tests).
 """
@@ -19,6 +20,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+try:
+    from .step_runtime import validate_jsonschema_fallback
+except ImportError:  # pragma: no cover
+    from step_runtime import validate_jsonschema_fallback  # type: ignore[no-redef]
 
 DEFAULT_SCHEMA_PATH = (
     Path(__file__).resolve().parents[1] / "schemas" / "compiled-workflow.schema.yaml"
@@ -106,7 +112,7 @@ def validate_compiled_workflow(
             loc = "/".join(str(p) for p in err.absolute_path) or "<root>"
             errors.append(f"{loc}: {err.message}")
     except ImportError:
-        errors.extend(_lightweight_check(data, schema))
+        errors.extend(validate_jsonschema_fallback(data, schema))
 
     return CompiledWorkflowVerdict(ok=not errors, errors=errors, stage=stage)
 
@@ -129,42 +135,3 @@ def ensure_valid_compiled_workflow(
     )
 
 
-def _lightweight_check(data: dict, schema: dict) -> list[str]:
-    """Top-level required + type + enum checker.
-
-    Matches ``step_runtime.validate_constitution``'s fallback exactly so the
-    two helpers produce equivalent verdicts when ``jsonschema`` is absent.
-    """
-    errors: list[str] = []
-    if not isinstance(data, dict):
-        errors.append(f"<root>: expected object, got '{type(data).__name__}'")
-        return errors
-
-    required = schema.get("required") or []
-    for key in required:
-        if key not in data:
-            errors.append(f"<root>: missing required field '{key}'")
-
-    type_map = {
-        "string": str,
-        "integer": int,
-        "number": (int, float),
-        "boolean": bool,
-        "array": list,
-        "object": dict,
-    }
-    properties = schema.get("properties") or {}
-    for key, spec in properties.items():
-        if key not in data or not isinstance(spec, dict):
-            continue
-        expected = spec.get("type")
-        py_type = type_map.get(expected) if isinstance(expected, str) else None
-        if py_type is not None and not isinstance(data[key], py_type):
-            errors.append(
-                f"{key}: expected type '{expected}', got '{type(data[key]).__name__}'"
-            )
-        enum = spec.get("enum")
-        if isinstance(enum, list) and data[key] not in enum:
-            errors.append(f"{key}: value '{data[key]}' not in enum {enum}")
-
-    return errors
