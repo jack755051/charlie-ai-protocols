@@ -7,6 +7,7 @@ CAP_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 DEFAULT_BRANCH="${CAP_DEFAULT_BRANCH:-main}"
 REMOTE_NAME="${CAP_REMOTE_NAME:-origin}"
 SKIP_FETCH="${CAP_SKIP_FETCH:-0}"
+FORCE_TAG_SYNC="${CAP_FORCE_TAG_SYNC:-0}"
 
 usage() {
   cat <<'EOF' >&2
@@ -44,7 +45,52 @@ fetch_remote() {
     return
   fi
 
-  run_git fetch --tags "${REMOTE_NAME}" --prune
+  local output
+  if ! output="$(run_git fetch --no-tags "${REMOTE_NAME}" --prune 2>&1)"; then
+    printf '%s\n' "${output}" >&2
+    cat >&2 <<EOF
+
+cap update 無法同步 ${REMOTE_NAME} 分支 metadata。
+請確認遠端名稱與網路狀態，或用 CAP_REMOTE_NAME 指定正確 remote。
+EOF
+    return 1
+  fi
+
+  if output="$(run_git fetch --tags "${REMOTE_NAME}" --prune 2>&1)"; then
+    return
+  fi
+
+  if [ "${FORCE_TAG_SYNC}" = "1" ]; then
+    run_git fetch --force --tags "${REMOTE_NAME}" --prune
+    return
+  fi
+
+  printf '%s\n' "${output}" >&2
+  cat >&2 <<EOF
+
+cap update 無法同步 release tags，因為本機 tag 與 ${REMOTE_NAME} 上的同名 tag 不一致。
+若你確認要以遠端 release tag 為準，請執行：
+
+  CAP_FORCE_TAG_SYNC=1 cap update
+
+只想檢視本機版本、不碰遠端 metadata 時，請執行：
+
+  CAP_SKIP_FETCH=1 cap version
+EOF
+  return 1
+}
+
+fetch_remote_best_effort() {
+  if [ "${SKIP_FETCH}" = "1" ]; then
+    printf 'skipped\n'
+    return
+  fi
+
+  if fetch_remote >/dev/null 2>&1; then
+    printf 'fresh\n'
+  else
+    printf 'cache\n'
+  fi
 }
 
 latest_release_tag() {
@@ -362,7 +408,8 @@ prepare_target() {
 
 show_version() {
   ensure_git_repo
-  fetch_remote 2>/dev/null
+  local metadata_status
+  metadata_status="$(fetch_remote_best_effort)"
 
   local commit latest_tag current
   commit="$(run_git rev-parse --short HEAD)"
@@ -412,6 +459,17 @@ show_version() {
   done
 
   echo ""
+  case "${metadata_status}" in
+    fresh)
+      echo "  Remote metadata: fresh"
+      ;;
+    skipped)
+      echo "  Remote metadata: skipped"
+      ;;
+    *)
+      echo "  Remote metadata: local cache"
+      ;;
+  esac
   echo "  Usage: cap update <version>"
 }
 
