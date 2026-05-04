@@ -642,6 +642,46 @@ def _provider_from_cli(provider_cli: str, executor: str) -> str:
     return "builtin"
 
 
+class LifecycleTransitionError(Exception):
+    """Raised by ``upsert_session`` when ``enforce_transition=True`` and
+    the requested lifecycle would step through a disallowed state pair.
+
+    The ``current`` / ``requested`` attributes let callers branch on the
+    exact transition that was rejected without re-parsing the message.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        session_id: str,
+        current: str | None,
+        requested: str,
+    ) -> None:
+        super().__init__(message)
+        self.session_id = session_id
+        self.current = current
+        self.requested = requested
+
+
+# P5 #8 lifecycle state machine. Each key is the prior lifecycle value
+# (None = no prior entry, i.e. first write); each value is the set of
+# lifecycle states allowed to follow. Idempotent rewrites (X → X) are
+# permitted across the board so retries that re-emit the same state do
+# not trip the gate. Terminal states (completed / failed / cancelled /
+# recycled) only accept themselves — no resurrecting a closed session.
+_LIFECYCLE_TRANSITIONS: dict[str | None, set[str]] = {
+    None: {"planned", "running", "failed", "cancelled", "blocked"},
+    "planned": {"planned", "running", "failed", "cancelled"},
+    "running": {"running", "completed", "failed", "cancelled", "recycled", "blocked"},
+    "blocked": {"blocked", "running", "failed", "cancelled"},
+    "completed": {"completed"},
+    "failed": {"failed"},
+    "cancelled": {"cancelled"},
+    "recycled": {"recycled"},
+}
+
+
 def upsert_session(
     sessions_path: str,
     run_id: str,
@@ -668,6 +708,7 @@ def upsert_session(
     parent_session_id: str | None = None,
     root_session_id: str | None = None,
     spawn_reason: str | None = None,
+    enforce_transition: bool = False,
 ) -> None:
     """Upsert one CAP agent session into agent-sessions.json."""
     path = Path(sessions_path)
@@ -684,6 +725,23 @@ def upsert_session(
         if item.get("session_id") == session_id:
             existing = item
             break
+
+    # P5 #8: opt-in lifecycle state-machine. When enforce_transition is
+    # False (default) we keep the legacy "store whatever lifecycle the
+    # caller passed" behaviour so cap-workflow-exec.sh and other shell
+    # callers stay untouched. AgentSessionRunner opts in by passing
+    # enforce_transition=True; future shell callers can opt in later.
+    if enforce_transition:
+        prior_lifecycle = existing.get("lifecycle") if existing else None
+        allowed = _LIFECYCLE_TRANSITIONS.get(prior_lifecycle, set())
+        if lifecycle not in allowed:
+            raise LifecycleTransitionError(
+                f"disallowed lifecycle transition for session '{session_id}': "
+                f"{prior_lifecycle!r} → {lifecycle!r}",
+                session_id=session_id,
+                current=prior_lifecycle,
+                requested=lifecycle,
+            )
 
     if existing is None:
         existing = {

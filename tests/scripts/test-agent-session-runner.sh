@@ -266,26 +266,32 @@ assert_contains "result status timeout"     "status=timeout"   "${out9}"
 assert_contains "ledger lifecycle failed"   "lifecycle=failed" "${out9}"
 assert_contains "failure mentions timeout"  "timed out"        "${out9}"
 
-# ── Case 10 ─────────────────────────────────────────────────────────────
-echo "Case 10: same session_id → ledger entry updated (not duplicated)"
+# ── Case 10 (legacy dedupe semantic) ────────────────────────────────────
+# With P5 #8 lifecycle enforcement, the runner now rejects a second
+# run_step on a completed session (completed → running is disallowed).
+# So we exercise the underlying upsert dedupe via direct upsert_session
+# calls without enforce_transition — this also documents that the shell
+# executor's existing same-session-id replay behaviour is preserved.
+echo "Case 10: direct upsert_session same session_id → 1 entry (legacy dedupe)"
 out10="$(run_py "
 import json, tempfile, pathlib
-from engine.provider_adapter import FakeAdapter, ProviderRequest, ProviderResult, STATUS_COMPLETED
-from engine.agent_session_runner import AgentSessionRunner, SessionContext
-fa = FakeAdapter(ProviderResult(status=STATUS_COMPLETED, exit_code=0, stdout='ok', stderr='', duration_seconds=0.001))
+from engine import step_runtime
 with tempfile.TemporaryDirectory() as td:
     sessions = str(pathlib.Path(td) / 'agent-sessions.json')
-    ctx = SessionContext(sessions_path=sessions, run_id='r1', workflow_id='wf', workflow_name='WF',
-                         step_id='same-id', capability='cap_x', agent_alias='alias_x', executor='ai')
-    runner = AgentSessionRunner()
-    runner.run_step(fa, ProviderRequest(session_id='sess-fixed', step_id='same-id', prompt='hi'), ctx)
-    runner.run_step(fa, ProviderRequest(session_id='sess-fixed', step_id='same-id', prompt='hi-again'), ctx)
+    args = (sessions, 'r1', 'wf', 'WF', 'sess-fixed', 'same-id', 'cap_x', 'alias_x',
+            '', 'shell', 'shell', 'running', 'pending', '', '', '', '', '')
+    step_runtime.upsert_session(*args)
+    args2 = (sessions, 'r1', 'wf', 'WF', 'sess-fixed', 'same-id', 'cap_x', 'alias_x',
+             '', 'shell', 'shell', 'completed', 'success', '', '', '', '', '0')
+    step_runtime.upsert_session(*args2)
     data = json.loads(pathlib.Path(sessions).read_text())
     print('count=' + str(len(data['sessions'])))
     print('only_id=' + data['sessions'][0]['session_id'])
+    print('final_lifecycle=' + data['sessions'][0]['lifecycle'])
 ")"
-assert_contains "single ledger entry" "count=1"                 "${out10}"
-assert_contains "kept the fixed id"   "only_id=sess-fixed"      "${out10}"
+assert_contains "single ledger entry"     "count=1"                  "${out10}"
+assert_contains "kept the fixed id"       "only_id=sess-fixed"       "${out10}"
+assert_contains "final lifecycle stuck"   "final_lifecycle=completed" "${out10}"
 
 # ── Case 11 (P5 #6) ─────────────────────────────────────────────────────
 echo "Case 11 (P5 #6): prompt snapshot is sha256 content-addressed and surfaced in ledger"
@@ -442,6 +448,95 @@ assert_contains "B parent linked"                          "B_parent=root-A"    
 assert_contains "B spawn_reason recorded"                  "B_reason=delegate planning to specialist"    "${out15}"
 assert_contains "grandchild C inherits root through chain" "C_root=root-A"                                "${out15}"
 assert_contains "C parent points at B"                     "C_parent=child-B"                             "${out15}"
+
+# ── Case 17 (P5 #8) ─────────────────────────────────────────────────────
+echo "Case 17 (P5 #8): runner rejects re-run of a completed session (lifecycle enforcement)"
+out17="$(run_py "
+import json, pathlib, tempfile
+from engine.provider_adapter import FakeAdapter, ProviderRequest, ProviderResult, STATUS_COMPLETED
+from engine.agent_session_runner import AgentSessionRunner, SessionContext
+from engine.step_runtime import LifecycleTransitionError
+fa = FakeAdapter(ProviderResult(status=STATUS_COMPLETED, exit_code=0, stdout='ok', stderr='', duration_seconds=0.001))
+runner = AgentSessionRunner()
+with tempfile.TemporaryDirectory() as td:
+    sessions = str(pathlib.Path(td) / 'agent-sessions.json')
+    ctx = SessionContext(sessions_path=sessions, run_id='r', workflow_id='wf', workflow_name='WF',
+                         step_id='s1', capability='cap_x', agent_alias='alias_x', executor='ai')
+    runner.run_step(fa, ProviderRequest(session_id='sess-once', step_id='s1', prompt='p'), ctx)
+    try:
+        runner.run_step(fa, ProviderRequest(session_id='sess-once', step_id='s1', prompt='p2'), ctx)
+        print('NO_RAISE')
+    except LifecycleTransitionError as exc:
+        print('current=' + str(exc.current))
+        print('requested=' + exc.requested)
+        print('msg_has_arrow=' + str('→' in str(exc)))
+")"
+assert_contains "current state was completed"          "current=completed"         "${out17}"
+assert_contains "requested transition was running"     "requested=running"         "${out17}"
+assert_contains "error message describes transition"   "msg_has_arrow=True"        "${out17}"
+
+# ── Case 18 (P5 #8) ─────────────────────────────────────────────────────
+echo "Case 18 (P5 #8): legacy direct upsert (no enforce flag) still allows arbitrary lifecycle"
+out18="$(run_py "
+import json, tempfile, pathlib
+from engine import step_runtime
+with tempfile.TemporaryDirectory() as td:
+    sessions = str(pathlib.Path(td) / 'agent-sessions.json')
+    common = (sessions, 'r', 'wf', 'WF', 'sess-legacy', 's1', 'cap_x', 'alias_x',
+              '', 'shell', 'shell')
+    step_runtime.upsert_session(*common, 'completed', 'success', '', '', '', '', '0')
+    step_runtime.upsert_session(*common, 'running', 'pending', '', '', '', '', '')
+    data = json.loads(pathlib.Path(sessions).read_text())
+    print('lifecycle=' + data['sessions'][0]['lifecycle'])
+")"
+assert_contains "shell-style backwards transition silently accepted" "lifecycle=running" "${out18}"
+
+# ── Case 19 (P5 #8) ─────────────────────────────────────────────────────
+echo "Case 19 (P5 #8): enforce flag rejects illegal direct transitions on existing sessions"
+out19="$(run_py "
+from engine import step_runtime
+from engine.step_runtime import LifecycleTransitionError
+import tempfile, pathlib
+with tempfile.TemporaryDirectory() as td:
+    sessions = str(pathlib.Path(td) / 'agent-sessions.json')
+    base = (sessions, 'r', 'wf', 'WF', 'sess-enf', 's1', 'cap_x', 'alias_x',
+            '', 'shell', 'shell')
+    # Seed with legacy direct call (no enforce flag) so the session exists
+    # at lifecycle=completed. This mirrors the realistic scenario where a
+    # shell-side caller wrote a terminal state and a Python runner later
+    # tries to mutate the same session_id under enforcement.
+    step_runtime.upsert_session(*base, 'completed', 'success', '', '', '', '', '0')
+    # Now flip to failed under enforcement; completed → failed must raise.
+    try:
+        step_runtime.upsert_session(*base, 'failed', 'failed', '', '', '', '', '0',
+                                    enforce_transition=True)
+        print('NO_RAISE')
+    except LifecycleTransitionError as exc:
+        print('rejected current=' + str(exc.current))
+        print('rejected requested=' + exc.requested)
+")"
+assert_contains "completed→failed rejected when enforced" "rejected current=completed" "${out19}"
+assert_contains "requested target captured"               "rejected requested=failed"  "${out19}"
+
+# ── Case 20 (P5 #8) ─────────────────────────────────────────────────────
+echo "Case 20 (P5 #8): legal transitions still pass with enforce flag"
+out20="$(run_py "
+from engine import step_runtime
+import json, tempfile, pathlib
+with tempfile.TemporaryDirectory() as td:
+    sessions = str(pathlib.Path(td) / 'agent-sessions.json')
+    base = (sessions, 'r', 'wf', 'WF', 'sess-legal', 's1', 'cap_x', 'alias_x',
+            '', 'shell', 'shell')
+    step_runtime.upsert_session(*base, 'planned', 'pending', '', '', '', '', '',
+                                enforce_transition=True)
+    step_runtime.upsert_session(*base, 'running', 'pending', '', '', '', '', '',
+                                enforce_transition=True)
+    step_runtime.upsert_session(*base, 'completed', 'success', '', '', '', '', '0',
+                                enforce_transition=True)
+    s = json.loads(pathlib.Path(sessions).read_text())['sessions'][0]
+    print('final=' + s['lifecycle'])
+")"
+assert_contains "planned→running→completed allowed" "final=completed" "${out20}"
 
 # ── Case 16 (P5 #7) ─────────────────────────────────────────────────────
 echo "Case 16 (P5 #7): parent absent from ledger → root falls back to parent_session_id (no hard fail)"

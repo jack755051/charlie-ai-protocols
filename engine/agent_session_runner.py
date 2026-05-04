@@ -300,4 +300,8 @@ class AgentSessionRunner:
             parent_session_id=parent_session_id,
             root_session_id=root_session_id,
             spawn_reason=spawn_reason,
+            # P5 #8: runner is the opt-in caller for lifecycle enforcement.
+            # Shell executor still calls upsert_session without this flag
+            # so its existing transitions stay accepted as-is.
+            enforce_transition=True,
         )

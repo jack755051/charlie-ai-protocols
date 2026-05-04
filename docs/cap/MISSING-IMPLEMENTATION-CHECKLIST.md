@@ -341,9 +341,10 @@
   - 驗收：可追蹤 supervisor 與 downstream agent 關係
   - 進度：done in `feat(agent-session): link parent and root sessions`；`schemas/agent-session.schema.yaml` 新增 2 個 optional 欄位 `root_session_id`（派生鏈頂端，無 parent 時 = self）/ `spawn_reason`（free-form 派生原因）；`parent_session_id` 已存在 schema 但先前從未 populate，本批正式啟用。`engine/agent_session_runner.py:SessionContext` 加 `parent_session_id` 與 `spawn_reason` 兩個 optional 欄位；新 helper `_derive_root_session_id` 在 runner 起跑時透過 ledger 查 parent 的 `root_session_id` 並繼承，沒有 parent 時 root = self。**保守 fallback**：parent 不在 ledger（ledger 不存在 / JSON parse fail / parent_session_id 找不到）時 root = parent_session_id 而非 hard fail，相容舊 ledger 與不完整歷史。`engine/step_runtime.py:upsert_session` 加 keyword-only `parent_session_id` / `root_session_id` / `spawn_reason` 三參數，沿用 P5 #6 的 opt-in 模式。`tests/scripts/test-agent-session-runner.sh` 新增 Case 14/15/16（無 parent self-root / 三層 chain root inherit / parent 不在 ledger fallback），擴至 16 cases / **60 passed**。
 
-- [ ] 補 session lifecycle
+- [x] 補 session lifecycle
   - 交付物：created / running / completed / failed / cancelled / recycled 狀態轉移
   - 驗收：workflow 結束後 session 狀態完整閉合
+  - 進度：done in `feat(agent-session): enforce runner lifecycle transitions`；新增 `engine/step_runtime.py:LifecycleTransitionError` 例外類別 + 模組層 `_LIFECYCLE_TRANSITIONS` 狀態機表。`upsert_session` 加 keyword-only `enforce_transition: bool = False`，**預設 False 保留 shell legacy 行為**（cap-workflow-exec.sh 與其他既有 shell caller 不變）；`AgentSessionRunner` 對所有 upsert 呼叫傳 `enforce_transition=True`，從現在起 Python runner 嚴格守住合法轉移。允許表（保守）：first write 接受 `planned / running / failed / cancelled / blocked`；`planned → running / failed / cancelled`；`running → completed / failed / cancelled / recycled / blocked`；`blocked → running / failed / cancelled`；terminal 狀態（completed / failed / cancelled / recycled）只接受 idempotent 重寫（X → X），不可復活。明確拒絕：`completed → running`、`failed → completed`、`cancelled → completed`，違法轉移直接 raise `LifecycleTransitionError(current, requested)`。`tests/scripts/test-agent-session-runner.sh` 改寫 Case 10（用 direct upsert 驗 legacy dedupe 仍 work）並新增 Case 17/18/19/20（runner 拒絕 re-run completed session / 無 enforce flag 仍允許任意轉移 / enforce flag 對 direct caller 也生效 / planned→running→completed 合法路徑），擴至 20 cases / **68 passed**。
 
 - [ ] 整合 timeout / stall handling
   - 交付物：timeout policy
