@@ -5,10 +5,18 @@ import re
 from pathlib import Path
 
 try:
+    from .compiled_workflow_validator import (
+        CompiledWorkflowSchemaError,
+        ensure_valid_compiled_workflow,
+    )
     from .project_context_loader import ProjectContextLoader
     from .runtime_binder import RuntimeBinder
     from .workflow_loader import WorkflowLoader
 except ImportError:  # pragma: no cover
+    from compiled_workflow_validator import (  # type: ignore[no-redef]
+        CompiledWorkflowSchemaError,
+        ensure_valid_compiled_workflow,
+    )
     from project_context_loader import ProjectContextLoader
     from runtime_binder import RuntimeBinder
     from workflow_loader import WorkflowLoader
@@ -264,6 +272,7 @@ class TaskScopedWorkflowCompiler:
         governance = self._compile_governance(constitution, capability_graph)
         steps = [self._compile_step(node, constitution) for node in capability_graph["nodes"]]
         return {
+            "schema_version": 1,
             "workflow_id": f"compiled-{constitution['task_id']}",
             "version": 2,
             "name": f"Compiled Workflow — {constitution['task_id']}",
@@ -278,12 +287,14 @@ class TaskScopedWorkflowCompiler:
         constitution = self.build_task_constitution(source_request)
         capability_graph = self.build_capability_graph(constitution)
         candidate_workflow = self.build_candidate_workflow(constitution, capability_graph)
+        ensure_valid_compiled_workflow(candidate_workflow, stage="post_build")
         candidate_semantic = self.loader.build_semantic_plan_from_workflow(
             self.loader.normalize_workflow_data(candidate_workflow, f"<compiled:{constitution['task_id']}:candidate>")
         )
         binding = self.binder.bind_semantic_plan(candidate_semantic, registry_ref=registry_ref)
         unresolved_policy = self.build_unresolved_policy(constitution, capability_graph, binding)
         compiled_workflow = self.apply_unresolved_policy(candidate_workflow, unresolved_policy)
+        ensure_valid_compiled_workflow(compiled_workflow, stage="post_unresolved_policy")
         plan = self.binder.build_bound_execution_phases_from_workflow(
             compiled_workflow,
             registry_ref=registry_ref,
@@ -436,6 +447,7 @@ class TaskScopedWorkflowCompiler:
         }
 
         candidate_workflow = self.build_candidate_workflow(enriched_constitution, capability_graph)
+        ensure_valid_compiled_workflow(candidate_workflow, stage="post_build")
         candidate_semantic = self.loader.build_semantic_plan_from_workflow(
             self.loader.normalize_workflow_data(
                 candidate_workflow,
@@ -447,6 +459,7 @@ class TaskScopedWorkflowCompiler:
             enriched_constitution, capability_graph, binding
         )
         compiled_workflow = self.apply_unresolved_policy(candidate_workflow, unresolved_policy)
+        ensure_valid_compiled_workflow(compiled_workflow, stage="post_unresolved_policy")
         plan = self.binder.build_bound_execution_phases_from_workflow(
             compiled_workflow,
             registry_ref=registry_ref,

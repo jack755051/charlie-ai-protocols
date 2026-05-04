@@ -683,13 +683,36 @@ def cmd_constitution_json(cap_root: str, request: str) -> None:
 # ---------------------------------------------------------------------------
 
 def cmd_compile_json(cap_root: str, request: str, registry_ref: str | None = None) -> None:
-    """Compile a task-scoped workflow and print JSON."""
+    """Compile a task-scoped workflow and print JSON.
+
+    On schema-class failure (compiled_workflow rejected by
+    ``schemas/compiled-workflow.schema.yaml`` at any compile-pipeline
+    stage) prints a deterministic JSON error to stdout and exits 1.
+    Schema-class exit code 41 alignment is intentionally left to the
+    shell executor wrapper; the Python CLI keeps the established
+    "JSON + exit 1" contract used by ``validate-constitution``.
+    """
     base_dir = Path(cap_root)
     sys.path.insert(0, str(base_dir))
+    from engine.compiled_workflow_validator import CompiledWorkflowSchemaError  # noqa: E402
     from engine.task_scoped_compiler import TaskScopedWorkflowCompiler  # noqa: E402
 
     compiler = TaskScopedWorkflowCompiler(base_dir=base_dir)
-    compiled = compiler.compile_task(request, registry_ref=registry_ref or None)
+    try:
+        compiled = compiler.compile_task(request, registry_ref=registry_ref or None)
+    except CompiledWorkflowSchemaError as exc:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": "compiled_workflow_schema_error",
+                    "stage": exc.stage,
+                    "errors": exc.errors,
+                },
+                ensure_ascii=False,
+            )
+        )
+        sys.exit(1)
     print(json.dumps(compiled, ensure_ascii=False))
 
 
