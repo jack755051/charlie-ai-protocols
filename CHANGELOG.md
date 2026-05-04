@@ -6,6 +6,33 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.22.0-rc7] - 2026-05-04
+
+> Release candidate — open P5「AgentSessionRunner」段並落地 runner baseline 共 7 條（#1/#2/#5/#6/#7/#8/#9）。本 tag 不取代 `v0.22.0` 正式版；**未動** `scripts/cap-workflow-exec.sh` production executor，所有新 enforcement 透過 opt-in keyword flag 切入既有 `step_runtime.upsert_session`，shell legacy 行為完全保留。P5 #3 CodexAdapter / #4 ClaudeAdapter / #10 cap session inspect 仍待做；P5 #9 stall handling 標 deferred 到 streaming adapter 落地後一併實作。
+
+### Added
+
+- **P5 #1+#2+#5 ProviderAdapter / AgentSessionRunner / ShellAdapter** (`52bdf76`)：新增 `engine/provider_adapter.py`（`ProviderRequest` / `ProviderResult` immutable dataclass + 4 status 字串常數 + `ProviderAdapter` ABC + `FakeAdapter` deterministic test adapter + `ShellAdapter` `subprocess.run` 包裝，TimeoutExpired 收斂為 `status=timeout/exit_code=-1` 不 raise）+ `engine/agent_session_runner.py:AgentSessionRunner.run_step(adapter, request, context) -> RunStepOutcome`（自動產生 session_id / 預先 upsert running ledger / 呼叫 adapter / 捕捉例外為 failed / map status 到 lifecycle / 寫 terminal ledger）。Ledger 寫入 100% 重用 `step_runtime.upsert_session`，不重做 schema 寫入規則。`tests/scripts/test-agent-session-runner.sh` 10 cases / 35 passed。
+- **P5 #6 prompt snapshot / hash** (`d171e92`)：`schemas/agent-session.schema.yaml` 加 3 optional 欄位 `prompt_hash` / `prompt_snapshot_path` / `prompt_size_bytes`；`engine/agent_session_runner.py:_write_prompt_snapshot` 把 rendered prompt 寫到 `<sessions_dir>/prompts/<sha256[:2]>/<sha256>.txt` content-addressable layout，多 session 共用同 prompt 內容自動 dedupe；`upsert_session` 加同名 keyword-only 三參數。test 擴至 13 cases / 49 passed。
+- **P5 #7 parent / child / root session relation** (`04eb463`)：schema 加 2 optional 欄位 `root_session_id` / `spawn_reason`（`parent_session_id` schema 已存在但先前從未 populate，本批正式啟用）；`SessionContext` 加 `parent_session_id` / `spawn_reason`；新 helper `_derive_root_session_id` 透過 ledger 查 parent 的 `root_session_id` 並繼承（無 parent 時 root = self；parent 不在 ledger 時保守 fallback root = parent_session_id 而非 hard fail）；`upsert_session` 加同名 keyword-only 三參數。test 擴至 16 cases / 60 passed。
+- **P5 #8 lifecycle state-machine** (`d1a5682`)：新增 `engine/step_runtime.py:LifecycleTransitionError` + 模組層 `_LIFECYCLE_TRANSITIONS` 狀態機表；`upsert_session` 加 keyword-only `enforce_transition: bool = False`（預設 False 保留 shell legacy 行為），`AgentSessionRunner` 對所有 upsert 呼叫傳 `True`。允許表（保守）：first write 接受 `planned / running / failed / cancelled / blocked`；`planned → running / failed / cancelled`；`running → completed / failed / cancelled / recycled / blocked`；`blocked → running / failed / cancelled`；terminal 狀態（completed / failed / cancelled / recycled）只接受 idempotent 重寫（X → X），不可復活。明確拒絕：`completed → running` / `failed → completed` / `cancelled → completed`。test 擴至 20 cases / 68 passed。
+
+### Changed
+
+- **P5 #9 timeout failure standardization** (`027cafa`)：ShellAdapter timeout `failure_reason` 標準化前綴 `timeout: shell command exceeded <N>s`（先前為 `shell command timed out after <N>s`）；`AgentSessionRunner.run_step` 對任何 status=timeout 的 result 強制把 `failure_reason` 補上 `timeout:` 前綴（adapter 忘記時也保證 prefix），CLI / dry-run / log consumer 可直接 pattern-match 不再 re-check status；timeout 透過既有 `_STATUS_TO_LIFECYCLE` map 對應到 ledger `lifecycle=failed`。test 擴至 23 cases / 75 passed。
+
+### Notes
+
+- **P5 #0 baseline 文件對齊** (`ef16abc`)：`docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md` P5 段加入 baseline 現況（既有 schema / ledger writer / cap-workflow-exec.sh production executor）與 5 條紅線 scope memo（不重構 cap-workflow-exec.sh / 新 Python additive layer / ShellAdapter mirror shell / 不接 Codex/Claude / ledger 重用 step_runtime.upsert_session）。
+- **P5 #9 stall handling deferred**：stall 監測「process 多久沒新 output」只對會 stream output 的 AI provider 有意義，ShellAdapter 是 blocking subprocess.run 不適用；待 Codex / Claude adapter 落地後再設計 streaming watcher。
+- **P5 #3 CodexAdapter / #4 ClaudeAdapter / #10 cap session inspect 仍待做**：P5 #10 建議優先（無需 token，可立即讓 prompt snapshot / lifecycle 等資料對人/agent 可觀測）。
+- 本 tag 為 release candidate，仍未取代 `v0.22.0` 正式版。
+
+### Verified
+
+- `scripts/workflows/smoke-per-stage.sh` 從 v0.22.0-rc6 baseline 42 step 升至 **43 step / 43 passed / 0 failed / 0 skipped**：新增 `agent-session-runner baseline (P5 #1-#3)` gate（P5 #6/#7/#8/#9 沿用同一 test fixture 擴充，未新增獨立 smoke gate）。
+- 跨 hook test 全綠：agent-session-runner 75/75（從 35 擴至 23 cases）、preflight-report 21/21、workflow-dry-run-inspection 17/17、workflow-policy-gates 19/19、compiled-workflow-validation-hook 16/16、binding-report-validation-hook 15/15、compile-task-from-envelope 33/33。
+
 ## [v0.22.0-rc6] - 2026-05-04
 
 > Release candidate — close P4「Compiled Workflow and Binding Pipeline」整段除 #5 deferred 外的最後兩條（#10 preflight report + #11 dry-run inspection）。本 tag 不取代 `v0.22.0` 正式版；P4 #5 維持 deferred non-blocking 待 shared / builtin / legacy workflow producer 真實落地。
