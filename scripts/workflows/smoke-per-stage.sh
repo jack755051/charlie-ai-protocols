@@ -199,6 +199,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-cap-session-analyze.sh" "cap sessio
 run_fixture "${REPO_ROOT}/tests/scripts/test-shell-prompt-snapshot.sh" "shell executor prompt snapshot wiring"
 run_fixture "${REPO_ROOT}/tests/scripts/test-step-failure-detail.sh" "step failure detail extractor"
 run_fixture "${REPO_ROOT}/tests/scripts/test-cap-artifact-inspect.sh" "cap artifact registry inspect (P6 #1+#2)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-capability-validator.sh" "capability validator registry (P6 #5+#6+#7)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-binding-report-schema.sh" "binding-report schema gate (P0 #3)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-supervisor-orchestration-schema.sh" "supervisor-orchestration schema gate (P0 #4, forward contract)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-workflow-result-schema.sh" "workflow-result schema gate (P0 #5, normalized contract)"

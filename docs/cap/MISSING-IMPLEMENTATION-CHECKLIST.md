@@ -1,6 +1,6 @@
 # CAP Missing Implementation Checklist
 
-更新日期：2026-05-04（P4 #1-#9 compile-pipeline policy gates 落地，#5 deferred、#8 為語意 alignment doc）
+更新日期：2026-05-04（P6 #5+#6+#7 capability-aware validation registry 落地）
 
 本清單承接 `TODOLIST.md` 與 `docs/cap/IMPLEMENTATION-ROADMAP.md` 的「尚未完成」項目，整理成可執行的工程工作清單。原則是先補 runtime contract 與 validator，再補 runner、orchestration、session、gate 與 promote/publish 閉環。
 
@@ -380,17 +380,20 @@
   - 交付物：output expectation checker
   - 驗收：缺必交付 artifact 時 step failed
 
-- [ ] 實作 JSON extraction / validation
+- [x] 實作 JSON extraction / validation
   - 交付物：通用 extraction helper
   - 驗收：AI 輸出的 JSON artifact 能穩定解析與驗證
+  - 進度：done in `feat(capability-validator): add artifact validation registry`（v0.22.0-rc9 後第二批）。`engine/capability_validator.py:extract_json_from_fence(text, fence_begin, fence_end)` 為 pure helper：採 line-anchored regex `(?m)^FENCE_BEGIN[ \t]*$\n(.*?)\n^FENCE_END[ \t]*$` 鏡像 `scripts/workflows/persist-task-constitution.sh:142-149` awk 語意，避免 LLM 在 prose 內引用 fence marker（如「以 `<<<X_BEGIN>>> ... <<<X_END>>>` 包裹 JSON」這類說明文）誤觸 — 沒有 line anchor 時 non-greedy regex 會吃進 prose 範例回傳 `...`。Inner content strip 沿用 v0.21.5 nested ```` ```json ```` wrapper 拆除行為。JSON parse → schema validation 直接 reuse `engine/step_runtime.py:validate_jsonschema_fallback`（rc7-rc9 hardened nested required / type / enum / pattern / additionalProperties / minItems / properties / items / type-union），**不引入新 schema engine**。
 
-- [ ] 實作 Markdown required section validation
+- [x] 實作 Markdown required section validation
   - 交付物：Markdown validator
   - 驗收：缺必要章節的 report / handoff 會 fail
+  - 進度：done in same commit。`engine/capability_validator.py:check_markdown_sections(text, required)` 為 pure helper：line-equality 比對（header line 如 `## Foo` 必須單獨成行；段落內局部出現不算），缺漏 header 一條一條 emit `missing required section: <header>` error。**機制就緒，registry 暫不掛任何 production capability**：DEFAULT_RULES 目前 3 條全為 json_schema kind；markdown_sections kind 在 test 經 custom `rules=` 參數驗證，等 P7 result report 或新 handoff summary 章節需求出現時再 register，避免 false positive。
 
-- [ ] 實作 capability-specific validators
+- [x] 實作 capability-specific validators
   - 交付物：validator registry
   - 驗收：不同 capability 可指定專屬驗收規則
+  - 進度：done in same commit。`engine/capability_validator.py` 提供唯一 entry `validate_capability_output(capability, artifact_path, *, rules=None, repo_root=None)`，dispatch 走 `DEFAULT_RULES` registry（可被 `rules=` 參數覆寫供 test / 未來自訂用）。**Conservative seeding**：DEFAULT_RULES 只放 3 條已知契約穩定的 capability — `task_constitution_persistence` / `task_constitution_planning`（兩條同走 `schemas/task-constitution.schema.yaml` + `<<<TASK_CONSTITUTION_JSON_BEGIN/END>>>` fence，因 planning step 產的就是 persistence step 消費的 artifact）+ `supervisor_envelope_validation`（`schemas/supervisor-orchestration.schema.yaml` + `<<<SUPERVISOR_ORCHESTRATION_BEGIN/END>>>` fence，鏡像 `scripts/workflows/validate-supervisor-envelope.sh` 既有 enforcement）。**ValidationResult.validator_kind** 5 enum：`json_schema` / `markdown_sections` / `no_validator`（capability 不在 registry，視為 skipped 而非 verified — 杜絕「猜規則」false positive）/ `missing_artifact` / `unknown_kind`，讓 caller 可 branch verdict family 而不必解析 message string。**Read-only**：never writes artifact、never modifies registry state；caller 自決如何消費 verdict（P6 #4 required-output enforcement / 未來 ad-hoc 診斷）。**完全不動** `cap-workflow-exec.sh` execution path，沿用 P5 模式維持「可獨立 import 的 pure module」。`tests/scripts/test-capability-validator.sh` 12 cases / **32 passed**：happy / missing-required / fence-anchored prose-immunity / nested ```` ```json ```` strip / PARSE_ERROR / no-fence / markdown happy / markdown missing / unknown capability / missing artifact / unknown kind / 真實歷史 token-monitor 草稿 replay（rediscover MISSING goal + success_criteria）。接入 `scripts/workflows/smoke-per-stage.sh` 為 P6 #5+#6+#7 gate。
 
 - [ ] 實作 route_back_to handling
   - 交付物：route back runtime behavior
