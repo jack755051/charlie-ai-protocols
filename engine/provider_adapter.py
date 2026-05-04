@@ -24,6 +24,7 @@ inspect`` CLI. Production execution path is intentionally left alone.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import time
 from abc import ABC, abstractmethod
@@ -125,6 +126,160 @@ class FakeAdapter(ProviderAdapter):
         if callable(self._result):
             return self._result(request)
         return self._result
+
+
+def _resolve_provider_binary(name: str, env_var: str) -> str | None:
+    """Resolve a provider CLI binary path.
+
+    Precedence: explicit env override (used by tests to point at a fake
+    binary), then PATH lookup. Returns None when neither resolves so
+    the caller can record a deterministic ``failed`` ProviderResult
+    rather than letting subprocess raise FileNotFoundError on launch.
+    """
+    override = os.environ.get(env_var)
+    if override:
+        return override
+    return shutil.which(name)
+
+
+def _strip_codex_preamble(raw: str) -> str:
+    """Strip Codex CLI banner / transcript and keep only the last assistant block.
+
+    Mirrors the awk logic in
+    ``scripts/cap-workflow-exec.sh:strip_codex_preamble`` line-for-line:
+    on each ``assistant`` or ``codex`` marker line the buffer resets so
+    only the final response block is retained, and the stripped result
+    drops the marker itself. Returns ``""`` when no marker is found so
+    the caller can fall back to the raw output (mirrors the shell's
+    ``|| printf '%s\\n' "${raw}"`` fallback).
+    """
+    lines = raw.splitlines(keepends=True)
+    found = False
+    buf: list[str] = []
+    for line in lines:
+        stripped = line.rstrip("\n")
+        if stripped in ("assistant", "codex"):
+            found = True
+            buf = []
+            continue
+        if found:
+            buf.append(line)
+    if not found:
+        return ""
+    return "".join(buf)
+
+
+class CodexAdapter(ProviderAdapter):
+    """Codex CLI provider adapter (P5 #3).
+
+    Mirrors ``scripts/cap-workflow-exec.sh:run_step_codex`` semantics:
+    invokes ``codex exec [--skip-git-repo-check] <prompt>`` and applies
+    the same preamble strip so callers receive the cleaned assistant
+    response on stdout. stderr is captured separately (the shell version
+    merges stdout+stderr via ``2>&1``; the Python contract keeps them
+    apart so consumers can inspect each stream).
+
+    Binary resolution: ``CAP_CODEX_BIN`` env override first (used by
+    tests to point at a fake binary), then PATH lookup. Missing binary
+    surfaces as ``ProviderResult(status=failed, exit_code=-1)`` with a
+    deterministic ``failure_reason`` rather than raising
+    FileNotFoundError, so the runner records a clean failed session.
+
+    Timeout / non-zero exit / completion all follow the established
+    ``ShellAdapter`` shape — ``status=timeout, exit_code=-1`` on
+    ``subprocess.TimeoutExpired`` (with the ``timeout:`` failure_reason
+    prefix per P5 #9), ``status=failed`` on non-zero, ``status=completed``
+    on exit 0.
+
+    Production execution remains in shell (see P5 baseline §1); this
+    adapter is for deterministic tests with a fake codex binary, future
+    programmatic invocation paths, and as the eventual migration target.
+    """
+
+    name = "codex"
+
+    def __init__(self, *, skip_git_repo_check: bool = True) -> None:
+        self.skip_git_repo_check = skip_git_repo_check
+
+    def run(self, request: ProviderRequest) -> ProviderResult:
+        binary = _resolve_provider_binary("codex", "CAP_CODEX_BIN")
+        if binary is None:
+            return ProviderResult(
+                status=STATUS_FAILED,
+                exit_code=-1,
+                stdout="",
+                stderr="",
+                duration_seconds=0.0,
+                failure_reason=(
+                    "codex binary not found "
+                    "(set CAP_CODEX_BIN or install codex on PATH)"
+                ),
+            )
+
+        cmd: list[str] = [binary, "exec"]
+        if self.skip_git_repo_check:
+            cmd.append("--skip-git-repo-check")
+        cmd.append(request.prompt)
+
+        merged_env = None
+        if request.env is not None:
+            merged_env = {**os.environ, **request.env}
+
+        timeout = request.timeout_seconds
+        started = time.monotonic()
+        try:
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env=merged_env,
+            )
+        except subprocess.TimeoutExpired as exc:
+            elapsed = time.monotonic() - started
+            return ProviderResult(
+                status=STATUS_TIMEOUT,
+                exit_code=-1,
+                stdout=exc.stdout or "",
+                stderr=exc.stderr or "",
+                duration_seconds=elapsed,
+                failure_reason=f"timeout: codex command exceeded {timeout}s",
+            )
+        except (FileNotFoundError, PermissionError) as exc:
+            # Env override pointed at a non-existent / non-executable path.
+            # Surface as a deterministic failed result rather than re-raising
+            # so AgentSessionRunner records a clean failed session.
+            elapsed = time.monotonic() - started
+            return ProviderResult(
+                status=STATUS_FAILED,
+                exit_code=-1,
+                stdout="",
+                stderr="",
+                duration_seconds=elapsed,
+                failure_reason=f"codex binary unavailable: {exc}",
+            )
+
+        elapsed = time.monotonic() - started
+        # Apply preamble strip; fall back to raw stdout when no marker is
+        # present (mirrors shell `|| printf '%s\n' "${raw}"`).
+        cleaned = _strip_codex_preamble(proc.stdout) or proc.stdout
+
+        if proc.returncode == 0:
+            return ProviderResult(
+                status=STATUS_COMPLETED,
+                exit_code=proc.returncode,
+                stdout=cleaned,
+                stderr=proc.stderr,
+                duration_seconds=elapsed,
+            )
+        return ProviderResult(
+            status=STATUS_FAILED,
+            exit_code=proc.returncode,
+            stdout=cleaned,
+            stderr=proc.stderr,
+            duration_seconds=elapsed,
+            failure_reason=f"codex exited {proc.returncode}",
+        )
 
 
 class ShellAdapter(ProviderAdapter):
