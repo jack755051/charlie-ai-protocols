@@ -285,9 +285,10 @@
   - 驗收：run 前能看到 capability、binding、policy、artifact 風險
   - 進度：done in `feat/binding-report-validation`；新增 `schemas/preflight-report.schema.yaml` v1（8 個必填頂層欄位 `schema_version` / `workflow_id` / `binding_status` / `is_executable` / `gates` / `unresolved_summary` / `warnings` / `blocking_reasons`）+ `engine/preflight_report.py:build_preflight_report(compiled_workflow, binding)` builder。`engine/task_scoped_compiler.py` 兩個 compile path 在所有 validation + policy gate 通過後（`ensure_binding_status_executable` 之後、`build_bound_execution_phases_from_workflow` 之後）建立 preflight，回傳 dict 多一個 `preflight_report` key（legacy compile_task 從 7 鍵升 8 鍵；envelope path 從 9 鍵升 10 鍵；對應的 `tests/scripts/test-compile-task-from-envelope.sh` Case 0 / 3 / 6 key 斷言同步更新）。**範圍邊界**：blocked binding 仍由 P4 #6/#9 的 `BindingPolicyError` 在 `apply_unresolved_policy` 前 halt，preflight 不會被建立；`is_executable: true` 與 `blocking_reasons: []` 是現行架構的常態，contract 保留 `false` / non-empty 給未來部分狀態檢視場景。fallback / optional unresolved 只透過 `warnings` 表達，不影響 `is_executable`。新 `tests/scripts/test-preflight-report.sh` 6 cases / **21 passed / 0 failed**（happy path / envelope path / schema 驗證 / optional unresolved warning / fallback skill warning / blocked-deterministic-halt 不漏 preflight）。
 
-- [ ] 強化 dry-run inspection
+- [x] 強化 dry-run inspection
   - 交付物：dry-run inspection output
   - 驗收：dry-run 可顯示 compiled workflow、binding、policy 與 preflight 判定，不執行任何 step
+  - 進度：done in `feat/binding-report-validation`；擴充既有 `engine/workflow_cli.py:cmd_print_compiled_dry_run` 加兩個 optional flag `--preflight-json` / `--binding-json`（沒帶 flag 時行為與舊版完全一致，向後相容；帶 flag 時 render `preflight:` 區塊：workflow_id / binding_status / is_executable / 步驟計數 / 4 條 gate 狀態 / warnings / blocking_reasons，再 render `binding_steps:` 區塊：每個 step 的 capability / selected_provider / selected_skill_id / resolution_status）。`scripts/cap-workflow.sh:run-task --dry-run` 從 `compile_task` 結果再抽 `preflight_report` JSON 並 pass 兩個新 flag 給 renderer。**Dry-run 路徑保持 print-only**：shell 在 print 後直接 `exit 0`，不會進入 binding-status 後續分支或呼叫任何 executor，新 `tests/scripts/test-workflow-dry-run-inspection.sh` Case 4 透過 sandbox 目錄前後檔案計數證實 renderer 不寫入任何 artifact。test 4 cases / **17 passed / 0 failed**（backward-compat 無新 flag / 帶 preflight 渲染 / 帶 binding step detail / print-only 無副作用）。
 
 ## P5：AgentSessionRunner
 

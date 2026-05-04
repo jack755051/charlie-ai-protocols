@@ -850,7 +850,14 @@ def cmd_print_compile_report(compiled_json: str, snapshot_json: str) -> None:
             print(f"  - {step['step_id']} => {step.get('governance_reason', step.get('resolution_status'))}")
 
 
-def cmd_print_compiled_dry_run(constitution_json: str, policy_json: str, plan_json: str, snapshot_json: str) -> None:
+def cmd_print_compiled_dry_run(
+    constitution_json: str,
+    policy_json: str,
+    plan_json: str,
+    snapshot_json: str,
+    preflight_json: str | None = None,
+    binding_json: str | None = None,
+) -> None:
     constitution = _load_json_arg(constitution_json)
     policy = _load_json_arg(policy_json)
     plan = _load_json_arg(plan_json)
@@ -876,6 +883,51 @@ def cmd_print_compiled_dry_run(constitution_json: str, policy_json: str, plan_js
         print("standby:")
         for step in plan["standby_steps"]:
             print(f"  - {step['step_id']} => {step.get('governance_reason', step.get('resolution_status'))}")
+
+    if preflight_json:
+        preflight = _load_json_arg(preflight_json)
+        gates = preflight.get("gates") or {}
+        summary = preflight.get("unresolved_summary") or {}
+        warnings = preflight.get("warnings") or []
+        blocking = preflight.get("blocking_reasons") or []
+        print("preflight:")
+        print(f"  - workflow_id: {preflight.get('workflow_id', '-')}")
+        print(f"  - binding_status: {preflight.get('binding_status', '-')}")
+        print(f"  - is_executable: {preflight.get('is_executable', False)}")
+        print(
+            f"  - steps: total={summary.get('total_steps', 0)} "
+            f"resolved={summary.get('resolved_steps', 0)} "
+            f"fallback={summary.get('fallback_steps', 0)} "
+            f"optional_unresolved={summary.get('unresolved_optional_steps', 0)}"
+        )
+        gate_pairs = " ".join(f"{k}={v}" for k, v in sorted(gates.items()))
+        print(f"  - gates: {gate_pairs}")
+        if warnings:
+            print("  - warnings:")
+            for w in warnings:
+                print(f"      • {w}")
+        else:
+            print("  - warnings: (none)")
+        if blocking:
+            print("  - blocking_reasons:")
+            for b in blocking:
+                print(f"      • {b}")
+        else:
+            print("  - blocking_reasons: (none)")
+
+    if binding_json:
+        binding = _load_json_arg(binding_json)
+        print("binding_steps:")
+        for step in binding.get("steps") or []:
+            step_id = step.get("step_id", "<unknown>")
+            cap = step.get("capability", "-")
+            provider = step.get("selected_provider") or "-"
+            skill = step.get("selected_skill_id") or "-"
+            status = step.get("resolution_status", "-")
+            print(
+                f"  - {step_id}: capability={cap} provider={provider} "
+                f"skill={skill} status={status}"
+            )
 
 
 def cmd_print_compiled_blocked(constitution_json: str, policy_json: str, binding_json: str, snapshot_json: str) -> None:
@@ -1463,6 +1515,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("policy_json")
     p.add_argument("plan_json")
     p.add_argument("snapshot_json")
+    p.add_argument("--preflight-json", default=None)
+    p.add_argument("--binding-json", default=None)
 
     # print-compiled-blocked
     p = sub.add_parser("print-compiled-blocked", help="Render compiled workflow blocked summary")
@@ -1585,7 +1639,14 @@ def main() -> None:
         case "print-compile-report":
             cmd_print_compile_report(args.compiled_json, args.snapshot_json)
         case "print-compiled-dry-run":
-            cmd_print_compiled_dry_run(args.constitution_json, args.policy_json, args.plan_json, args.snapshot_json)
+            cmd_print_compiled_dry_run(
+                args.constitution_json,
+                args.policy_json,
+                args.plan_json,
+                args.snapshot_json,
+                preflight_json=args.preflight_json,
+                binding_json=args.binding_json,
+            )
         case "print-compiled-blocked":
             cmd_print_compiled_blocked(args.constitution_json, args.policy_json, args.binding_json, args.snapshot_json)
         case "print-compiled-degraded":
