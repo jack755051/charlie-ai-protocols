@@ -194,7 +194,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-preflight-report.sh" "preflight rep
 run_fixture "${REPO_ROOT}/tests/scripts/test-workflow-dry-run-inspection.sh" "workflow dry-run inspection (P4 #11)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-agent-session-runner.sh" "agent-session-runner baseline (P5 #1-#3)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-cap-session-inspect.sh" "cap session inspect (P5 #10)"
-run_fixture "${REPO_ROOT}/tests/scripts/test-provider-adapters.sh" "provider adapters (P5 #3 codex)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-provider-adapters.sh" "provider adapters (P5 #3 codex + #4 claude)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-binding-report-schema.sh" "binding-report schema gate (P0 #3)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-supervisor-orchestration-schema.sh" "supervisor-orchestration schema gate (P0 #4, forward contract)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-workflow-result-schema.sh" "workflow-result schema gate (P0 #5, normalized contract)"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# test-provider-adapters.sh — P5 #3 (CodexAdapter) gate.
+# test-provider-adapters.sh — P5 #3 (CodexAdapter) + P5 #4 (ClaudeAdapter) gate.
 #
 # Verifies engine.provider_adapter.CodexAdapter against fake codex
 # binaries placed in a sandbox. No real provider is invoked — every
@@ -86,6 +86,32 @@ cat > "${SANDBOX}/bin/codex-slow" <<'EOF'
 #!/bin/bash
 sleep 5
 EOF
+cat > "${SANDBOX}/bin/claude-happy" <<'EOF'
+#!/bin/bash
+echo "claude clean response"
+exit 0
+EOF
+cat > "${SANDBOX}/bin/claude-stderr" <<'EOF'
+#!/bin/bash
+echo "out-line"
+echo "err-line" 1>&2
+exit 0
+EOF
+cat > "${SANDBOX}/bin/claude-fail" <<'EOF'
+#!/bin/bash
+echo "claude said no" 1>&2
+exit 5
+EOF
+cat > "${SANDBOX}/bin/claude-slow" <<'EOF'
+#!/bin/bash
+sleep 5
+EOF
+cat > "${SANDBOX}/bin/claude-argecho" <<'EOF'
+#!/bin/bash
+printf 'argc=%s\n' "$#"
+for a in "$@"; do printf 'arg=%s\n' "$a"; done
+exit 0
+EOF
 cat > "${SANDBOX}/bin/codex-argecho" <<'EOF'
 #!/bin/bash
 # Place argc/args inside the assistant block so the adapter's preamble
@@ -117,6 +143,12 @@ run_py_with_codex_bin() {
   local fake="$1"; shift
   local code="$1"; shift
   ( cd "${REPO_ROOT}" && CAP_CODEX_BIN="${fake}" python3 -c "${code}" 2>&1 )
+}
+
+run_py_with_claude_bin() {
+  local fake="$1"; shift
+  local code="$1"; shift
+  ( cd "${REPO_ROOT}" && CAP_CLAUDE_BIN="${fake}" python3 -c "${code}" 2>&1 )
 }
 
 # ── Case 1 ──────────────────────────────────────────────────────────────
@@ -236,6 +268,100 @@ assert_contains "outcome lifecycle completed"  "outcome_lifecycle=completed"  "$
 assert_contains "result status completed"      "outcome_status=completed"     "${out8}"
 assert_contains "ledger provider_cli=codex"    "ledger_provider_cli=codex"    "${out8}"
 assert_contains "ledger lifecycle completed"   "ledger_lifecycle=completed"   "${out8}"
+
+# ── Case 9 (P5 #4) ──────────────────────────────────────────────────────
+echo "Case 9 (P5 #4): ClaudeAdapter happy path → completed, stdout direct (no preamble)"
+out9="$(run_py_with_claude_bin "${SANDBOX}/bin/claude-happy" "
+from engine.provider_adapter import ClaudeAdapter, ProviderRequest
+res = ClaudeAdapter().run(ProviderRequest(session_id='x', step_id='s', prompt='hi'))
+print('status=' + res.status)
+print('exit=' + str(res.exit_code))
+print('stdout_repr=' + repr(res.stdout))
+")"
+assert_contains "claude status completed"  "status=completed"                      "${out9}"
+assert_contains "claude exit 0"            "exit=0"                                "${out9}"
+assert_contains "claude stdout direct"     "stdout_repr='claude clean response\n'" "${out9}"
+
+# ── Case 10 (P5 #4) ─────────────────────────────────────────────────────
+echo "Case 10 (P5 #4): ClaudeAdapter stdout / stderr captured separately"
+out10="$(run_py_with_claude_bin "${SANDBOX}/bin/claude-stderr" "
+from engine.provider_adapter import ClaudeAdapter, ProviderRequest
+res = ClaudeAdapter().run(ProviderRequest(session_id='x', step_id='s', prompt='hi'))
+print('stdout=' + res.stdout.strip())
+print('stderr=' + res.stderr.strip())
+")"
+assert_contains "claude stdout captured"  "stdout=out-line"  "${out10}"
+assert_contains "claude stderr captured"  "stderr=err-line"  "${out10}"
+
+# ── Case 11 (P5 #4) ─────────────────────────────────────────────────────
+echo "Case 11 (P5 #4): ClaudeAdapter non-zero exit → failed with exit_code captured"
+out11="$(run_py_with_claude_bin "${SANDBOX}/bin/claude-fail" "
+from engine.provider_adapter import ClaudeAdapter, ProviderRequest
+res = ClaudeAdapter().run(ProviderRequest(session_id='x', step_id='s', prompt='hi'))
+print('status=' + res.status)
+print('exit=' + str(res.exit_code))
+print('failure=' + (res.failure_reason or ''))
+")"
+assert_contains "claude status failed"        "status=failed"      "${out11}"
+assert_contains "claude exit 5 captured"      "exit=5"             "${out11}"
+assert_contains "claude failure mentions exit" "claude exited 5"   "${out11}"
+
+# ── Case 12 (P5 #4) ─────────────────────────────────────────────────────
+echo "Case 12 (P5 #4): ClaudeAdapter timeout → status=timeout with P5 #9 prefix"
+out12="$(run_py_with_claude_bin "${SANDBOX}/bin/claude-slow" "
+from engine.provider_adapter import ClaudeAdapter, ProviderRequest
+res = ClaudeAdapter().run(ProviderRequest(session_id='x', step_id='s', prompt='hi', timeout_seconds=0.5))
+print('status=' + res.status)
+print('exit=' + str(res.exit_code))
+print('failure=' + (res.failure_reason or ''))
+")"
+assert_contains "claude timeout status"             "status=timeout"                        "${out12}"
+assert_contains "claude timeout exit -1"            "exit=-1"                               "${out12}"
+assert_contains "claude failure has timeout: prefix" "timeout: claude command exceeded 0.5s" "${out12}"
+
+# ── Case 13 (P5 #4) ─────────────────────────────────────────────────────
+echo "Case 13 (P5 #4): ClaudeAdapter passes 'claude -p <prompt>' (no extra subcommand)"
+out13="$(run_py_with_claude_bin "${SANDBOX}/bin/claude-argecho" "
+from engine.provider_adapter import ClaudeAdapter, ProviderRequest
+res = ClaudeAdapter().run(ProviderRequest(session_id='x', step_id='s', prompt='HELLO_PROMPT'))
+print(res.stdout)
+")"
+assert_contains "argc=2 (-p + prompt only)"  "argc=2"             "${out13}"
+assert_contains "-p flag present"             "arg=-p"             "${out13}"
+assert_contains "prompt passed last"          "arg=HELLO_PROMPT"   "${out13}"
+
+# ── Case 14 (P5 #4) ─────────────────────────────────────────────────────
+echo "Case 14 (P5 #4): ClaudeAdapter missing binary → deterministic failed result"
+out14="$(run_py_with_claude_bin "${SANDBOX}/bin/claude-NOT-A-FILE" "
+from engine.provider_adapter import ClaudeAdapter, ProviderRequest
+res = ClaudeAdapter().run(ProviderRequest(session_id='x', step_id='s', prompt='hi'))
+print('status=' + res.status)
+print('failure=' + (res.failure_reason or ''))
+")"
+assert_contains "claude status failed not raised"  "status=failed"   "${out14}"
+assert_contains "claude failure mentions binary"   "claude binary"   "${out14}"
+
+# ── Case 15 (P5 #4) ─────────────────────────────────────────────────────
+echo "Case 15 (P5 #4): AgentSessionRunner + ClaudeAdapter writes ledger with provider_cli=claude"
+out15="$(run_py_with_claude_bin "${SANDBOX}/bin/claude-happy" "
+import json, tempfile, pathlib
+from engine.provider_adapter import ClaudeAdapter, ProviderRequest
+from engine.agent_session_runner import AgentSessionRunner, SessionContext
+with tempfile.TemporaryDirectory() as td:
+    sessions = str(pathlib.Path(td) / 'agent-sessions.json')
+    ctx = SessionContext(sessions_path=sessions, run_id='r', workflow_id='wf', workflow_name='WF',
+                         step_id='s1', capability='cap_x', agent_alias='alias_x', executor='ai')
+    out = AgentSessionRunner().run_step(ClaudeAdapter(),
+                                        ProviderRequest(session_id='', step_id='s1', prompt='p'),
+                                        ctx)
+    s = json.loads(pathlib.Path(sessions).read_text())['sessions'][0]
+    print('outcome_lifecycle=' + out.lifecycle)
+    print('ledger_provider_cli=' + s['provider_cli'])
+    print('ledger_lifecycle=' + s['lifecycle'])
+")"
+assert_contains "claude outcome lifecycle completed" "outcome_lifecycle=completed"   "${out15}"
+assert_contains "claude ledger provider_cli"          "ledger_provider_cli=claude"    "${out15}"
+assert_contains "claude ledger lifecycle"             "ledger_lifecycle=completed"    "${out15}"
 
 # ── Summary ─────────────────────────────────────────────────────────────
 echo ""

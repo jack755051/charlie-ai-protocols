@@ -282,6 +282,110 @@ class CodexAdapter(ProviderAdapter):
         )
 
 
+class ClaudeAdapter(ProviderAdapter):
+    """Claude CLI provider adapter (P5 #4).
+
+    Mirrors ``scripts/cap-workflow-exec.sh:run_step_claude`` semantics:
+    invokes ``claude -p <prompt>`` and returns stdout / stderr / exit
+    code untouched. No preamble strip is needed because the ``-p`` mode
+    emits the assistant response directly without banner / transcript
+    noise (unlike Codex). stderr is captured separately (the shell
+    version merges via ``2>&1``).
+
+    Binary resolution: ``CAP_CLAUDE_BIN`` env override first (used by
+    tests to point at a fake binary), then PATH lookup. Missing binary
+    surfaces as ``ProviderResult(status=failed, exit_code=-1)`` with a
+    deterministic ``failure_reason`` rather than raising
+    FileNotFoundError, mirroring CodexAdapter so AgentSessionRunner
+    records a clean failed session.
+
+    Timeout / non-zero exit / completion all follow the established
+    ShellAdapter / CodexAdapter shape and the P5 #9 ``timeout:`` prefix
+    convention.
+
+    Production execution remains in shell (P5 baseline §1); this
+    adapter is for deterministic tests with a fake claude binary,
+    future programmatic invocation paths, and as the eventual
+    migration target.
+    """
+
+    name = "claude"
+
+    def run(self, request: ProviderRequest) -> ProviderResult:
+        binary = _resolve_provider_binary("claude", "CAP_CLAUDE_BIN")
+        if binary is None:
+            return ProviderResult(
+                status=STATUS_FAILED,
+                exit_code=-1,
+                stdout="",
+                stderr="",
+                duration_seconds=0.0,
+                failure_reason=(
+                    "claude binary not found "
+                    "(set CAP_CLAUDE_BIN or install claude on PATH)"
+                ),
+            )
+
+        cmd = [binary, "-p", request.prompt]
+
+        merged_env = None
+        if request.env is not None:
+            merged_env = {**os.environ, **request.env}
+
+        timeout = request.timeout_seconds
+        started = time.monotonic()
+        try:
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env=merged_env,
+            )
+        except subprocess.TimeoutExpired as exc:
+            elapsed = time.monotonic() - started
+            return ProviderResult(
+                status=STATUS_TIMEOUT,
+                exit_code=-1,
+                stdout=exc.stdout or "",
+                stderr=exc.stderr or "",
+                duration_seconds=elapsed,
+                failure_reason=f"timeout: claude command exceeded {timeout}s",
+            )
+        except (FileNotFoundError, PermissionError) as exc:
+            # Env override pointed at a non-existent / non-executable path.
+            # Surface as a deterministic failed result rather than re-raising
+            # so AgentSessionRunner records a clean failed session (mirrors
+            # CodexAdapter behaviour for the same condition).
+            elapsed = time.monotonic() - started
+            return ProviderResult(
+                status=STATUS_FAILED,
+                exit_code=-1,
+                stdout="",
+                stderr="",
+                duration_seconds=elapsed,
+                failure_reason=f"claude binary unavailable: {exc}",
+            )
+
+        elapsed = time.monotonic() - started
+        if proc.returncode == 0:
+            return ProviderResult(
+                status=STATUS_COMPLETED,
+                exit_code=proc.returncode,
+                stdout=proc.stdout,
+                stderr=proc.stderr,
+                duration_seconds=elapsed,
+            )
+        return ProviderResult(
+            status=STATUS_FAILED,
+            exit_code=proc.returncode,
+            stdout=proc.stdout,
+            stderr=proc.stderr,
+            duration_seconds=elapsed,
+            failure_reason=f"claude exited {proc.returncode}",
+        )
+
+
 class ShellAdapter(ProviderAdapter):
     """Run the prompt as a shell command via ``subprocess.run``.
 
