@@ -258,6 +258,7 @@
 - [ ] 實作 project / shared / builtin / legacy source priority
   - 交付物：source resolver
   - 驗收：binding report 明確記錄命中來源
+  - 現況：**deferred / blocked**。目前 runtime 只有 project workflow source 有 producer，shared / builtin / legacy 三個 layer 沒有實際 workflow producer 目錄；`source_priority` 字串只在 supervisor schema 與測試 fixture 出現，runtime 不消費。若現在硬做 4-layer resolver 等於蓋空殼且無 consumer 可驗，且 per-step `source_layer / source_path / candidate_sources / selected_reason` 欄位會打開剛 close 的 P4 #2 binding-report schema 與 fixtures。延後到 shared / builtin / legacy workflow producer 真實落地後再實作；屆時應同步審視 binding-report.schema.yaml 是否新增 optional source-tracking 子物件。
 
 - [ ] enforce allowed capabilities
   - 交付物：policy check
