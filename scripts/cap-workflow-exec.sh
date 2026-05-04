@@ -619,6 +619,39 @@ register_step_runtime_state() {
   "${PYTHON_BIN}" "${STEP_PY}" register-state "${plan_json}" "${registry_path}" "${step_id}" "${execution_state}" "${blocked_reason}" "${output_source}" "${output_path}" "${handoff_path}"
 }
 
+# resolve_latest_ticket — Locate the highest-seq Type C handoff ticket
+# for ${step_id} under ${handoffs_dir}. Mirrors the seq scheme written
+# by scripts/workflows/emit-handoff-ticket.sh (base file
+# `<step>.ticket.json`; reruns append `-<seq>.ticket.json` per
+# supervisor protocol §3.6 rule 2). Stdout is the absolute path of
+# the latest ticket, or empty when no ticket exists for the step
+# (used by the P6 #3 opt-in pre-dispatch gate to no-op cleanly).
+resolve_latest_ticket() {
+  local handoffs_dir="$1"
+  local step_id="$2"
+  [ -z "${handoffs_dir}" ] && return 0
+  [ ! -d "${handoffs_dir}" ] && return 0
+  local base="${handoffs_dir}/${step_id}.ticket.json"
+  local latest=""
+  [ -f "${base}" ] && latest="${base}"
+  local candidate seq highest=1
+  shopt -s nullglob
+  for candidate in "${handoffs_dir}/${step_id}"-*.ticket.json; do
+    [ -f "${candidate}" ] || continue
+    seq="${candidate##*-}"
+    seq="${seq%.ticket.json}"
+    case "${seq}" in
+      ''|*[!0-9]*) continue ;;
+    esac
+    if [ "${seq}" -gt "${highest}" ]; then
+      highest="${seq}"
+      latest="${candidate}"
+    fi
+  done
+  shopt -u nullglob
+  [ -n "${latest}" ] && printf '%s\n' "${latest}"
+}
+
 register_agent_session() {
   local session_id="$1"
   local step_id="$2"
@@ -853,6 +886,8 @@ bash "${PATH_HELPER}" ensure >/dev/null 2>&1 || true
 PROJECT_ROOT="$(bash "${PATH_HELPER}" get project_root)"
 REPORT_DIR="$(bash "${PATH_HELPER}" get report_dir)"
 WORKFLOW_REPORT_DIR="$(bash "${PATH_HELPER}" get workflow_report_dir)"
+HANDOFFS_DIR="$(bash "${PATH_HELPER}" get handoff_dir 2>/dev/null || true)"
+HANDOFF_SCHEMA_PATH="${CAP_ROOT}/schemas/handoff-ticket.schema.yaml"
 WORKFLOW_OUTPUT_DIR="${WORKFLOW_REPORT_DIR}/${WORKFLOW_ID}/${RUN_LABEL}"
 PROJECT_DOCS_DIR="${PROJECT_ROOT}/docs"
 ARTIFACT_INDEX="${WORKFLOW_OUTPUT_DIR}/artifact-index.md"
@@ -1021,6 +1056,46 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
       register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "detached_head" "" "" ""
       record_blocked_step "${WORKFLOW_LOG}" "${RUN_SUMMARY}" "${phase_num}" "${step_id}" "${capability}" "detached_head" "version_control_requires_branch"
       break
+    fi
+  fi
+
+  # ── P6 #3 opt-in handoff schema gate (pre-dispatch) ──
+  # Default behavior is unchanged (flag off → branch is skipped, the
+  # ai-dispatch path runs as before). When CAP_ENFORCE_HANDOFF_SCHEMA=1
+  # we re-validate the latest-seq Type C ticket for this step against
+  # schemas/handoff-ticket.schema.yaml *before* spawning the sub-agent.
+  # The emission-time gate inside emit-handoff-ticket.sh already
+  # enforces the same schema; this is the last line of defense against
+  # manual edits, schema bumps invalidating older tickets, fixture
+  # drift, or any on-disk mutation between emission and dispatch.
+  # Validator rc=41 (schema_validation_failed) maps to
+  # STEP_STATUS=handoff_ticket_invalid + ERROR_TYPE=handoff_validation_failed
+  # + STEP_HANDOFF_GATE_DETAIL captured for SESSION_FAILURE_REASON below.
+  # No ticket on disk → no-op (not every step has a ticket; avoids false
+  # positives on pure shell steps and pre-emit phases).
+  STEP_HANDOFF_GATE_DETAIL=""
+  HANDOFF_GATE_HARD_FAIL=0
+  if [ "${CAP_ENFORCE_HANDOFF_SCHEMA:-0}" = "1" ] && [ "${effective_executor}" = "ai" ]; then
+    HANDOFF_TICKET_PATH="$(resolve_latest_ticket "${HANDOFFS_DIR}" "${step_id}")"
+    if [ -n "${HANDOFF_TICKET_PATH}" ]; then
+      GATE_OUT="$("${PYTHON_BIN}" "${STEP_PY}" validate-handoff-ticket "${HANDOFF_TICKET_PATH}" --schema "${HANDOFF_SCHEMA_PATH}" 2>&1)"
+      GATE_RC=$?
+      if [ "${GATE_RC}" -eq 41 ]; then
+        HANDOFF_GATE_HARD_FAIL=1
+        STEP_HANDOFF_GATE_DETAIL="${GATE_OUT}"
+        STEP_STATUS="handoff_ticket_invalid"
+        FINAL_STEP_STATE="hard_fail"
+        ERROR_TYPE="handoff_validation_failed"
+        step_status "block" "${step_id}" "0"
+        printf "  ${RED}│ blocked_handoff_invalid: %s${RESET}\n" "${HANDOFF_TICKET_PATH}"
+        printf "  ${RED}│ %s${RESET}\n" "${GATE_OUT}"
+        FAILED=$((FAILED + 1))
+        bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} ticket:${HANDOFF_TICKET_PATH} handoff_gate:hard_fail" "失敗" >/dev/null 2>&1 || true
+        append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} error:${ERROR_TYPE} ticket:${HANDOFF_TICKET_PATH} gate:${GATE_OUT}" "失敗"
+        register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "handoff_ticket_invalid" "" "" ""
+        record_blocked_step "${WORKFLOW_LOG}" "${RUN_SUMMARY}" "${phase_num}" "${step_id}" "${capability}" "handoff_ticket_invalid" "ticket:${HANDOFF_TICKET_PATH} detail:${GATE_OUT}"
+        break
+      fi
     fi
   fi
 

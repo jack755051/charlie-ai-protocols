@@ -1217,6 +1217,97 @@ def validate_capability_output_cli(capability: str, artifact_path: str) -> None:
 
 
 # ─────────────────────────────────────────────────────────
+# 16. validate-handoff-ticket (P6 #3 opt-in pre-dispatch gate)
+# ─────────────────────────────────────────────────────────
+
+
+def _default_handoff_schema_path() -> Path:
+    """Resolve the canonical handoff-ticket schema shipped with the repo.
+
+    The schema lives at ``schemas/handoff-ticket.schema.yaml`` next to
+    ``engine/`` in the CAP source tree. Callers may override via the
+    optional CLI argument; this default lets ``cap-workflow-exec.sh``
+    invoke the validator without re-deriving the path.
+    """
+    return Path(__file__).resolve().parent.parent / "schemas" / "handoff-ticket.schema.yaml"
+
+
+def validate_handoff_ticket_cli(ticket_path: str, schema_path: str | None = None) -> None:
+    """Opt-in CAP_ENFORCE_HANDOFF_SCHEMA gate (P6 #3) — pre-dispatch
+    validator that re-checks Type C handoff tickets against
+    ``schemas/handoff-ticket.schema.yaml`` before the executor spawns
+    the downstream sub-agent.
+
+    The emission-time validator inside ``emit-handoff-ticket.sh``
+    already enforces the same schema, so this gate serves as the
+    *last line of defense*: it catches manual edits, schema bumps that
+    invalidate older tickets, fixture drift in tests, or any other
+    on-disk mutation between emission and dispatch.
+
+    Exit code policy mirrors ``policies/workflow-executor-exit-codes.md``:
+      * exit 0  — ``ok=True`` (schema clean).
+      * exit 41 — ``ok=False`` (`schema_validation_failed`, the same
+                  schema-class code used by P0a executors and the P6 #4
+                  required-output gate).
+      * exit 1  — ``missing_artifact`` (ticket file or schema absent)
+                  or ``parse_error`` (non-JSON ticket / non-YAML schema).
+
+    Stdout is intentionally a single ``reason=...;detail=...`` line so
+    the shell wrapper in ``cap-workflow-exec.sh`` can capture it
+    directly into ``SESSION_FAILURE_REASON`` without re-parsing JSON,
+    matching the contract used by P6 #4.
+    """
+    ticket_p = Path(ticket_path)
+    if not ticket_p.exists():
+        print(f"reason=missing_artifact;detail=ticket not found: {ticket_path}")
+        sys.exit(1)
+
+    try:
+        ticket = json.loads(ticket_p.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"reason=parse_error;detail=ticket JSON invalid: {exc}")
+        sys.exit(1)
+    except OSError as exc:  # pragma: no cover — defensive read guard
+        print(f"reason=parse_error;detail=ticket read failed: {exc}")
+        sys.exit(1)
+
+    schema_p = Path(schema_path) if schema_path else _default_handoff_schema_path()
+    if not schema_p.exists():
+        print(f"reason=missing_artifact;detail=schema not found: {schema_p}")
+        sys.exit(1)
+
+    try:
+        import yaml  # type: ignore[import]
+
+        schema = yaml.safe_load(schema_p.read_text(encoding="utf-8")) or {}
+    except ImportError:
+        print("reason=parse_error;detail=PyYAML unavailable; cannot load handoff schema")
+        sys.exit(1)
+    except Exception as exc:  # pragma: no cover — defensive YAML guard
+        print(f"reason=parse_error;detail=schema YAML invalid: {exc}")
+        sys.exit(1)
+
+    errors: list[str] = []
+    try:
+        from jsonschema import Draft202012Validator  # type: ignore[import]
+
+        validator = Draft202012Validator(schema)
+        for err in sorted(validator.iter_errors(ticket), key=lambda e: list(e.absolute_path)):
+            loc = "/".join(str(p) for p in err.absolute_path) or "<root>"
+            errors.append(f"{loc}: {err.message}")
+    except ImportError:
+        errors.extend(validate_jsonschema_fallback(ticket, schema))
+
+    if errors:
+        joined = " | ".join(errors)
+        print(f"reason=handoff_schema_invalid;detail={joined}")
+        sys.exit(41)
+
+    print("reason=ok;detail=handoff_schema_valid")
+    sys.exit(0)
+
+
+# ─────────────────────────────────────────────────────────
 # CLI entry point
 # ─────────────────────────────────────────────────────────
 
@@ -1350,6 +1441,24 @@ def _build_parser() -> argparse.ArgumentParser:
     p_vco.add_argument("capability")
     p_vco.add_argument("artifact_path")
 
+    # 16. validate-handoff-ticket (P6 #3 — opt-in pre-dispatch gate)
+    p_vht = sub.add_parser(
+        "validate-handoff-ticket",
+        help=(
+            "P6 #3 opt-in pre-dispatch handoff schema gate; revalidates "
+            "a Type C ticket against schemas/handoff-ticket.schema.yaml "
+            "before sub-agent dispatch (0=ok, 41=schema invalid, "
+            "1=missing artifact / parse error)."
+        ),
+    )
+    p_vht.add_argument("ticket_path")
+    p_vht.add_argument(
+        "--schema",
+        dest="schema_path",
+        default=None,
+        help="Override handoff schema path; defaults to schemas/handoff-ticket.schema.yaml",
+    )
+
     return parser
 
 
@@ -1434,6 +1543,8 @@ def main(argv: list[str] | None = None) -> None:
             validate_constitution(args.json_path, args.schema_path)
         case "validate-capability-output":
             validate_capability_output_cli(args.capability, args.artifact_path)
+        case "validate-handoff-ticket":
+            validate_handoff_ticket_cli(args.ticket_path, args.schema_path)
 
 
 if __name__ == "__main__":
