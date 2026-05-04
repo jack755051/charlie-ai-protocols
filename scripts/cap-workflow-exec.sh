@@ -705,6 +705,35 @@ write_prompt_snapshot() {
   printf '%s|%s|%s\n' "${hash}" "${target}" "${size}"
 }
 
+# Parse `reason:` / `detail:` lines emitted by shell executors via
+# fail_with() (e.g. persist-task-constitution.sh, validate-constitution.sh)
+# from the step's artifact and return a compact one-line summary suitable
+# for embedding in workflow.log entries and the agent-sessions ledger
+# failure_reason field.
+#
+# Output shape (empty when neither is present):
+#   reason=<reason>;detail=<detail1>|<detail2>
+#
+# Goal: make `cap session inspect <id>` and `cap session analyze` show
+# the actual failure category (e.g. MISSING_REQUIRED:goal,success_criteria
+# or PARSE_ERROR:Extra data ...) instead of a bare "schema_validation_failed"
+# / generic "failed" string. No execution behaviour change — pure
+# observability lift parsed from the artifact the step itself wrote.
+extract_step_failure_detail() {
+  local artifact="$1"
+  local reason details
+  [ -f "${artifact}" ] || { printf ''; return; }
+  reason="$(awk '/^reason:/ {sub(/^reason: */, ""); print; exit}' "${artifact}" 2>/dev/null)"
+  details="$(awk '/^detail:/ {sub(/^detail: */, ""); print}' "${artifact}" 2>/dev/null | tr '\n' '|' | sed 's/|$//')"
+  if [ -n "${reason}" ] && [ -n "${details}" ]; then
+    printf '%s' "reason=${reason};detail=${details}"
+  elif [ -n "${reason}" ]; then
+    printf '%s' "reason=${reason}"
+  elif [ -n "${details}" ]; then
+    printf '%s' "detail=${details}"
+  fi
+}
+
 session_lifecycle_for_state() {
   local final_state="$1"
   case "${final_state}" in
@@ -1226,7 +1255,10 @@ Release / governed-mode requirements:
     ERROR_TYPE="artifact_reported_failure"
     ERROR_HINT="  step stdout/artifact 回報 blocked 或 failed 結果，executor 已判定為 hard_fail，避免只產文件卻被標記成功。"
     bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} capability:${capability} cli:${effective_cli}" "失敗" >/dev/null 2>&1 || true
-    append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s error:${ERROR_TYPE}" "失敗"
+    STEP_FAILURE_DETAIL="$(extract_step_failure_detail "${STEP_OUTPUT_PATH}")"
+    LOG_DETAIL_SUFFIX=""
+    [ -n "${STEP_FAILURE_DETAIL}" ] && LOG_DETAIL_SUFFIX=" ${STEP_FAILURE_DETAIL}"
+    append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s error:${ERROR_TYPE}${LOG_DETAIL_SUFFIX}" "失敗"
     printf "%s\n" "${ERROR_HINT}"
     SHOULD_HALT=1
   elif [ -n "${STOP_REASON}" ]; then
@@ -1332,7 +1364,10 @@ Release / governed-mode requirements:
     fi
 
     bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} capability:${capability} cli:${effective_cli}" "失敗" >/dev/null 2>&1 || true
-    append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s error:${ERROR_TYPE}" "失敗"
+    STEP_FAILURE_DETAIL="$(extract_step_failure_detail "${STEP_OUTPUT_PATH}")"
+    LOG_DETAIL_SUFFIX=""
+    [ -n "${STEP_FAILURE_DETAIL}" ] && LOG_DETAIL_SUFFIX=" ${STEP_FAILURE_DETAIL}"
+    append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s error:${ERROR_TYPE}${LOG_DETAIL_SUFFIX}" "失敗"
 
     # Show classified error
     if [ -n "${output}" ]; then
@@ -1365,7 +1400,15 @@ Release / governed-mode requirements:
   SESSION_RESULT="$(session_result_for_state "${FINAL_STEP_STATE}")"
   SESSION_FAILURE_REASON=""
   if [ "${SESSION_RESULT}" != "success" ]; then
-    SESSION_FAILURE_REASON="${STEP_STATUS}"
+    # Pull reason / detail lines emitted by shell executors (fail_with)
+    # so the ledger surfaces e.g. "failed: reason=validation_failed;detail=PARSE_ERROR:..."
+    # rather than just "failed". Empty extraction → fall back to STEP_STATUS only.
+    SESSION_DETAIL="$(extract_step_failure_detail "${STEP_OUTPUT_PATH}")"
+    if [ -n "${SESSION_DETAIL}" ]; then
+      SESSION_FAILURE_REASON="${STEP_STATUS}: ${SESSION_DETAIL}"
+    else
+      SESSION_FAILURE_REASON="${STEP_STATUS}"
+    fi
   fi
   register_agent_session \
     "${SESSION_ID}" \
