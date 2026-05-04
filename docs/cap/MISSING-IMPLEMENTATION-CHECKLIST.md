@@ -1,6 +1,6 @@
 # CAP Missing Implementation Checklist
 
-更新日期：2026-05-04（P6 #5+#6+#7 capability-aware validation registry 落地）
+更新日期：2026-05-04（P6 #4 opt-in CAP_ENFORCE_REQUIRED_OUTPUTS gate 落地，production 預設行為不變）
 
 本清單承接 `TODOLIST.md` 與 `docs/cap/IMPLEMENTATION-ROADMAP.md` 的「尚未完成」項目，整理成可執行的工程工作清單。原則是先補 runtime contract 與 validator，再補 runner、orchestration、session、gate 與 promote/publish 閉環。
 
@@ -376,9 +376,10 @@
   - 交付物：handoff validation hook
   - 驗收：不合法 handoff 不會交給下游
 
-- [ ] 實作 required output check
+- [x] 實作 required output check
   - 交付物：output expectation checker
   - 驗收：缺必交付 artifact 時 step failed
+  - 進度：done in `feat(workflow-exec): add opt-in CAP_ENFORCE_REQUIRED_OUTPUTS gate`（v0.22.0-rc9 後第三批）。**Opt-in 設計、production 預設行為不變**：環境變數 `CAP_ENFORCE_REQUIRED_OUTPUTS=0`（預設）時 cap-workflow-exec.sh 完全不調 validator；`=1` 時才在 step exit 0 + 非 empty_capture 的 OK 分支前插入結構性驗證。**最小切入點**：依 探勘結論，runtime 模型是「一個 step 一個物理檔承載多個 declared outputs」（`engine/step_runtime.py:register_state:605-612` validated 後把 capability `outputs[]` 全部塞進 registry，通通指向同一 `output_path`），所以「outputs 名稱 vs 檔案存在性」比對沒實質意義；真正缺的是「檔案內容是否真的長對」。本批 reuse 上一批 `engine/capability_validator.py:validate_capability_output()` 作為唯一 enforcement 機制 — 註冊 capability 走 schema 驗證、未註冊回 `no_validator`（skipped），**杜絕 false positive**。**新增** `engine/step_runtime.py:validate_capability_output_cli()` thin wrapper + `validate-capability-output <capability> <artifact_path>` subcommand：exit 0 = ok 或 skipped、exit 41 = `schema_validation_failed`（沿用 P0a `policies/workflow-executor-exit-codes.md` 政策）、exit 1 = `missing_artifact` / `unknown_kind`（操作性錯誤）；stdout 單行 `reason=...;detail=...` 直接被 shell 捕捉進 SESSION_FAILURE_REASON。**Shell wiring**：cap-workflow-exec.sh 在 OK 分支重構為 `VALIDATOR_HARD_FAIL=0` flag-guard 寫法，flag on + rc=41 時設 `STEP_STATUS=required_output_invalid` + `FINAL_STEP_STATE=hard_fail` + `ERROR_TYPE=output_validation_failed`（高層分類保留以不打散既有 analyzer grouping）+ `STEP_VALIDATOR_DETAIL` 捕捉。`SESSION_FAILURE_REASON` 構造改為 `STEP_VALIDATOR_DETAIL` 優先於 `extract_step_failure_detail`（gate 在 agent 寫完後跑，verdict 比 artifact 內容更貼近 fail 真相）；`cap session inspect` / `analyze` 直接看到 schema 缺欄位 / JSON parse fail / markdown section 缺失。**步驟新增 reset**：`STEP_VALIDATOR_DETAIL=""` 加在每 step iteration 開頭，避免跨 step 殘留。`tests/scripts/test-required-output-enforcement.sh` 8 cases / **30 passed** 三層覆蓋：Layer 1 (CLI 4 verdict 分支 exit code + stdout format)、Layer 2 (shell 條件邏輯 simulation 經 STATUS / STATE / HALT / DETAIL / SESSION_REASON 5 欄位回 round-trip 驗證)、Layer 3 (cap-workflow-exec.sh source 含 env-flag block + reset + ERROR_TYPE 高層分類等 6 個關鍵 marker，防 future refactor 誤刪)。接入 `scripts/workflows/smoke-per-stage.sh` 為 P6 #4 gate。**Backward-compat 驗證**：跑完整 P5 + P6 #1+#2 + P6 #5+#6+#7 regression（agent-session-runner / cap-session-inspect / cap-session-analyze / step-failure-detail / cap-artifact-inspect / capability-validator）全綠 — 217 passed / 0 failed，沒有打壞既有 session 流程。
 
 - [x] 實作 JSON extraction / validation
   - 交付物：通用 extraction helper

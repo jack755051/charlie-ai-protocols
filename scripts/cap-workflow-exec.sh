@@ -1225,6 +1225,7 @@ Release / governed-mode requirements:
   SHOULD_HALT=0
   OUTPUT_SOURCE=""
   FINAL_STEP_STATE="running"
+  STEP_VALIDATOR_DETAIL=""
 
   if ! OUTPUT_SOURCE="$(materialize_step_output "${step_id}" "${STEP_OUTPUT_PATH}" "${output}")"; then
     STEP_STATUS="write_failed"
@@ -1305,12 +1306,46 @@ Release / governed-mode requirements:
       printf "%s\n" "${ERROR_HINT}"
       SHOULD_HALT=1
     else
-      STEP_STATUS="ok"
-      FINAL_STEP_STATE="validated"
-      step_status "ok" "${step_id}" "${DURATION}"
-      COMPLETED=$((COMPLETED + 1))
-      bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} capability:${capability} agent:${agent_alias} cli:${effective_cli}" "成功" >/dev/null 2>&1 || true
-      append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s output:${STEP_OUTPUT_PATH} source:${OUTPUT_SOURCE}" "成功"
+      # ── P6 #4 opt-in required-output enforcement ──
+      # Default behavior is unchanged (flag off → branch is skipped, exit 0
+      # path runs as before). When CAP_ENFORCE_REQUIRED_OUTPUTS=1 we run the
+      # registered capability_validator gate against the artifact: registered
+      # capabilities (3 today: task_constitution_persistence /
+      # task_constitution_planning / supervisor_envelope_validation) are
+      # structurally checked; unregistered capabilities short-circuit to
+      # rc=0 with reason=skipped (no false positives). Validator rc=41
+      # (schema_validation_failed) maps to STEP_STATUS=required_output_invalid
+      # + ERROR_TYPE=output_validation_failed (existing high-level grouping)
+      # + STEP_VALIDATOR_DETAIL captured for SESSION_FAILURE_REASON below.
+      VALIDATOR_HARD_FAIL=0
+      if [ "${CAP_ENFORCE_REQUIRED_OUTPUTS:-0}" = "1" ]; then
+        VALIDATOR_OUT="$("${PYTHON_BIN}" "${STEP_PY}" validate-capability-output "${capability}" "${STEP_OUTPUT_PATH}" 2>&1)"
+        VALIDATOR_RC=$?
+        if [ "${VALIDATOR_RC}" -eq 41 ]; then
+          VALIDATOR_HARD_FAIL=1
+          STEP_VALIDATOR_DETAIL="${VALIDATOR_OUT}"
+          STEP_STATUS="required_output_invalid"
+          FINAL_STEP_STATE="hard_fail"
+          step_status "fail" "${step_id}" "${DURATION}"
+          FAILED=$((FAILED + 1))
+          ERROR_TYPE="output_validation_failed"
+          ERROR_HINT="  step exit 0 但 capability validator 偵測到 required output 結構不符（CAP_ENFORCE_REQUIRED_OUTPUTS=1）；executor 已判定為 hard_fail。"
+          bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} capability:${capability} cli:${effective_cli} validator:hard_fail" "失敗" >/dev/null 2>&1 || true
+          append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s error:${ERROR_TYPE} validator:${VALIDATOR_OUT}" "失敗"
+          printf "%s\n" "${ERROR_HINT}"
+          if [ "${optional}" != "True" ]; then
+            SHOULD_HALT=1
+          fi
+        fi
+      fi
+      if [ "${VALIDATOR_HARD_FAIL}" -eq 0 ]; then
+        STEP_STATUS="ok"
+        FINAL_STEP_STATE="validated"
+        step_status "ok" "${step_id}" "${DURATION}"
+        COMPLETED=$((COMPLETED + 1))
+        bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} capability:${capability} agent:${agent_alias} cli:${effective_cli}" "成功" >/dev/null 2>&1 || true
+        append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s output:${STEP_OUTPUT_PATH} source:${OUTPUT_SOURCE}" "成功"
+      fi
     fi
   else
     STEP_STATUS="failed"
@@ -1400,14 +1435,22 @@ Release / governed-mode requirements:
   SESSION_RESULT="$(session_result_for_state "${FINAL_STEP_STATE}")"
   SESSION_FAILURE_REASON=""
   if [ "${SESSION_RESULT}" != "success" ]; then
-    # Pull reason / detail lines emitted by shell executors (fail_with)
-    # so the ledger surfaces e.g. "failed: reason=validation_failed;detail=PARSE_ERROR:..."
-    # rather than just "failed". Empty extraction → fall back to STEP_STATUS only.
-    SESSION_DETAIL="$(extract_step_failure_detail "${STEP_OUTPUT_PATH}")"
-    if [ -n "${SESSION_DETAIL}" ]; then
-      SESSION_FAILURE_REASON="${STEP_STATUS}: ${SESSION_DETAIL}"
+    # P6 #4: opt-in capability_validator detail wins over artifact-side
+    # reason:/detail: lines, because the gate ran AFTER the agent finished
+    # writing — its verdict is the closest-to-truth diagnosis of why this
+    # step is being downgraded from exit-0 to hard_fail.
+    if [ -n "${STEP_VALIDATOR_DETAIL:-}" ]; then
+      SESSION_FAILURE_REASON="${STEP_STATUS}: ${STEP_VALIDATOR_DETAIL}"
     else
-      SESSION_FAILURE_REASON="${STEP_STATUS}"
+      # Pull reason / detail lines emitted by shell executors (fail_with)
+      # so the ledger surfaces e.g. "failed: reason=validation_failed;detail=PARSE_ERROR:..."
+      # rather than just "failed". Empty extraction → fall back to STEP_STATUS only.
+      SESSION_DETAIL="$(extract_step_failure_detail "${STEP_OUTPUT_PATH}")"
+      if [ -n "${SESSION_DETAIL}" ]; then
+        SESSION_FAILURE_REASON="${STEP_STATUS}: ${SESSION_DETAIL}"
+      else
+        SESSION_FAILURE_REASON="${STEP_STATUS}"
+      fi
     fi
   fi
   register_agent_session \

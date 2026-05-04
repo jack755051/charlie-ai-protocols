@@ -1169,6 +1169,54 @@ def _check_against_schema(data: Any, schema: Any, path: list[str]) -> list[str]:
 
 
 # ─────────────────────────────────────────────────────────
+# 15. validate-capability-output (P6 #4 opt-in gate)
+# ─────────────────────────────────────────────────────────
+
+def validate_capability_output_cli(capability: str, artifact_path: str) -> None:
+    """Opt-in CAP_ENFORCE_REQUIRED_OUTPUTS gate (P6 #4) — thin wrapper that
+    delegates verdicts to ``engine.capability_validator``.
+
+    Exit code policy mirrors ``policies/workflow-executor-exit-codes.md``:
+      * exit 0  — ``ok=True`` OR ``validator_kind="no_validator"`` (skipped).
+      * exit 41 — ``ok=False`` for json_schema / markdown_sections kinds
+                  (`schema_validation_failed`, the same code used by
+                  P0a schema-class executors).
+      * exit 1  — ``missing_artifact`` / ``unknown_kind`` (operational
+                  errors, not a structural failure of the artifact).
+
+    Stdout is intentionally a single ``reason=...;detail=...`` line so the
+    shell wrapper in ``cap-workflow-exec.sh`` can capture it directly into
+    ``SESSION_FAILURE_REASON`` without re-parsing JSON. ``no_validator``
+    skipped runs print ``reason=skipped;detail=no_validator`` so audit logs
+    can distinguish "validator absent" from "validator passed".
+    """
+    try:
+        from .capability_validator import validate_capability_output
+    except ImportError:  # pragma: no cover — same fallback as the inspector
+        from capability_validator import validate_capability_output  # type: ignore[no-redef]
+
+    result = validate_capability_output(capability, artifact_path)
+
+    if result.validator_kind == "no_validator":
+        print("reason=skipped;detail=no_validator")
+        sys.exit(0)
+    if result.validator_kind == "missing_artifact":
+        joined = " | ".join(result.errors) or "artifact missing"
+        print(f"reason=missing_artifact;detail={joined}")
+        sys.exit(1)
+    if result.validator_kind == "unknown_kind":
+        joined = " | ".join(result.errors) or "unknown rule kind"
+        print(f"reason=unknown_kind;detail={joined}")
+        sys.exit(1)
+    if result.ok:
+        print(f"reason=ok;detail={result.validator_kind}")
+        sys.exit(0)
+    joined = " | ".join(result.errors) or "structural validation failed"
+    print(f"reason=required_output_invalid;detail={joined}")
+    sys.exit(41)
+
+
+# ─────────────────────────────────────────────────────────
 # CLI entry point
 # ─────────────────────────────────────────────────────────
 
@@ -1289,6 +1337,19 @@ def _build_parser() -> argparse.ArgumentParser:
     p_vjs.add_argument("json_path")
     p_vjs.add_argument("schema_path")
 
+    # 15. validate-capability-output (P6 #4 — opt-in required output gate)
+    p_vco = sub.add_parser(
+        "validate-capability-output",
+        help=(
+            "P6 #4 opt-in required-output gate; dispatches to "
+            "engine.capability_validator.validate_capability_output and maps the "
+            "verdict to exit codes (0=ok or skipped, 41=schema/structural fail, "
+            "1=missing artifact / unknown rule kind)."
+        ),
+    )
+    p_vco.add_argument("capability")
+    p_vco.add_argument("artifact_path")
+
     return parser
 
 
@@ -1371,6 +1432,8 @@ def main(argv: list[str] | None = None) -> None:
             validate_constitution(args.constitution_path, args.schema_path)
         case "validate-jsonschema":
             validate_constitution(args.json_path, args.schema_path)
+        case "validate-capability-output":
+            validate_capability_output_cli(args.capability, args.artifact_path)
 
 
 if __name__ == "__main__":
