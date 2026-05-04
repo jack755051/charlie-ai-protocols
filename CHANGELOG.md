@@ -6,6 +6,31 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.22.0-rc9] - 2026-05-04
+
+> Release candidate — collect 4 observability commits since v0.22.0-rc8 into a clean checkpoint covering docs index + session cost analyzer + production-shell prompt snapshot wiring + workflow-exec failure detail wiring. **Untouched**: workflow / supervisor / dispatch behaviour. All metadata + docs + analysis surfaces; no execution semantics change. Smoke升至 48 step / 48 passed / 0 failed.
+
+### Added
+
+- **docs/cap/README.md docs index** (`52a1c65`)：5 段索引（入口導覽 / boundaries / reference / quality reports / 新增規則）讓讀者依需求查文件，避免每次掃整個 `docs/cap/`。`ARCHITECTURE.md` 開頭加 navigation banner 點向 README / CHECKLIST / boundaries memos。**未搬檔、未刪文件**，第一輪 conservative consolidation。
+- **`engine/session_cost_analyzer.py` + `cap session analyze`** (`1c65da9`)：read-only token / time analyzer。`cap session analyze [--top N] [--json] [--run-id <id>] [--workflow-id <id>] [--sessions-path <path>]`。報告欄位：total_sessions / total_duration_seconds / lifecycle_counts / by_provider[] / by_capability[] / largest_prompts[] (top N by size) / duplicate_prompts[] (hash 重複 ≥2，cache 候選) / longest_sessions[] / failures{ total, timeout (P5 #9 prefix 子集), by_capability }。`scripts/cap-session.sh` 加 `analyze` 分流，`scripts/cap-entry.sh` 加 help 行。`tests/scripts/test-cap-session-analyze.sh` 11 cases / 43 passed。
+- **shell executor prompt snapshot wiring** (`d5de760`)：把 P5 #6 prompt snapshot contract 從 Python additive layer 擴到 production shell executor。新 helper `write_prompt_snapshot()` 計算 SHA-256 寫 content-addressed snapshot 到 `<WORKFLOW_OUTPUT_DIR>/prompts/<sha256[:2]>/<sha256>.txt`（與 Python 端 `_write_prompt_snapshot` 共用同 layout）。`register_agent_session()` 加 3 個 optional 位置參數，兩個 upsert 呼叫點都帶上。`engine/step_runtime.py:upsert-session` CLI 加 `--prompt-hash` / `--prompt-snapshot-path` / `--prompt-size-bytes` 三個 optional flags。**驗證**：`cap workflow run workflow-smoke-test` 後 `cap session analyze` 立即看到 `largest_prompts` 不再為空（commit_changes 2929B、normalize_repo 2360B）。`tests/scripts/test-shell-prompt-snapshot.sh` 8 cases / 21 passed。
+- **workflow.log + ledger failure detail extraction** (`6999594`)：新 helper `extract_step_failure_detail(artifact_path)` 解析 shell executor 透過 `fail_with()` emit 的 `reason:` / `detail:` 行，回傳 `reason=<reason>;detail=<d1>|<d2>` 緊湊格式。Wire 進 `artifact_reported_failure` + catch-all classified-error 兩個 log 寫入點 + terminal `register_agent_session` 的 `SESSION_FAILURE_REASON` build。對 4 件 token-monitor 歷史 failure（1 件 `PARSE_ERROR:Extra data` + 3 件 `MISSING_REQUIRED` 變體）全部成功抽取，未來新 failure 走過此 wiring 後 `cap session inspect` `failure_reason` 直接就是「failed: reason=validation_failed;detail=MISSING_REQUIRED:goal,success_criteria」而非僅「failed」。Pre-artifact 失敗路徑（write_failed / TIMEOUT / STALL / output_validation_failed）刻意不動。`tests/scripts/test-step-failure-detail.sh` 6 cases / 6 passed。
+
+### Notes
+
+- **未動執行行為**：所有 4 顆 commit 均為 metadata + 文件 + 分析工具；prompt 內容 / provider dispatch / timeout / stall / schema validation 邏輯完全不變。
+- **未做** P5 #9 stall handling（仍 deferred 待 streaming adapter consumer 出現）。
+- **未做** task_constitution_persistence failure 的修復（#3 repair hint / #4 JSON-after-JSON strip / #5 supervisor self-check）；本輪只做 failure logging 收緊，這些行為改動等新 failure 數據累積後再決定。
+- **第一輪收斂效果**：(a) 文件入口統一、root README 53% slim；(b) token/time hotspot 立刻可觀測；(c) production run 補齊 prompt metadata，cache 候選分析有資料；(d) failure 不再被 generic tag 污染。
+- 本 tag 為 release candidate，仍未取代 `v0.22.0` 正式版。是「P5 + observability 收斂完整 / P6 Artifact, Handoff and Validation 可開工」的乾淨基線。
+
+### Verified
+
+- `scripts/workflows/smoke-per-stage.sh` 從 v0.22.0-rc8 baseline 45 step 升至 **48 step / 48 passed / 0 failed / 0 skipped**：新增 `cap session analyze (token/time)` + `shell executor prompt snapshot wiring` + `step failure detail extractor` 三個 gate。
+- 跨 hook test 全綠：cap-session-analyze 43/43、shell-prompt-snapshot 21/21、step-failure-detail 6/6、agent-session-runner 75/75、cap-session-inspect 32/32、provider-adapters 44/44、preflight-report 21/21、workflow-policy-gates 19/19、compiled-workflow-validation-hook 16/16、binding-report-validation-hook 15/15、compile-task-from-envelope 33/33。
+- **End-to-end real-data 驗證**：跑 `cap workflow run workflow-smoke-test` production workflow 後，新 session 完整寫入 `prompt_hash` (64-char sha256) + `prompt_snapshot_path` (matches `<run_dir>/prompts/<hash[:2]>/<hash>.txt`) + `prompt_size_bytes` (與 disk file size 一致)；`cap session analyze --top 10` 立即顯示 largest_prompts hot list。
+
 ## [v0.22.0-rc8] - 2026-05-04
 
 > Release candidate — close P5「AgentSessionRunner」整段除 #9 stall handling deferred 外的最後三條（#10 cap session inspect + #3 CodexAdapter + #4 ClaudeAdapter）。本 tag 不取代 `v0.22.0` 正式版；**未動** `scripts/cap-workflow-exec.sh` production executor，所有新 adapter / inspector 都是 additive Python layer。stall handling 待真有 streaming provider adapter consumer 時再做（目前 Codex / Claude / Shell adapter 都是 blocking subprocess.run）。
