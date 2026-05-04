@@ -135,9 +135,9 @@ format_change_subject() {
   summary="$(printf '%s' "${subject}" | sed -E 's/^[a-z]+(\([^)]+\))?!?:[[:space:]]*//')"
 
   if [ -n "${scope}" ]; then
-    printf '[%s] %s' "${scope}" "${summary}"
+    printf '%-14s %s' "[${scope}]" "${summary}"
   else
-    printf '%s' "${summary}"
+    printf '%-14s %s' "" "${summary}"
   fi
 }
 
@@ -446,15 +446,15 @@ print_update_summary() {
   echo "Updating Charlie's AI Protocols"
   echo "${new_ref}"
   print_visual_change_summary "${prev_ref}" "${new_ref}"
+  echo "You can see the changelog at docs/cap/RELEASE-NOTES.md"
   print_cap_logo
   echo ""
-  echo "CAP has been updated!"
+  echo "Hooray! CAP has been updated!"
   echo ""
   printf "  %-14s %s\n" "Agents:" "${agents}"
   printf "  %-14s %s\n" "Strategies:" "${strategies}"
   printf "  %-14s %s\n" "Workflows:" "${workflows}"
   echo ""
-  echo "  Changelog: docs/cap/RELEASE-NOTES.md"
   echo "  Run 'source ~/.zshrc' or open a new terminal to apply."
 }
 
