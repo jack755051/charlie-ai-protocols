@@ -6,7 +6,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TRACE_LOG="${SCRIPT_DIR}/trace-log.sh"
 
 usage() {
-  echo "Usage: bash scripts/cap-session.sh <codex|claude> [args...]" >&2
+  cat >&2 <<'EOF'
+Usage:
+  bash scripts/cap-session.sh <codex|claude> [args...]    # interactive provider session
+  bash scripts/cap-session.sh inspect <session_id> [--json] [--sessions-path <path>]
+  bash scripts/cap-session.sh inspect --run-id <run_id>      [--json] [--sessions-path <path>]
+  bash scripts/cap-session.sh inspect --workflow-id <wf_id>  [--json] [--sessions-path <path>]
+  bash scripts/cap-session.sh inspect --step-id <step_id>    [--json] [--sessions-path <path>]
+EOF
   exit 1
 }
 
@@ -57,6 +64,11 @@ shift
 
 case "${CLI_NAME}" in
   codex|claude)
+    ;;
+  inspect)
+    PYTHON_BIN="${PYTHON_BIN:-python3}"
+    REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+    exec "${PYTHON_BIN}" "${REPO_ROOT}/engine/session_inspector.py" "$@"
     ;;
   *)
     usage

@@ -72,6 +72,7 @@ COMMAND                            DESCRIPTION
   cap agent <agent> [prompt]       啟動指定 agent 互動 session
   cap codex [ARGS...]              透過 wrapper 啟動 Codex（含 trace）
   cap claude [ARGS...]             透過 wrapper 啟動 Claude（含 trace）
+  cap session inspect <session_id> [--json]  查 agent session ledger（read-only）
 
 [Artifacts]
   cap promote list                 列出可升級的 drafts / reports
@@ -94,6 +95,10 @@ case "${COMMAND}" in
   claude)
     shift
     exec bash "${SCRIPT_DIR}/cap-session.sh" claude "$@"
+    ;;
+  session)
+    shift || true
+    exec bash "${SCRIPT_DIR}/cap-session.sh" "$@"
     ;;
   version|update|rollback|release-check)
     exec bash "${SCRIPT_DIR}/cap-release.sh" "$@"
