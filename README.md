@@ -222,6 +222,7 @@ cap workflow list
 cap workflow ps
 cap workflow show version-control
 cap version
+cap update latest
 cap release-check --recent 10
 cap workflow bind version-control
 cap workflow plan version-control

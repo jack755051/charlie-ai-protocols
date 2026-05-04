@@ -108,6 +108,88 @@ changelog_entry_for_tag() {
   ' "${CAP_ROOT}/CHANGELOG.md"
 }
 
+print_cap_logo() {
+  cat <<'EOF'
+   ______ ___     ____
+  / ____//   |   / __ \
+ / /    / /| |  / /_/ /
+/ /___ / ___ | / ____/
+\____//_/  |_|/_/
+EOF
+}
+
+change_category_for_subject() {
+  local subject="$1"
+  case "${subject}" in
+    feat\(*|feat:*) printf 'features' ;;
+    fix\(*|fix:*) printf 'bug_fixes' ;;
+    docs\(*|docs:*) printf 'documentation' ;;
+    *) printf 'other' ;;
+  esac
+}
+
+format_change_subject() {
+  local subject="$1"
+  local scope summary
+  scope="$(printf '%s' "${subject}" | sed -n -E 's/^[a-z]+\(([^)]+)\)!?:.*/\1/p')"
+  summary="$(printf '%s' "${subject}" | sed -E 's/^[a-z]+(\([^)]+\))?!?:[[:space:]]*//')"
+
+  if [ -n "${scope}" ]; then
+    printf '[%s] %s' "${scope}" "${summary}"
+  else
+    printf '%s' "${summary}"
+  fi
+}
+
+print_change_section() {
+  local title="$1"
+  local category="$2"
+  local range="$3"
+  local entries printed
+
+  entries="$(run_git log --reverse --format='%h%x09%s' "${range}" 2>/dev/null || true)"
+  if [ -z "${entries}" ]; then
+    return
+  fi
+
+  printed=0
+  echo "${entries}" | while IFS="$(printf '\t')" read -r hash subject; do
+    if [ "$(change_category_for_subject "${subject}")" != "${category}" ]; then
+      continue
+    fi
+
+    if [ "${printed}" -eq 0 ]; then
+      printf '\n%s:\n\n' "${title}"
+      printed=1
+    fi
+    printf ' - %-7s %s\n' "${hash}" "$(format_change_subject "${subject}")"
+  done
+}
+
+print_visual_change_summary() {
+  local prev_ref="$1"
+  local new_ref="$2"
+
+  if [ -z "${prev_ref}" ] || [ "${prev_ref}" = "${new_ref}" ]; then
+    return
+  fi
+
+  local range
+  range="${prev_ref}..${new_ref}"
+  if ! run_git rev-list --quiet "${range}" >/dev/null 2>&1; then
+    return
+  fi
+  if [ -z "$(run_git log --format='%h' "${range}" 2>/dev/null | head -n 1)" ]; then
+    return
+  fi
+
+  print_change_section "Features" "features" "${range}"
+  print_change_section "Bug fixes" "bug_fixes" "${range}"
+  print_change_section "Documentation" "documentation" "${range}"
+  print_change_section "Other changes" "other" "${range}"
+  echo ""
+}
+
 release_check_tags() {
   local mode="${1:-recent}"
   local count="${2:-10}"
@@ -287,7 +369,9 @@ show_version() {
   latest_tag="$(latest_release_tag)"
   current="$(run_git describe --tags --exact-match 2>/dev/null || true)"
 
-  # Current version
+  echo "CAP VERSION"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
   if [ -n "${current}" ]; then
     if [ "${current}" = "${latest_tag}" ]; then
       echo "CAP ${current} (${commit}) — up to date"
@@ -298,7 +382,6 @@ show_version() {
     echo "CAP ${latest_tag}+dev (${commit}) — on $(run_git branch --show-current || echo 'detached')"
   fi
 
-  # Recent releases
   local tags
   tags="$(run_git tag --list 'v*' --sort=-version:refname | head -n 5)"
   if [ -z "${tags}" ]; then
@@ -360,27 +443,18 @@ print_update_summary() {
   strategies="$(count_strategies)"
   workflows="$(count_workflows)"
 
+  echo "Updating Charlie's AI Protocols"
+  echo "${new_ref}"
+  print_visual_change_summary "${prev_ref}" "${new_ref}"
+  print_cap_logo
   echo ""
-  echo "CAP updated → ${new_ref}"
+  echo "CAP has been updated!"
   echo ""
   printf "  %-14s %s\n" "Agents:" "${agents}"
   printf "  %-14s %s\n" "Strategies:" "${strategies}"
   printf "  %-14s %s\n" "Workflows:" "${workflows}"
   echo ""
-
-  # Show changelog since previous version
-  if [ -n "${prev_ref}" ] && [ "${prev_ref}" != "${new_ref}" ]; then
-    local log
-    log="$(run_git log --oneline "${prev_ref}..${new_ref}" 2>/dev/null || true)"
-    if [ -n "${log}" ]; then
-      echo "  Changes since ${prev_ref}:"
-      echo "${log}" | while IFS= read -r line; do
-        echo "    ${line}"
-      done
-      echo ""
-    fi
-  fi
-
+  echo "  Changelog: docs/cap/RELEASE-NOTES.md"
   echo "  Run 'source ~/.zshrc' or open a new terminal to apply."
 }
 
