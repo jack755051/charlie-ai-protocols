@@ -6,6 +6,26 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.22.0-rc6] - 2026-05-04
+
+> Release candidate — close P4「Compiled Workflow and Binding Pipeline」整段除 #5 deferred 外的最後兩條（#10 preflight report + #11 dry-run inspection）。本 tag 不取代 `v0.22.0` 正式版；P4 #5 維持 deferred non-blocking 待 shared / builtin / legacy workflow producer 真實落地。
+
+### Added
+
+- **P4 #10 preflight report** (`cdba5d6`)：新增 `schemas/preflight-report.schema.yaml` v1（8 個必填頂層欄位 `schema_version` / `workflow_id` / `binding_status` / `is_executable` / `gates` / `unresolved_summary` / `warnings` / `blocking_reasons`；binding_status enum 故意只允許 `ready|degraded` —— blocked 由 P4 #6/#9 在更前面 halt） + `engine/preflight_report.py:build_preflight_report(compiled_workflow, binding)` builder。`engine/task_scoped_compiler.py` 兩個 compile path 在所有 validation + policy gate 通過後建立 preflight，回傳 dict 多一個 `preflight_report` key（legacy 7→8 keys、envelope 9→10 keys）。fallback skill 與 optional unresolved 走 `warnings`；blocking_reasons 在現行架構恆為空，contract 預留給未來 partial-state 檢視場景。`tests/scripts/test-preflight-report.sh` 6 cases / 21 passed（happy / envelope / schema 驗證 / optional unresolved warning / fallback skill warning / blocked-deterministic-halt 不漏 preflight）。`tests/scripts/test-compile-task-from-envelope.sh` Case 0 / 3 / 6 key 斷言同步更新。
+- **P4 #11 dry-run inspection** (`1411286`)：擴充 `engine/workflow_cli.py:cmd_print_compiled_dry_run` 加 `--preflight-json` / `--binding-json` 兩個 optional flag（向後相容，沒帶 flag 行為與舊版一致）。帶 flag 時 render `preflight:` 區塊（workflow_id / binding_status / is_executable / 步驟計數 / 4 條 gate 狀態 / warnings / blocking_reasons）與 `binding_steps:` 區塊（每 step capability / selected_provider / selected_skill_id / resolution_status）。`scripts/cap-workflow.sh:run-task --dry-run` 從 compile 結果再抽 `preflight_report` JSON 並 pass 兩個新 flag 給 renderer；shell 在 print 後直接 `exit 0`，**不**進入 binding-status 後續分支或呼叫任何 executor。`tests/scripts/test-workflow-dry-run-inspection.sh` 4 cases / 17 passed（backward-compat / preflight 渲染 / binding step detail / sandbox 前後檔案計數證明 print-only 無 execution side-effect）。
+
+### Notes
+
+- P4 整段除 #5 deferred 外全部完成：#1/#2/#3/#4/#6/#7/#8/#9/#10/#11 共 10 條 close。
+- P4 #5（project / shared / builtin / legacy source priority resolver）維持 deferred non-blocking。目前 runtime 只有 project workflow source 有 producer，其餘三層尚無實際 producer 與 consumer，硬做會變空殼且需重開 P4 #2 binding-report schema / fixture。將於 multi-source workflow producer 真實落地後再實作。
+- 本 tag 為 release candidate，仍未取代 `v0.22.0` 正式版。是「P4 closeout / P5 AgentSessionRunner 可開工」的乾淨基線。
+
+### Verified
+
+- `scripts/workflows/smoke-per-stage.sh` 從 v0.22.0-rc5 baseline 40 step 升至 **42 step / 42 passed / 0 failed / 0 skipped**：新增 P4 #10 preflight report gate + P4 #11 workflow dry-run inspection gate。
+- 跨 hook test 全綠：preflight-report 21/21、workflow-dry-run-inspection 17/17、workflow-policy-gates 19/19、compiled-workflow-normalization 8/8、compiled-workflow-validation-hook 16/16、binding-report-validation-hook 15/15、compile-task-from-envelope 33/33（preflight key 斷言更新後）。
+
 ## [v0.22.0-rc5] - 2026-05-04
 
 > Release candidate — P4 validation + policy gate checkpoint。本 tag 不取代 `v0.22.0` 正式版，亦不算 P4 整段 closeout（P4 #10/#11 仍待做、P4 #5 deferred non-blocking）。
