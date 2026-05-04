@@ -978,6 +978,9 @@ def validate_jsonschema_fallback(data: Any, schema: Any) -> list[str]:
     * ``type`` (recursive; accepts both single ``"string"`` and union
       ``["string", "null"]`` forms; ``"null"`` matches Python ``None``)
     * ``enum`` (recursive)
+    * ``pattern`` (string regex via ``re.search``)
+    * ``additionalProperties: false`` (rejects keys not declared in
+      ``properties``; ``true`` and schema-form values are not enforced)
     * ``minItems`` for arrays
     * ``properties`` (recursive into object properties)
     * ``items`` (recursive into array items)
@@ -1037,11 +1040,29 @@ def _check_against_schema(data: Any, schema: Any, path: list[str]) -> list[str]:
     if isinstance(enum, list) and data not in enum:
         errors.append(f"{loc}: value '{data}' not in enum {enum}")
 
+    pattern = schema.get("pattern")
+    if isinstance(pattern, str) and isinstance(data, str):
+        try:
+            if re.search(pattern, data) is None:
+                errors.append(
+                    f"{loc}: value '{data}' does not match pattern '{pattern}'"
+                )
+        except re.error as exc:
+            errors.append(f"{loc}: invalid regex pattern '{pattern}': {exc}")
+
     if isinstance(data, dict):
+        properties = schema.get("properties") or {}
+        if schema.get("additionalProperties") is False:
+            allowed_keys = set(properties.keys())
+            for key in data:
+                if key not in allowed_keys:
+                    errors.append(
+                        f"{loc}: unknown property '{key}' (additionalProperties: false)"
+                    )
         for key in schema.get("required") or []:
             if key not in data:
                 errors.append(f"{loc}: missing required field '{key}'")
-        for key, sub in (schema.get("properties") or {}).items():
+        for key, sub in properties.items():
             if key in data and isinstance(sub, dict):
                 errors.extend(_check_against_schema(data[key], sub, path + [key]))
 
