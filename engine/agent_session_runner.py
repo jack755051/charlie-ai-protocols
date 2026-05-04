@@ -16,8 +16,10 @@ are scheduled for later P5 batches.
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from dataclasses import dataclass, replace
+from pathlib import Path
 
 try:
     from . import step_runtime
@@ -78,6 +80,39 @@ class SessionContext:
 
 
 @dataclass(frozen=True)
+class PromptSnapshot:
+    """Content-addressed prompt snapshot metadata (P5 #6).
+
+    Returned by ``_write_prompt_snapshot`` and forwarded to
+    ``upsert_session`` so the ledger gains ``prompt_hash`` /
+    ``prompt_snapshot_path`` / ``prompt_size_bytes`` fields. Multiple
+    sessions with identical prompt content share the same on-disk file.
+    """
+
+    hash: str
+    path: str
+    size_bytes: int
+
+
+def _write_prompt_snapshot(sessions_path: str, prompt: str) -> PromptSnapshot:
+    """Write the prompt to a content-addressed file under the sessions dir.
+
+    Path layout: ``<sessions_dir>/prompts/<sha256[:2]>/<sha256>.txt``.
+    Idempotent: if the file already exists (because another session had
+    the same prompt content) it is left untouched, achieving dedupe.
+    """
+    encoded = prompt.encode("utf-8")
+    digest = hashlib.sha256(encoded).hexdigest()
+    sessions_dir = Path(sessions_path).parent
+    target_dir = sessions_dir / "prompts" / digest[:2]
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"{digest}.txt"
+    if not target.exists():
+        target.write_text(prompt, encoding="utf-8")
+    return PromptSnapshot(hash=digest, path=str(target), size_bytes=len(encoded))
+
+
+@dataclass(frozen=True)
 class RunStepOutcome:
     """Returned to the caller after ``run_step`` completes."""
 
@@ -85,6 +120,7 @@ class RunStepOutcome:
     result: ProviderResult
     lifecycle: str
     failure_reason: str | None
+    prompt_snapshot: PromptSnapshot | None = None
 
 
 class AgentSessionRunner:
@@ -115,10 +151,13 @@ class AgentSessionRunner:
         if request.session_id != session_id:
             request = replace(request, session_id=session_id)
 
+        snapshot = _write_prompt_snapshot(context.sessions_path, request.prompt)
+
         self._upsert_lifecycle(
             context, session_id, adapter.name,
             lifecycle="running", result="pending",
             failure_reason="", duration_seconds="",
+            snapshot=snapshot,
         )
 
         try:
@@ -129,6 +168,7 @@ class AgentSessionRunner:
                 context, session_id, adapter.name,
                 lifecycle="failed", result="failed",
                 failure_reason=failure_msg, duration_seconds="",
+                snapshot=snapshot,
             )
             synthetic = ProviderResult(
                 status=STATUS_FAILED,
@@ -143,6 +183,7 @@ class AgentSessionRunner:
                 result=synthetic,
                 lifecycle="failed",
                 failure_reason=failure_msg,
+                prompt_snapshot=snapshot,
             )
 
         lifecycle = _STATUS_TO_LIFECYCLE.get(result.status, "failed")
@@ -161,6 +202,7 @@ class AgentSessionRunner:
             # null the field. Sub-second precision is intentionally
             # discarded — the ledger schema stores integer seconds.
             duration_seconds=str(max(0, int(result.duration_seconds))),
+            snapshot=snapshot,
         )
 
         return RunStepOutcome(
@@ -168,6 +210,7 @@ class AgentSessionRunner:
             result=result,
             lifecycle=lifecycle,
             failure_reason=failure_reason or None,
+            prompt_snapshot=snapshot,
         )
 
     @staticmethod
@@ -180,6 +223,7 @@ class AgentSessionRunner:
         result: str,
         failure_reason: str,
         duration_seconds: str,
+        snapshot: PromptSnapshot | None = None,
     ) -> None:
         step_runtime.upsert_session(
             context.sessions_path,
@@ -200,4 +244,7 @@ class AgentSessionRunner:
             context.handoff_path,
             failure_reason,
             duration_seconds,
+            prompt_hash=snapshot.hash if snapshot else None,
+            prompt_snapshot_path=snapshot.path if snapshot else None,
+            prompt_size_bytes=snapshot.size_bytes if snapshot else None,
         )

@@ -134,3 +134,15 @@ properties:
         type: boolean
       delete_scratch_on_success:
         type: boolean
+  prompt_hash:
+    type: string
+    nullable: true
+    description: SHA-256 hex digest of the rendered prompt text (P5 #6); used as content-addressable lookup key for `prompt_snapshot_path`. Optional.
+  prompt_snapshot_path:
+    type: string
+    nullable: true
+    description: Filesystem path of the snapshot file written under `<sessions_dir>/prompts/<hash[:2]>/<hash>.txt`. Multiple sessions sharing the same prompt content reference the same file (dedupe by hash). Optional.
+  prompt_size_bytes:
+    type: integer
+    nullable: true
+    description: Byte length of the rendered prompt text as encoded in UTF-8 (P5 #6). Optional, populated by AgentSessionRunner.

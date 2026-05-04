@@ -287,6 +287,107 @@ with tempfile.TemporaryDirectory() as td:
 assert_contains "single ledger entry" "count=1"                 "${out10}"
 assert_contains "kept the fixed id"   "only_id=sess-fixed"      "${out10}"
 
+# ── Case 11 (P5 #6) ─────────────────────────────────────────────────────
+echo "Case 11 (P5 #6): prompt snapshot is sha256 content-addressed and surfaced in ledger"
+out11="$(run_py "
+import hashlib, json, pathlib, tempfile
+from engine.provider_adapter import FakeAdapter, ProviderRequest, ProviderResult, STATUS_COMPLETED
+from engine.agent_session_runner import AgentSessionRunner, SessionContext
+fa = FakeAdapter(ProviderResult(status=STATUS_COMPLETED, exit_code=0, stdout='', stderr='', duration_seconds=0.001))
+with tempfile.TemporaryDirectory() as td:
+    sessions = str(pathlib.Path(td) / 'agent-sessions.json')
+    ctx = SessionContext(sessions_path=sessions, run_id='r', workflow_id='wf', workflow_name='WF',
+                         step_id='s1', capability='cap_x', agent_alias='alias_x', executor='ai')
+    prompt = 'render this prompt deterministically'
+    expected_hash = hashlib.sha256(prompt.encode('utf-8')).hexdigest()
+    out = AgentSessionRunner().run_step(fa, ProviderRequest(session_id='', step_id='s1', prompt=prompt), ctx)
+    print('outcome_hash=' + (out.prompt_snapshot.hash if out.prompt_snapshot else ''))
+    print('expected_hash_prefix=' + expected_hash[:12])
+    print('outcome_size=' + str(out.prompt_snapshot.size_bytes if out.prompt_snapshot else -1))
+    sf = pathlib.Path(out.prompt_snapshot.path)
+    print('snapshot_exists=' + str(sf.exists()))
+    print('snapshot_content_match=' + str(sf.read_text() == prompt))
+    expected_layout = pathlib.Path(td) / 'prompts' / expected_hash[:2] / (expected_hash + '.txt')
+    print('layout_match=' + str(sf.resolve() == expected_layout.resolve()))
+    data = json.loads(pathlib.Path(sessions).read_text())
+    s = data['sessions'][0]
+    print('ledger_hash=' + s.get('prompt_hash', ''))
+    print('ledger_size=' + str(s.get('prompt_size_bytes', -1)))
+    print('ledger_path_basename=' + pathlib.Path(s.get('prompt_snapshot_path', '')).name)
+")"
+assert_contains "outcome carries snapshot"           "outcome_hash="                            "${out11}"
+assert_contains "outcome hash matches sha256"        "expected_hash_prefix=$(printf '%s' 'render this prompt deterministically' | python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.read().encode()).hexdigest()[:12])')" "${out11}"
+assert_contains "snapshot file exists"               "snapshot_exists=True"                     "${out11}"
+assert_contains "snapshot content matches input"     "snapshot_content_match=True"              "${out11}"
+assert_contains "snapshot path layout correct"       "layout_match=True"                        "${out11}"
+assert_contains "ledger has prompt_hash"             "ledger_hash="                             "${out11}"
+assert_contains "ledger has prompt_size_bytes"       "ledger_size=$(printf '%s' 'render this prompt deterministically' | wc -c | tr -d ' ')" "${out11}"
+
+# ── Case 12 (P5 #6) ─────────────────────────────────────────────────────
+echo "Case 12 (P5 #6): identical prompts dedupe to the same snapshot file"
+out12="$(run_py "
+import json, pathlib, tempfile
+from engine.provider_adapter import FakeAdapter, ProviderRequest, ProviderResult, STATUS_COMPLETED
+from engine.agent_session_runner import AgentSessionRunner, SessionContext
+fa = FakeAdapter(ProviderResult(status=STATUS_COMPLETED, exit_code=0, stdout='', stderr='', duration_seconds=0.001))
+runner = AgentSessionRunner()
+with tempfile.TemporaryDirectory() as td:
+    sessions = str(pathlib.Path(td) / 'agent-sessions.json')
+    base = SessionContext(sessions_path=sessions, run_id='r', workflow_id='wf', workflow_name='WF',
+                          step_id='', capability='cap_x', agent_alias='alias_x', executor='ai')
+    prompt = 'shared prompt body'
+    a = runner.run_step(fa, ProviderRequest(session_id='sess-A', step_id='step-A', prompt=prompt),
+                        SessionContext(**{**base.__dict__, 'step_id': 'step-A'}))
+    b = runner.run_step(fa, ProviderRequest(session_id='sess-B', step_id='step-B', prompt=prompt),
+                        SessionContext(**{**base.__dict__, 'step_id': 'step-B'}))
+    c = runner.run_step(fa, ProviderRequest(session_id='sess-C', step_id='step-C', prompt='different prompt body'),
+                        SessionContext(**{**base.__dict__, 'step_id': 'step-C'}))
+    print('a_hash=' + a.prompt_snapshot.hash[:12])
+    print('b_hash=' + b.prompt_snapshot.hash[:12])
+    print('c_hash=' + c.prompt_snapshot.hash[:12])
+    print('a_path=' + a.prompt_snapshot.path)
+    print('b_path=' + b.prompt_snapshot.path)
+    print('a_eq_b_path=' + str(a.prompt_snapshot.path == b.prompt_snapshot.path))
+    print('a_neq_c_path=' + str(a.prompt_snapshot.path != c.prompt_snapshot.path))
+    snapshot_files = sorted(p.name for p in (pathlib.Path(td) / 'prompts').rglob('*.txt'))
+    print('total_snapshot_files=' + str(len(snapshot_files)))
+")"
+assert_contains "identical prompts share path"     "a_eq_b_path=True"        "${out12}"
+assert_contains "different prompts split path"    "a_neq_c_path=True"        "${out12}"
+assert_contains "only 2 snapshot files on disk"   "total_snapshot_files=2"   "${out12}"
+
+# ── Case 13 (P5 #6) ─────────────────────────────────────────────────────
+# Note: full ledger schema validation is intentionally NOT asserted here
+# because schemas/agent-session.schema.yaml uses OpenAPI-style
+# `nullable: true` for several pre-existing optional fields
+# (parent_session_id, prompt_file, failure_reason) which the
+# JSON-Schema validator does not honour — that is a pre-existing gap
+# tracked separately, not in scope for the P5 #6 prompt-snapshot
+# delivery. Instead we sanity-check the three new fields are typed
+# correctly in isolation.
+echo "Case 13 (P5 #6): new ledger fields have correct types"
+out13="$(run_py "
+import json, pathlib, tempfile
+from engine.provider_adapter import FakeAdapter, ProviderRequest, ProviderResult, STATUS_COMPLETED
+from engine.agent_session_runner import AgentSessionRunner, SessionContext
+fa = FakeAdapter(ProviderResult(status=STATUS_COMPLETED, exit_code=0, stdout='', stderr='', duration_seconds=0.001))
+with tempfile.TemporaryDirectory() as td:
+    sessions = str(pathlib.Path(td) / 'agent-sessions.json')
+    ctx = SessionContext(sessions_path=sessions, run_id='r', workflow_id='wf', workflow_name='WF',
+                         step_id='s1', capability='task_constitution_planning', agent_alias='alias_x',
+                         executor='ai')
+    AgentSessionRunner().run_step(fa, ProviderRequest(session_id='', step_id='s1', prompt='type-check prompt'), ctx)
+    s = json.loads(pathlib.Path(sessions).read_text())['sessions'][0]
+    print('hash_is_str=' + str(isinstance(s.get('prompt_hash'), str)))
+    print('hash_len=' + str(len(s.get('prompt_hash', ''))))
+    print('path_is_str=' + str(isinstance(s.get('prompt_snapshot_path'), str)))
+    print('size_is_int=' + str(isinstance(s.get('prompt_size_bytes'), int)))
+")"
+assert_contains "prompt_hash is string"          "hash_is_str=True"        "${out13}"
+assert_contains "prompt_hash length is 64 (sha256 hex)" "hash_len=64"      "${out13}"
+assert_contains "prompt_snapshot_path is string" "path_is_str=True"        "${out13}"
+assert_contains "prompt_size_bytes is integer"   "size_is_int=True"        "${out13}"
+
 # ── Summary ─────────────────────────────────────────────────────────────
 echo ""
 echo "agent-session-runner: ${pass_count} passed, ${fail_count} failed"

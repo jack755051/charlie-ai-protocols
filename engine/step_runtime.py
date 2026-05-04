@@ -661,6 +661,10 @@ def upsert_session(
     handoff_path: str,
     failure_reason: str,
     duration_seconds: str,
+    *,
+    prompt_hash: str | None = None,
+    prompt_snapshot_path: str | None = None,
+    prompt_size_bytes: int | None = None,
 ) -> None:
     """Upsert one CAP agent session into agent-sessions.json."""
     path = Path(sessions_path)
@@ -742,6 +746,17 @@ def upsert_session(
             existing["duration_seconds"] = int(duration_seconds)
         except ValueError:
             existing["duration_seconds"] = None
+
+    # P5 #6 content-addressed prompt snapshot fields. All optional and
+    # only populated when the caller (AgentSessionRunner today) supplies
+    # them; legacy shell callers that pass positional args only stay
+    # untouched.
+    if prompt_hash is not None:
+        existing["prompt_hash"] = prompt_hash
+    if prompt_snapshot_path is not None:
+        existing["prompt_snapshot_path"] = prompt_snapshot_path
+    if prompt_size_bytes is not None:
+        existing["prompt_size_bytes"] = prompt_size_bytes
 
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
