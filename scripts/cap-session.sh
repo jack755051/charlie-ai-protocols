@@ -13,6 +13,7 @@ Usage:
   bash scripts/cap-session.sh inspect --run-id <run_id>      [--json] [--sessions-path <path>]
   bash scripts/cap-session.sh inspect --workflow-id <wf_id>  [--json] [--sessions-path <path>]
   bash scripts/cap-session.sh inspect --step-id <step_id>    [--json] [--sessions-path <path>]
+  bash scripts/cap-session.sh analyze [--top N] [--json] [--run-id <id>] [--workflow-id <id>] [--sessions-path <path>]
 EOF
   exit 1
 }
@@ -69,6 +70,11 @@ case "${CLI_NAME}" in
     PYTHON_BIN="${PYTHON_BIN:-python3}"
     REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
     exec "${PYTHON_BIN}" "${REPO_ROOT}/engine/session_inspector.py" "$@"
+    ;;
+  analyze)
+    PYTHON_BIN="${PYTHON_BIN:-python3}"
+    REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+    exec "${PYTHON_BIN}" "${REPO_ROOT}/engine/session_cost_analyzer.py" "$@"
     ;;
   *)
     usage

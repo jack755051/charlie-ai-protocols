@@ -97,6 +97,8 @@ cap workflow run --strategy auto version-control "版本更新"
 # Session ledger（runtime observability）
 cap session inspect <session_id>
 cap session inspect --run-id <run_id> --json
+cap session analyze --top 10                       # 彙整 token/time 熱點分析
+cap session analyze --run-id <run_id> --json
 ```
 
 完整 CLI 入口由 `scripts/cap-entry.sh` 派發；策略 / dry-run / agent-session 等行為以 [docs/cap/ARCHITECTURE.md](docs/cap/ARCHITECTURE.md) 為準。

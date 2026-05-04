@@ -73,6 +73,7 @@ COMMAND                            DESCRIPTION
   cap codex [ARGS...]              透過 wrapper 啟動 Codex（含 trace）
   cap claude [ARGS...]             透過 wrapper 啟動 Claude（含 trace）
   cap session inspect <session_id> [--json]  查 agent session ledger（read-only）
+  cap session analyze [--top N] [--json]    彙整 token / time 熱點分析（read-only）
 
 [Artifacts]
   cap promote list                 列出可升級的 drafts / reports
