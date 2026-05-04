@@ -389,6 +389,17 @@
 
 ## P9：Repo-specific Source Resolver
 
+- [ ] 執行 skills method intake（不阻塞 P0-P10 主線）
+  - 交付物：將 `/Users/charlie010583/Desktop/01_private/98_other_skills/skills` 中高價值工程方法改寫為 CAP strategies，而不是直接導入 Claude plugin / slash-command runtime
+  - 初始 strategy 清單：
+    - `agent-skills/strategies/diagnose-loop.md`
+    - `agent-skills/strategies/tdd-vertical-slice.md`
+    - `agent-skills/strategies/shared-language-and-adr.md`
+    - `agent-skills/strategies/architecture-deepening.md`
+    - `agent-skills/strategies/vertical-slice-planning.md`
+  - 驗收：現有 agent prompt 明確掛載這些 strategy（troubleshoot / QA / frontend / backend / supervisor / techlead / watcher），且不新增第二套 skill resolver
+  - 延後：Codex / Claude 原生 `SKILL.md` export、mapper 擴充、plugin / marketplace 安裝流程留到 builtin / project / shared source resolver 完成後再做
+
 - [ ] 支援 repo-local workflow source roots
   - 交付物：workflow resolver
   - 驗收：project workflow 可覆蓋或擴充 builtin workflow

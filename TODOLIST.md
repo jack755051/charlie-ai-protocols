@@ -1,6 +1,6 @@
 # CAP Platform TODO List
 
-更新日期：2026-05-02
+更新日期：2026-05-04
 
 ## 目標
 
@@ -23,6 +23,7 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 - `~/.cap/projects/<project_id>/` 放 runtime state。
 - sub-agent 應抽象為 CAP Agent Session，不綁死 Codex 或 Claude 原生能力。
 - runtime 遵守 deterministic-first、AI-on-ambiguity、halt-on-risk。
+- 外部 Claude-style `SKILL.md` 方法論應先吸收為 CAP strategy / capability，再視 P9 source resolver 成熟度輸出原生 Claude / Codex skill 格式；CAP 仍是 SSOT。
 
 ## 目前完成狀態
 
@@ -74,6 +75,7 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 - [ ] agent session lifecycle 尚未完整紀錄 `created / running / completed / failed / recycled`
 - [ ] detached / background workflow run 尚未實作
 - [ ] repo-specific workflow / skill source resolver 尚未完整
+- [ ] 外部 skills 方法論尚未完成 CAP 化 intake（先轉為 strategy，不先做 Claude / Codex 原生 runtime 融合）
 - [ ] promote / publish 流程尚未閉環
 
 ## 完整實現流程摘要
@@ -247,6 +249,18 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 - [ ] enforce halt-on-risk
 
 ### Phase 10: Repo-specific Source Resolver
+
+- [ ] Skills method intake（不阻塞 P0-P10 主線）
+  - 來源：`/Users/charlie010583/Desktop/01_private/98_other_skills/skills`（Claude plugin / slash-command `SKILL.md` 結構）
+  - 決策：先吸收工程方法，不直接導入第二套 skill resolver。
+  - 初始 strategy 目標：
+    - `agent-skills/strategies/diagnose-loop.md`
+    - `agent-skills/strategies/tdd-vertical-slice.md`
+    - `agent-skills/strategies/shared-language-and-adr.md`
+    - `agent-skills/strategies/architecture-deepening.md`
+    - `agent-skills/strategies/vertical-slice-planning.md`
+  - 掛載建議：`10-troubleshoot-agent.md` 掛 diagnose；`07-qa-agent.md` / `04-frontend-agent.md` / `05-backend-agent.md` 掛 TDD；`01-supervisor-agent.md` 掛 shared language / vertical slice planning；`02-techlead-agent.md` / `90-watcher-agent.md` 掛 architecture deepening。
+  - 延後項目：Codex / Claude 原生 `SKILL.md` 或 plugin export、mapper 擴充、marketplace / shared registry 安裝流程，留到 P10 source resolver 與 P11 publish 流程成熟後再做。
 
 - [ ] 支援 repo-local workflow source roots
 - [ ] 支援 repo-local skill registry
