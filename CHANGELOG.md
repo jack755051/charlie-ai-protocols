@@ -6,6 +6,28 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.22.0-rc8] - 2026-05-04
+
+> Release candidate — close P5「AgentSessionRunner」整段除 #9 stall handling deferred 外的最後三條（#10 cap session inspect + #3 CodexAdapter + #4 ClaudeAdapter）。本 tag 不取代 `v0.22.0` 正式版；**未動** `scripts/cap-workflow-exec.sh` production executor，所有新 adapter / inspector 都是 additive Python layer。stall handling 待真有 streaming provider adapter consumer 時再做（目前 Codex / Claude / Shell adapter 都是 blocking subprocess.run）。
+
+### Added
+
+- **P5 #10 cap session inspect** (`19a7603`)：新增 `engine/session_inspector.py`（read-only），公開 `find_sessions(...)` / `render_session_text(...)` 兩個 helper 與 argparse-driven `main()`。CLI surface：`cap session inspect <session_id> [--json] [--sessions-path <path>]`，亦支援 `--run-id` / `--workflow-id` / `--step-id` 三種 filter；missing session 走 deterministic JSON error `{"ok": false, "error": "session_not_found", ...}` exit 1。Default scan walks `<CAP_HOME or ~/.cap>/projects/*/reports/workflows/*/*/agent-sessions.json`。**顯示欄位完整**：lifecycle / result / step / run / workflow / capability / provider (cli=...) / executor / duration / exit_code / parent_session_id / root_session_id / spawn_reason / prompt_hash / prompt_snapshot_path / prompt_size_bytes / outputs / failure_reason / source ledger trailer。`scripts/cap-session.sh` 加 `inspect` 分流，`scripts/cap-entry.sh` 加 `cap session ...` route + help。`tests/scripts/test-cap-session-inspect.sh` 9 cases / 32 passed。
+- **P5 #3 CodexAdapter** (`6e5b9f6`)：新增 `engine.provider_adapter.CodexAdapter` 鏡射 `scripts/cap-workflow-exec.sh:run_step_codex` 語意：呼叫 `codex exec [--skip-git-repo-check] <prompt>`，stdout 走新 helper `_strip_codex_preamble`（Python 重寫 awk line-for-line：取最後一段 `assistant`/`codex` marker 之後內容，無 marker fallback raw stdout）。stderr 獨立捕捉。新 helper `_resolve_provider_binary("codex", "CAP_CODEX_BIN")`：env override → PATH lookup → 缺 binary 不 raise 回 deterministic failed result。`subprocess.FileNotFoundError` / `PermissionError` / `TimeoutExpired` 全部收斂為 `ProviderResult`，timeout 對齊 P5 #9 prefix。Constructor `skip_git_repo_check=True` 預設 on。`provider_session_id` 暫無（Codex CLI 未暴露穩定 native session id）。
+- **P5 #4 ClaudeAdapter** (`e081da6`)：新增 `engine.provider_adapter.ClaudeAdapter` 鏡射 `scripts/cap-workflow-exec.sh:run_step_claude` 語意：呼叫 `claude -p <prompt>`，stdout / stderr 獨立捕捉。**無 preamble strip**：Claude `-p` 模式直接吐 assistant 回覆，不帶 banner / transcript（與 Codex 不同）。Binary resolution 重用 P5 #3 的 `_resolve_provider_binary("claude", "CAP_CLAUDE_BIN")`；缺 binary / FileNotFoundError / PermissionError / timeout 全部與 CodexAdapter 對齊（同一套 contract）。`tests/scripts/test-provider-adapters.sh` 共 15 cases / 44 passed（Codex 25 + Claude 19），全部用 fake bash binary 驅動。
+
+### Notes
+
+- **P5 整段範圍**：#1/#2/#3/#4/#5/#6/#7/#8/#9/#10 共 10 條完成；P5 #9 stall handling 維持 deferred 待 streaming provider adapter 真有 consumer 時再做（目前 Codex / Claude / Shell adapter 都是 blocking subprocess.run）。
+- **未動 production executor**：`scripts/cap-workflow-exec.sh` 從 P5 baseline 起未被動到，仍是 production step execution path。所有新 Python adapter / runner / inspector 都是 additive layer，contract 對齊但不取代。
+- **Provider-native session id 暫無**：Codex / Claude CLI 都未在 stdout 暴露穩定 native session id，`provider_session_id` 欄位維持 `None`，等真有需要再接（會是後續 P5 / P7 cycle 的事）。
+- 本 tag 為 release candidate，仍未取代 `v0.22.0` 正式版。是「P5 closeout / P6 Artifact, Handoff and Validation 可開工」的乾淨基線。
+
+### Verified
+
+- `scripts/workflows/smoke-per-stage.sh` 從 v0.22.0-rc7 baseline 43 step 升至 **45 step / 45 passed / 0 failed / 0 skipped**：新增 `cap session inspect (P5 #10)` 與 `provider adapters (P5 #3 codex + #4 claude)` 兩個 gate。
+- 跨 hook test 全綠：provider-adapters 44/44、cap-session-inspect 32/32、agent-session-runner 75/75、preflight-report 21/21、workflow-policy-gates 19/19、compiled-workflow-validation-hook 16/16、binding-report-validation-hook 15/15、compile-task-from-envelope 33/33。
+
 ## [v0.22.0-rc7] - 2026-05-04
 
 > Release candidate — open P5「AgentSessionRunner」段並落地 runner baseline 共 7 條（#1/#2/#5/#6/#7/#8/#9）。本 tag 不取代 `v0.22.0` 正式版；**未動** `scripts/cap-workflow-exec.sh` production executor，所有新 enforcement 透過 opt-in keyword flag 切入既有 `step_runtime.upsert_session`，shell legacy 行為完全保留。P5 #3 CodexAdapter / #4 ClaudeAdapter / #10 cap session inspect 仍待做；P5 #9 stall handling 標 deferred 到 streaming adapter 落地後一併實作。
