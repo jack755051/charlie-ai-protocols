@@ -360,13 +360,17 @@
 
 ## P6：Artifact, Handoff and Validation
 
-- [ ] 實作 artifact registry
+> **Baseline 現況（盤點於 v0.22.0-rc9 後）**：P6 並非從零開工。既有 `runtime-state.json` 已是 artifact registry SSOT — `engine/step_runtime.py:register_state` 寫入，每 artifact 帶 `artifact / source_step / path / handoff_path` 四欄；handoff schema 已存於 `schemas/handoff-ticket.schema.yaml`，emission-time validation 由 `scripts/workflows/emit-handoff-ticket.sh` 處理；JSON validation 工具鏈（`engine/step_runtime.py:validate_jsonschema_fallback`）已具備 nested / pattern / additionalProperties / type union 支援；`engine/supervisor_envelope.py:resolve_failure_routing` 是 pure helper（runtime 尚未消費）。**P6 紅線**：(1) read-only / pure helper 優先（#1/#2/#5/#6/#7），(2) opt-in validation enforcement 次之（#4），(3) 動 production executor 的 runtime gate（#3 handoff）與 control flow（#8 route_back_to）最後做。本批策略沿用 P5 模式，避免重做既有設施。
+
+- [x] 實作 artifact registry
   - 交付物：artifact metadata registry
   - 驗收：每個 artifact 有 name、path、producer、schema、status
+  - 進度：done in `feat(cap-artifact): add runtime-state artifact inspection`（v0.22.0-rc9 後第一批）。**未新增 registry**，沿用既有 `runtime-state.json`（`engine/step_runtime.py:register_state` 寫入，per-artifact 4 欄位 `artifact` / `source_step` / `path` / `handoff_path`）。新增 `engine/artifact_inspector.py` read-only 查詢層 mirror `engine/session_inspector.py`：scan `<CAP_HOME or ~/.cap>/projects/*/reports/workflows/*/*/runtime-state.json`，支援 list / inspect / by-step 三種查詢，缺 entry 走 deterministic JSON error exit 1。CLI surface：`cap artifact list / inspect <name> / by-step <step_id>`，全部支援 `--json` + `--runtime-state <path>` override。Wrapper：新增 `scripts/cap-artifact.sh` dispatcher、`cap-entry.sh` 加 `cap artifact ...` route + help 行。**status / schema 欄位**目前 registry 內無，本 ticket 先把 producer / path / handoff_path 三條真實欄位 expose；status / schema 待 P6 #4（required output enforcement）與 #5/#7（capability-aware validators）補。**完全不動** `cap-workflow-exec.sh` execution path，純 read-only inspection layer。
 
-- [ ] 實作 artifact lineage
+- [x] 實作 artifact lineage
   - 交付物：artifact dependency graph
   - 驗收：可追蹤 artifact 由哪個 step / session 產生
+  - 進度：done in same commit。**Producer (artifact → 由誰產)**：直接從 `runtime-state.artifacts[*].source_step` 取，1 對 1 對應已存。**Consumers (artifact → 誰會吃)**：本批採 conservative derive — 從 `schemas/capabilities.yaml` 反查哪些 capability 把該 artifact 名稱列為 `inputs`，再 cross-ref runtime-state 的 `steps[*].capability` 找出同 run 內可能的 consumer step，回傳 `derived_consumers: [{step_id, capability}, ...]`。欄位**特意命名 derived_**（非 actual_）強調這是 static cross-reference 而非實際 consumption event 紀錄；當 `capabilities.yaml` 無法讀（如 yaml 套件缺、檔案不存在）則 derived_consumers 完全省略而非報空，避免 false negative。Test Case 9 涵蓋此 fallback 行為。後續若需要 actual consumption 追蹤，待 P6 #3 handoff runtime gate 與 #4 required output enforcement 落地後可順手補。`tests/scripts/test-cap-artifact-inspect.sh` 9 cases / **31 passed**：list / inspect / missing deterministic / by-step / derived_consumers cross-ref / 三條 subcommand JSON envelope / read-only md5 verify / cap-entry routing / capabilities 缺失 fallback。接入 `scripts/workflows/smoke-per-stage.sh` 為 P6 #1+#2 gate。
 
 - [ ] 實作 handoff schema validator
   - 交付物：handoff validation hook

@@ -74,6 +74,7 @@ COMMAND                            DESCRIPTION
   cap claude [ARGS...]             透過 wrapper 啟動 Claude（含 trace）
   cap session inspect <session_id> [--json]  查 agent session ledger（read-only）
   cap session analyze [--top N] [--json]    彙整 token / time 熱點分析（read-only）
+  cap artifact list / inspect / by-step      查 runtime-state.json artifact registry（read-only）
 
 [Artifacts]
   cap promote list                 列出可升級的 drafts / reports
@@ -100,6 +101,10 @@ case "${COMMAND}" in
   session)
     shift || true
     exec bash "${SCRIPT_DIR}/cap-session.sh" "$@"
+    ;;
+  artifact)
+    shift || true
+    exec bash "${SCRIPT_DIR}/cap-artifact.sh" "$@"
     ;;
   version|update|rollback|release-check)
     exec bash "${SCRIPT_DIR}/cap-release.sh" "$@"
