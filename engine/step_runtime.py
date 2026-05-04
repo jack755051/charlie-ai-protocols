@@ -1240,6 +1240,15 @@ def _build_parser() -> argparse.ArgumentParser:
     p_usess.add_argument("handoff_path")
     p_usess.add_argument("failure_reason")
     p_usess.add_argument("duration_seconds")
+    # P5 #6 prompt snapshot metadata — optional flags so the legacy
+    # 18-positional shell caller keeps working unchanged. Shell wrapper
+    # in scripts/cap-workflow-exec.sh now opts in to populate these
+    # so analyzer queries (cap session analyze) get prompt size /
+    # duplicate-hash data from production runs as well, not only from
+    # the Python AgentSessionRunner path.
+    p_usess.add_argument("--prompt-hash", default=None)
+    p_usess.add_argument("--prompt-snapshot-path", default=None)
+    p_usess.add_argument("--prompt-size-bytes", type=int, default=None)
 
     # 8. flatten-steps
     p_fs = sub.add_parser("flatten-steps", help="展平 plan JSON 為 pipe-delimited 記錄")
@@ -1344,6 +1353,9 @@ def main(argv: list[str] | None = None) -> None:
                 args.handoff_path,
                 args.failure_reason,
                 args.duration_seconds,
+                prompt_hash=args.prompt_hash,
+                prompt_snapshot_path=args.prompt_snapshot_path,
+                prompt_size_bytes=args.prompt_size_bytes,
             )
         case "flatten-steps":
             flatten_steps(args.plan_json)

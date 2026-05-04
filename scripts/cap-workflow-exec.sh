@@ -634,6 +634,21 @@ register_agent_session() {
   local handoff_path="${12}"
   local failure_reason="${13}"
   local duration_seconds="${14}"
+  # P5 #6 wiring: optional prompt snapshot metadata. When unset / empty
+  # the corresponding --flag is omitted so the call stays byte-equivalent
+  # to the legacy 14-positional invocation; older callers do not need to
+  # change. Populated by the prompt build path below so production runs
+  # contribute prompt_hash / size to the agent-sessions ledger and
+  # `cap session analyze` can surface real largest_prompts /
+  # duplicate_prompts hot lists.
+  local prompt_hash="${15:-}"
+  local prompt_snapshot_path="${16:-}"
+  local prompt_size_bytes="${17:-}"
+
+  local extra=()
+  [ -n "${prompt_hash}" ] && extra+=(--prompt-hash "${prompt_hash}")
+  [ -n "${prompt_snapshot_path}" ] && extra+=(--prompt-snapshot-path "${prompt_snapshot_path}")
+  [ -n "${prompt_size_bytes}" ] && extra+=(--prompt-size-bytes "${prompt_size_bytes}")
 
   "${PYTHON_BIN}" "${STEP_PY}" upsert-session \
     "${AGENT_SESSIONS_JSON}" \
@@ -653,7 +668,41 @@ register_agent_session() {
     "${output_path}" \
     "${handoff_path}" \
     "${failure_reason}" \
-    "${duration_seconds}" >/dev/null 2>&1 || true
+    "${duration_seconds}" \
+    "${extra[@]+"${extra[@]}"}" >/dev/null 2>&1 || true
+}
+
+# P5 #6 production wiring: compute SHA-256, write content-addressed
+# snapshot, echo "hash|path|size" so the caller can fan into ledger
+# fields. Mirrors engine.agent_session_runner._write_prompt_snapshot
+# layout — `<base_dir>/prompts/<hash[:2]>/<hash>.txt` — so Python and
+# shell paths share the same on-disk dedupe set per workflow run.
+# Idempotent: existing target file is left untouched. Returns 1 (and
+# emits nothing) when no sha256 tool is available, so the caller can
+# skip the metadata fields rather than crash.
+write_prompt_snapshot() {
+  local prompt="$1"
+  local base_dir="$2"
+  local hash size prompts_dir target
+
+  if command -v shasum >/dev/null 2>&1; then
+    hash="$(printf '%s' "${prompt}" | shasum -a 256 | awk '{print $1}')"
+  elif command -v sha256sum >/dev/null 2>&1; then
+    hash="$(printf '%s' "${prompt}" | sha256sum | awk '{print $1}')"
+  else
+    return 1
+  fi
+
+  size="$(printf '%s' "${prompt}" | wc -c | tr -d ' ')"
+  prompts_dir="${base_dir}/prompts/${hash:0:2}"
+  target="${prompts_dir}/${hash}.txt"
+
+  mkdir -p "${prompts_dir}" 2>/dev/null || return 1
+  if [ ! -f "${target}" ]; then
+    printf '%s' "${prompt}" > "${target}" 2>/dev/null || return 1
+  fi
+
+  printf '%s|%s|%s\n' "${hash}" "${target}" "${size}"
 }
 
 session_lifecycle_for_state() {
@@ -967,6 +1016,24 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
       "${continue_reason:-required by workflow}"
   )"
 
+  # P5 #6 production wiring: capture prompt snapshot + hash + size so
+  # the agent-sessions ledger gets the same metadata Python
+  # AgentSessionRunner already writes. write_prompt_snapshot is
+  # idempotent (multiple sessions sharing identical prompt content
+  # share the file), so this is safe to call per step. On systems
+  # without shasum / sha256sum the helper returns 1 and the three
+  # vars stay empty, in which case register_agent_session simply
+  # omits the optional --flag args (legacy behaviour preserved).
+  STEP_PROMPT_HASH=""
+  STEP_PROMPT_SNAPSHOT_PATH=""
+  STEP_PROMPT_SIZE_BYTES=""
+  PROMPT_META="$(write_prompt_snapshot "${step_prompt}" "${WORKFLOW_OUTPUT_DIR}" 2>/dev/null || true)"
+  if [ -n "${PROMPT_META}" ]; then
+    STEP_PROMPT_HASH="$(printf '%s' "${PROMPT_META}" | cut -d'|' -f1)"
+    STEP_PROMPT_SNAPSHOT_PATH="$(printf '%s' "${PROMPT_META}" | cut -d'|' -f2)"
+    STEP_PROMPT_SIZE_BYTES="$(printf '%s' "${PROMPT_META}" | cut -d'|' -f3)"
+  fi
+
   START_STEP="$(date '+%s')"
   STEP_TMP="$(mktemp)"
   effective_timeout="$(positive_int_or_default "${timeout_seconds}" "${DEFAULT_STEP_TIMEOUT_SECONDS}")"
@@ -999,7 +1066,10 @@ while IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id 
     "${STEP_OUTPUT_PATH}" \
     "${STEP_HANDOFF_PATH}" \
     "" \
-    ""
+    "" \
+    "${STEP_PROMPT_HASH}" \
+    "${STEP_PROMPT_SNAPSHOT_PATH}" \
+    "${STEP_PROMPT_SIZE_BYTES}"
 
   # Run step in background, show live output chunks plus watchdog state.
   if [ "${effective_executor}" = "shell" ]; then
@@ -1311,7 +1381,10 @@ Release / governed-mode requirements:
     "${STEP_OUTPUT_PATH}" \
     "${STEP_HANDOFF_PATH}" \
     "${SESSION_FAILURE_REASON}" \
-    "${DURATION}"
+    "${DURATION}" \
+    "${STEP_PROMPT_HASH}" \
+    "${STEP_PROMPT_SNAPSHOT_PATH}" \
+    "${STEP_PROMPT_SIZE_BYTES}"
 
   {
     printf '\n### %s\n\n' "${step_id}"
