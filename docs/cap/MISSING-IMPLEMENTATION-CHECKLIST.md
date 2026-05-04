@@ -307,13 +307,16 @@
 >
 > 換句話說，shell 是 production runner、Python AgentSessionRunner 是 future programmable execution layer，兩者並存且邊界清楚。
 
-- [ ] 定義 `ProviderAdapter` interface
+- [x] 定義 `ProviderAdapter` interface
   - 交付物：provider adapter contract
   - 驗收：Codex / Claude / Shell 可共用同一 runner 介面
+  - 進度：done in `feat/agent-session-baseline`（commit pending push）；新增 `engine/provider_adapter.py` 定義 `ProviderRequest`（session_id / step_id / prompt / timeout_seconds / env / metadata）、`ProviderResult`（status / exit_code / stdout / stderr / duration_seconds / provider_session_id / artifacts / failure_reason）兩個 immutable dataclass，4 個 status 字串常數（`completed` / `failed` / `timeout` / `cancelled`），抽象基底 `ProviderAdapter` 與兩個內建子類 `FakeAdapter`（test 用 deterministic adapter，可吃固定 result 或 callable）/ `ShellAdapter`（subprocess.run 包裝，timeout 走 TimeoutExpired 收斂為 status=timeout 不 raise）。本批刻意**不**接 Codex / Claude，留待後續 P5 cycle；production 仍由 `scripts/cap-workflow-exec.sh` 負責，contract 的價值在於提供 future migration target 與 deterministic test surface。
 
-- [ ] 實作 `AgentSessionRunner`
+- [x] 實作 `AgentSessionRunner`
   - 交付物：runner module
   - 驗收：workflow step 不直接綁 provider CLI 細節
+  - 進度：done in `feat/agent-session-baseline`（commit pending push）；新增 `engine/agent_session_runner.py:AgentSessionRunner` programmable Python 執行層，提供 `run_step(adapter, request, context) -> RunStepOutcome`：(1) 自動產生 session_id（沒帶就 `sess_<uuid12>`）、(2) 先 upsert 一筆 `lifecycle=running / result=pending` 的 ledger 入口供觀察者看到 in-flight session、(3) 呼叫 adapter，捕捉 adapter 內部例外並轉成 `lifecycle=failed` ledger 紀錄、(4) 把 `ProviderResult.status` 對應到 schema lifecycle enum（`completed→completed`、`failed→failed`、`timeout→failed`、`cancelled→cancelled`）並寫入 terminal ledger entry、(5) 回傳 `RunStepOutcome(session_id, result, lifecycle, failure_reason)` 給呼叫方。**Ledger 寫入 100% 重用** `engine.step_runtime.upsert_session`（直接 import 呼叫），不重做 schema 寫入規則。`SessionContext` dataclass 對齊 upsert_session 的位置參數，呼叫端只需提供工作流上下文。runner 跨呼叫 stateless，可重用同一 instance 服務並行 context。
+
 
 - [ ] 實作 `CodexAdapter`
   - 交付物：Codex provider adapter
@@ -323,9 +326,10 @@
   - 交付物：Claude provider adapter
   - 驗收：可捕捉 provider-native session id、stdout、stderr、exit code
 
-- [ ] 實作 `ShellAdapter`
+- [x] 實作 `ShellAdapter`
   - 交付物：Shell provider adapter
   - 驗收：shell step 與 AI step 同樣進 session ledger
+  - 進度：done in `feat/agent-session-baseline`（commit pending push）；`engine/provider_adapter.py:ShellAdapter` 透過 `subprocess.run(["/bin/bash","-c", prompt], capture_output=True, text=True, timeout=...)` 執行；exit_code=0 → `status=completed`，非零 → `status=failed` + `failure_reason='shell command exited <N>'`，`subprocess.TimeoutExpired` → `status=timeout / exit_code=-1 / failure_reason='shell command timed out after <N>s'`。`request.env` 若提供會 merge 到 `os.environ` 之上（不覆蓋整個環境，避免丟失 PATH 等）。透過 `AgentSessionRunner` 與 ShellAdapter 配合，shell step 與 AI step 走同一條 ledger 寫入路徑（`step_runtime.upsert_session`），對 ledger 而言 provider_cli 欄位填 `shell` 即可區分。本批刻意是 **thin wrapper**：不複製 `scripts/cap-workflow-exec.sh:run_shell_step` 的 signal handling / background process / stall watchdog / progress streaming；那些仍由 production shell executor 負責，本 adapter 只服務 deterministic test 與未來 migration contract。新 `tests/scripts/test-agent-session-runner.sh` 10 cases / **35 passed / 0 failed** 涵蓋 FakeAdapter / ShellAdapter happy / fail / stdio capture / timeout / runner ledger / lifecycle mapping / idempotent upsert，接入 `smoke-per-stage.sh` 為 P5 #1-#3 baseline gate。
 
 - [ ] 補 prompt snapshot / prompt hash
   - 交付物：session metadata
