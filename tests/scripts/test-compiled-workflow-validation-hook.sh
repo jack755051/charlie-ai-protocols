@@ -146,7 +146,10 @@ assert_contains "raised at post_build"  "stage=post_build"          "${out3}"
 assert_contains "version error present" "version_error_present"     "${out3}"
 
 # ── Case 4 ──────────────────────────────────────────────────────────────
-echo "Case 4: steps shape wrong (object instead of array) → halt at post_build"
+echo "Case 4: schema-only failure (triggers minItems) → halt at post_build"
+# Normalization (workflow_loader._validate_workflow) does not check
+# triggers shape, so this case proves the post_build schema gate is
+# still alive after the P4 #4 normalize-then-validate order flip.
 out4="$(run_py "
 from engine.task_scoped_compiler import TaskScopedWorkflowCompiler
 from engine.compiled_workflow_validator import CompiledWorkflowSchemaError
@@ -154,7 +157,7 @@ c = TaskScopedWorkflowCompiler()
 orig = c.build_candidate_workflow
 def patched(constitution, capability_graph):
     wf = orig(constitution, capability_graph)
-    wf['steps'] = {'not': 'an array'}
+    wf['triggers'] = []
     return wf
 c.build_candidate_workflow = patched
 try:
@@ -163,12 +166,12 @@ try:
 except CompiledWorkflowSchemaError as exc:
     print('stage=' + exc.stage)
     for e in exc.errors:
-        if 'steps' in e and ('array' in e.lower() or 'dict' in e.lower()):
-            print('steps_type_error_present')
+        if 'triggers' in e and ('minItems' in e or 'too short' in e.lower()):
+            print('triggers_minitems_error_present')
             break
 ")"
-assert_contains "raised at post_build"   "stage=post_build"            "${out4}"
-assert_contains "steps type error"        "steps_type_error_present"    "${out4}"
+assert_contains "raised at post_build"        "stage=post_build"                  "${out4}"
+assert_contains "triggers minItems error"      "triggers_minitems_error_present"  "${out4}"
 
 # ── Case 5 ──────────────────────────────────────────────────────────────
 echo "Case 5: transform corrupts workflow → halt at post_unresolved_policy, no bound phases"

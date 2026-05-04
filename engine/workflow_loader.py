@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections import defaultdict, deque
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -38,11 +39,44 @@ class WorkflowLoader:
         return self.normalize_workflow_data(data, workflow_path)
 
     def normalize_workflow_data(self, workflow: dict, workflow_path: str | Path = "<inline>") -> dict:
+        """Normalize a raw workflow dict into the canonical compiled-workflow shape.
+
+        Backward-compatible step aliases:
+
+        * ``depends_on`` → ``needs`` (only when ``needs`` is absent;
+          existing ``needs`` always wins so producers that already speak
+          the canonical name are untouched). The legacy ``depends_on``
+          field is preserved on the step for callers that still read it.
+
+        Intentionally does **not** fill in defaults for required
+        compiled-workflow schema fields (``schema_version`` / ``version`` /
+        ``triggers`` etc.). Producers must emit those themselves; the
+        downstream ``compiled-workflow.schema.yaml`` gate (P4 #1) is
+        responsible for catching omissions, and silently filling them
+        here would mask producer-level bugs.
+        """
         workflow_path = str(workflow_path)
         self._validate_workflow(workflow, workflow_path)
         normalized = dict(workflow)
         normalized["_source_path"] = workflow_path
+
+        if isinstance(normalized.get("steps"), list):
+            normalized["steps"] = [
+                self._normalize_step_aliases(step) for step in normalized["steps"]
+            ]
+
         return normalized
+
+    @staticmethod
+    def _normalize_step_aliases(step: Any) -> Any:
+        if not isinstance(step, dict):
+            return step
+        if "depends_on" not in step or "needs" in step:
+            return step
+        copied = dict(step)
+        depends_on = step["depends_on"]
+        copied["needs"] = list(depends_on) if isinstance(depends_on, list) else []
+        return copied
 
     def load_capabilities(self) -> dict:
         """從 schemas/capabilities.yaml 讀取 capability 契約。"""

@@ -188,6 +188,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-capability-graph-schema.sh" "capabi
 run_fixture "${REPO_ROOT}/tests/scripts/test-compiled-workflow-schema.sh" "compiled-workflow schema gate (P0 #2)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-compiled-workflow-validation-hook.sh" "compiled-workflow validation hook (P4 #1)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-binding-report-validation-hook.sh" "binding-report validation hook (P4 #2)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-compiled-workflow-normalization.sh" "compiled-workflow normalization (P4 #4)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-binding-report-schema.sh" "binding-report schema gate (P0 #3)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-supervisor-orchestration-schema.sh" "supervisor-orchestration schema gate (P0 #4, forward contract)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-workflow-result-schema.sh" "workflow-result schema gate (P0 #5, normalized contract)"

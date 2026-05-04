@@ -250,9 +250,10 @@
   - 驗收：identity-ledger 11/11 在無 `pip install jsonschema` 環境也能 pass
   - 進度：done in `feat/binding-report-validation`；`engine/step_runtime.py:_check_against_schema` 補 `pattern`（透過 `re.search`，bad regex 在 schema 內視為 error 而非 crash）與 `additionalProperties: false`（object 額外鍵被 reject；只強制 boolean false 形式，true 與 schema-form 維持 permissive 與 jsonschema 預設一致）。test-identity-ledger-schema 由 9/11 升至 **11/11 passed**；compiled-workflow-schema、binding-report-schema、compiled-workflow-validation-hook、binding-report-validation-hook、compile-task-from-envelope 全綠回歸。
 
-- [ ] 強化 compiled workflow normalization
+- [x] 強化 compiled workflow normalization
   - 交付物：normalizer
   - 驗收：不同來源 workflow 輸出一致 shape
+  - 進度：done in `feat/binding-report-validation`；擴充既有 `engine/workflow_loader.py:normalize_workflow_data`，新增 backward-compatible step alias `depends_on → needs`（只在 `needs` 不存在時補；既有 `needs` 永遠勝出，`depends_on` 保留不刪以相容仍讀 legacy 欄位的下游）。**嚴格不補**任何 compiled-workflow schema 必填欄位（`schema_version` / `version` / `triggers` 等），讓 P4 #1 producer contract 不被偷偷掩蓋。`engine/task_scoped_compiler.py` 兩個 compile path（`compile_task` / `compile_task_from_envelope`）翻轉順序為 `build → normalize → ensure_valid_compiled_workflow(post_build) → bind`，alias 在 schema 驗證前完成。新增 `tests/scripts/test-compiled-workflow-normalization.sh` 4 cases / **8 passed / 0 failed**（canonical needs 不變、depends_on→needs、同時存在以 needs 為準、缺 schema_version 仍 fail schema validation），接入 `smoke-per-stage.sh` 為 P4 #4 gate。
 
 - [ ] 實作 project / shared / builtin / legacy source priority
   - 交付物：source resolver

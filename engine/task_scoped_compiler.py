@@ -295,10 +295,11 @@ class TaskScopedWorkflowCompiler:
         constitution = self.build_task_constitution(source_request)
         capability_graph = self.build_capability_graph(constitution)
         candidate_workflow = self.build_candidate_workflow(constitution, capability_graph)
-        ensure_valid_compiled_workflow(candidate_workflow, stage="post_build")
-        candidate_semantic = self.loader.build_semantic_plan_from_workflow(
-            self.loader.normalize_workflow_data(candidate_workflow, f"<compiled:{constitution['task_id']}:candidate>")
+        candidate_workflow = self.loader.normalize_workflow_data(
+            candidate_workflow, f"<compiled:{constitution['task_id']}:candidate>"
         )
+        ensure_valid_compiled_workflow(candidate_workflow, stage="post_build")
+        candidate_semantic = self.loader.build_semantic_plan_from_workflow(candidate_workflow)
         binding = self.binder.bind_semantic_plan(candidate_semantic, registry_ref=registry_ref)
         ensure_valid_binding_report(binding, stage="post_bind")
         unresolved_policy = self.build_unresolved_policy(constitution, capability_graph, binding)
@@ -456,13 +457,12 @@ class TaskScopedWorkflowCompiler:
         }
 
         candidate_workflow = self.build_candidate_workflow(enriched_constitution, capability_graph)
-        ensure_valid_compiled_workflow(candidate_workflow, stage="post_build")
-        candidate_semantic = self.loader.build_semantic_plan_from_workflow(
-            self.loader.normalize_workflow_data(
-                candidate_workflow,
-                f"<compiled-from-envelope:{enriched_constitution['task_id']}:candidate>",
-            )
+        candidate_workflow = self.loader.normalize_workflow_data(
+            candidate_workflow,
+            f"<compiled-from-envelope:{enriched_constitution['task_id']}:candidate>",
         )
+        ensure_valid_compiled_workflow(candidate_workflow, stage="post_build")
+        candidate_semantic = self.loader.build_semantic_plan_from_workflow(candidate_workflow)
         binding = self.binder.bind_semantic_plan(candidate_semantic, registry_ref=registry_ref)
         ensure_valid_binding_report(binding, stage="post_bind")
         unresolved_policy = self.build_unresolved_policy(
