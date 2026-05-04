@@ -388,6 +388,83 @@ assert_contains "prompt_hash length is 64 (sha256 hex)" "hash_len=64"      "${ou
 assert_contains "prompt_snapshot_path is string" "path_is_str=True"        "${out13}"
 assert_contains "prompt_size_bytes is integer"   "size_is_int=True"        "${out13}"
 
+# ── Case 14 (P5 #7) ─────────────────────────────────────────────────────
+echo "Case 14 (P5 #7): no parent → root_session_id = self"
+out14="$(run_py "
+import json, pathlib, tempfile
+from engine.provider_adapter import FakeAdapter, ProviderRequest, ProviderResult, STATUS_COMPLETED
+from engine.agent_session_runner import AgentSessionRunner, SessionContext
+fa = FakeAdapter(ProviderResult(status=STATUS_COMPLETED, exit_code=0, stdout='', stderr='', duration_seconds=0.001))
+with tempfile.TemporaryDirectory() as td:
+    sessions = str(pathlib.Path(td) / 'agent-sessions.json')
+    ctx = SessionContext(sessions_path=sessions, run_id='r', workflow_id='wf', workflow_name='WF',
+                         step_id='s1', capability='cap_x', agent_alias='alias_x', executor='ai')
+    out = AgentSessionRunner().run_step(fa, ProviderRequest(session_id='sess-solo', step_id='s1', prompt='p'), ctx)
+    s = json.loads(pathlib.Path(sessions).read_text())['sessions'][0]
+    print('root=' + (s.get('root_session_id') or ''))
+    print('parent=' + str(s.get('parent_session_id')))
+")"
+assert_contains "root equals self when no parent"  "root=sess-solo"   "${out14}"
+assert_contains "parent stays None"                "parent=None"      "${out14}"
+
+# ── Case 15 (P5 #7) ─────────────────────────────────────────────────────
+echo "Case 15 (P5 #7): parent in ledger → child inherits parent's root_session_id"
+out15="$(run_py "
+import json, pathlib, tempfile
+from engine.provider_adapter import FakeAdapter, ProviderRequest, ProviderResult, STATUS_COMPLETED
+from engine.agent_session_runner import AgentSessionRunner, SessionContext
+fa = FakeAdapter(ProviderResult(status=STATUS_COMPLETED, exit_code=0, stdout='', stderr='', duration_seconds=0.001))
+runner = AgentSessionRunner()
+with tempfile.TemporaryDirectory() as td:
+    sessions = str(pathlib.Path(td) / 'agent-sessions.json')
+    base = SessionContext(sessions_path=sessions, run_id='r', workflow_id='wf', workflow_name='WF',
+                          step_id='', capability='cap_x', agent_alias='alias_x', executor='ai')
+    runner.run_step(fa, ProviderRequest(session_id='root-A', step_id='sa', prompt='p1'),
+                    SessionContext(**{**base.__dict__, 'step_id':'sa'}))
+    runner.run_step(fa, ProviderRequest(session_id='child-B', step_id='sb', prompt='p2'),
+                    SessionContext(**{**base.__dict__, 'step_id':'sb',
+                                      'parent_session_id':'root-A',
+                                      'spawn_reason':'delegate planning to specialist'}))
+    runner.run_step(fa, ProviderRequest(session_id='grand-C', step_id='sc', prompt='p3'),
+                    SessionContext(**{**base.__dict__, 'step_id':'sc', 'parent_session_id':'child-B'}))
+    data = json.loads(pathlib.Path(sessions).read_text())
+    by_id = {s['session_id']: s for s in data['sessions']}
+    print('A_root=' + by_id['root-A']['root_session_id'])
+    print('B_root=' + by_id['child-B']['root_session_id'])
+    print('B_parent=' + by_id['child-B']['parent_session_id'])
+    print('B_reason=' + by_id['child-B']['spawn_reason'])
+    print('C_root=' + by_id['grand-C']['root_session_id'])
+    print('C_parent=' + by_id['grand-C']['parent_session_id'])
+")"
+assert_contains "A is its own root"                       "A_root=root-A"                                "${out15}"
+assert_contains "B inherits A as root"                    "B_root=root-A"                                "${out15}"
+assert_contains "B parent linked"                          "B_parent=root-A"                              "${out15}"
+assert_contains "B spawn_reason recorded"                  "B_reason=delegate planning to specialist"    "${out15}"
+assert_contains "grandchild C inherits root through chain" "C_root=root-A"                                "${out15}"
+assert_contains "C parent points at B"                     "C_parent=child-B"                             "${out15}"
+
+# ── Case 16 (P5 #7) ─────────────────────────────────────────────────────
+echo "Case 16 (P5 #7): parent absent from ledger → root falls back to parent_session_id (no hard fail)"
+out16="$(run_py "
+import json, pathlib, tempfile
+from engine.provider_adapter import FakeAdapter, ProviderRequest, ProviderResult, STATUS_COMPLETED
+from engine.agent_session_runner import AgentSessionRunner, SessionContext
+fa = FakeAdapter(ProviderResult(status=STATUS_COMPLETED, exit_code=0, stdout='', stderr='', duration_seconds=0.001))
+with tempfile.TemporaryDirectory() as td:
+    sessions = str(pathlib.Path(td) / 'agent-sessions.json')
+    ctx = SessionContext(sessions_path=sessions, run_id='r', workflow_id='wf', workflow_name='WF',
+                         step_id='s1', capability='cap_x', agent_alias='alias_x', executor='ai',
+                         parent_session_id='phantom-parent-id')
+    out = AgentSessionRunner().run_step(fa, ProviderRequest(session_id='sess-orphan', step_id='s1', prompt='p'), ctx)
+    s = json.loads(pathlib.Path(sessions).read_text())['sessions'][0]
+    print('root=' + s['root_session_id'])
+    print('parent=' + s['parent_session_id'])
+    print('lifecycle=' + s['lifecycle'])
+")"
+assert_contains "fallback root = parent_session_id"  "root=phantom-parent-id"      "${out16}"
+assert_contains "parent still recorded"               "parent=phantom-parent-id"   "${out16}"
+assert_contains "no hard fail; lifecycle completed"   "lifecycle=completed"         "${out16}"
+
 # ── Summary ─────────────────────────────────────────────────────────────
 echo ""
 echo "agent-session-runner: ${pass_count} passed, ${fail_count} failed"

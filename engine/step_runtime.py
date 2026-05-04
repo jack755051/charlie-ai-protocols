@@ -665,6 +665,9 @@ def upsert_session(
     prompt_hash: str | None = None,
     prompt_snapshot_path: str | None = None,
     prompt_size_bytes: int | None = None,
+    parent_session_id: str | None = None,
+    root_session_id: str | None = None,
+    spawn_reason: str | None = None,
 ) -> None:
     """Upsert one CAP agent session into agent-sessions.json."""
     path = Path(sessions_path)
@@ -757,6 +760,16 @@ def upsert_session(
         existing["prompt_snapshot_path"] = prompt_snapshot_path
     if prompt_size_bytes is not None:
         existing["prompt_size_bytes"] = prompt_size_bytes
+
+    # P5 #7 parent / child / root session relation. Same opt-in pattern.
+    # Note: parent_session_id was already initialized to None on first
+    # entry above; this lets callers populate it on a later upsert.
+    if parent_session_id is not None:
+        existing["parent_session_id"] = parent_session_id
+    if root_session_id is not None:
+        existing["root_session_id"] = root_session_id
+    if spawn_reason is not None:
+        existing["spawn_reason"] = spawn_reason
 
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 

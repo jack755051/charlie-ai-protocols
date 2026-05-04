@@ -17,6 +17,7 @@ are scheduled for later P5 batches.
 from __future__ import annotations
 
 import hashlib
+import json
 import uuid
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -60,9 +61,10 @@ class SessionContext:
 
     Mirrors the positional arguments of
     ``step_runtime.upsert_session`` so the runner can pass them
-    through without reshaping. Only the fields required for a minimal
-    session record are present here; richer fields (prompt snapshot,
-    parent_session_id, etc.) are left for later P5 batches.
+    through without reshaping. ``parent_session_id`` and
+    ``spawn_reason`` are optional; when ``parent_session_id`` is
+    provided the runner derives ``root_session_id`` automatically by
+    following the parent's chain through the ledger.
     """
 
     sessions_path: str
@@ -77,6 +79,8 @@ class SessionContext:
     input_mode: str = ""
     output_path: str = ""
     handoff_path: str = ""
+    parent_session_id: str | None = None
+    spawn_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -92,6 +96,40 @@ class PromptSnapshot:
     hash: str
     path: str
     size_bytes: int
+
+
+def _derive_root_session_id(
+    sessions_path: str, parent_session_id: str | None, self_session_id: str
+) -> str:
+    """Derive ``root_session_id`` for a new session (P5 #7).
+
+    Rules:
+    * No ``parent_session_id`` → caller is the root; root = self.
+    * Has parent → look up the parent in the ledger and inherit
+      ``parent.root_session_id`` (or ``parent.session_id`` if the
+      parent itself has no recorded root).
+    * Parent not found in ledger (missing file, malformed JSON, or
+      parent_session_id absent from sessions[]) → conservative fallback:
+      root = parent_session_id. This keeps the runner usable against
+      legacy ledgers that pre-date the P5 #7 fields rather than hard
+      failing on incomplete history.
+    """
+    if not parent_session_id:
+        return self_session_id
+
+    path = Path(sessions_path)
+    if not path.exists():
+        return parent_session_id
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return parent_session_id
+
+    for entry in data.get("sessions") or []:
+        if entry.get("session_id") == parent_session_id:
+            return entry.get("root_session_id") or entry.get("session_id") or parent_session_id
+    return parent_session_id
 
 
 def _write_prompt_snapshot(sessions_path: str, prompt: str) -> PromptSnapshot:
@@ -152,12 +190,18 @@ class AgentSessionRunner:
             request = replace(request, session_id=session_id)
 
         snapshot = _write_prompt_snapshot(context.sessions_path, request.prompt)
+        root_session_id = _derive_root_session_id(
+            context.sessions_path, context.parent_session_id, session_id
+        )
 
         self._upsert_lifecycle(
             context, session_id, adapter.name,
             lifecycle="running", result="pending",
             failure_reason="", duration_seconds="",
             snapshot=snapshot,
+            parent_session_id=context.parent_session_id,
+            root_session_id=root_session_id,
+            spawn_reason=context.spawn_reason,
         )
 
         try:
@@ -203,6 +247,9 @@ class AgentSessionRunner:
             # discarded — the ledger schema stores integer seconds.
             duration_seconds=str(max(0, int(result.duration_seconds))),
             snapshot=snapshot,
+            parent_session_id=context.parent_session_id,
+            root_session_id=root_session_id,
+            spawn_reason=context.spawn_reason,
         )
 
         return RunStepOutcome(
@@ -224,6 +271,9 @@ class AgentSessionRunner:
         failure_reason: str,
         duration_seconds: str,
         snapshot: PromptSnapshot | None = None,
+        parent_session_id: str | None = None,
+        root_session_id: str | None = None,
+        spawn_reason: str | None = None,
     ) -> None:
         step_runtime.upsert_session(
             context.sessions_path,
@@ -247,4 +297,7 @@ class AgentSessionRunner:
             prompt_hash=snapshot.hash if snapshot else None,
             prompt_snapshot_path=snapshot.path if snapshot else None,
             prompt_size_bytes=snapshot.size_bytes if snapshot else None,
+            parent_session_id=parent_session_id,
+            root_session_id=root_session_id,
+            spawn_reason=spawn_reason,
         )

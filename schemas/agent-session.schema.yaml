@@ -37,6 +37,14 @@ properties:
     type: string
     nullable: true
     description: 若由另一 session 派生，記錄 parent id
+  root_session_id:
+    type: string
+    nullable: true
+    description: 派生鏈頂端 session id (P5 #7)。無 parent 時等於 self；有 parent 時繼承 parent.root_session_id；parent 不在 ledger 時 fallback 為 parent_session_id。Optional。
+  spawn_reason:
+    type: string
+    nullable: true
+    description: parent 派生此 session 的原因，例如 supervisor delegation reason 或 retry trigger (P5 #7). Optional, free-form。
   role:
     type: string
     description: agent alias，例如 supervisor、frontend、backend

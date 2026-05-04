@@ -336,9 +336,10 @@
   - 驗收：每個 session 可回溯實際 prompt
   - 進度：done in `feat(agent-session): store content-addressed prompt snapshots`；`schemas/agent-session.schema.yaml` 加 3 個 optional 欄位 `prompt_hash`（SHA-256 hex）/ `prompt_snapshot_path`（落地路徑）/ `prompt_size_bytes`（UTF-8 byte size）。新增 `engine/agent_session_runner.py:_write_prompt_snapshot` 把 rendered prompt 寫到 `<sessions_dir>/prompts/<sha256[:2]>/<sha256>.txt` content-addressable layout，**多 session 共用同 prompt 內容會自動 dedupe 同一檔**（idempotent，target 已存在不覆寫）；`AgentSessionRunner.run_step` 在第一次 `running` upsert 與後續 terminal upsert 都帶上 snapshot metadata。`engine/step_runtime.py:upsert_session` 加 keyword-only `prompt_hash` / `prompt_snapshot_path` / `prompt_size_bytes` 三參數（皆 optional，向後相容既有 16-positional shell caller，預設 None 時不寫入欄位）。`tests/scripts/test-agent-session-runner.sh` 新增 Case 11/12/13（snapshot 內容驗證 / dedupe / 欄位 type 驗證），擴至 13 cases / **49 passed**。Note：full ledger schema validation 仍因預先存在的 `nullable: true` （OpenAPI 風格、非 JSON-Schema 標準）受到 fallback validator 限制，本批不修；屬獨立 schema hardening 課題。
 
-- [ ] 補 parent / child session relation
+- [x] 補 parent / child session relation
   - 交付物：session graph 欄位
   - 驗收：可追蹤 supervisor 與 downstream agent 關係
+  - 進度：done in `feat(agent-session): link parent and root sessions`；`schemas/agent-session.schema.yaml` 新增 2 個 optional 欄位 `root_session_id`（派生鏈頂端，無 parent 時 = self）/ `spawn_reason`（free-form 派生原因）；`parent_session_id` 已存在 schema 但先前從未 populate，本批正式啟用。`engine/agent_session_runner.py:SessionContext` 加 `parent_session_id` 與 `spawn_reason` 兩個 optional 欄位；新 helper `_derive_root_session_id` 在 runner 起跑時透過 ledger 查 parent 的 `root_session_id` 並繼承，沒有 parent 時 root = self。**保守 fallback**：parent 不在 ledger（ledger 不存在 / JSON parse fail / parent_session_id 找不到）時 root = parent_session_id 而非 hard fail，相容舊 ledger 與不完整歷史。`engine/step_runtime.py:upsert_session` 加 keyword-only `parent_session_id` / `root_session_id` / `spawn_reason` 三參數，沿用 P5 #6 的 opt-in 模式。`tests/scripts/test-agent-session-runner.sh` 新增 Case 14/15/16（無 parent self-root / 三層 chain root inherit / parent 不在 ledger fallback），擴至 16 cases / **60 passed**。
 
 - [ ] 補 session lifecycle
   - 交付物：created / running / completed / failed / cancelled / recycled 狀態轉移
