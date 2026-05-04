@@ -12,6 +12,26 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 完整實現路線與開發備忘錄見 [docs/cap/IMPLEMENTATION-ROADMAP.md](docs/cap/IMPLEMENTATION-ROADMAP.md)。
 尚未實現項目的可執行清單見 [docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md](docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md)。
 
+## 編號對照
+
+`TODOLIST.md` 與 `docs/cap/IMPLEMENTATION-ROADMAP.md` 使用「Phase」作為產品路線階段；`docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md` 使用「P」作為工程執行批次。兩者關係如下：
+
+| Product Phase | Engineering Batch | Scope |
+|---|---|---|
+| Phase 1 | P0 | Runtime Contracts |
+| Phase 2 | P1 | Project Storage and Identity |
+| Phase 3 | P2 | Project Constitution Runner |
+| Phase 4 | P3 | Supervisor Structured Orchestration |
+| Phase 5 | P4 | Compiled Workflow and Binding Pipeline |
+| Phase 6 | P5 | AgentSessionRunner |
+| Phase 7 | P6 | Artifact, Handoff and Validation |
+| Phase 8 | P7 | Result Report and Run Archive |
+| Phase 9 | P8 | Governance Gates |
+| Phase 10 | P9 | Repo-specific Source Resolver |
+| Phase 11 | P10 | Detached Runtime and Promote / Publish |
+
+歷史 commit / release note 中的 `P0`–`P10` 依上表解讀；不要把 Phase 編號與 P 編號混用為同一序列。
+
 ## 核心原則
 
 - CAP 是平台層，負責 runtime、binding、compile、promote、registry adapter 與 session lifecycle。

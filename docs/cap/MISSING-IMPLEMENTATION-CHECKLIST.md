@@ -1,6 +1,6 @@
 # CAP Missing Implementation Checklist
 
-更新日期：2026-05-02（v0.22.0 P1 #1 + #2 + #3 closeout 後）
+更新日期：2026-05-04（補 Phase ↔ P 編號對照）
 
 本清單承接 `TODOLIST.md` 與 `docs/cap/IMPLEMENTATION-ROADMAP.md` 的「尚未完成」項目，整理成可執行的工程工作清單。原則是先補 runtime contract 與 validator，再補 runner、orchestration、session、gate 與 promote/publish 閉環。
 
@@ -11,6 +11,26 @@
 - `partial`：已有局部 case 或輔助工具落地，但尚未滿足該項完整驗收。
 - `foundation`：已補上前置基礎，後續仍需完成主要功能。
 - 未標記者視為尚未開始或目前文件中沒有可對齊的落地證據。
+
+## Phase ↔ P 編號對照
+
+`TODOLIST.md` 與 `docs/cap/IMPLEMENTATION-ROADMAP.md` 使用「Phase」作為產品路線階段；本清單使用「P」作為工程執行批次。兩者不是同一個序列，對照如下：
+
+| Product Phase | Engineering Batch | Scope |
+|---|---|---|
+| Phase 1 | P0 | Runtime Contracts |
+| Phase 2 | P1 | Project Storage and Identity |
+| Phase 3 | P2 | Project Constitution Runner |
+| Phase 4 | P3 | Supervisor Structured Orchestration |
+| Phase 5 | P4 | Compiled Workflow and Binding Pipeline |
+| Phase 6 | P5 | AgentSessionRunner |
+| Phase 7 | P6 | Artifact, Handoff and Validation |
+| Phase 8 | P7 | Result Report and Run Archive |
+| Phase 9 | P8 | Governance Gates |
+| Phase 10 | P9 | Repo-specific Source Resolver |
+| Phase 11 | P10 | Detached Runtime and Promote / Publish |
+
+歷史 commit / release note 中的 `P0`–`P10` 依上表解讀；不要把 Phase 編號與 P 編號混用為同一序列。
 
 ## P0：先補齊 Runtime Contracts
 
@@ -239,6 +259,10 @@
   - 交付物：source root policy check
   - 驗收：未允許來源不能被載入
 
+- [ ] enforce fallback policy
+  - 交付物：fallback policy check
+  - 驗收：strict / preferred / fallback_allowed 與 missing_policy 的行為在 bind / run 前一致套用
+
 - [ ] 強化 unresolved handling
   - 交付物：error model 與 report
   - 驗收：required unresolved halt，optional unresolved 可降級
@@ -246,6 +270,10 @@
 - [ ] 產出 preflight report
   - 交付物：preflight artifact
   - 驗收：run 前能看到 capability、binding、policy、artifact 風險
+
+- [ ] 強化 dry-run inspection
+  - 交付物：dry-run inspection output
+  - 驗收：dry-run 可顯示 compiled workflow、binding、policy 與 preflight 判定，不執行任何 step
 
 ## P5：AgentSessionRunner
 
