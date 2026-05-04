@@ -1,6 +1,6 @@
 # CAP Missing Implementation Checklist
 
-更新日期：2026-05-04（P4 #1 compiled workflow schema validation hook 落地 + nested jsonschema fallback fix）
+更新日期：2026-05-04（P4 #1/#2/#3 compiled workflow + binding report validation hooks 落地 + jsonschema fallback hardening）
 
 本清單承接 `TODOLIST.md` 與 `docs/cap/IMPLEMENTATION-ROADMAP.md` 的「尚未完成」項目，整理成可執行的工程工作清單。原則是先補 runtime contract 與 validator，再補 runner、orchestration、session、gate 與 promote/publish 閉環。
 
@@ -240,14 +240,15 @@
   - 驗收：invalid compiled workflow 不會進入 bind / run
   - 進度：done in `feat/compiled-workflow-validation`；新增 `engine/compiled_workflow_validator.py`（`CompiledWorkflowSchemaError` / `validate_compiled_workflow` / `ensure_valid_compiled_workflow`），於 `engine/task_scoped_compiler.py` 的 `compile_task` 與 `compile_task_from_envelope` 各掛兩個驗證點：`post_build`（producer 缺欄位 / 違反 enum / 壞 shape 即時 halt）與 `post_unresolved_policy`（policy transform 後再驗一次，halt 前不會進入 `build_bound_execution_phases_from_workflow`）。Prerequisite fix：`build_candidate_workflow` 補 `schema_version: 1`（先前漏輸出，導致 schema gate 一掛即斷）。`engine/workflow_cli.py:cmd_compile_json` schema fail 時印 deterministic JSON `{"ok": false, "error": "compiled_workflow_schema_error", "stage": "...", "errors": [...]}` 並 exit 1（schema-class exit 41 對齊留 shell executor wrapper）。同步把 `engine/step_runtime.py:validate-jsonschema` 的 fallback 升級為遞迴 nested-aware（required / type / enum / minItems / properties / items），讓無 jsonschema 套件的環境也能完整驗證。新增 `tests/scripts/test-compiled-workflow-validation-hook.sh` 7 cases / **16 passed / 0 failed**（happy / 缺 schema_version / 壞 version enum / 壞 steps shape / transform 破壞 → 不進入 bound phases / envelope 路徑繼承 hook / cmd_compile_json JSON 契約），接入 `smoke-per-stage.sh` 為 P4 #1 gate；`tests/scripts/test-compiled-workflow-schema.sh` 由 4/9 升至 **9/9 passed**。
 
-- [ ] 實作 binding report schema validation
+- [x] 實作 binding report schema validation
   - 交付物：validation hook
   - 驗收：binding report 可被機器驗證
+  - 進度：done in `feat/binding-report-validation`；新增 `engine/binding_report_validator.py`（`BindingReportSchemaError` / `validate_binding_report` / `ensure_valid_binding_report`），於 `engine/task_scoped_compiler.py` 的 `compile_task` 與 `compile_task_from_envelope` 在 `bind_semantic_plan` 後掛 `post_bind` 驗證點：binding report schema 失敗即時 halt，不會進入 `apply_unresolved_policy` 或 `build_bound_execution_phases_from_workflow`。Prerequisite fix：`engine/runtime_binder.py:bind_semantic_plan` 補 `schema_version: 1`（producer 先前漏輸出，與 P4 #1 同類型缺欄位 fix）。`engine/workflow_cli.py:cmd_compile_json` 加第二個 except 分支，schema fail 時印 `{"ok": false, "error": "binding_report_schema_error", "stage": "post_bind", "errors": [...]}` 並 exit 1，與 compiled-workflow validator 對稱。新增 `tests/scripts/test-binding-report-validation-hook.sh` 7 cases / **15 passed / 0 failed**（happy / 缺 schema_version / binding_status enum 違反 / summary 缺 nested required / fail 不進入 bound phases / envelope 路徑繼承 hook / cmd_compile_json JSON 契約），接入 `smoke-per-stage.sh` 為 P4 #2 gate。
 
-- [ ] 強化 step_runtime validate-jsonschema fallback（pattern + additionalProperties）
+- [x] 強化 step_runtime validate-jsonschema fallback（pattern + additionalProperties）
   - 交付物：fallback parity with jsonschema package
   - 驗收：identity-ledger 11/11 在無 `pip install jsonschema` 環境也能 pass
-  - 現況：fallback 已支援 nested required / type / enum / minItems / items.properties / type union（含 `["string","null"]`）；`pattern`（regex 約束）與 `additionalProperties: false` 仍依賴 jsonschema 完整套件，列為後續 hardening
+  - 進度：done in `feat/binding-report-validation`；`engine/step_runtime.py:_check_against_schema` 補 `pattern`（透過 `re.search`，bad regex 在 schema 內視為 error 而非 crash）與 `additionalProperties: false`（object 額外鍵被 reject；只強制 boolean false 形式，true 與 schema-form 維持 permissive 與 jsonschema 預設一致）。test-identity-ledger-schema 由 9/11 升至 **11/11 passed**；compiled-workflow-schema、binding-report-schema、compiled-workflow-validation-hook、binding-report-validation-hook、compile-task-from-envelope 全綠回歸。
 
 - [ ] 強化 compiled workflow normalization
   - 交付物：normalizer

@@ -5,6 +5,10 @@ import re
 from pathlib import Path
 
 try:
+    from .binding_report_validator import (
+        BindingReportSchemaError,
+        ensure_valid_binding_report,
+    )
     from .compiled_workflow_validator import (
         CompiledWorkflowSchemaError,
         ensure_valid_compiled_workflow,
@@ -13,6 +17,10 @@ try:
     from .runtime_binder import RuntimeBinder
     from .workflow_loader import WorkflowLoader
 except ImportError:  # pragma: no cover
+    from binding_report_validator import (  # type: ignore[no-redef]
+        BindingReportSchemaError,
+        ensure_valid_binding_report,
+    )
     from compiled_workflow_validator import (  # type: ignore[no-redef]
         CompiledWorkflowSchemaError,
         ensure_valid_compiled_workflow,
@@ -292,6 +300,7 @@ class TaskScopedWorkflowCompiler:
             self.loader.normalize_workflow_data(candidate_workflow, f"<compiled:{constitution['task_id']}:candidate>")
         )
         binding = self.binder.bind_semantic_plan(candidate_semantic, registry_ref=registry_ref)
+        ensure_valid_binding_report(binding, stage="post_bind")
         unresolved_policy = self.build_unresolved_policy(constitution, capability_graph, binding)
         compiled_workflow = self.apply_unresolved_policy(candidate_workflow, unresolved_policy)
         ensure_valid_compiled_workflow(compiled_workflow, stage="post_unresolved_policy")
@@ -455,6 +464,7 @@ class TaskScopedWorkflowCompiler:
             )
         )
         binding = self.binder.bind_semantic_plan(candidate_semantic, registry_ref=registry_ref)
+        ensure_valid_binding_report(binding, stage="post_bind")
         unresolved_policy = self.build_unresolved_policy(
             enriched_constitution, capability_graph, binding
         )

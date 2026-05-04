@@ -282,6 +282,7 @@ class RuntimeBinder:
         )
 
         return {
+            "schema_version": 1,
             "workflow_id": semantic_plan["workflow_id"],
             "workflow_version": semantic_plan["version"],
             "binding_status": binding_status,
