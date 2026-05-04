@@ -36,8 +36,8 @@ cap workflow run --strategy auto version-control "版本更新"
 
 ## Status
 
-- **Latest tag**：`v0.22.0-rc8` — close P5 with cap session inspect and Codex / Claude adapters
-- **Phase 進度**：P0 / P1 / P2 / P3 / P4 / P5 已完成（其中 P4 #5 source priority resolver 與 P5 #9 stall handling 為 deferred non-blocking）；**P6-P10 pending**
+- **Latest tag**：`v0.22.0-rc10` — close P6 with handoff schema gate and route_back_to control flow
+- **Phase 進度**：P0 / P1 / P2 / P3 / P4 / P5 / P6 已完成（其中 P4 #5 source priority resolver 與 P5 #9 stall handling 為 deferred non-blocking）；**P7-P10 pending**
 - **單一進度來源**：[docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md](docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md)
 - **完整 release 紀錄**：[docs/cap/RELEASE-NOTES.md](docs/cap/RELEASE-NOTES.md)
 
