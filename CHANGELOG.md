@@ -6,6 +6,38 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.22.0-rc5] - 2026-05-04
+
+> Release candidate — P4 validation + policy gate checkpoint。本 tag 不取代 `v0.22.0` 正式版，亦不算 P4 整段 closeout（P4 #10/#11 仍待做、P4 #5 deferred non-blocking）。
+
+### Added
+
+- **P4 #1 compiled workflow validation hook** (`2d29d28`)：新增 `engine/compiled_workflow_validator.py`（`CompiledWorkflowSchemaError` / `validate_compiled_workflow` / `ensure_valid_compiled_workflow`）；於 `engine/task_scoped_compiler.py` 兩個 compile path 各掛 `post_build` + `post_unresolved_policy` 雙驗證點；CLI `cmd_compile_json` schema fail 時印 `{"ok": false, "error": "compiled_workflow_schema_error", "stage": "...", "errors": [...]}` 並 exit 1。Prerequisite fix：`build_candidate_workflow` 補 `schema_version: 1`。`tests/scripts/test-compiled-workflow-validation-hook.sh` 7 cases / 16 passed。
+- **P4 #2 binding report validation hook** (`877d0b4`)：新增 `engine/binding_report_validator.py`，在 `bind_semantic_plan` 後掛 `post_bind` 驗證點；CLI 加第二個 except 分支 `binding_report_schema_error`。Prerequisite fix：`engine/runtime_binder.py:bind_semantic_plan` 補 `schema_version: 1`。`tests/scripts/test-binding-report-validation-hook.sh` 7 cases / 15 passed。
+- **P4 #4 compiled workflow normalization** (`ae0f983`)：擴充 `engine/workflow_loader.py:normalize_workflow_data` 加 backward-compatible step alias `depends_on → needs`（既有 `needs` 勝出，`depends_on` 保留）；嚴格不補 schema 必填欄位。`task_scoped_compiler` 兩個 compile path 翻轉順序為 `build → normalize → validate → bind`。`tests/scripts/test-compiled-workflow-normalization.sh` 4 cases / 8 passed。
+- **P4 #6/#9 binding policy hard halt** (`8ec1e57`)：新增 `engine/runtime_binder.py:BindingPolicyError` + `ensure_binding_status_executable`，在 `compile_task` / `compile_task_from_envelope` 內把 `binding_status='blocked'` 升級為硬 halt；CLI 加第三個 except 分支 `binding_policy_error`。disallowed required capability 與 required-unresolved 兩條都會在 `apply_unresolved_policy` 之前 halt，optional unresolved 維持 `degraded`。
+- **P4 #7 typed source policy error** (`3384ee2`)：新增 `engine/runtime_binder.py:WorkflowSourcePolicyError`，`_assert_workflow_source_allowed` 改 raise 自訂 class；CLI 加第四個 except 分支 `workflow_source_policy_error`。檢查邏輯本身不動。
+- **P4 #6-#9 共同測試** (`8ec1e57` / `3384ee2`)：`tests/scripts/test-workflow-policy-gates.sh` 6 cases / 19 passed 覆蓋 4 條 policy gate 與 4 個 CLI deterministic JSON 契約。
+
+### Changed
+
+- **P4 #3 jsonschema fallback hardening** (`daa262b` / `45fe723` / `256a00f`)：把 `engine/step_runtime.py:validate_constitution` 的 inline lightweight checker 抽成 module-level `validate_jsonschema_fallback` 並升級為遞迴 nested-aware；分三段補 union type（`["string","null"]`）、pattern（regex via `re.search`）、`additionalProperties: false`。`engine/compiled_workflow_validator.py` 與 `engine/binding_report_validator.py` 透過 import 共用同一 helper。`test-compiled-workflow-schema.sh` 4/9→9/9、`test-binding-report-schema.sh` 5/10→10/10、`test-identity-ledger-schema.sh` 8/11→11/11。
+- **cap-release UX** (`413443b` / `9faac41` / `fe91fc2`)：`scripts/cap-release.sh` 加 ASCII logo 與 Features/Bug fixes/Documentation/Other changes 分組摘要（scope 欄位對齊 omz update 風格）；`fetch_remote` 拆 branch metadata vs tags metadata，加 `CAP_FORCE_TAG_SYNC`，`cap version` fetch fail 時 fallback 到 local cache 並顯示 `Remote metadata: fresh|skipped|local cache`；README 補 `cap update latest`。
+- **P4 #8 fallback search policy 語意文件化** (`9d1b8f2`)：純 alignment doc，不改 runtime。釐清 `binding_mode='strict'` = fallback 搜尋停用而非 fallback rejection；rename 與行為變更皆延後以避免重開 P4 #2 schema / fixture。
+
+### Notes
+
+- **P4 #5 deferred non-blocking** (`4254c19`)：`docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md` 把 P4 #5 source priority resolver 標記為 deferred / blocked；目前 runtime 只有 project workflow source 有 producer，shared / builtin / legacy 三層尚無實際 producer 與 consumer，硬做會變空殼且需重開 P4 #2 binding-report schema / fixture。
+- **`TODOLIST.md` Phase ↔ P 編號對照** (`fb0a6db`)：補對照表釐清產品路線「Phase 1-11」vs 工程批次「P0-P10」並非同一序列；歷史 commit / release note 中的 P 編號依此對照解讀。
+- **P4 #10/#11 待做**：preflight report 與強化 dry-run inspection 仍未實作，是 P4 整段 closeout 前的剩餘工作。
+- 本 tag 為 release candidate，仍未取代 `v0.22.0` 正式版，亦不算 P4 整段 closeout。
+
+### Verified
+
+- `scripts/workflows/smoke-per-stage.sh` 從 v0.22.0-rc4 baseline 升至 **40 step / 40 passed / 0 failed / 0 skipped**：新增 P4 #1 / P4 #2 / P4 #4 / P4 #6-#9 共四條 hook gate。
+- 跨 schema fixture suite 全綠：compiled-workflow 9/9、binding-report 10/10、identity-ledger 11/11、capability-graph 8/8、gate-result 10/10、supervisor-orchestration 10/10、workflow-result 10/10。
+- 跨 hook test 全綠：compiled-workflow-validation-hook 16/16、binding-report-validation-hook 15/15、compiled-workflow-normalization 8/8、workflow-policy-gates 19/19、compile-task-from-envelope 33/33。
+
 ## [v0.22.0-rc2] - 2026-05-03
 
 > Release candidate — close P1「Project Storage and Identity」整段 7 個 milestone（#1–#7）。本 tag 不取代 `v0.22.0` 正式版，僅標示 P1 整段落地的乾淨節點。
