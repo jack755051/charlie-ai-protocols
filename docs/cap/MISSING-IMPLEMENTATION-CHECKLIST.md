@@ -346,9 +346,10 @@
   - 驗收：workflow 結束後 session 狀態完整閉合
   - 進度：done in `feat(agent-session): enforce runner lifecycle transitions`；新增 `engine/step_runtime.py:LifecycleTransitionError` 例外類別 + 模組層 `_LIFECYCLE_TRANSITIONS` 狀態機表。`upsert_session` 加 keyword-only `enforce_transition: bool = False`，**預設 False 保留 shell legacy 行為**（cap-workflow-exec.sh 與其他既有 shell caller 不變）；`AgentSessionRunner` 對所有 upsert 呼叫傳 `enforce_transition=True`，從現在起 Python runner 嚴格守住合法轉移。允許表（保守）：first write 接受 `planned / running / failed / cancelled / blocked`；`planned → running / failed / cancelled`；`running → completed / failed / cancelled / recycled / blocked`；`blocked → running / failed / cancelled`；terminal 狀態（completed / failed / cancelled / recycled）只接受 idempotent 重寫（X → X），不可復活。明確拒絕：`completed → running`、`failed → completed`、`cancelled → completed`，違法轉移直接 raise `LifecycleTransitionError(current, requested)`。`tests/scripts/test-agent-session-runner.sh` 改寫 Case 10（用 direct upsert 驗 legacy dedupe 仍 work）並新增 Case 17/18/19/20（runner 拒絕 re-run completed session / 無 enforce flag 仍允許任意轉移 / enforce flag 對 direct caller 也生效 / planned→running→completed 合法路徑），擴至 20 cases / **68 passed**。
 
-- [ ] 整合 timeout / stall handling
+- [x] 整合 timeout / stall handling
   - 交付物：timeout policy
   - 驗收：卡住的 provider session 不會無限等待
+  - 進度：done in `fix(agent-session): record timeout failures consistently`，**範圍縮小至 timeout**；stall handling 因目前無 streaming provider adapter（Codex / Claude 仍 deferred）暫無實作 consumer，標記為 deferred，等 streaming Codex / Claude adapters 落地後一併實作。本批完成項：(1) ShellAdapter `subprocess.TimeoutExpired` 統一回 `ProviderResult(status=timeout, exit_code=-1)`，`failure_reason` 標準化前綴 `timeout: shell command exceeded <N>s`；(2) `AgentSessionRunner.run_step` 對任何 status=timeout 的 result 強制把 `failure_reason` 補上 `timeout:` 前綴（adapter 忘記時也保證 prefix），CLI / dry-run / log consumer 可直接 pattern-match 不再 re-check status；(3) timeout 透過既有 `_STATUS_TO_LIFECYCLE` map 對應到 ledger `lifecycle=failed`；(4) test 補強：Case 21（adapter 沒帶 reason 也補 prefix）/ Case 22（timeout=None 正常完成）/ Case 23（adapter 已帶 prefix 不重複），加上 Case 7 / Case 9 既有 timeout 斷言更新為新 prefix 格式。Suite **75 passed / 0 failed**。**Stall handling deferred 理由**：stall 監測「process 多久沒新 output」只對會 stream output 的 AI provider 有意義，ShellAdapter 是 blocking subprocess.run 不適用；待 Codex / Claude adapter 落地後再設計 streaming watcher。
 
 - [ ] 新增 `cap session inspect`
   - 交付物：CLI command

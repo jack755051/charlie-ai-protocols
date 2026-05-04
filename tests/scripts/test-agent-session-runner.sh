@@ -199,7 +199,7 @@ print('failure=' + (res.failure_reason or ''))
 ")"
 assert_contains "timeout status"          "status=timeout"   "${out7}"
 assert_contains "timeout exit -1"         "exit=-1"          "${out7}"
-assert_contains "failure mentions timeout" "timed out"        "${out7}"
+assert_contains "failure carries timeout: prefix" "timeout: shell command exceeded" "${out7}"
 
 # ── Case 8 ──────────────────────────────────────────────────────────────
 echo "Case 8: runner + ShellAdapter writes ledger entry with duration"
@@ -264,7 +264,7 @@ with tempfile.TemporaryDirectory() as td:
 ")"
 assert_contains "result status timeout"     "status=timeout"   "${out9}"
 assert_contains "ledger lifecycle failed"   "lifecycle=failed" "${out9}"
-assert_contains "failure mentions timeout"  "timed out"        "${out9}"
+assert_contains "ledger failure carries timeout: prefix"  "timeout: shell command exceeded"  "${out9}"
 
 # ── Case 10 (legacy dedupe semantic) ────────────────────────────────────
 # With P5 #8 lifecycle enforcement, the runner now rejects a second
@@ -559,6 +559,60 @@ with tempfile.TemporaryDirectory() as td:
 assert_contains "fallback root = parent_session_id"  "root=phantom-parent-id"      "${out16}"
 assert_contains "parent still recorded"               "parent=phantom-parent-id"   "${out16}"
 assert_contains "no hard fail; lifecycle completed"   "lifecycle=completed"         "${out16}"
+
+# ── Case 21 (P5 #9) ─────────────────────────────────────────────────────
+echo "Case 21 (P5 #9): runner enforces timeout: prefix even when adapter forgets"
+out21="$(run_py "
+import json, pathlib, tempfile
+from engine.provider_adapter import FakeAdapter, ProviderRequest, ProviderResult, STATUS_TIMEOUT
+from engine.agent_session_runner import AgentSessionRunner, SessionContext
+# Sloppy adapter: returns timeout status but no failure_reason at all.
+fa = FakeAdapter(ProviderResult(status=STATUS_TIMEOUT, exit_code=-1, stdout='', stderr='', duration_seconds=0.0))
+with tempfile.TemporaryDirectory() as td:
+    sessions = str(pathlib.Path(td) / 'agent-sessions.json')
+    ctx = SessionContext(sessions_path=sessions, run_id='r', workflow_id='wf', workflow_name='WF',
+                         step_id='s1', capability='cap_x', agent_alias='alias_x', executor='ai')
+    out = AgentSessionRunner().run_step(fa, ProviderRequest(session_id='', step_id='s1', prompt='p'), ctx)
+    s = json.loads(pathlib.Path(sessions).read_text())['sessions'][0]
+    print('outcome_failure=' + (out.failure_reason or ''))
+    print('ledger_failure=' + (s.get('failure_reason') or ''))
+    print('lifecycle=' + s['lifecycle'])
+")"
+assert_contains "outcome failure has timeout prefix"  "timeout:"          "${out21}"
+assert_contains "ledger failure has timeout prefix"   "timeout:"          "${out21}"
+assert_contains "lifecycle still mapped to failed"    "lifecycle=failed"  "${out21}"
+
+# ── Case 22 (P5 #9) ─────────────────────────────────────────────────────
+echo "Case 22 (P5 #9): no timeout (None) → command runs to completion"
+out22="$(run_py "
+from engine.provider_adapter import ShellAdapter, ProviderRequest
+res = ShellAdapter().run(ProviderRequest(session_id='x', step_id='s', prompt='echo done'))
+print('status=' + res.status)
+print('stdout=' + res.stdout.strip())
+")"
+assert_contains "no timeout completes"   "status=completed" "${out22}"
+assert_contains "stdout captured"        "stdout=done"      "${out22}"
+
+# ── Case 23 (P5 #9) ─────────────────────────────────────────────────────
+echo "Case 23 (P5 #9): adapter-supplied timeout prefix is preserved (not double-prefixed)"
+out23="$(run_py "
+from engine.provider_adapter import FakeAdapter, ProviderRequest, ProviderResult, STATUS_TIMEOUT
+from engine.agent_session_runner import AgentSessionRunner, SessionContext
+import tempfile, pathlib, json
+fa = FakeAdapter(ProviderResult(status=STATUS_TIMEOUT, exit_code=-1, stdout='', stderr='',
+                                duration_seconds=0.0, failure_reason='timeout: provider X exceeded 30s'))
+with tempfile.TemporaryDirectory() as td:
+    sessions = str(pathlib.Path(td) / 'agent-sessions.json')
+    ctx = SessionContext(sessions_path=sessions, run_id='r', workflow_id='wf', workflow_name='WF',
+                         step_id='s1', capability='cap_x', agent_alias='alias_x', executor='ai')
+    out = AgentSessionRunner().run_step(fa, ProviderRequest(session_id='', step_id='s1', prompt='p'), ctx)
+    s = json.loads(pathlib.Path(sessions).read_text())['sessions'][0]
+    fr = s['failure_reason']
+    print('failure=' + fr)
+    print('starts_with_one_prefix=' + str(fr.startswith('timeout:') and not fr.startswith('timeout: timeout:')))
+")"
+assert_contains "exact failure preserved" "failure=timeout: provider X exceeded 30s" "${out23}"
+assert_contains "no double prefix"        "starts_with_one_prefix=True"               "${out23}"
 
 # ── Summary ─────────────────────────────────────────────────────────────
 echo ""

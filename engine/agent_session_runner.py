@@ -235,6 +235,12 @@ class AgentSessionRunner:
         failure_reason = result.failure_reason or (
             "" if lifecycle == "completed" else result.status
         )
+        # P5 #9: ensure timeout outcomes are always recorded with a
+        # "timeout:" prefix even when the adapter forgot to set one,
+        # so log / CLI consumers can pattern-match on the prefix
+        # rather than re-inspecting result.status.
+        if result.status == STATUS_TIMEOUT and not failure_reason.startswith("timeout:"):
+            failure_reason = f"timeout: {failure_reason}" if failure_reason else "timeout: provider exceeded request.timeout_seconds"
 
         self._upsert_lifecycle(
             context, session_id, adapter.name,

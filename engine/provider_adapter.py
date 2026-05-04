@@ -169,7 +169,10 @@ class ShellAdapter(ProviderAdapter):
                 stdout=exc.stdout or "",
                 stderr=exc.stderr or "",
                 duration_seconds=elapsed,
-                failure_reason=f"shell command timed out after {timeout}s",
+                # P5 #9: standardized "timeout: ..." prefix so CLI / dry-run /
+                # log consumers can branch on the failure family without
+                # re-checking the status field separately.
+                failure_reason=f"timeout: shell command exceeded {timeout}s",
             )
 
         elapsed = time.monotonic() - started
