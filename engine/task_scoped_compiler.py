@@ -14,7 +14,11 @@ try:
         ensure_valid_compiled_workflow,
     )
     from .project_context_loader import ProjectContextLoader
-    from .runtime_binder import RuntimeBinder
+    from .runtime_binder import (
+        BindingPolicyError,
+        RuntimeBinder,
+        ensure_binding_status_executable,
+    )
     from .workflow_loader import WorkflowLoader
 except ImportError:  # pragma: no cover
     from binding_report_validator import (  # type: ignore[no-redef]
@@ -26,7 +30,11 @@ except ImportError:  # pragma: no cover
         ensure_valid_compiled_workflow,
     )
     from project_context_loader import ProjectContextLoader
-    from runtime_binder import RuntimeBinder
+    from runtime_binder import (  # type: ignore[no-redef]
+        BindingPolicyError,
+        RuntimeBinder,
+        ensure_binding_status_executable,
+    )
     from workflow_loader import WorkflowLoader
 
 
@@ -302,6 +310,7 @@ class TaskScopedWorkflowCompiler:
         candidate_semantic = self.loader.build_semantic_plan_from_workflow(candidate_workflow)
         binding = self.binder.bind_semantic_plan(candidate_semantic, registry_ref=registry_ref)
         ensure_valid_binding_report(binding, stage="post_bind")
+        ensure_binding_status_executable(binding, stage="post_bind_policy")
         unresolved_policy = self.build_unresolved_policy(constitution, capability_graph, binding)
         compiled_workflow = self.apply_unresolved_policy(candidate_workflow, unresolved_policy)
         ensure_valid_compiled_workflow(compiled_workflow, stage="post_unresolved_policy")
@@ -465,6 +474,7 @@ class TaskScopedWorkflowCompiler:
         candidate_semantic = self.loader.build_semantic_plan_from_workflow(candidate_workflow)
         binding = self.binder.bind_semantic_plan(candidate_semantic, registry_ref=registry_ref)
         ensure_valid_binding_report(binding, stage="post_bind")
+        ensure_binding_status_executable(binding, stage="post_bind_policy")
         unresolved_policy = self.build_unresolved_policy(
             enriched_constitution, capability_graph, binding
         )

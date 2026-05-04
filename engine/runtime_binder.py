@@ -13,6 +13,60 @@ except ImportError:  # pragma: no cover
     from workflow_loader import WorkflowLoader
 
 
+class BindingPolicyError(Exception):
+    """Raised when a binding report cannot be safely executed.
+
+    Surfaces the soft halt the binding report has carried since P4 #2
+    (binding_status enum: ready / degraded / blocked) as a deterministic
+    exception, so downstream consumers cannot accidentally advance past
+    unresolved required capabilities or constitution-blocked steps. The
+    ``stage`` attribute records where the gate fired so callers can
+    branch on producer- vs. transform-stage failures uniformly with
+    the validator helpers.
+    """
+
+    def __init__(self, message: str, *, stage: str, errors: list[str]) -> None:
+        super().__init__(message)
+        self.stage = stage
+        self.errors = list(errors)
+
+
+def ensure_binding_status_executable(
+    binding: dict, *, stage: str = "post_bind_policy"
+) -> None:
+    """Raise ``BindingPolicyError`` when ``binding_status == 'blocked'``.
+
+    A binding is considered non-executable when at least one required
+    step has unresolved capability binding (``required_unresolved``,
+    ``incompatible``) or is blocked by the project constitution
+    (``blocked_by_constitution``). The aggregate status is computed
+    by ``RuntimeBinder._resolve_binding_status``; this helper just
+    promotes ``"blocked"`` from a label into a halt.
+    """
+    status = binding.get("binding_status")
+    if status != "blocked":
+        return
+    summary = binding.get("summary") or {}
+    blocked_steps = [
+        step.get("step_id", "<unknown>")
+        for step in (binding.get("steps") or [])
+        if step.get("resolution_status")
+        in {"required_unresolved", "blocked_by_constitution", "incompatible"}
+    ]
+    errors = [
+        "binding_status='blocked' with "
+        f"{summary.get('unresolved_required_steps', 0)} unresolved required step(s)"
+    ]
+    if blocked_steps:
+        errors.append("blocked steps: " + ", ".join(blocked_steps))
+    raise BindingPolicyError(
+        "binding cannot proceed at stage "
+        f"'{stage}': blocked by constitution / unresolved required capabilities",
+        stage=stage,
+        errors=errors,
+    )
+
+
 class RuntimeBinder:
     """Workflow runtime binder: semantic plan -> binding report / bound phases."""
 

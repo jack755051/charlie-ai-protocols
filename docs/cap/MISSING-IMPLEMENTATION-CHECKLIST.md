@@ -260,9 +260,10 @@
   - 驗收：binding report 明確記錄命中來源
   - 現況：**deferred / blocked**。目前 runtime 只有 project workflow source 有 producer，shared / builtin / legacy 三個 layer 沒有實際 workflow producer 目錄；`source_priority` 字串只在 supervisor schema 與測試 fixture 出現，runtime 不消費。若現在硬做 4-layer resolver 等於蓋空殼且無 consumer 可驗，且 per-step `source_layer / source_path / candidate_sources / selected_reason` 欄位會打開剛 close 的 P4 #2 binding-report schema 與 fixtures。延後到 shared / builtin / legacy workflow producer 真實落地後再實作；屆時應同步審視 binding-report.schema.yaml 是否新增 optional source-tracking 子物件。
 
-- [ ] enforce allowed capabilities
+- [x] enforce allowed capabilities
   - 交付物：policy check
   - 驗收：憲法未允許的 capability 會 halt
+  - 進度：done in `feat/binding-report-validation`；既有 `engine/runtime_binder.py` 已會把 `binding_policy.allowed_capabilities` 不允許的 step 標記為 `resolution_status='blocked_by_constitution'` 並計入 `unresolved_required_steps`（line 88, 140-173），但這只升到 `binding_status='blocked'` 標籤、過去只有 `main.py:105` 軟認帳。本輪新增 `engine/runtime_binder.py:BindingPolicyError` + `ensure_binding_status_executable(binding, *, stage)`，掛在 `engine/task_scoped_compiler.py` 兩個 compile path 的 `ensure_valid_binding_report` 之後、`apply_unresolved_policy` 之前；blocked 時即時 raise，不會進入 `apply_unresolved_policy` 或 `build_bound_execution_phases_from_workflow`。`engine/workflow_cli.py:cmd_compile_json` 接成 `{"ok": false, "error": "binding_policy_error", "stage": "post_bind_policy", "errors": [...]}`，exit 1。
 
 - [ ] enforce allowed workflow source roots
   - 交付物：source root policy check
@@ -272,9 +273,10 @@
   - 交付物：fallback policy check
   - 驗收：strict / preferred / fallback_allowed 與 missing_policy 的行為在 bind / run 前一致套用
 
-- [ ] 強化 unresolved handling
+- [x] 強化 unresolved handling
   - 交付物：error model 與 report
   - 驗收：required unresolved halt，optional unresolved 可降級
+  - 進度：done in `feat/binding-report-validation`；與 P4 #6 共用同一條 `binding_status='blocked'` 路徑。required unresolved step 會推升 `binding_status` 至 `blocked`，新 `ensure_binding_status_executable` halt 在 `compile_task` / `compile_task_from_envelope` 內生效。optional unresolved 維持原本「不推升 binding_status，可降級執行」語意：optional unresolved 只進 `unresolved_optional_steps` 計數，`binding_status` 落在 `degraded`（不算 blocked），不被新 hard halt 影響，下游 `apply_unresolved_policy` 仍按原本 `optional_unresolved → action='skip|fallback'` 處理。新 `tests/scripts/test-workflow-policy-gates.sh` Case 3 覆蓋 required-unresolved → halt + 不進入 bound phases。
 
 - [ ] 產出 preflight report
   - 交付物：preflight artifact
