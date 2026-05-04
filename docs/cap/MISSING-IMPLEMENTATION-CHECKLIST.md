@@ -244,6 +244,11 @@
   - 交付物：validation hook
   - 驗收：binding report 可被機器驗證
 
+- [ ] 強化 step_runtime validate-jsonschema fallback（pattern + additionalProperties）
+  - 交付物：fallback parity with jsonschema package
+  - 驗收：identity-ledger 11/11 在無 `pip install jsonschema` 環境也能 pass
+  - 現況：fallback 已支援 nested required / type / enum / minItems / items.properties / type union（含 `["string","null"]`）；`pattern`（regex 約束）與 `additionalProperties: false` 仍依賴 jsonschema 完整套件，列為後續 hardening
+
 - [ ] 強化 compiled workflow normalization
   - 交付物：normalizer
   - 驗收：不同來源 workflow 輸出一致 shape
