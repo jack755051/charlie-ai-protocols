@@ -37,7 +37,7 @@ cap workflow run --strategy auto version-control "版本更新"
 ## Status
 
 - **Latest tag**：`v0.22.0-rc13` — close P7 with result-report builder, run archive policy, and Logger handoff
-- **Phase 進度**：P0 / P1 / P2 / P3 / P4 / P5 / P6 / P7 已完成（其中 P4 #5 source priority resolver 與 P5 #9 stall handling 為 deferred non-blocking；P7 #5 promote_candidates 為 design-deferred 至 P10）；**P8 in-progress**：gate-result validation CLI（#5）與 watcher checkpoint runner（#1）已落地形成 contract↔producer 閉環，其餘 P8（security / qa / logger runner、fail route handling、halt-on-risk、rerun failed gate）與 P9 / P10 pending
+- **Phase 進度**：P0 / P1 / P2 / P3 / P4 / P5 / P6 / P7 已完成（其中 P4 #5 source priority resolver 與 P5 #9 stall handling 為 deferred non-blocking；P7 #5 promote_candidates 為 design-deferred 至 P10）；**P8 in-progress**：gate-result validation CLI（#5）+ watcher checkpoint runner（#1）+ security checkpoint runner（#3）已落地形成 contract↔producer 雙鏈閉環，其餘 P8（qa / logger runner、fail route handling、halt-on-risk、rerun failed gate）與 P9 / P10 pending
 - **單一進度來源**：[docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md](docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md)
 - **完整 release 紀錄**：[docs/cap/RELEASE-NOTES.md](docs/cap/RELEASE-NOTES.md)
 

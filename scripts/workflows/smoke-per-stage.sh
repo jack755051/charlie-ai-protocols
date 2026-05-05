@@ -26,6 +26,7 @@
 #  19. tests/scripts/test-gate-result-schema.sh                  (P0 #6 schema gate, forward contract)
 #  19a. tests/scripts/test-validate-gate-result-cli.sh           (P8 #5 gate-result CLI contract: rc 0/41/1 + reason= shape)
 #  19b. tests/scripts/test-watcher-gate-runner.sh                (P8 #1 first concrete gate-result producer; emit + round-trip)
+#  19c. tests/scripts/test-security-gate-runner.sh               (P8 #3 second gate-result producer; secret/XSS/eval scan + round-trip)
 #  20. tests/scripts/test-project-id-resolver.sh                 (P1 #1 + #2 + #3 resolver + ledger gate)
 #  21. tests/scripts/test-identity-ledger-schema.sh              (P1 #3 ledger schema gate, normalized contract)
 #  22. tests/scripts/test-storage-health.sh                      (P1 #4 storage health-check core)
@@ -218,6 +219,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-workflow-result-schema.sh" "workflo
 run_fixture "${REPO_ROOT}/tests/scripts/test-gate-result-schema.sh" "gate-result schema gate (P0 #6, forward contract)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-validate-gate-result-cli.sh" "validate-gate-result CLI contract (P8 #5)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-watcher-gate-runner.sh" "watcher checkpoint runner (P8 #1)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-security-gate-runner.sh" "security checkpoint runner (P8 #3)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-project-id-resolver.sh" "project-id resolver + ledger gate (P1 #1/#2/#3)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-identity-ledger-schema.sh" "identity-ledger schema gate (P1 #3, normalized contract)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-storage-health.sh" "storage health-check core (P1 #4)"

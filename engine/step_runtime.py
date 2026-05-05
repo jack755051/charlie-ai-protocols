@@ -1572,6 +1572,105 @@ def run_watcher_gate_cli(
 
 
 # ─────────────────────────────────────────────────────────
+# 19. run-security-gate (P8 #3 second concrete gate-result producer)
+# ─────────────────────────────────────────────────────────
+
+
+def run_security_gate_cli(
+    *,
+    gate_id: str,
+    checkpoint: str,
+    workflow_id: str,
+    run_id: str,
+    step_id: str,
+    project_id: str,
+    target_artifacts: list[str],
+    output_path: str | None,
+    task_id: str | None,
+    gate_subtype: str | None,
+    produced_by: str,
+) -> None:
+    """Run one security checkpoint and persist the envelope.
+
+    Producer counterpart of P8 #3 — mirrors :func:`run_watcher_gate_cli`
+    end-to-end (build → in-memory validate → persist → on-disk
+    re-validate → emit single-line status), but the underlying check
+    bank is the security pattern set defined in
+    :mod:`engine.security_gate_runner`. Sharing the emit/validate
+    skeleton across rails keeps the contract bug surface single-sourced
+    so a future schema change only needs one CLI to update.
+
+    Exit code policy mirrors :func:`run_watcher_gate_cli` (and through
+    it ``policies/workflow-executor-exit-codes.md``):
+      * exit 0  — envelope produced and validated; stdout includes
+                  ``status=ok;result=<verdict>;risk=<level>;path=<file>``.
+      * exit 41 — ``schema_validation_failed`` (producer drift; the
+                  envelope built by this runner does not satisfy
+                  ``schemas/gate-result.schema.yaml``). Envelope is
+                  still written to disk for triage.
+      * exit 1  — operational error (write failed, schema unreadable).
+    """
+    try:
+        from .security_gate_runner import (
+            SecurityGateInput,
+            run_security_gate,
+        )
+    except ImportError:  # pragma: no cover — direct-script fallback
+        from security_gate_runner import (  # type: ignore[no-redef]
+            SecurityGateInput,
+            run_security_gate,
+        )
+
+    spec = SecurityGateInput(
+        gate_id=gate_id,
+        checkpoint=checkpoint,
+        workflow_id=workflow_id,
+        run_id=run_id,
+        step_id=step_id,
+        project_id=project_id,
+        target_artifacts=target_artifacts,
+        task_id=task_id,
+        gate_subtype=gate_subtype,
+        produced_by=produced_by,
+    )
+
+    envelope = run_security_gate(spec)
+    pre_errors = _validate_gate_result_payload(envelope)
+    if pre_errors:
+        joined = " | ".join(pre_errors)
+        print(f"reason=producer_envelope_invalid;detail={joined}")
+        sys.exit(41)
+
+    target = Path(output_path) if output_path else Path.cwd() / f"{step_id}.gate-result.json"
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            json.dumps(envelope, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        print(f"reason=persist_failed;detail={exc}")
+        sys.exit(1)
+
+    try:
+        on_disk = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"reason=persist_readback_failed;detail={exc}")
+        sys.exit(1)
+
+    post_errors = _validate_gate_result_payload(on_disk)
+    if post_errors:
+        joined = " | ".join(post_errors)
+        print(f"reason=gate_result_schema_invalid;detail={joined}")
+        sys.exit(41)
+
+    print(
+        f"status=ok;result={envelope['result']};risk={envelope['risk_level']};path={target}"
+    )
+    sys.exit(0)
+
+
+# ─────────────────────────────────────────────────────────
 # CLI entry point
 # ─────────────────────────────────────────────────────────
 
@@ -1787,7 +1886,52 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Agent id recorded on the envelope; defaults to 90-Watcher.",
     )
 
-    # 19. resolve-handoff-routing (P6 #8 — opt-in route_back_to gate)
+    # 19. run-security-gate (P8 #3 — second concrete gate-result producer)
+    p_rsg = sub.add_parser(
+        "run-security-gate",
+        help=(
+            "P8 #3 security checkpoint runner; emits a gate-result "
+            "envelope satisfying schemas/gate-result.schema.yaml after "
+            "running deterministic security checks (artifact_exists / "
+            "artifact_non_empty / secret_patterns / risky_keywords). "
+            "Self-validates emitted file via the same schema gate as "
+            "validate-gate-result so producer drift fails loud (exit 41)."
+        ),
+    )
+    p_rsg.add_argument("--gate-id", dest="gate_id", required=True)
+    p_rsg.add_argument("--checkpoint", required=True)
+    p_rsg.add_argument("--workflow-id", dest="workflow_id", required=True)
+    p_rsg.add_argument("--run-id", dest="run_id", required=True)
+    p_rsg.add_argument("--step-id", dest="step_id", required=True)
+    p_rsg.add_argument("--project-id", dest="project_id", required=True)
+    p_rsg.add_argument(
+        "--target-artifact",
+        dest="target_artifacts",
+        action="append",
+        default=None,
+        help="Path to one artifact the security gate must scan; pass multiple times for multiple inputs.",
+    )
+    p_rsg.add_argument(
+        "--output",
+        dest="output_path",
+        default=None,
+        help="Where to write <step_id>.gate-result.json; defaults to ./<step_id>.gate-result.json.",
+    )
+    p_rsg.add_argument("--task-id", dest="task_id", default=None)
+    p_rsg.add_argument(
+        "--gate-subtype",
+        dest="gate_subtype",
+        default="secret_scan",
+        help="Optional finer classification persisted on the envelope; defaults to secret_scan.",
+    )
+    p_rsg.add_argument(
+        "--produced-by",
+        dest="produced_by",
+        default="08-Security",
+        help="Agent id recorded on the envelope; defaults to 08-Security.",
+    )
+
+    # 20. resolve-handoff-routing (P6 #8 — opt-in route_back_to gate)
     p_rhr = sub.add_parser(
         "resolve-handoff-routing",
         help=(
@@ -1919,6 +2063,24 @@ def main(argv: list[str] | None = None) -> None:
                 step_id=args.step_id,
                 project_id=args.project_id,
                 target_artifacts=parse_target_artifacts(args.target_artifacts),
+                output_path=args.output_path,
+                task_id=args.task_id,
+                gate_subtype=args.gate_subtype,
+                produced_by=args.produced_by,
+            )
+        case "run-security-gate":
+            try:
+                from .security_gate_runner import parse_target_artifacts as _sec_parse
+            except ImportError:  # pragma: no cover — direct-script fallback
+                from security_gate_runner import parse_target_artifacts as _sec_parse  # type: ignore[no-redef]
+            run_security_gate_cli(
+                gate_id=args.gate_id,
+                checkpoint=args.checkpoint,
+                workflow_id=args.workflow_id,
+                run_id=args.run_id,
+                step_id=args.step_id,
+                project_id=args.project_id,
+                target_artifacts=_sec_parse(args.target_artifacts),
                 output_path=args.output_path,
                 task_id=args.task_id,
                 gate_subtype=args.gate_subtype,
