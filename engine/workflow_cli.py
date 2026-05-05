@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 import uuid
 from datetime import datetime, timedelta
@@ -546,19 +547,178 @@ def cmd_show(cap_root: str, workflow_ref: str, status_file: str) -> None:
 # Subcommand: inspect
 # ---------------------------------------------------------------------------
 
-def cmd_inspect(status_file: str, run_id: str) -> None:
-    """Inspect a specific workflow run by run_id."""
-    sf = Path(status_file)
+def _find_run_dir(cap_home: Path, run_id: str) -> Path | None:
+    """Locate the on-disk run directory for ``run_id`` under ``cap_home``.
 
+    Layout: ``<cap_home>/projects/<project_id>/reports/workflows/<workflow_id>/<run_id>/``.
+    Globs across all projects + workflows because the inspect caller
+    only knows the run_id, not the project or workflow it belonged to.
+    Returns ``None`` if no matching directory is found (caller falls
+    back to the status-store path).
+    """
+    if not cap_home.is_dir():
+        return None
+    # ``sorted`` keeps the resolution deterministic when the same
+    # ``run_id`` somehow appears under multiple project / workflow
+    # subtrees (rare but possible after restores or renames); the
+    # alphabetically first match wins instead of relying on the
+    # filesystem's iteration order.
+    for path in sorted(cap_home.glob(f"projects/*/reports/workflows/*/{run_id}")):
+        if path.is_dir():
+            return path
+    return None
+
+
+def _try_build_result(run_dir: Path, cap_home: Path, status_file: str | None) -> dict | None:
+    """Aggregate run_dir SSOT into a workflow-result dict in-memory.
+
+    Used by ``cmd_inspect`` when ``workflow-result.json`` is missing
+    (e.g., older runs predating P7 Phase B, or runs whose schema
+    validation failed and emitted only the legacy fallback result.md).
+    Returns ``None`` if the builder import or call raises so the caller
+    can drop through to the status-store path without surfacing a
+    Python traceback to the user.
+    """
+    # workflow_cli.py is run as a script (``python engine/workflow_cli.py …``),
+    # so by default sys.path only includes ``engine/``. Insert the repo
+    # root once so the absolute ``engine.result_report_builder`` import
+    # resolves. Other cmd_* helpers in this module use the same pattern.
+    cap_root = Path(__file__).resolve().parent.parent
+    if str(cap_root) not in sys.path:
+        sys.path.insert(0, str(cap_root))
+    try:
+        from engine.result_report_builder import build_workflow_result
+    except ImportError:
+        return None
+    try:
+        return build_workflow_result(
+            run_dir,
+            cap_home=cap_home,
+            status_file=status_file or None,
+        )
+    except (FileNotFoundError, OSError, ValueError):
+        return None
+
+
+def _print_inspect_text(result: dict) -> None:
+    """Render a workflow-result dict as the P7 #7 inspect text view.
+
+    Sections (in order): Run Header / Summary / Failures / Sessions /
+    Artifacts / Logs Pointer. ``-`` is the placeholder for missing
+    scalars; ``(none)`` for empty list sections so the reader can tell
+    "no data" apart from "section not yet implemented".
+    """
+    # Run Header
+    print("# Run Header")
+    print(f"  workflow_id:   {result.get('workflow_id', '-')}")
+    if result.get("workflow_name"):
+        print(f"  workflow_name: {result['workflow_name']}")
+    print(f"  run_id:        {result.get('run_id', '-')}")
+    print(f"  project_id:    {result.get('project_id', '-')}")
+    if result.get("task_id"):
+        print(f"  task_id:       {result['task_id']}")
+    print(f"  started_at:    {result.get('started_at', '-') or '-'}")
+    finished_at = result.get("finished_at")
+    print(f"  finished_at:   {finished_at if finished_at else '-'}")
+    duration = result.get("total_duration_seconds")
+    print(f"  duration:      {f'{duration}s' if duration is not None else '-'}")
+    print(f"  final_state:   {result.get('final_state', '-')}")
+    fr = result.get("final_result")
+    print(f"  final_result:  {fr if fr else '-'}")
+
+    # Summary
+    summary = result.get("summary", {}) or {}
+    print()
+    print("# Summary")
+    print(f"  total_steps: {summary.get('total_steps', 0)}")
+    print(f"  completed:   {summary.get('completed', 0)}")
+    print(f"  failed:      {summary.get('failed', 0)}")
+    print(f"  skipped:     {summary.get('skipped', 0)}")
+    print(f"  blocked:     {summary.get('blocked', 0)}")
+
+    # Failures
+    failures = result.get("failures") or []
+    print()
+    print("# Failures")
+    if not failures:
+        print("  (none)")
+    else:
+        for failure in failures:
+            print(f"  - step_id:       {failure.get('step_id', '-')}")
+            print(f"    reason:        {failure.get('reason', '-')}")
+            if failure.get("detail"):
+                print(f"    detail:        {failure['detail']}")
+            rb = failure.get("route_back_to")
+            print(f"    route_back_to: {rb if rb else '-'}")
+
+    # Sessions
+    sessions = result.get("sessions") or []
+    print()
+    print("# Sessions")
+    if not sessions:
+        print("  (none)")
+    else:
+        for session in sessions:
+            print(f"  - session_id: {session.get('session_id', '-')}")
+            print(f"    step_id:     {session.get('step_id', '-')}")
+            print(f"    role:        {session.get('role', '-')}")
+            print(f"    capability:  {session.get('capability', '-')}")
+            print(f"    executor:    {session.get('executor', '-')}")
+            print(f"    lifecycle:   {session.get('lifecycle', '-')}")
+            if "duration_seconds" in session and session["duration_seconds"] is not None:
+                print(f"    duration:    {session['duration_seconds']}s")
+            if "result" in session:
+                print(f"    result:      {session['result']}")
+
+    # Artifacts
+    artifacts = result.get("artifacts") or []
+    print()
+    print("# Artifacts")
+    if not artifacts:
+        print("  (none)")
+    else:
+        for artifact in artifacts:
+            print(f"  - {artifact.get('name', '-')}: {artifact.get('path', '-')}")
+            if artifact.get("producer_step_id"):
+                print(f"      producer_step_id: {artifact['producer_step_id']}")
+
+    # Logs Pointer
+    logs = result.get("logs") or {}
+    print()
+    print("# Logs Pointer")
+    if not isinstance(logs, dict) or not logs:
+        print("  (none)")
+    else:
+        if logs.get("workflow_log"):
+            print(f"  workflow_log:       {logs['workflow_log']}")
+        wll = logs.get("workflow_log_lines")
+        if wll is not None:
+            print(f"  workflow_log_lines: {wll}")
+
+
+def _legacy_status_store_inspect(
+    status_file: str, run_id: str, *, output_json: bool
+) -> None:
+    """Pre-P7 inspect path: read from the status store ``runs[]`` array.
+
+    Triggered when no run_dir exists for ``run_id`` (typically because
+    the run never reached cap-workflow-exec.sh, or its run_dir was
+    archived / deleted). Output format matches the prior cmd_inspect
+    text view; ``--json`` dumps the runs[] entry as-is.
+    """
+    sf = Path(status_file)
     if not sf.exists():
         print(f"找不到 run_id：{run_id}", file=sys.stderr)
         sys.exit(1)
-
     runs = _normalize_runs_only(json.loads(sf.read_text(encoding="utf-8")))
     run = next((item for item in runs if item.get("run_id") == run_id), None)
     if run is None:
         print(f"找不到 run_id：{run_id}", file=sys.stderr)
         sys.exit(1)
+
+    if output_json:
+        print(json.dumps(run, ensure_ascii=False, indent=2))
+        return
 
     print("WORKFLOW RUN INSPECT")
     print(f"RUN ID:      {run.get('run_id', '-')}")
@@ -578,6 +738,54 @@ def cmd_inspect(status_file: str, run_id: str) -> None:
         print(f"DURATION:    {int((finished - started).total_seconds())}s")
     print(f"PROMPT:      {run.get('prompt_preview', '-') or '-'}")
     print(f"STATUS FILE: {sf}")
+
+
+def cmd_inspect(
+    status_file: str,
+    run_id: str,
+    *,
+    output_json: bool = False,
+    cap_home: str | None = None,
+) -> None:
+    """Inspect a workflow run.
+
+    Resolution order (P7 #7):
+      1. ``<cap_home>/projects/*/reports/workflows/*/<run_id>/workflow-result.json``
+         — preferred; emitted by P7 Phase B producer wiring on schema pass.
+      2. Same run_dir without ``workflow-result.json`` — call
+         ``result_report_builder.build_workflow_result`` to aggregate
+         the SSOT in-memory.
+      3. No run_dir found — fall back to the legacy status-store
+         ``runs[]`` lookup, preserving the prior inspect output for
+         pre-P7 entries.
+    """
+    # Resolution precedence: explicit ``--cap-home`` flag overrides the
+    # ``CAP_HOME`` env var, which in turn overrides the default
+    # ``~/.cap``. Aligns with the rest of the CAP scripts that consult
+    # ``CAP_HOME`` (cap-paths.sh ``get cap_home``).
+    cap_home_raw = cap_home or os.environ.get("CAP_HOME") or str(Path.home() / ".cap")
+    cap_home_path = Path(cap_home_raw).expanduser()
+    run_dir = _find_run_dir(cap_home_path, run_id)
+
+    if run_dir is not None:
+        result_json_path = run_dir / "workflow-result.json"
+        result: dict | None = None
+        if result_json_path.is_file():
+            try:
+                result = json.loads(result_json_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                result = None
+        if result is None:
+            result = _try_build_result(run_dir, cap_home_path, status_file)
+
+        if result is not None:
+            if output_json:
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+            else:
+                _print_inspect_text(result)
+            return
+
+    _legacy_status_store_inspect(status_file, run_id, output_json=output_json)
 
 
 # ---------------------------------------------------------------------------
@@ -1448,6 +1656,18 @@ def _build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("inspect", help="Inspect a specific workflow run")
     p.add_argument("status_file")
     p.add_argument("run_id")
+    p.add_argument(
+        "--json",
+        action="store_true",
+        dest="output_json",
+        help="Emit the workflow-result JSON instead of the text view.",
+    )
+    p.add_argument(
+        "--cap-home",
+        dest="cap_home",
+        default=None,
+        help="Override the CAP home directory used to locate run_dir (default: ~/.cap).",
+    )
 
     # plan
     p = sub.add_parser("plan", help="Display semantic + bound execution plan")
@@ -1604,7 +1824,12 @@ def main() -> None:
         case "show":
             cmd_show(args.cap_root, args.workflow_ref, args.status_file)
         case "inspect":
-            cmd_inspect(args.status_file, args.run_id)
+            cmd_inspect(
+                args.status_file,
+                args.run_id,
+                output_json=args.output_json,
+                cap_home=args.cap_home,
+            )
         case "plan":
             cmd_plan(args.cap_root, args.workflow_ref)
         case "bind":

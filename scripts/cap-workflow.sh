@@ -253,8 +253,11 @@ case "${1:-}" in
     "${PYTHON_BIN}" "${CLI_PY}" show "${CAP_ROOT}" "${WORKFLOW_REF}" "$(get_status_store)"
     ;;
   inspect)
-    [ "$#" -eq 2 ] || usage
-    "${PYTHON_BIN}" "${CLI_PY}" inspect "$(get_status_store)" "$2"
+    shift
+    [ "$#" -ge 1 ] || usage
+    # Forward all remaining args (run_id + optional --json / --cap-home);
+    # argparse on the Python side does the parsing.
+    "${PYTHON_BIN}" "${CLI_PY}" inspect "$(get_status_store)" "$@"
     ;;
   plan)
     [ "$#" -eq 2 ] || usage
