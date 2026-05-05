@@ -261,7 +261,7 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 
 - [x] 實作 watcher checkpoint runner（v0.22.0 P8 #1：`engine/watcher_gate_runner.py` 純函式 + `step_runtime.py run-watcher-gate` CLI 子命令；emit-then-self-validate 模式，runner 落地的 envelope 由 `validate-gate-result` 雙重驗證；測試覆蓋 pass / warn / blocked / 空 target_artifacts / round-trip 共 39 assertions）
 - [x] 實作 security checkpoint runner（v0.22.0 P8 #3：`engine/security_gate_runner.py` 純函式 + `step_runtime.py run-security-gate` CLI；沿用 #1 emit-then-self-validate 模式；pattern bank 涵蓋 5 條 secret regex + 3 條 risky keyword；critical → halt、high-only → escalate；finding cap = 10/file 防 envelope 爆炸；測試覆蓋 13 cases / 74 assertions，11 個 envelope 全通過 round-trip validate-gate-result CLI）
-- [ ] 實作 qa checkpoint runner
+- [x] 實作 qa checkpoint runner（v0.22.0 P8 #4：`engine/qa_gate_runner.py` 純函式 + `step_runtime.py run-qa-gate` CLI；3 條 test-summary 正則（jest / pytest / mocha）+ 3 條 coverage 正則（jest text-summary / generic / Lines），cross-artifact 聚合 tests counts 與 worst coverage；test_failure → high/escalate、coverage_below → medium/warn；`--coverage-threshold` 預設 80.0；測試覆蓋 17 cases / 77 assertions，14 個 envelope 全通過 round-trip validate-gate-result CLI）
 - [ ] 實作 logger milestone runner
 - [x] 定義 gate result schema（v0.22.0 P0 #6 forward contract，10 fixture cases；v0.22.0 P8 #5 加上 `step_runtime.py validate-gate-result` CLI 套用 schema 並對齊 P6 #3 的 0/41/1 exit code 與 `reason=...;detail=...` 單行契約，供 P8 #6 fail-route handling、#7 halt-on-risk 與 #8 rerun failed gate 共同消費）
 - [ ] 實作 fail route handling
