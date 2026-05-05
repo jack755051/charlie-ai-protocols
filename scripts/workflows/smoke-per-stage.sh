@@ -30,6 +30,7 @@
 #  19d. tests/scripts/test-qa-gate-runner.sh                     (P8 #4 third gate-result producer; jest/pytest/mocha + coverage threshold + round-trip)
 #  19e. tests/scripts/test-logger-gate-runner.sh                 (P8 #5 fourth gate-result producer; P7 workflow-result.json archive readiness + mode-aware archive-summary check)
 #  19f. tests/scripts/test-gate-result-consumer.sh               (P8 #6 first gate-result consumer; halt/route_back/escalate/retry-unsupported/defer + workflow.log + route-history.jsonl)
+#  19g. tests/scripts/test-rerun-gate.sh                         (P8 rerun-failed-gate consumer; eligibility + dispatch + versioned output + audit trail)
 #  20. tests/scripts/test-project-id-resolver.sh                 (P1 #1 + #2 + #3 resolver + ledger gate)
 #  21. tests/scripts/test-identity-ledger-schema.sh              (P1 #3 ledger schema gate, normalized contract)
 #  22. tests/scripts/test-storage-health.sh                      (P1 #4 storage health-check core)
@@ -226,6 +227,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-security-gate-runner.sh" "security 
 run_fixture "${REPO_ROOT}/tests/scripts/test-qa-gate-runner.sh" "qa checkpoint runner (P8 #4)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-logger-gate-runner.sh" "logger milestone runner (P8 #5)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-gate-result-consumer.sh" "gate-result fail-route consumer (P8 #6)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-rerun-gate.sh" "rerun-failed-gate consumer (P8 #8)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-project-id-resolver.sh" "project-id resolver + ledger gate (P1 #1/#2/#3)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-identity-ledger-schema.sh" "identity-ledger schema gate (P1 #3, normalized contract)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-storage-health.sh" "storage health-check core (P1 #4)"

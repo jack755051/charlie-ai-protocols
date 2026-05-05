@@ -1674,6 +1674,18 @@ def run_logger_gate_cli(
 
 
 # ─────────────────────────────────────────────────────────
+# 23. rerun-gate (P8 rerun-failed-gate consumer)
+# ─────────────────────────────────────────────────────────
+#
+# Second consumer-side entry point: takes a previously-emitted
+# gate-result envelope, validates schema, checks rerun eligibility
+# (fail / blocked by default; pass / warn require --force), rebuilds
+# the matching producer input spec, re-runs, and persists the new
+# envelope at a versioned path so the original is preserved. Logic
+# lives in :mod:`engine.gate_result_rerun`.
+
+
+# ─────────────────────────────────────────────────────────
 # CLI entry point
 # ─────────────────────────────────────────────────────────
 
@@ -2085,7 +2097,51 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional path to route-history.jsonl; appends one JSON record per call.",
     )
 
-    # 23. resolve-handoff-routing (P6 #8 — opt-in route_back_to gate)
+    # 23. rerun-gate (P8 — rerun failed/blocked gate consumer)
+    p_rgate = sub.add_parser(
+        "rerun-gate",
+        help=(
+            "P8 rerun consumer; reads an existing gate-result envelope, "
+            "validates schema, checks eligibility (fail/blocked default; "
+            "pass/warn require --force), re-dispatches to the matching "
+            "producer (watcher/security/qa/logger), and writes the new "
+            "envelope at a versioned path (<step_id>-N.gate-result.json) "
+            "so the original is preserved as audit trail. Optionally "
+            "appends to workflow.log + route-history.jsonl. "
+            "(0=outcome emitted, 41=schema invalid, 1=missing/parse/"
+            "unsupported)."
+        ),
+    )
+    p_rgate.add_argument(
+        "result_path",
+        help="Path to the original <step_id>.gate-result.json envelope.",
+    )
+    p_rgate.add_argument(
+        "--output",
+        dest="output_path",
+        default=None,
+        help="Override new envelope path; defaults to versioned <step_id>-N.gate-result.json next to original.",
+    )
+    p_rgate.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Allow rerun on pass / warn verdicts; default refuses unless original was fail / blocked.",
+    )
+    p_rgate.add_argument(
+        "--workflow-log",
+        dest="workflow_log_path",
+        default=None,
+        help="Optional path to workflow.log; appends one human-readable line per rerun.",
+    )
+    p_rgate.add_argument(
+        "--route-history",
+        dest="route_history_path",
+        default=None,
+        help="Optional path to route-history.jsonl; appends one JSON record per rerun.",
+    )
+
+    # 24. resolve-handoff-routing (P6 #8 — opt-in route_back_to gate)
     p_rhr = sub.add_parser(
         "resolve-handoff-routing",
         help=(
@@ -2283,6 +2339,18 @@ def main(argv: list[str] | None = None) -> None:
                 from gate_result_consumer import consume_gate_result_cli  # type: ignore[no-redef]
             consume_gate_result_cli(
                 result_path=args.result_path,
+                workflow_log_path=args.workflow_log_path,
+                route_history_path=args.route_history_path,
+            )
+        case "rerun-gate":
+            try:
+                from .gate_result_rerun import rerun_gate_cli
+            except ImportError:  # pragma: no cover — direct-script fallback
+                from gate_result_rerun import rerun_gate_cli  # type: ignore[no-redef]
+            rerun_gate_cli(
+                result_path=args.result_path,
+                output_path=args.output_path,
+                force=args.force,
                 workflow_log_path=args.workflow_log_path,
                 route_history_path=args.route_history_path,
             )
