@@ -133,11 +133,15 @@ assert_contains  "decision=proceed (warn)"  "decision=proceed" "${out2}"
 assert_contains  "result=warn"              "result=warn"    "${out2}"
 
 # ── Case 3: fail + halt → halt ─────────────────────────────────────────
+# Uses risk=medium so the test exercises the explicit-halt-action path
+# purely (without halt-on-risk policy P8 #7 firing). Halt-on-risk
+# variant — risk=critical that overrides any non-halt action — is
+# in Case 17 onwards.
 echo "Case 3: fail + fail_routing.action=halt → decision=halt"
 PATH_3="$(write_envelope "case3-fail-halt" "{
   ${IDENTITY},
   \"result\": \"fail\",
-  \"risk_level\": \"critical\",
+  \"risk_level\": \"medium\",
   \"fail_routing\": {
     \"action\": \"halt\",
     \"route_back_to_step\": null,
@@ -151,11 +155,14 @@ assert_contains  "decision=halt"            "decision=halt" "${out3}"
 assert_contains  "reason carries producer text" "Critical secret leak" "${out3}"
 
 # ── Case 4: fail + route_back → route_back ─────────────────────────────
+# Uses risk=medium so halt-on-risk policy (P8 #7) does not override
+# the route_back recommendation; halt-on-risk variant is exercised
+# separately in Case 18.
 echo "Case 4: fail + route_back + route_back_to_step=ba → decision=route_back"
 PATH_4="$(write_envelope "case4-fail-routeback" "{
   ${IDENTITY},
   \"result\": \"fail\",
-  \"risk_level\": \"high\",
+  \"risk_level\": \"medium\",
   \"fail_routing\": {
     \"action\": \"route_back\",
     \"route_back_to_step\": \"ba\",
@@ -170,11 +177,13 @@ assert_contains  "route_back_to_step=ba"           "route_back_to_step=ba" "${ou
 assert_contains  "needs_supervisor=false"          "needs_supervisor=false" "${out4}"
 
 # ── Case 5: fail + route_back missing target → conservative halt ───────
+# Uses risk=medium so the test exercises the route_back-target-missing
+# downgrade purely; halt-on-risk variant is in Case 19.
 echo "Case 5: fail + route_back without route_back_to_step → conservative halt"
 PATH_5="$(write_envelope "case5-routeback-no-target" "{
   ${IDENTITY},
   \"result\": \"fail\",
-  \"risk_level\": \"high\",
+  \"risk_level\": \"medium\",
   \"fail_routing\": {
     \"action\": \"route_back\",
     \"route_back_to_step\": null,
@@ -188,11 +197,13 @@ assert_contains  "decision=halt (downgrade)"        "decision=halt" "${out5}"
 assert_contains  "needs_supervisor=true"            "needs_supervisor=true" "${out5}"
 
 # ── Case 6: fail + retry → retry_unsupported ───────────────────────────
+# Uses risk=medium so halt-on-risk does not pre-empt retry_unsupported.
+# Halt-on-risk variant in Case 20.
 echo "Case 6: fail + fail_routing.action=retry → decision=retry_unsupported (P8 #6 v1 boundary)"
 PATH_6="$(write_envelope "case6-fail-retry" "{
   ${IDENTITY},
   \"result\": \"fail\",
-  \"risk_level\": \"high\",
+  \"risk_level\": \"medium\",
   \"fail_routing\": {
     \"action\": \"retry\",
     \"route_back_to_step\": null,
@@ -207,11 +218,13 @@ assert_contains  "needs_supervisor=true (retry)"     "needs_supervisor=true"    
 assert_contains  "reason mentions overlap with P8 #8" "overlaps P8 #8"            "${out6}"
 
 # ── Case 7: fail + escalate → escalate + needs_supervisor=true ─────────
+# Uses risk=medium so halt-on-risk does not override escalate.
+# Halt-on-risk-supplants-escalate variant in Case 21.
 echo "Case 7: fail + fail_routing.action=escalate → decision=escalate"
 PATH_7="$(write_envelope "case7-fail-escalate" "{
   ${IDENTITY},
   \"result\": \"fail\",
-  \"risk_level\": \"high\",
+  \"risk_level\": \"medium\",
   \"fail_routing\": {
     \"action\": \"escalate\",
     \"route_back_to_step\": null,
@@ -225,11 +238,13 @@ assert_contains  "decision=escalate"                "decision=escalate" "${out7}
 assert_contains  "needs_supervisor=true"            "needs_supervisor=true" "${out7}"
 
 # ── Case 8: fail + none → defer_to_workflow_yaml ──────────────────────
+# Uses risk=medium so defer-to-workflow-YAML is exercised purely.
+# Halt-on-risk-supplants-defer variant in Case 22.
 echo "Case 8: fail + fail_routing.action=none → decision=defer_to_workflow_yaml"
 PATH_8="$(write_envelope "case8-fail-none" "{
   ${IDENTITY},
   \"result\": \"fail\",
-  \"risk_level\": \"high\",
+  \"risk_level\": \"medium\",
   \"fail_routing\": {
     \"action\": \"none\",
     \"route_back_to_step\": null,
@@ -242,11 +257,13 @@ assert_eq        "rc 0 defer"                       "0"             "${rc8}"
 assert_contains  "decision=defer_to_workflow_yaml"  "decision=defer_to_workflow_yaml" "${out8}"
 
 # ── Case 9: blocked + missing fail_routing → conservative halt ────────
+# Uses risk=medium so the test exercises the conservative-halt-on-
+# missing-fail_routing path purely; halt-on-risk variant in Case 23.
 echo "Case 9: blocked + fail_routing absent → conservative halt with needs_supervisor=true"
 PATH_9="$(write_envelope "case9-blocked-no-routing" "{
   ${IDENTITY},
   \"result\": \"blocked\",
-  \"risk_level\": \"high\"
+  \"risk_level\": \"medium\"
 }")"
 out9="$(run_consume "${PATH_9}")"
 rc9=$?
@@ -354,6 +371,199 @@ out16="$(run_consume "${PRODUCER_OUT_B}")"
 rc16=$?
 assert_eq        "rc 0 real-producer blocked"        "0"             "${rc16}"
 assert_contains  "decision=halt"                     "decision=halt" "${out16}"
+
+# ──────────────────────────────────────────────────────────────────────
+# P8 #7 halt-on-risk policy cases
+# ──────────────────────────────────────────────────────────────────────
+#
+# These cases verify that risk_level=high|critical forces halt
+# regardless of result or fail_routing.action. The earlier cases
+# (3-9) deliberately use risk=medium so they exercise the
+# pre-halt-on-risk decision matrix purely; cases below exercise
+# the policy override.
+
+# ── Case 17: pass + risk=high → halt-on-risk ──────────────────────────
+echo "Case 17: pass envelope but risk_level=high → decision=halt (halt_on_risk policy)"
+PATH_17="$(write_envelope "case17-pass-high" "{
+  ${IDENTITY},
+  \"result\": \"pass\",
+  \"risk_level\": \"high\"
+}")"
+out17="$(run_consume "${PATH_17}")"
+rc17=$?
+assert_eq        "rc 0 pass+high"                    "0"             "${rc17}"
+assert_contains  "decision=halt overrides pass"      "decision=halt" "${out17}"
+assert_contains  "needs_supervisor=true on halt-on-risk" "needs_supervisor=true" "${out17}"
+assert_contains  "reason mentions halt_on_risk"      "halt_on_risk"  "${out17}"
+assert_contains  "reason mentions risk_level=high"   "risk_level=high" "${out17}"
+
+# ── Case 18: pass + risk=critical → halt-on-risk ──────────────────────
+echo "Case 18: pass envelope but risk_level=critical → decision=halt"
+PATH_18="$(write_envelope "case18-pass-critical" "{
+  ${IDENTITY},
+  \"result\": \"pass\",
+  \"risk_level\": \"critical\"
+}")"
+out18="$(run_consume "${PATH_18}")"
+rc18=$?
+assert_eq        "rc 0 pass+critical"                "0"             "${rc18}"
+assert_contains  "decision=halt"                     "decision=halt" "${out18}"
+assert_contains  "reason mentions risk_level=critical" "risk_level=critical" "${out18}"
+
+# ── Case 19: warn + risk=critical → halt-on-risk ──────────────────────
+echo "Case 19: warn envelope but risk_level=critical → decision=halt"
+PATH_19="$(write_envelope "case19-warn-critical" "{
+  ${IDENTITY},
+  \"result\": \"warn\",
+  \"risk_level\": \"critical\"
+}")"
+out19="$(run_consume "${PATH_19}")"
+rc19=$?
+assert_eq        "rc 0 warn+critical"                "0"             "${rc19}"
+assert_contains  "decision=halt overrides warn"      "decision=halt" "${out19}"
+assert_contains  "reason mentions verdict=warn"      "verdict=warn"  "${out19}"
+
+# ── Case 20: warn + risk=high → halt-on-risk ──────────────────────────
+echo "Case 20: warn envelope but risk_level=high → decision=halt"
+PATH_20="$(write_envelope "case20-warn-high" "{
+  ${IDENTITY},
+  \"result\": \"warn\",
+  \"risk_level\": \"high\"
+}")"
+out20="$(run_consume "${PATH_20}")"
+rc20=$?
+assert_eq        "rc 0 warn+high"                    "0"             "${rc20}"
+assert_contains  "decision=halt"                     "decision=halt" "${out20}"
+
+# ── Case 21: fail + escalate + high → halt-on-risk supplants escalate ─
+echo "Case 21: fail + escalate + risk=high → decision=halt (supplants escalate)"
+PATH_21="$(write_envelope "case21-fail-escalate-high" "{
+  ${IDENTITY},
+  \"result\": \"fail\",
+  \"risk_level\": \"high\",
+  \"fail_routing\": {
+    \"action\": \"escalate\",
+    \"route_back_to_step\": null,
+    \"reason\": \"High-severity findings; supervisor decides.\"
+  }
+}")"
+out21="$(run_consume "${PATH_21}")"
+rc21=$?
+assert_eq        "rc 0 fail+escalate+high"           "0"             "${rc21}"
+assert_contains  "decision=halt (supplants escalate)" "decision=halt" "${out21}"
+assert_contains  "reason notes overridden action"    "overrides producer fail_routing.action=escalate" "${out21}"
+assert_contains  "reason preserves producer text"    "supervisor decides" "${out21}"
+
+# ── Case 22: fail + route_back + critical → halt-on-risk wins ─────────
+echo "Case 22: fail + route_back + critical → decision=halt (avoids high-risk auto-routing)"
+PATH_22="$(write_envelope "case22-fail-routeback-critical" "{
+  ${IDENTITY},
+  \"result\": \"fail\",
+  \"risk_level\": \"critical\",
+  \"fail_routing\": {
+    \"action\": \"route_back\",
+    \"route_back_to_step\": \"ba\",
+    \"reason\": \"Spec drift; rerun BA.\"
+  }
+}")"
+out22="$(run_consume "${PATH_22}")"
+rc22=$?
+assert_eq        "rc 0 fail+route_back+critical"      "0"             "${rc22}"
+assert_contains  "decision=halt (no auto route_back)" "decision=halt" "${out22}"
+# Critically: route_back_to_step must NOT carry the producer's target
+# step — halt-on-risk halts cleanly without proposing a target.
+assert_contains  "route_back_to_step=none on halt-on-risk" "route_back_to_step=none" "${out22}"
+assert_contains  "reason notes overridden route_back" "overrides producer fail_routing.action=route_back" "${out22}"
+
+# ── Case 23: fail + retry + high → halt-on-risk supplants retry ───────
+echo "Case 23: fail + retry + risk=high → decision=halt (supplants retry_unsupported)"
+PATH_23="$(write_envelope "case23-fail-retry-high" "{
+  ${IDENTITY},
+  \"result\": \"fail\",
+  \"risk_level\": \"high\",
+  \"fail_routing\": {
+    \"action\": \"retry\",
+    \"route_back_to_step\": null,
+    \"reason\": \"Flaky env; rerun.\"
+  }
+}")"
+out23="$(run_consume "${PATH_23}")"
+rc23=$?
+assert_eq        "rc 0 fail+retry+high"              "0"             "${rc23}"
+assert_contains  "decision=halt"                     "decision=halt" "${out23}"
+# Verify it goes through halt-on-risk path, not the retry_unsupported
+# path — the latter would leave 'overlaps P8 #8' in the reason.
+if printf '%s' "${out23}" | grep -qF -- "decision=retry_unsupported"; then
+  echo "  FAIL: high-risk envelope unexpectedly emitted retry_unsupported instead of halt-on-risk"
+  fail_count=$((fail_count + 1))
+else
+  echo "  PASS: high-risk pre-empts retry_unsupported path"
+  pass_count=$((pass_count + 1))
+fi
+
+# ── Case 24: fail + none + high → halt-on-risk supplants defer ────────
+echo "Case 24: fail + none + risk=high → decision=halt (supplants defer_to_workflow_yaml)"
+PATH_24="$(write_envelope "case24-fail-none-high" "{
+  ${IDENTITY},
+  \"result\": \"fail\",
+  \"risk_level\": \"high\",
+  \"fail_routing\": {
+    \"action\": \"none\",
+    \"route_back_to_step\": null,
+    \"reason\": \"Producer declined.\"
+  }
+}")"
+out24="$(run_consume "${PATH_24}")"
+rc24=$?
+assert_eq        "rc 0 fail+none+high"               "0"             "${rc24}"
+assert_contains  "decision=halt (not defer)"         "decision=halt" "${out24}"
+if printf '%s' "${out24}" | grep -qF -- "decision=defer_to_workflow_yaml"; then
+  echo "  FAIL: high-risk envelope incorrectly deferred to workflow YAML"
+  fail_count=$((fail_count + 1))
+else
+  echo "  PASS: high-risk pre-empts defer_to_workflow_yaml"
+  pass_count=$((pass_count + 1))
+fi
+
+# ── Case 25: blocked + critical + no fail_routing → halt-on-risk ──────
+echo "Case 25: blocked + critical + fail_routing absent → halt-on-risk with audit tags"
+PATH_25="$(write_envelope "case25-blocked-critical-no-routing" "{
+  ${IDENTITY},
+  \"result\": \"blocked\",
+  \"risk_level\": \"critical\"
+}")"
+out25="$(run_consume "${PATH_25}")"
+rc25=$?
+assert_eq        "rc 0 blocked+critical+no-routing"  "0"             "${rc25}"
+assert_contains  "decision=halt"                     "decision=halt" "${out25}"
+assert_contains  "reason mentions halt_on_risk"      "halt_on_risk"  "${out25}"
+# Even on a halt-on-risk halt, the absence-of-fail_routing audit tag
+# is preserved so existing triage tooling that greps 'fail_routing
+# absent' still surfaces this case.
+assert_contains  "reason preserves fail_routing absent tag" "fail_routing absent" "${out25}"
+
+# ── Case 26: route-history JSONL on halt-on-risk records halt_on_risk note ─
+echo "Case 26: route-history record for halt-on-risk carries notes=[halt_on_risk]"
+HIST_PATH_HR="${SANDBOX}/halt-on-risk-history.jsonl"
+run_consume "${PATH_21}" --route-history "${HIST_PATH_HR}" >/dev/null
+hr_check="$("${PYTHON_BIN}" - "${HIST_PATH_HR}" <<'PY'
+import json, sys
+records = [json.loads(line) for line in open(sys.argv[1], encoding="utf-8") if line.strip()]
+if not records:
+    print("fail:no_records")
+    sys.exit(0)
+rec = records[0]
+notes = rec.get("notes", [])
+if "halt_on_risk" not in notes:
+    print(f"fail:halt_on_risk_missing:{notes}")
+    sys.exit(0)
+if not any(n.startswith("overrode_action:") for n in notes):
+    print(f"fail:overrode_action_missing:{notes}")
+    sys.exit(0)
+print("ok")
+PY
+)"
+assert_eq        "halt-on-risk note present in JSONL" "ok"           "${hr_check}"
 
 echo ""
 echo "gate-result-consumer: ${pass_count} passed, ${fail_count} failed"

@@ -91,6 +91,18 @@ DECISION_ACTIONS = (
 )
 
 
+# P8 #7 halt-on-risk: risk levels that force halt regardless of
+# verdict or fail_routing recommendation. ``critical`` is for
+# explicit hard-failures (secret leak, IDOR, schema-broken SSOT);
+# ``high`` is for findings that the producer flagged as worth
+# escalating but where automated routing would be unsafe (e.g.,
+# auto route_back of a high-risk security finding could land it
+# back into the same pipeline that emitted the leak in the first
+# place). Anything below high is allowed to proceed through the
+# normal verdict ladder.
+HALT_ON_RISK_LEVELS = ("high", "critical")
+
+
 @dataclass
 class GateConsumeDecision:
     """Runtime routing decision derived from one gate-result envelope.
@@ -140,17 +152,26 @@ def derive_decision(envelope: dict[str, Any]) -> GateConsumeDecision:
 
     Decision matrix (in order of evaluation):
 
-      * result == 'pass' / 'warn'  → proceed (regardless of fail_routing)
-      * result == 'fail' / 'blocked' AND fail_routing missing
-        → conservative halt (needs_supervisor=True)
-      * fail_routing.action == 'halt'      → halt
-      * fail_routing.action == 'route_back':
+      0. **halt-on-risk policy (P8 #7)** — if ``risk_level`` is in
+         ``HALT_ON_RISK_LEVELS`` (currently ``high`` / ``critical``),
+         halt regardless of result or fail_routing.action.
+         ``needs_supervisor=True``. This is the **first** check so a
+         critical/high envelope cannot be auto-routed (route_back) or
+         auto-escalated (escalate) past supervisor review. Even
+         ``pass`` / ``warn`` halts when risk is high+ — a clean run
+         that nonetheless flagged residual risk must surface to a
+         human before the pipeline keeps moving.
+      1. result == 'pass' / 'warn'  → proceed
+      2. result == 'fail' / 'blocked' AND fail_routing missing
+         → conservative halt (needs_supervisor=True)
+      3. fail_routing.action == 'halt'      → halt
+      4. fail_routing.action == 'route_back':
           - route_back_to_step present → route_back
           - route_back_to_step missing → halt (conservative downgrade)
-      * fail_routing.action == 'escalate'  → escalate (needs_supervisor=True)
-      * fail_routing.action == 'retry'     → retry_unsupported (halt-equivalent)
-      * fail_routing.action == 'none'      → defer_to_workflow_yaml
-      * unknown action (defensive guard)   → halt + notes
+      5. fail_routing.action == 'escalate'  → escalate (needs_supervisor=True)
+      6. fail_routing.action == 'retry'     → retry_unsupported (halt-equivalent)
+      7. fail_routing.action == 'none'      → defer_to_workflow_yaml
+      8. unknown action (defensive guard)   → halt + notes
     """
     result = envelope.get("result", "<absent>")
     risk_level = envelope.get("risk_level", "<absent>")
@@ -166,7 +187,24 @@ def derive_decision(envelope: dict[str, Any]) -> GateConsumeDecision:
         "source_gate_type": envelope.get("gate_type", "<unknown>"),
     }
 
-    # ── pass / warn → proceed ──────────────────────────────────────
+    # ── 0. halt-on-risk policy (P8 #7) ────────────────────────────
+    # high / critical risk forces halt no matter what verdict or
+    # fail_routing recommendation says. This is the LAST line of
+    # defense for governance: even a 'pass' verdict that happens to
+    # carry a critical risk flag (e.g., the producer aggregated a
+    # critical residual without enough findings to fail) cannot
+    # proceed without a supervisor signing off. Equally, a fail
+    # routed for retry/route_back/none with high+ risk gets halted
+    # so high-risk findings cannot self-heal through automation.
+    if risk_level in HALT_ON_RISK_LEVELS:
+        return _halt_on_risk_decision(
+            result=result,
+            risk_level=risk_level,
+            fail_routing=fail_routing,
+            common_fields=common_fields,
+        )
+
+    # ── 1. pass / warn → proceed ──────────────────────────────────
     if result in ("pass", "warn"):
         reason = (
             f"verdict={result}; downstream unrestricted by gate result"
@@ -285,6 +323,70 @@ def derive_decision(envelope: dict[str, Any]) -> GateConsumeDecision:
         route_back_to_step=None,
         needs_supervisor=True,
         notes=[f"unknown_action:{action!r}"],
+        **common_fields,
+    )
+
+
+def _halt_on_risk_decision(
+    *,
+    result: str,
+    risk_level: str,
+    fail_routing: Any,
+    common_fields: dict[str, Any],
+) -> GateConsumeDecision:
+    """Build a halt decision for the P8 #7 halt-on-risk policy.
+
+    Reason text is constructed to preserve full audit context:
+
+      * State the policy trigger explicitly (``halt_on_risk policy:
+        risk_level=<lvl> requires halt regardless of verdict=<v>``)
+        so a log reader can immediately spot why the halt fired.
+      * If a producer fail_routing was present and recommended a
+        non-halt action, surface that the policy **overrode** that
+        recommendation; this matters when triaging why a route_back
+        / escalate / retry / none recommendation didn't take effect.
+      * If the producer recorded its own ``reason`` in fail_routing,
+        include it verbatim so the human-readable rationale survives.
+      * If the verdict is fail / blocked but fail_routing is absent
+        entirely (the conservative-halt edge case from P8 #6 v1),
+        include the ``fail_routing absent`` substring so existing
+        triage tools that grep for that phrase still find it.
+
+    Notes list captures structured tags:
+
+      * ``halt_on_risk`` — always present; primary tag.
+      * ``overrode_action:<action>`` — when policy supplanted a
+        producer fail_routing.action other than halt.
+      * ``fail_routing_absent`` — when fail/blocked envelope had no
+        fail_routing at all.
+    """
+    parts = [
+        f"halt_on_risk policy: risk_level={risk_level} requires halt "
+        f"regardless of verdict={result}"
+    ]
+    notes: list[str] = ["halt_on_risk"]
+
+    if isinstance(fail_routing, dict):
+        action = fail_routing.get("action")
+        producer_reason = fail_routing.get("reason")
+        if action and action != "halt":
+            parts.append(f"overrides producer fail_routing.action={action}")
+            notes.append(f"overrode_action:{action}")
+        if producer_reason:
+            parts.append(f"producer note: {producer_reason}")
+    elif result in ("fail", "blocked"):
+        # No fail_routing despite a non-clean verdict — would have hit
+        # the P8 #6 conservative-halt branch anyway, but tag here for
+        # consistent audit semantics.
+        parts.append("fail_routing absent on fail/blocked verdict")
+        notes.append("fail_routing_absent")
+
+    return GateConsumeDecision(
+        decision="halt",
+        reason="; ".join(parts),
+        route_back_to_step=None,
+        needs_supervisor=True,
+        notes=notes,
         **common_fields,
     )
 
