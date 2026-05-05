@@ -1600,6 +1600,67 @@ def run_qa_gate_cli(
 
 
 # ─────────────────────────────────────────────────────────
+# 21. run-logger-gate (P8 #5 fourth concrete gate-result producer)
+# ─────────────────────────────────────────────────────────
+
+
+def run_logger_gate_cli(
+    *,
+    gate_id: str,
+    checkpoint: str,
+    workflow_id: str,
+    run_id: str,
+    step_id: str,
+    project_id: str,
+    workflow_result_path: str,
+    result_md_path: str | None,
+    archive_summary_path: str | None,
+    mode: str,
+    output_path: str | None,
+    task_id: str | None,
+    gate_subtype: str | None,
+    produced_by: str,
+) -> None:
+    """Run one Logger archive-readiness checkpoint and persist envelope.
+
+    Producer counterpart of P8 #5 — sibling of run-watcher-gate /
+    run-security-gate / run-qa-gate, sharing the
+    :func:`gate_runner_common.emit_and_validate_or_exit` skeleton so
+    the persist→pre-validate→write→read-back→post-validate→stdout
+    contract stays single-sourced. Diverges from siblings by accepting
+    **dedicated artifact paths** (workflow-result / result.md /
+    archive-summary) instead of a generic ``--target-artifact`` list,
+    because Logger has named roles for each input.
+
+    Exit code policy mirrors sibling runners (see common helper).
+    """
+    try:
+        from .logger_gate_runner import LoggerGateInput, run_logger_gate
+        from .gate_runner_common import emit_and_validate_or_exit
+    except ImportError:  # pragma: no cover — direct-script fallback
+        from logger_gate_runner import LoggerGateInput, run_logger_gate  # type: ignore[no-redef]
+        from gate_runner_common import emit_and_validate_or_exit  # type: ignore[no-redef]
+
+    spec = LoggerGateInput(
+        gate_id=gate_id,
+        checkpoint=checkpoint,
+        workflow_id=workflow_id,
+        run_id=run_id,
+        step_id=step_id,
+        project_id=project_id,
+        workflow_result_path=workflow_result_path,
+        result_md_path=result_md_path,
+        archive_summary_path=archive_summary_path,
+        mode=mode,
+        task_id=task_id,
+        gate_subtype=gate_subtype,
+        produced_by=produced_by,
+    )
+    envelope = run_logger_gate(spec)
+    emit_and_validate_or_exit(envelope, step_id=step_id, output_path=output_path)
+
+
+# ─────────────────────────────────────────────────────────
 # CLI entry point
 # ─────────────────────────────────────────────────────────
 
@@ -1913,7 +1974,74 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Coverage percentage below which a coverage_below_threshold finding fires; defaults to 80.0.",
     )
 
-    # 21. resolve-handoff-routing (P6 #8 — opt-in route_back_to gate)
+    # 21. run-logger-gate (P8 #5 — fourth concrete gate-result producer)
+    p_rlg = sub.add_parser(
+        "run-logger-gate",
+        help=(
+            "P8 #5 Logger milestone runner; emits a gate-result envelope "
+            "satisfying schemas/gate-result.schema.yaml after validating "
+            "the P7 workflow-result.json (existence + non-empty + JSON "
+            "parse + workflow-result schema) and optionally checking "
+            "result.md / archive-summary.md archive readiness. Mode "
+            "(milestone|final) controls archive-summary missing severity. "
+            "Self-validates emitted file via the same schema gate as "
+            "validate-gate-result so producer drift fails loud (exit 41)."
+        ),
+    )
+    p_rlg.add_argument("--gate-id", dest="gate_id", required=True)
+    p_rlg.add_argument("--checkpoint", required=True)
+    p_rlg.add_argument("--workflow-id", dest="workflow_id", required=True)
+    p_rlg.add_argument("--run-id", dest="run_id", required=True)
+    p_rlg.add_argument("--step-id", dest="step_id", required=True)
+    p_rlg.add_argument("--project-id", dest="project_id", required=True)
+    p_rlg.add_argument(
+        "--workflow-result",
+        dest="workflow_result_path",
+        required=True,
+        help="Path to the P7 workflow-result.json being audited (primary SSOT).",
+    )
+    p_rlg.add_argument(
+        "--result-md",
+        dest="result_md_path",
+        default=None,
+        help="Optional path to result.md projection; missing → warn-level finding.",
+    )
+    p_rlg.add_argument(
+        "--archive-summary",
+        dest="archive_summary_path",
+        default=None,
+        help="Optional path to archive-summary.md; severity of missing is mode-aware.",
+    )
+    p_rlg.add_argument(
+        "--mode",
+        choices=("milestone", "final"),
+        default="milestone",
+        help=(
+            "Logger mode: 'milestone' treats archive-summary missing as warn; "
+            "'final' treats it as blocked. Defaults to 'milestone'."
+        ),
+    )
+    p_rlg.add_argument(
+        "--output",
+        dest="output_path",
+        default=None,
+        help="Where to write <step_id>.gate-result.json; defaults to ./<step_id>.gate-result.json.",
+    )
+    p_rlg.add_argument("--task-id", dest="task_id", default=None)
+    p_rlg.add_argument(
+        "--gate-subtype",
+        dest="gate_subtype",
+        default="milestone_archive",
+        help="Optional finer classification persisted on the envelope; defaults to milestone_archive.",
+    )
+    p_rlg.add_argument(
+        "--produced-by",
+        dest="produced_by",
+        default="99-Logger",
+        help="Agent id recorded on the envelope; defaults to 99-Logger.",
+    )
+
+    # 22. resolve-handoff-routing (P6 #8 — opt-in route_back_to gate)
     p_rhr = sub.add_parser(
         "resolve-handoff-routing",
         help=(
@@ -2086,6 +2214,23 @@ def main(argv: list[str] | None = None) -> None:
                 gate_subtype=args.gate_subtype,
                 produced_by=args.produced_by,
                 coverage_threshold=args.coverage_threshold,
+            )
+        case "run-logger-gate":
+            run_logger_gate_cli(
+                gate_id=args.gate_id,
+                checkpoint=args.checkpoint,
+                workflow_id=args.workflow_id,
+                run_id=args.run_id,
+                step_id=args.step_id,
+                project_id=args.project_id,
+                workflow_result_path=args.workflow_result_path,
+                result_md_path=args.result_md_path,
+                archive_summary_path=args.archive_summary_path,
+                mode=args.mode,
+                output_path=args.output_path,
+                task_id=args.task_id,
+                gate_subtype=args.gate_subtype,
+                produced_by=args.produced_by,
             )
         case "resolve-handoff-routing":
             try:
