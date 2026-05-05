@@ -1661,6 +1661,19 @@ def run_logger_gate_cli(
 
 
 # ─────────────────────────────────────────────────────────
+# 22. consume-gate-result (P8 #6 fail-route handling consumer)
+# ─────────────────────────────────────────────────────────
+#
+# Sibling of run-{watcher,security,qa,logger}-gate but on the consumer
+# side: reads a previously-emitted gate-result envelope and translates
+# it into a runtime routing decision the controller (cap-workflow-exec
+# shell hook, future Python orchestrator) can act on. Decision
+# semantics live in :mod:`engine.gate_result_consumer`; this entry
+# point is a thin argparse → kwargs forwarder so the parsing layer
+# stays consistent with sibling subcommands.
+
+
+# ─────────────────────────────────────────────────────────
 # CLI entry point
 # ─────────────────────────────────────────────────────────
 
@@ -2041,7 +2054,38 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Agent id recorded on the envelope; defaults to 99-Logger.",
     )
 
-    # 22. resolve-handoff-routing (P6 #8 — opt-in route_back_to gate)
+    # 22. consume-gate-result (P8 #6 — fail-route handling consumer)
+    p_cgr = sub.add_parser(
+        "consume-gate-result",
+        help=(
+            "P8 #6 fail-route handler; reads a gate-result envelope, "
+            "validates schema, derives a runtime routing decision "
+            "(proceed / halt / route_back / escalate / retry_unsupported "
+            "/ defer_to_workflow_yaml), optionally appends to "
+            "workflow.log and route-history.jsonl audit trails, and "
+            "prints a single-line decision payload to stdout for the "
+            "shell controller to grep (0=decision emitted, "
+            "41=schema invalid, 1=missing/parse error)."
+        ),
+    )
+    p_cgr.add_argument(
+        "result_path",
+        help="Path to the <step_id>.gate-result.json envelope to consume.",
+    )
+    p_cgr.add_argument(
+        "--workflow-log",
+        dest="workflow_log_path",
+        default=None,
+        help="Optional path to workflow.log; appends one human-readable line per call.",
+    )
+    p_cgr.add_argument(
+        "--route-history",
+        dest="route_history_path",
+        default=None,
+        help="Optional path to route-history.jsonl; appends one JSON record per call.",
+    )
+
+    # 23. resolve-handoff-routing (P6 #8 — opt-in route_back_to gate)
     p_rhr = sub.add_parser(
         "resolve-handoff-routing",
         help=(
@@ -2231,6 +2275,16 @@ def main(argv: list[str] | None = None) -> None:
                 task_id=args.task_id,
                 gate_subtype=args.gate_subtype,
                 produced_by=args.produced_by,
+            )
+        case "consume-gate-result":
+            try:
+                from .gate_result_consumer import consume_gate_result_cli
+            except ImportError:  # pragma: no cover — direct-script fallback
+                from gate_result_consumer import consume_gate_result_cli  # type: ignore[no-redef]
+            consume_gate_result_cli(
+                result_path=args.result_path,
+                workflow_log_path=args.workflow_log_path,
+                route_history_path=args.route_history_path,
             )
         case "resolve-handoff-routing":
             try:
