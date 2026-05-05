@@ -291,6 +291,29 @@ properties:
         reason:
           type: [string, "null"]
 
+  inputs:
+    type: object
+    description: |
+      Best-effort pointer-only references to upstream sources for this run
+      (constitution / compiled workflow / binding). The P7 result report
+      builder records directory paths when the well-known cap-storage
+      subdirs exist on disk under cap_home, otherwise ``null``. Pointer-only
+      by design — the builder does NOT parse, validate, or pick a specific
+      timestamped snapshot; it does NOT read the P3 supervisor orchestration
+      envelope; and it does NOT load any other JSON-Schema. Callers (cap
+      workflow inspect, human readers, P10 promote pipeline) must not assume
+      a directory pointer implies a per-run snapshot match.
+    properties:
+      constitution_dir:
+        type: [string, "null"]
+        description: Path to <cap_home>/projects/<project_id>/constitutions/ when the dir exists; null otherwise. Task-scoped — without an explicit per-run task_id link, the builder cannot resolve a specific snapshot, so this is project-level and best-effort.
+      compiled_workflow_dir:
+        type: [string, "null"]
+        description: Path to <cap_home>/projects/<project_id>/compiled-workflows/<workflow_id>/ when the dir exists; null otherwise.
+      binding_dir:
+        type: [string, "null"]
+        description: Path to <cap_home>/projects/<project_id>/bindings/<workflow_id>/ when the dir exists; null otherwise.
+
   logs:
     type: ["object", "null"]
     description: Pointer to the workflow log file plus optional metadata. Null when no log was produced (degenerate runs).

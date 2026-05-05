@@ -30,6 +30,17 @@ Sources consumed (per docs/cap recon, rc12 baseline):
                                               per-run ``task_id``, so this
                                               lookup normally yields
                                               ``None`` today)
+  * ``<cap_home>/projects/<id>/{constitutions,compiled-workflows,bindings}/``
+                                            — optional, **pointer-only**
+                                              (P7 #2 minimal pointers — see
+                                              :func:`_resolve_input_pointers`;
+                                              builder records the directory
+                                              paths if they exist on disk
+                                              but never parses or validates
+                                              their contents, never picks
+                                              a specific snapshot, and
+                                              never reads P3 supervisor
+                                              orchestration envelopes)
 """
 
 from __future__ import annotations
@@ -124,6 +135,7 @@ def build_workflow_result(
     promote_candidates: list[dict[str, Any]] = []  # v1: always empty (P10 owns producer).
     logs = _build_logs(run_dir_path)
     task_id = _resolve_task_id(status_file, run_id)
+    inputs = _resolve_input_pointers(cap_home, project_id, workflow_id)
 
     result: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
@@ -146,6 +158,7 @@ def build_workflow_result(
     result["failures"] = failures
     result["promote_candidates"] = promote_candidates
     result["logs"] = logs
+    result["inputs"] = inputs
     return result
 
 
@@ -188,6 +201,20 @@ def render_result_md(result: dict[str, Any]) -> str:
     lines.append(f"- failed: {summary.get('failed', 0)}")
     lines.append(f"- skipped: {summary.get('skipped', 0)}")
     lines.append(f"- blocked: {summary.get('blocked', 0)}")
+
+    inputs = result.get("inputs") or {}
+    if isinstance(inputs, dict) and any(
+        inputs.get(k) for k in ("constitution_dir", "compiled_workflow_dir", "binding_dir")
+    ):
+        lines.append("")
+        lines.append("## Inputs")
+        lines.append("")
+        if inputs.get("constitution_dir"):
+            lines.append(f"- constitution_dir: {inputs['constitution_dir']}")
+        if inputs.get("compiled_workflow_dir"):
+            lines.append(f"- compiled_workflow_dir: {inputs['compiled_workflow_dir']}")
+        if inputs.get("binding_dir"):
+            lines.append(f"- binding_dir: {inputs['binding_dir']}")
 
     steps = result.get("steps") or []
     lines.append("")
@@ -674,6 +701,64 @@ def _safe_parent_name(run_dir: Path, *, depth: int) -> Optional[str]:
     if depth - 1 < 0 or depth - 1 >= len(parents):
         return None
     return parents[depth - 1].name
+
+
+def _resolve_input_pointers(
+    cap_home: Optional[Path | str],
+    project_id: str,
+    workflow_id: str,
+) -> dict[str, Any]:
+    """Best-effort pointer-only lookup of upstream sources for this run.
+
+    P7 #2 minimal-pointer contract (deliberately narrow):
+      * Records **directory paths** when the well-known cap-storage
+        subdir exists on disk; otherwise ``None``.
+      * Does NOT parse or validate any file under those directories.
+      * Does NOT pick a specific timestamped snapshot — the reader
+        can list the directory to find them, but the builder never
+        claims "this binding snapshot drove this run" because that
+        requires cross-source parsing.
+      * Does NOT read schemas (``task-constitution.schema.yaml`` etc.).
+      * Does NOT read the P3 supervisor orchestration envelope.
+
+    These restrictions exist because today there is no stable
+    per-run linkage from a run_dir to its specific constitution /
+    compiled workflow / binding snapshots; correlating by timestamp
+    or workflow_id alone would be guessing in disguise. Once a
+    future producer (e.g., supervisor envelope persist or task
+    lifecycle hook) starts writing explicit per-run pointers, this
+    helper can be upgraded without changing the schema shape.
+
+    Returned shape:
+      ``{"constitution_dir": <path|None>, "compiled_workflow_dir":
+      <path|None>, "binding_dir": <path|None>}``
+    """
+    pointers: dict[str, Any] = {
+        "constitution_dir": None,
+        "compiled_workflow_dir": None,
+        "binding_dir": None,
+    }
+    if not cap_home or not project_id:
+        return pointers
+    project_root = Path(cap_home).expanduser() / "projects" / project_id
+
+    # Constitutions are task-scoped; without an explicit task_id link
+    # there is no stable way to resolve a per-run snapshot. Falls back
+    # to the project-level dir as a best-effort directory pointer so
+    # the reader can drill in manually.
+    constitution_root = project_root / "constitutions"
+    if constitution_root.is_dir():
+        pointers["constitution_dir"] = str(constitution_root)
+
+    if workflow_id and workflow_id != "unknown":
+        cw_root = project_root / "compiled-workflows" / workflow_id
+        if cw_root.is_dir():
+            pointers["compiled_workflow_dir"] = str(cw_root)
+        binding_root = project_root / "bindings" / workflow_id
+        if binding_root.is_dir():
+            pointers["binding_dir"] = str(binding_root)
+
+    return pointers
 
 
 def _resolve_task_id(status_file: Optional[Path | str], run_id: str) -> Optional[str]:

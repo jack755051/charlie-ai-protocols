@@ -885,6 +885,85 @@ assert_md_contains "render(failed): Failures section" "${RENDERED_FAILED_MD}" "#
 assert_md_contains "render(failed): bad_step entry" "${RENDERED_FAILED_MD}" "- step_id: bad_step"
 assert_md_contains "render(failed): reason rendered" "${RENDERED_FAILED_MD}" "reason: schema_validation_failed"
 
+# ── Case 13: input pointers — dirs present (P7 #2) ────────────────────
+#
+# When the well-known cap-storage subdirs exist on disk, the builder
+# records directory pointers under ``inputs``. Pointer-only by design;
+# the test only checks dir-level resolution, not snapshot picking.
+
+echo ""
+echo "Case 13: inputs pointers populated when cap-storage dirs exist"
+RUN13="$(stage_run_dir withinputs)"
+CAP13="$(cap_home_for withinputs)"
+# Create the three well-known subdirs that _resolve_input_pointers looks at.
+mkdir -p "${CAP13}/projects/test-proj/constitutions"
+mkdir -p "${CAP13}/projects/test-proj/compiled-workflows/test-wf"
+mkdir -p "${CAP13}/projects/test-proj/bindings/test-wf"
+
+OUT13="${SANDBOX}/withinputs.json"
+build_to_json "${RUN13}" "${OUT13}" "${CAP13}"
+assert_eq "withinputs constitution_dir resolved" \
+  "${CAP13}/projects/test-proj/constitutions" \
+  "$(json_field "${OUT13}" 'data["inputs"]["constitution_dir"]')"
+assert_eq "withinputs compiled_workflow_dir resolved" \
+  "${CAP13}/projects/test-proj/compiled-workflows/test-wf" \
+  "$(json_field "${OUT13}" 'data["inputs"]["compiled_workflow_dir"]')"
+assert_eq "withinputs binding_dir resolved" \
+  "${CAP13}/projects/test-proj/bindings/test-wf" \
+  "$(json_field "${OUT13}" 'data["inputs"]["binding_dir"]')"
+assert_schema_ok "withinputs passes schema" "${OUT13}"
+
+# Render check: result.md should now include the ## Inputs section.
+RENDERED_INPUTS_MD="${SANDBOX}/withinputs.result.md"
+PYTHONPATH="${REPO_ROOT}" "${PYTHON_BIN}" - "${OUT13}" "${RENDERED_INPUTS_MD}" <<'PY'
+import json, sys
+from pathlib import Path
+from engine.result_report_builder import render_result_md
+
+result = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+Path(sys.argv[2]).write_text(render_result_md(result), encoding="utf-8")
+PY
+assert_md_contains "render(inputs): ## Inputs section"     "${RENDERED_INPUTS_MD}" "## Inputs"
+assert_md_contains "render(inputs): constitution_dir line" "${RENDERED_INPUTS_MD}" "- constitution_dir:"
+assert_md_contains "render(inputs): compiled_workflow_dir" "${RENDERED_INPUTS_MD}" "- compiled_workflow_dir:"
+assert_md_contains "render(inputs): binding_dir line"      "${RENDERED_INPUTS_MD}" "- binding_dir:"
+
+# ── Case 14: input pointers — dirs missing → all null + section omitted
+
+echo ""
+echo "Case 14: inputs pointers null when cap-storage dirs absent"
+RUN14="$(stage_run_dir noinputs)"
+CAP14="$(cap_home_for noinputs)"
+# Deliberately do NOT mkdir constitutions / compiled-workflows / bindings.
+
+OUT14="${SANDBOX}/noinputs.json"
+build_to_json "${RUN14}" "${OUT14}" "${CAP14}"
+assert_eq "noinputs constitution_dir=None" "None" \
+  "$(json_field "${OUT14}" 'data["inputs"]["constitution_dir"]')"
+assert_eq "noinputs compiled_workflow_dir=None" "None" \
+  "$(json_field "${OUT14}" 'data["inputs"]["compiled_workflow_dir"]')"
+assert_eq "noinputs binding_dir=None" "None" \
+  "$(json_field "${OUT14}" 'data["inputs"]["binding_dir"]')"
+assert_schema_ok "noinputs passes schema (all null pointers)" "${OUT14}"
+
+# Render: ## Inputs section must be omitted when all pointers are null.
+RENDERED_NOINPUTS_MD="${SANDBOX}/noinputs.result.md"
+PYTHONPATH="${REPO_ROOT}" "${PYTHON_BIN}" - "${OUT14}" "${RENDERED_NOINPUTS_MD}" <<'PY'
+import json, sys
+from pathlib import Path
+from engine.result_report_builder import render_result_md
+
+result = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+Path(sys.argv[2]).write_text(render_result_md(result), encoding="utf-8")
+PY
+if grep -qF -- "## Inputs" "${RENDERED_NOINPUTS_MD}"; then
+  echo "  FAIL: render(noinputs) should omit ## Inputs when all pointers null"
+  fail_count=$((fail_count + 1))
+else
+  echo "  PASS: render(noinputs): ## Inputs section omitted"
+  pass_count=$((pass_count + 1))
+fi
+
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"
 [ "${fail_count}" -eq 0 ]

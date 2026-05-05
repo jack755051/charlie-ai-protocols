@@ -636,6 +636,23 @@ def _print_inspect_text(result: dict) -> None:
     print(f"  skipped:     {summary.get('skipped', 0)}")
     print(f"  blocked:     {summary.get('blocked', 0)}")
 
+    # Inputs (P7 #2 minimal pointers — directory pointers only, no
+    # per-run snapshot resolution; section is omitted when all three
+    # pointers are null so legacy runs without these dirs stay tidy).
+    inputs = result.get("inputs") or {}
+    if isinstance(inputs, dict) and any(
+        inputs.get(k)
+        for k in ("constitution_dir", "compiled_workflow_dir", "binding_dir")
+    ):
+        print()
+        print("# Inputs")
+        if inputs.get("constitution_dir"):
+            print(f"  constitution_dir:      {inputs['constitution_dir']}")
+        if inputs.get("compiled_workflow_dir"):
+            print(f"  compiled_workflow_dir: {inputs['compiled_workflow_dir']}")
+        if inputs.get("binding_dir"):
+            print(f"  binding_dir:           {inputs['binding_dir']}")
+
     # Failures
     failures = result.get("failures") or []
     print()

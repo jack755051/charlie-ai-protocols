@@ -323,6 +323,34 @@ assert_contains "envhome: workflow_id field"   "${OUT6}" "workflow_id:   inspect
 assert_contains "envhome: run_id field"        "${OUT6}" "run_id:        run_withjson"
 assert_contains "envhome: final_state field"   "${OUT6}" "final_state:   completed"
 
+# ── Case 7: inspect text view shows # Inputs when pointers populated ──
+#
+# Exercises the P7 #2 minimal-pointer rendering in cmd_inspect's text
+# view: when the cap-storage subdirs exist on disk, the # Inputs
+# section should appear with the three directory pointers; absent
+# when all three are null (covered by Cases 1 / 3 implicitly — those
+# fixtures don't stage the dirs and the section is correctly omitted).
+
+echo ""
+echo "Case 7: inputs pointers populated → inspect text shows # Inputs"
+RUN7="$(stage_run_dir withinputs)"
+CAP7="$(cap_home_for withinputs)"
+mkdir -p "${CAP7}/projects/inspect-proj/constitutions"
+mkdir -p "${CAP7}/projects/inspect-proj/compiled-workflows/inspect-wf"
+mkdir -p "${CAP7}/projects/inspect-proj/bindings/inspect-wf"
+emit_result_json "${RUN7}" "${CAP7}"
+
+OUT7="$("${PYTHON_BIN}" "${CLI_PY}" inspect "${EMPTY_STATUS}" "run_withinputs" \
+  --cap-home "${CAP7}" 2>&1)"
+RC7=$?
+assert_eq "inputs: exit 0" "0" "${RC7}"
+assert_contains "inputs: # Inputs section header"        "${OUT7}" "# Inputs"
+assert_contains "inputs: constitution_dir line"          "${OUT7}" "constitution_dir:"
+assert_contains "inputs: compiled_workflow_dir line"     "${OUT7}" "compiled_workflow_dir:"
+assert_contains "inputs: binding_dir line"               "${OUT7}" "binding_dir:"
+# Sanity: Case 1 (withjson, no dirs staged) must NOT show # Inputs.
+assert_not_contains "withjson(case1) omits # Inputs"     "${OUT1}" "# Inputs"
+
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"
 [ "${fail_count}" -eq 0 ]
