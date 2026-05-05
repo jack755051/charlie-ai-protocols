@@ -441,9 +441,10 @@
 
 ## P8：Governance Gates
 
-- [ ] 實作 watcher checkpoint runner
+- [x] 實作 watcher checkpoint runner
   - 交付物：watcher gate runtime
   - 驗收：milestone gate 可自動執行
+  - 進度：done in `v0.22.0` (in-progress)；新增 `engine/watcher_gate_runner.py` 提供純函式 `run_watcher_gate()` 與內建機械檢查（`artifact_exists` / `artifact_non_empty`），並在 `engine/step_runtime.py` 新增 `run-watcher-gate` 子命令作為 shell 入口。Runner 採 emit-then-self-validate 模式：先在記憶體建構 envelope、跑一次 schema validation 阻擋 producer drift，落地後再從磁碟讀回做第二次 validation 阻擋 persistence drift；任一驗證失敗回 exit 41，與 P8 #5 validate-gate-result CLI 共用同一條 schema gate。Verdict aggregation 規則：缺檔或無 target_artifacts → `result=blocked` / `risk=high` / `fail_routing.action=halt`；空檔 → `result=warn` / `risk=medium`；皆通過 → `result=pass` / `risk=none`；high/critical findings → `result=fail` / `fail_routing.action=escalate`。新增 `tests/scripts/test-watcher-gate-runner.sh` 覆蓋 8 cases / 39 assertions（pass / blocked / warn / 空 target_artifacts degenerate / 預設 `--output` 解析至 cwd / round-trip validate-gate-result CLI 全綠 / stdout status 行格式 / `--produced-by` 與 `--gate-subtype` 覆寫），並 wire 進 `smoke-per-stage.sh`。**閉環驗證**：runner 實際產出的 envelope 通過 P8 #5 CLI（`reason=ok;detail=gate_result_schema_valid` exit 0），證明 #1 contract 與 #2 producer 真的串得起來。**邊界**：runner 只做機械檢查的子集，**不**取代 90-watcher-agent.md 的 AI Watcher 結構稽核（DDD / 框架策略 / SSOT 等仍由 AI 主責）；後續若要擴充 mechanical check 集合（如 `markdown_has_section` / `json_has_field`），新增到 `engine/watcher_gate_runner.py` 並補對應 fixture 即可。
 
 - [ ] 實作 security checkpoint runner
   - 交付物：security gate runtime
@@ -457,9 +458,10 @@
   - 交付物：logger archive runtime
   - 驗收：結案摘要可自動生成或派工
 
-- [ ] 實作 gate result validation
+- [x] 實作 gate result validation
   - 交付物：套用 `schemas/gate-result.schema.yaml`
   - 驗收：gate output 可被機器驗證
+  - 進度：done in `v0.22.0` (in-progress)；新增 `engine/step_runtime.py:validate_gate_result_cli`（CLI 子命令 `validate-gate-result`），鏡像 `validate-handoff-ticket` (P6 #3) 的 exit code 政策（`0` = ok / `41` = `gate_result_schema_invalid` / `1` = `missing_artifact` / `parse_error`）與 `reason=...;detail=...` 單行 stdout 契約，供後續 P8 #6 fail-route handling、P8 #7 halt-on-risk 與 P8 #8 rerun-failed-gate 共同消費。預設 schema path 指向 `schemas/gate-result.schema.yaml`，可透過 `--schema` 覆寫。新增 `tests/scripts/test-validate-gate-result-cli.sh` 覆蓋 7 cases / 17 assertions（rc 0 / rc 41 missing-required / rc 41 enum-violation / rc 1 parse_error / rc 1 missing_artifact / `--schema` override / 預設 schema 解析），並 wire 進 `smoke-per-stage.sh`。**Producer 邊界**：本項只交付 validation gate；P8 #1-#4 watcher / security / qa / logger checkpoint runner 才是直接 producer，由 runner 在 gate step 結束時寫出 `<step_id>.gate-result.json` 並呼叫此 CLI 確認 envelope 合法後，下游 governance consumer 才能信任 `result` / `risk_level` / `fail_routing` 三欄位。
 
 - [ ] 實作 fail route handling
   - 交付物：failure routing runtime

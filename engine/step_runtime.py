@@ -1327,6 +1327,251 @@ def validate_handoff_ticket_cli(ticket_path: str, schema_path: str | None = None
 
 
 # ─────────────────────────────────────────────────────────
+# 17. validate-gate-result (P8 #5 governance gate output validator)
+# ─────────────────────────────────────────────────────────
+
+
+def _default_gate_result_schema_path() -> Path:
+    """Resolve the canonical gate-result schema shipped with the repo.
+
+    Mirrors :func:`_default_handoff_schema_path` but points at
+    ``schemas/gate-result.schema.yaml``. Lets ``cap-workflow-exec.sh``
+    and per-rail runners (Watcher / Security / QA / Logger) call
+    the validator without re-deriving the path.
+    """
+    return Path(__file__).resolve().parent.parent / "schemas" / "gate-result.schema.yaml"
+
+
+def validate_gate_result_cli(result_path: str, schema_path: str | None = None) -> None:
+    """P8 #5 gate-result validation gate — re-checks a per-gate decision
+    envelope against ``schemas/gate-result.schema.yaml`` before
+    governance consumers (fail_routing handler / halt-on-risk policy /
+    rerun-failed-gate CLI) read its fields.
+
+    Producers: P8 watcher / security / qa / logger checkpoint runners
+    write ``<step_id>.gate-result.json`` next to the run's other
+    artifacts and call this validator at gate exit. Consumers downstream
+    (fail-route handler, halt-on-risk enforcement, rerun-failed-gate
+    selector) trust ``result`` / ``risk_level`` / ``fail_routing``
+    only after this gate signals exit 0.
+
+    Exit code policy mirrors :func:`validate_handoff_ticket_cli` and
+    ``policies/workflow-executor-exit-codes.md``:
+      * exit 0  — ``ok=True`` (schema clean).
+      * exit 41 — ``ok=False`` (`schema_validation_failed`, the same
+                  schema-class code used by P0a executors and the P6 #4
+                  required-output gate).
+      * exit 1  — ``missing_artifact`` (gate-result file or schema absent)
+                  or ``parse_error`` (non-JSON envelope / non-YAML schema).
+
+    Stdout is intentionally a single ``reason=...;detail=...`` line so
+    the shell wrapper can capture it directly into governance state
+    without re-parsing JSON, matching the contract used by P6 #3 / P6 #4.
+    """
+    result_p = Path(result_path)
+    if not result_p.exists():
+        print(f"reason=missing_artifact;detail=gate-result not found: {result_path}")
+        sys.exit(1)
+
+    try:
+        envelope = json.loads(result_p.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"reason=parse_error;detail=gate-result JSON invalid: {exc}")
+        sys.exit(1)
+    except OSError as exc:  # pragma: no cover — defensive read guard
+        print(f"reason=parse_error;detail=gate-result read failed: {exc}")
+        sys.exit(1)
+
+    schema_p = Path(schema_path) if schema_path else _default_gate_result_schema_path()
+    if not schema_p.exists():
+        print(f"reason=missing_artifact;detail=schema not found: {schema_p}")
+        sys.exit(1)
+
+    try:
+        import yaml  # type: ignore[import]
+
+        schema = yaml.safe_load(schema_p.read_text(encoding="utf-8")) or {}
+    except ImportError:
+        print("reason=parse_error;detail=PyYAML unavailable; cannot load gate-result schema")
+        sys.exit(1)
+    except Exception as exc:  # pragma: no cover — defensive YAML guard
+        print(f"reason=parse_error;detail=schema YAML invalid: {exc}")
+        sys.exit(1)
+
+    errors: list[str] = []
+    try:
+        from jsonschema import Draft202012Validator  # type: ignore[import]
+
+        validator = Draft202012Validator(schema)
+        for err in sorted(validator.iter_errors(envelope), key=lambda e: list(e.absolute_path)):
+            loc = "/".join(str(p) for p in err.absolute_path) or "<root>"
+            errors.append(f"{loc}: {err.message}")
+    except ImportError:
+        errors.extend(validate_jsonschema_fallback(envelope, schema))
+
+    if errors:
+        joined = " | ".join(errors)
+        print(f"reason=gate_result_schema_invalid;detail={joined}")
+        sys.exit(41)
+
+    print("reason=ok;detail=gate_result_schema_valid")
+    sys.exit(0)
+
+
+def _validate_gate_result_payload(envelope: dict[str, Any]) -> list[str]:
+    """In-process validation helper used by run-watcher-gate.
+
+    Mirrors :func:`validate_gate_result_cli` validator path but operates
+    on an already-loaded envelope dict (no file I/O) so producers that
+    already hold the envelope in memory can self-validate before
+    persisting. Returns an ordered list of human-readable error
+    messages — empty list means the envelope is clean.
+
+    Producers SHOULD round-trip persisted output through
+    :func:`validate_gate_result_cli` (or the CLI subcommand) as well so
+    on-disk drift between persist time and consumer read time is also
+    caught; the in-memory pass is an early guard, not a replacement.
+    """
+    schema_p = _default_gate_result_schema_path()
+    if not schema_p.exists():
+        return [f"schema not found: {schema_p}"]
+
+    try:
+        import yaml  # type: ignore[import]
+
+        schema = yaml.safe_load(schema_p.read_text(encoding="utf-8")) or {}
+    except ImportError:
+        return ["PyYAML unavailable; cannot load gate-result schema"]
+    except Exception as exc:  # pragma: no cover — defensive YAML guard
+        return [f"schema YAML invalid: {exc}"]
+
+    errors: list[str] = []
+    try:
+        from jsonschema import Draft202012Validator  # type: ignore[import]
+
+        validator = Draft202012Validator(schema)
+        for err in sorted(validator.iter_errors(envelope), key=lambda e: list(e.absolute_path)):
+            loc = "/".join(str(p) for p in err.absolute_path) or "<root>"
+            errors.append(f"{loc}: {err.message}")
+    except ImportError:
+        errors.extend(validate_jsonschema_fallback(envelope, schema))
+
+    return errors
+
+
+# ─────────────────────────────────────────────────────────
+# 18. run-watcher-gate (P8 #2 first concrete gate-result producer)
+# ─────────────────────────────────────────────────────────
+
+
+def run_watcher_gate_cli(
+    *,
+    gate_id: str,
+    checkpoint: str,
+    workflow_id: str,
+    run_id: str,
+    step_id: str,
+    project_id: str,
+    target_artifacts: list[str],
+    output_path: str | None,
+    task_id: str | None,
+    gate_subtype: str | None,
+    produced_by: str,
+) -> None:
+    """Run one watcher milestone gate and persist the envelope.
+
+    Producer side of the P8 #1 contract: builds the gate-result
+    envelope via :func:`engine.watcher_gate_runner.run_watcher_gate`,
+    self-validates the in-memory envelope, persists it to
+    ``<output_path>`` (default ``<cwd>/<step_id>.gate-result.json``),
+    then re-validates the on-disk artifact via the same schema path
+    used by :func:`validate_gate_result_cli`. The double validation is
+    intentional: in-memory guards producer bugs, on-disk guards
+    persistence drift (e.g., truncated write, wrong encoding).
+
+    Exit code policy mirrors ``policies/workflow-executor-exit-codes.md``:
+      * exit 0  — envelope produced and validated; stdout includes
+                  ``status=ok;result=<verdict>;risk=<level>;path=<file>``
+                  for shell wrappers to capture without re-parsing JSON.
+      * exit 41 — ``schema_validation_failed`` (producer drift; the
+                  envelope this runner built does not satisfy
+                  ``schemas/gate-result.schema.yaml``). The runner still
+                  writes the envelope for triage but the exit code
+                  signals the gate output cannot be trusted.
+      * exit 1  — operational error (write failed, schema unreadable,
+                  PyYAML missing, etc.). Same code as the validator
+                  path so consumers can treat operational failures as
+                  ``missing_artifact``-equivalent.
+    """
+    try:
+        from .watcher_gate_runner import (
+            WatcherGateInput,
+            emit_watcher_gate_result,
+            run_watcher_gate,
+        )
+    except ImportError:  # pragma: no cover — sibling fallback for direct script use
+        from watcher_gate_runner import (  # type: ignore[no-redef]
+            WatcherGateInput,
+            emit_watcher_gate_result,
+            run_watcher_gate,
+        )
+
+    spec = WatcherGateInput(
+        gate_id=gate_id,
+        checkpoint=checkpoint,
+        workflow_id=workflow_id,
+        run_id=run_id,
+        step_id=step_id,
+        project_id=project_id,
+        target_artifacts=target_artifacts,
+        task_id=task_id,
+        gate_subtype=gate_subtype,
+        produced_by=produced_by,
+    )
+
+    # 1. Build envelope in-memory and validate before persistence so
+    #    producer drift is caught without polluting disk.
+    envelope = run_watcher_gate(spec)
+    pre_errors = _validate_gate_result_payload(envelope)
+    if pre_errors:
+        joined = " | ".join(pre_errors)
+        print(f"reason=producer_envelope_invalid;detail={joined}")
+        sys.exit(41)
+
+    # 2. Persist envelope. We write even when post-write validation
+    #    fails so triage has the bytes to inspect; the exit code still
+    #    signals failure.
+    target = Path(output_path) if output_path else Path.cwd() / f"{step_id}.gate-result.json"
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            json.dumps(envelope, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        print(f"reason=persist_failed;detail={exc}")
+        sys.exit(1)
+
+    # 3. Re-load and re-validate from disk to catch persistence drift.
+    try:
+        on_disk = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"reason=persist_readback_failed;detail={exc}")
+        sys.exit(1)
+
+    post_errors = _validate_gate_result_payload(on_disk)
+    if post_errors:
+        joined = " | ".join(post_errors)
+        print(f"reason=gate_result_schema_invalid;detail={joined}")
+        sys.exit(41)
+
+    print(
+        f"status=ok;result={envelope['result']};risk={envelope['risk_level']};path={target}"
+    )
+    sys.exit(0)
+
+
+# ─────────────────────────────────────────────────────────
 # CLI entry point
 # ─────────────────────────────────────────────────────────
 
@@ -1478,7 +1723,71 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Override handoff schema path; defaults to schemas/handoff-ticket.schema.yaml",
     )
 
-    # 17. resolve-handoff-routing (P6 #8 — opt-in route_back_to gate)
+    # 17. validate-gate-result (P8 #5 — governance gate output validator)
+    p_vgr = sub.add_parser(
+        "validate-gate-result",
+        help=(
+            "P8 #5 gate-result validation gate; revalidates a per-gate "
+            "decision envelope against schemas/gate-result.schema.yaml "
+            "before downstream governance consumers read result / "
+            "risk_level / fail_routing (0=ok, 41=schema invalid, "
+            "1=missing artifact / parse error)."
+        ),
+    )
+    p_vgr.add_argument("result_path")
+    p_vgr.add_argument(
+        "--schema",
+        dest="schema_path",
+        default=None,
+        help="Override gate-result schema path; defaults to schemas/gate-result.schema.yaml",
+    )
+
+    # 18. run-watcher-gate (P8 #2 — first concrete gate-result producer)
+    p_rwg = sub.add_parser(
+        "run-watcher-gate",
+        help=(
+            "P8 #2 watcher checkpoint runner; emits a gate-result envelope "
+            "satisfying schemas/gate-result.schema.yaml after running "
+            "deterministic mechanical checks (artifact_exists / "
+            "artifact_non_empty) over the given target artifacts. "
+            "Self-validates the emitted file via the same schema gate as "
+            "validate-gate-result so producer drift fails loud (exit 41)."
+        ),
+    )
+    p_rwg.add_argument("--gate-id", dest="gate_id", required=True)
+    p_rwg.add_argument("--checkpoint", required=True)
+    p_rwg.add_argument("--workflow-id", dest="workflow_id", required=True)
+    p_rwg.add_argument("--run-id", dest="run_id", required=True)
+    p_rwg.add_argument("--step-id", dest="step_id", required=True)
+    p_rwg.add_argument("--project-id", dest="project_id", required=True)
+    p_rwg.add_argument(
+        "--target-artifact",
+        dest="target_artifacts",
+        action="append",
+        default=None,
+        help="Path to one artifact the gate must audit; pass multiple times for multiple inputs.",
+    )
+    p_rwg.add_argument(
+        "--output",
+        dest="output_path",
+        default=None,
+        help="Where to write <step_id>.gate-result.json; defaults to ./<step_id>.gate-result.json.",
+    )
+    p_rwg.add_argument("--task-id", dest="task_id", default=None)
+    p_rwg.add_argument(
+        "--gate-subtype",
+        dest="gate_subtype",
+        default="structure_audit",
+        help="Optional finer classification persisted on the envelope; defaults to structure_audit.",
+    )
+    p_rwg.add_argument(
+        "--produced-by",
+        dest="produced_by",
+        default="90-Watcher",
+        help="Agent id recorded on the envelope; defaults to 90-Watcher.",
+    )
+
+    # 19. resolve-handoff-routing (P6 #8 — opt-in route_back_to gate)
     p_rhr = sub.add_parser(
         "resolve-handoff-routing",
         help=(
@@ -1595,6 +1904,26 @@ def main(argv: list[str] | None = None) -> None:
             validate_capability_output_cli(args.capability, args.artifact_path)
         case "validate-handoff-ticket":
             validate_handoff_ticket_cli(args.ticket_path, args.schema_path)
+        case "validate-gate-result":
+            validate_gate_result_cli(args.result_path, args.schema_path)
+        case "run-watcher-gate":
+            try:
+                from .watcher_gate_runner import parse_target_artifacts
+            except ImportError:  # pragma: no cover — direct-script fallback
+                from watcher_gate_runner import parse_target_artifacts  # type: ignore[no-redef]
+            run_watcher_gate_cli(
+                gate_id=args.gate_id,
+                checkpoint=args.checkpoint,
+                workflow_id=args.workflow_id,
+                run_id=args.run_id,
+                step_id=args.step_id,
+                project_id=args.project_id,
+                target_artifacts=parse_target_artifacts(args.target_artifacts),
+                output_path=args.output_path,
+                task_id=args.task_id,
+                gate_subtype=args.gate_subtype,
+                produced_by=args.produced_by,
+            )
         case "resolve-handoff-routing":
             try:
                 from .handoff_route_resolver import resolve_handoff_routing_cli
