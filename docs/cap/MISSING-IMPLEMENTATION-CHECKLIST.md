@@ -429,10 +429,10 @@
   - 驗收：標出可回寫 repo 的產物
   - 進度：schema slot + builder skeleton ready；**實際 producer 由 P10 owns**。`schemas/workflow-result.schema.yaml` 已定義 `promote_candidates[]` 欄位，`build_workflow_result` 永遠輸出 `[]`（builder docstring line 108 標註 `v1: always empty (P10 owns producer)`），下游 promote pipeline 介面已對齊。等 P10 Detached Runtime and Promote / Publish 開始時才會有真實 producer 寫入候選清單。
 
-- [ ] 補 final archive 規則
+- [x] 補 final archive 規則
   - 交付物：Logger handoff / archive policy
   - 驗收：Logger 可接手整理結案摘要
-  - 現況：尚未開始。等 Phase C 已穩定（workflow-result.json / result.md / cap workflow inspect 三個 artifact 都有了），下一步處理。
+  - 進度：done as **policy-first** delivery（無 archive automation；CLI / cron 等待真實使用情境再凝固）。新增 `policies/run-archive.md` 定義 active / archived / pruned 三段 lifecycle、就地標記策略（`<run_dir>/.lifecycle` 單行 plain text）、archive 必要核心檔案（`workflow-result.json` / `result.md` / `archive-summary.md` / `.lifecycle`）、retention 預設（active 30d、archived 180d、pruned 永久）、active 最小保證（每 workflow 至少 1 個 completed run + 最近 3 runs 不論 state）、與 `cap workflow inspect` 三狀態相容性。`agent-skills/99-logger-agent.md` 新增 §2.4「結案歸檔摘要」描述 Logger 對 archive 任務的 capability：以 `workflow-result.json` 為唯一資料來源，產出 7 段必填的 `archive-summary.md`（Run Identity / Lifecycle / Summary Metrics / Critical Events / Decision Narrative / Artifact Pointers），SSOT 殘缺或 schema 驗證失敗時必須 `needs_data` 中止而非偽造 archived 狀態。
 
 - [x] 新增 `cap workflow inspect <run-id>`
   - 交付物：CLI command

@@ -43,6 +43,22 @@
     - **Fixed**: 紀錄被 Watcher 攔截並修正的架構衝突、策略違反（如未傳遞 `CancellationToken`）、**被 Security 發現的資安漏洞**，以及被 QA 發現並修正的功能邏輯 Bug。
     - **Changed**: 根據 BA/API 規格書修正、技術策略調整或因應 **Security 審查與** QA 性能測試回饋優化的既有架構。
 
+### 2.4 結案歸檔摘要 (Run Archive Summary)
+當你被指派為 P7 run archive 的結案者時，必須在指定的 run_dir 寫出 `archive-summary.md`，作為該 run 從 `active` 進入 `archived` 狀態的人類可讀入口。完整 lifecycle / retention / 可重現性規範由 `policies/run-archive.md` 為 SSOT；本節僅定義你身為 Logger 的產出 capability。
+
+- **唯一資料來源**：以 `<run_dir>/workflow-result.json`（P7 builder 產出）為主；輔以 `run-summary.md` / `agent-sessions.json` / `route-history.jsonl` / handoff tickets 補強敘事。**禁止**讀對話過程或推測 prompt。
+- **必填章節**（順序固定，缺一必須回報 `needs_data` 中止 archive）：
+  1. `# Run Archive Summary`
+  2. `## Run Identity`：`run_id` / `workflow_id` / `workflow_name` / `project_id` / `task_id`。
+  3. `## Lifecycle`：`started_at` / `finished_at` / `total_duration_seconds` / `final_state` / `final_result`。
+  4. `## Summary Metrics`：`total_steps` / `completed` / `failed` / `skipped` / `blocked`。
+  5. `## Critical Events`：列出 `failures[]`、route_back 軌跡、Watcher / Security gate 異常、QA 重大發現；無事件時必須明示 `(none)` 而非省略章節。
+  6. `## Decision Narrative`：1–5 句敘事，標明本次 run 的目的、結論、後續行動；對齊本文件 §2.2 ADR 段精神，僅記錄決策層摘要，**不**複製對話。
+  7. `## Artifact Pointers`：`workflow_result_json` / `result_md` / `run_summary_md` / `agent_sessions_json` / `workflow_log` 的絕對路徑；若已被 prune，標明 `(pruned)`；`promote_candidates` 直接指向 `workflow-result.json` 的 `promote_candidates[]`。
+- **格式上限**：整份 `archive-summary.md` 以 80 行內為佳；`Critical Events` 章節若內容很多，採條列摘要 + 引用 `workflow-result.json` 路徑，而非展開全部細節。
+- **失敗條件**：若 `workflow-result.json` 不存在、schema 驗證失敗、或關鍵 SSOT 殘缺到無法湊出必填章節，必須回報 `needs_data`，**不得**寫入 `.lifecycle archived` 偽造完成。
+- **與其他章節的關係**：`archive-summary.md` 屬於本節新增的結案類紀錄，**不**取代 §2.1 Trace Log 與 §2.2 Daily Devlog；三者互補：trace 是 step 級即時軌跡，devlog 是階段彙整，archive summary 是 run 結案的單檔入口。
+
 ## 3. 執行紀律
 - **禁止幻覺**：若無明確的「任務交接單」、「Watcher 報告」、「**Security 漏洞報告**」或「QA 測試報告」，不可憑空猜測開發內容。
 - **紀錄層級依指示**：本 Agent 依收到的 `record_level` 指示決定產出層級。
