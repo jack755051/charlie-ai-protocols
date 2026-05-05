@@ -10,6 +10,7 @@
 |---|---|
 | 知道 CAP 整體目標與設計理念 | [PLATFORM-GOAL.md](PLATFORM-GOAL.md) |
 | 看完整架構與模組關係 | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| 找 P0–P6 任一概念的 SSOT 在哪個檔 / 哪個 schema | [ARCHITECTURE.md §P0–P6 Runtime Module Map](ARCHITECTURE.md#p0p6-runtime-module-map-convergence-checkpoint-2) |
 | 知道目前實作到哪、哪些待做 | [MISSING-IMPLEMENTATION-CHECKLIST.md](MISSING-IMPLEMENTATION-CHECKLIST.md) |
 | 看 release tag 對應的功能 | [RELEASE-NOTES.md](RELEASE-NOTES.md) |
 | 看開發路線圖（按 Phase / 階段） | [IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md) |

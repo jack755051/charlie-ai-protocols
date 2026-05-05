@@ -439,6 +439,61 @@ supervisor sub-agent  →  envelope JSON (fence-wrapped)
 
 ---
 
+## 🗺 P0–P6 Runtime Module Map (Convergence Checkpoint #2)
+
+> 落點：v0.22.0-rc10 後（P0–P6 全部 batch 已 commit）。本節是**輕量收斂 checkpoint**，目的是讓 P7（result report / run archive）開工時不必全 repo grep 才知道每個概念的 SSOT；它**不是**boundary memo，也**沒有**搬檔重構 — 只是把已經散落的 truth 一次列齊。新增 / 修改 runtime module 時請同步這張表；衝突時以表格欄位為準。
+
+### Runtime concept → SSOT 對照
+
+| 概念 | Code SSOT | Schema SSOT | Runtime artifact 落地路徑 |
+|---|---|---|---|
+| Project Constitution | [`engine/project_constitution_runner.py`](../../engine/project_constitution_runner.py) | [`schemas/project-constitution.schema.yaml`](../../schemas/project-constitution.schema.yaml) | `~/.cap/projects/<id>/constitutions/project.json` |
+| Task Constitution | [`engine/task_scoped_compiler.py`](../../engine/task_scoped_compiler.py) + [`scripts/workflows/persist-task-constitution.sh`](../../scripts/workflows/persist-task-constitution.sh) | [`schemas/task-constitution.schema.yaml`](../../schemas/task-constitution.schema.yaml) | `~/.cap/projects/<id>/constitutions/task_<id>.json` |
+| Capability graph | `engine/task_scoped_compiler.py:build_capability_graph` | [`schemas/capability-graph.schema.yaml`](../../schemas/capability-graph.schema.yaml) | in-memory，存於 compiled workflow body 內 |
+| Compiled workflow | `engine/task_scoped_compiler.py:build_candidate_workflow` + [`engine/compiled_workflow_validator.py`](../../engine/compiled_workflow_validator.py) | [`schemas/compiled-workflow.schema.yaml`](../../schemas/compiled-workflow.schema.yaml) | run-scoped JSON，由 `cap workflow run` 經 `PLAN_JSON` 傳給 executor |
+| Binding report | [`engine/runtime_binder.py`](../../engine/runtime_binder.py) + [`engine/binding_report_validator.py`](../../engine/binding_report_validator.py) | [`schemas/binding-report.schema.yaml`](../../schemas/binding-report.schema.yaml) | `cap workflow bind` stdout（`binding_status:` / `summary:` / per-step 行） |
+| Preflight report | [`engine/preflight_report.py`](../../engine/preflight_report.py) | [`schemas/preflight-report.schema.yaml`](../../schemas/preflight-report.schema.yaml) | `cap workflow run --dry-run` stdout（P4 #10/#11） |
+| Supervisor envelope | [`engine/supervisor_envelope.py`](../../engine/supervisor_envelope.py) + [`engine/orchestration_snapshot.py`](../../engine/orchestration_snapshot.py) | [`schemas/supervisor-orchestration.schema.yaml`](../../schemas/supervisor-orchestration.schema.yaml) | `~/.cap/projects/<id>/orchestrations/<stamp>/{envelope.json,envelope.md,validation.json,source-prompt.txt}` |
+| Handoff ticket (Type C) | [`scripts/workflows/emit-handoff-ticket.sh`](../../scripts/workflows/emit-handoff-ticket.sh) | [`schemas/handoff-ticket.schema.yaml`](../../schemas/handoff-ticket.schema.yaml) | `~/.cap/projects/<id>/handoffs/<step_id>.ticket.json`（重跑遞增 seq） |
+| Session ledger | [`engine/agent_session_runner.py`](../../engine/agent_session_runner.py) + `engine/step_runtime.py:upsert_session` | [`schemas/agent-session.schema.yaml`](../../schemas/agent-session.schema.yaml) | `<run_dir>/agent-sessions.json`（含 lifecycle / result / failure_reason / prompt snapshot metadata） |
+| Artifact registry | `engine/step_runtime.py:register_state` + [`engine/artifact_inspector.py`](../../engine/artifact_inspector.py) | (無獨立 schema；`steps[]` + `artifacts[]` JSON 形狀穩定) | `<run_dir>/runtime-state.json`（每 step 一條 entry，artifact name → output_path） |
+| Workflow log | `cap-workflow-exec.sh:append_workflow_log` | (純 append-only TSV-like 行) | `<run_dir>/workflow.log` |
+| Run summary | `cap-workflow-exec.sh:RUN_SUMMARY` | (Markdown，`## Steps` 區段每 step 一段) | `<run_dir>/run-summary.md` |
+| Route-back history | `cap-workflow-exec.sh:record_route_history` + [`engine/handoff_route_resolver.py`](../../engine/handoff_route_resolver.py) | (JSONL，每行一個 routing decision) | `<run_dir>/route-history.jsonl`（僅 `CAP_ENFORCE_ROUTE_BACK=1` 時寫入） |
+| Capability validator | [`engine/capability_validator.py`](../../engine/capability_validator.py) | (per-rule 委派回對應 schema) | 純 helper / verdict only，無獨立落地檔 |
+| Required-output gate | `engine/step_runtime.py:validate_capability_output_cli` + `cap-workflow-exec.sh` OK 分支 | (reuse capability_validator 規則表) | env flag `CAP_ENFORCE_REQUIRED_OUTPUTS=1`；fail 寫入 session ledger `failure_reason` |
+| Handoff schema gate | `engine/step_runtime.py:validate-handoff-ticket` + `cap-workflow-exec.sh` 派工前 | [`schemas/handoff-ticket.schema.yaml`](../../schemas/handoff-ticket.schema.yaml) | env flag `CAP_ENFORCE_HANDOFF_SCHEMA=1`；fail 阻擋 ai-dispatch |
+| Project identity / storage | [`engine/project_context_loader.py`](../../engine/project_context_loader.py) + [`engine/storage_health.py`](../../engine/storage_health.py) + [`engine/project_doctor.py`](../../engine/project_doctor.py) + [`engine/project_status.py`](../../engine/project_status.py) | [`schemas/identity-ledger.schema.yaml`](../../schemas/identity-ledger.schema.yaml) | `~/.cap/identity-ledger.json` + `~/.cap/projects/<id>/.cap.project.yaml` |
+| Read-only inspectors | [`engine/session_inspector.py`](../../engine/session_inspector.py) + [`engine/session_cost_analyzer.py`](../../engine/session_cost_analyzer.py) + [`engine/artifact_inspector.py`](../../engine/artifact_inspector.py) | (各自委派回上面對應的 schema) | CLI 投影：`cap session inspect / analyze`、`cap artifact list / inspect / by-step` |
+
+### P7 (Result Report & Run Archive) 應該讀的輸入 SSOT
+
+P7 的 result report builder 是這張表的**唯一 aggregate consumer**；它應該**只**從以下 source 讀資料，不要自己重新計算或重新驗證任何欄位（否則會出現「同一條真相在 P5/P6/P7 各算一次」的隱性技術債）。新增任何欄位前，先確認上游 source 已經有該欄位 — 沒有就回上游補，不要在 P7 builder 裡長新邏輯。
+
+| P7 將消費的 source | 來自 | 用途 |
+|---|---|---|
+| `<run_dir>/runtime-state.json` | 上表 Artifact registry 列 | per-step execution_state、output_source、output_path、handoff_path、artifacts[] |
+| `<run_dir>/agent-sessions.json` | 上表 Session ledger 列 | per-session lifecycle、result、failure_reason（含 P6 #4 validator detail）、duration、prompt snapshot metadata |
+| `<run_dir>/workflow.log` | 上表 Workflow log 列 | 線性事件流（含 gate 結果、route_back、blocked 路徑），給 timeline / forensic 視圖 |
+| `<run_dir>/run-summary.md` | 上表 Run summary 列 | 既有 human-readable per-step 段落，可直接 quote 進 result.md |
+| `<run_dir>/route-history.jsonl` | 上表 Route-back history 列 | route_back 決策（僅 P6 #8 flag on 時才存在） |
+| `~/.cap/projects/<id>/handoffs/*.ticket.json` | 上表 Handoff ticket 列 | per-step 派工 SSOT（含 acceptance_criteria / failure_routing），給 result report 解釋「期望 vs 實際」 |
+| `cap workflow run --dry-run` 的 preflight report | 上表 Preflight report 列 | run 啟動前的環境 / binding 健康度 baseline，比對實際執行落差 |
+
+P7 **不**應該讀的 source（避免越界）：
+- `~/.cap/projects/<id>/orchestrations/<stamp>/` — supervisor envelope 是 task-level 決策，不是 run-level result。P7 報告 run；envelope 的解讀屬 P3 supervisor 範圍。
+- `~/.cap/projects/<id>/constitutions/` — constitution 由 P2 / P3 producer 維護，P7 只引用 task_id / project_id 對齊，不解讀內容。
+- `schemas/*.yaml` 直接 parse — schema 是 contract，P7 builder 應透過上游 validator（已落地者）拿驗證結果，不重新跑 jsonschema。
+
+### 不是 SSOT 的東西（避免誤讀）
+
+- **`schemas/workflow-result.schema.yaml`** 是 P7 將要產的 result 文件的 **forward contract**，目前**沒有 producer**。P7 builder 落地時才會出現第一個 producer；現在拿來當 SSOT 是把契約當實作。
+- **`schemas/gate-result.schema.yaml`** 是 P8 governance gate 的 forward contract，同上 — 沒有 producer。P6 #3 的 handoff schema gate 與 P6 #4 的 required-output gate **不**是 P8 gate；它們是 step-internal pre-/post-dispatch validation，verdict 直接寫進 session ledger 而非 emit gate-result envelope。
+- **`runtime-state.json` 內的 `artifacts[]`** 不是 artifact 內容的 SSOT — 它是 metadata index（name / source_step / path / handoff_path）。內容真相在 `output_path` 指向的檔案。
+- **`workflow.log` / `run-summary.md`** 是 trace artifact，不是契約 — 行格式可能隨 executor 演進微調。P7 應從 `runtime-state.json` + `agent-sessions.json` 拿結構化資料，把 `.log` / `.md` 視為補充人類視圖。
+
+---
+
 ## ⛽ Runtime Cost & Token Budget Guardrails
 
 CAP 的多層 helper / executor / workflow 結構容易誘發「重複實作」（同一條邏輯在 Python helper、shell executor、workflow YAML 各寫一份）與「掃描成本浪費」（agent 第一刀就全 repo grep 找入口）。下列 5 條紀律是 P3 收斂後的 engineering discipline，所有後續 cycle（包含 Codex / Claude / 任何 sub-agent）都應遵守：
