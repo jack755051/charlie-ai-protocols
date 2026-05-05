@@ -25,6 +25,7 @@ CAP_PATHS="${SCRIPT_DIR}/cap-paths.sh"
 STATUS_MODULE="${REPO_ROOT}/engine/project_status.py"
 DOCTOR_MODULE="${REPO_ROOT}/engine/project_doctor.py"
 CONSTITUTION_MODULE="${REPO_ROOT}/engine/project_constitution_runner.py"
+MIGRATE_CONFIG_MODULE="${REPO_ROOT}/engine/migrate_config.py"
 
 usage() {
   cat <<'EOF'
@@ -41,6 +42,15 @@ Subcommands:
   doctor  [--project-root PATH] [--format text|json|yaml]
           Read-only diagnostic with remediation suggestions for every
           HealthIssueKind reported by the storage health check.
+
+  migrate-config  [--project-root PATH] [--dry-run] [--force]
+                  [--remove-legacy] [--format text|json|yaml]
+                  Copy legacy .cap.* dotfiles at the repo root into the
+                  .cap/ namespace introduced in P0c batch 1. Defaults to
+                  non-destructive copy; legacy files are kept until you pass
+                  --remove-legacy after verifying the new path loads.
+                  See engine/migrate_config.py for the action verdicts
+                  (skip_no_legacy / copy / already_migrated / conflict).
 
   constitution  (--prompt "<text>" | --from-file PATH | --promote STAMP | --latest)
                 [--project-root PATH] [--cap-home PATH] [--project-id ID]
@@ -334,6 +344,11 @@ cmd_constitution() {
   exec python3 "${CONSTITUTION_MODULE}" "$@"
 }
 
+cmd_migrate_config() {
+  [ -f "${MIGRATE_CONFIG_MODULE}" ] || die "engine/migrate_config.py missing"
+  exec python3 "${MIGRATE_CONFIG_MODULE}" "$@"
+}
+
 # ─────────────────────────────────────────────────────────
 # Dispatcher
 # ─────────────────────────────────────────────────────────
@@ -356,6 +371,10 @@ main() {
     constitution)
       shift
       cmd_constitution "$@"
+      ;;
+    migrate-config)
+      shift
+      cmd_migrate_config "$@"
       ;;
     -h|--help|help|"")
       usage

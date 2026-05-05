@@ -542,7 +542,8 @@ type cap                      # shell function from ~/.zshrc CAP block
 | 批次 | 範圍 | 風險 |
 |---|---|---|
 | **batch 1（已完成 v0.22.x）** | resolver 雙路徑讀（4 reader）+ tests + docs | 極低 — 純加讀取相容，不搬檔、不改 default producer |
-| **batch 2（pending）** | `cap project init` 改寫 `.cap/project.yaml` + mapper / installer 讀新路徑 + `cap project migrate-config` helper | 中 — producer 改寫，仍保留 legacy 讀 |
+| **batch 2（已完成 v0.22.x）** | `cap project migrate-config` helper：non-destructive copy / `--dry-run` / `--force` / `--remove-legacy`；`cap project init` producer 改寫 deferred 至 batch 2.5 | 低 — 純新增 helper，預設 copy + keep；不動 init / mapper / installer |
+| **batch 2.5（pending）** | `cap project init` 改寫 `.cap/project.yaml`、mapper / installer 讀新路徑 | 中 — producer 預設改寫；仍保留 legacy 讀 |
 | **batch 3（pending）** | 本 repo 自身遷移（`.cap.*` → `.cap/*`），跑全 smoke 驗證後 commit | 低 — 若前兩批正確，搬檔只是把現實對齊既有 resolver |
 
 ### Runtime storage 不在本節範圍
@@ -555,6 +556,15 @@ type cap                      # shell function from ~/.zshrc CAP block
 - Python ×3：`engine/project_constitution_runner.py:resolve_project_id` / `engine/project_context_loader.py:ProjectContextLoader.load` / `engine/step_runtime.py:_project_id_from_config` — 同樣雙路徑語意
 - Test：`tests/scripts/test-cap-config-namespace-resolver.sh` — 4 reader × 4 場景 = 27 cases
 - 4 reader 任一漂移 = bug。新增 reader 時務必同步本節。
+
+### Migration helper（batch 2）
+
+- 模組：`engine/migrate_config.py` — pure helper（`plan_migration` / `apply_migration` / `format_plan` / `format_result`）
+- CLI：`cap project migrate-config [--project-root PATH] [--dry-run] [--force] [--remove-legacy] [--format text|json|yaml]`
+- 行為：對 4 個 legacy 散檔（`.cap.project.yaml` / `.cap.constitution.yaml` / `.cap.skills.yaml` / `.cap.agents.json`）執行 copy → `<repo>/.cap/<name>`；4 個 per-file action：`skip_no_legacy` / `copy` / `already_migrated` / `conflict`。預設 non-destructive（保留 legacy）；`--remove-legacy` 才刪原檔；`--force` 才覆寫已存在的新路徑（避免誤覆蓋使用者手寫的 `.cap/project.yaml`）。
+- Exit 0 / 1：成功（含 dry-run / nothing-to-do）/ 至少一條 conflict 且未 `--force`
+- Test：`tests/scripts/test-cap-project-migrate-config.sh` — 9 case / 47 assertions
+- 邊界：本模組 **不** 重新解析 project_id、**不** 寫 `~/.cap/projects/<id>/`；只搬 repo-root 散檔。Resolver / runtime storage 各有自己的 SSOT。
 
 ---
 

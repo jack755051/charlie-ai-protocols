@@ -84,6 +84,9 @@ cap release-check --recent 10
 cap project init
 cap project status
 cap project doctor
+cap project migrate-config --dry-run                # 預覽 .cap.* → .cap/<name> 搬移計畫
+cap project migrate-config                          # 預設 copy + 保留 legacy
+cap project migrate-config --remove-legacy          # 驗證新路徑後刪除舊 .cap.* 散檔
 
 # Workflow 與 task
 cap workflow list
