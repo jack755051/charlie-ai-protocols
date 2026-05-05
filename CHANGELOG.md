@@ -6,15 +6,29 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
-## [Unreleased]
+## [v0.22.0-rc12] - 2026-05-05
+
+> Release candidate — collect 2 commits since v0.22.0-rc11 into a focused checkpoint that closes the P0c constitution workflow writers (`Batch 2.6`) deferred from rc11. All writes stay non-destructive: legacy `.cap.<name>` flat-file paths still resolve via the dual-path readers shipped in rc11, and `--remove-legacy` continues to be deferred to a follow-up tag.
 
 ### Fixed
 
 - **P0c batch 2.6 — constitution workflow writers `.cap` namespace migration** (`b5717d0`)：把 v0.22.0-rc11 「Notes」段刻意延後的 6 個 P2-tested constitution writer 收尾，全部改成「new path 優先 / legacy fallback / non-destructive / 不引入 `--remove-legacy`」，與 rc11 已完成的 4 個 reader dual-path（`9dcbc2a` / `58f7f25`）對齊：(1) **`scripts/workflows/persist-constitution.sh`**：`REPO_TARGET` 改寫到 `.cap/constitution.yaml`；exists / diff / skip 同時辨識 legacy `.cap.constitution.yaml` 以避免覆蓋舊 SSOT；`PROJECT_CONFIG_PATH` 改寫到 `.cap/project.yaml`；payload 內 `constitution_file` / `skill_registry` / `agent_registry` 同步指向 `.cap/<name>`；README scaffold template 反映新路徑；`mkdir -p .cap/` 安全建立。(2) **`scripts/workflows/bootstrap-constitution-defaults.sh`**：`source_of_truth` verbatim 預設 block 改用 `.cap/<name>` 路徑，並加 batch 2.6 dual-path 提醒。(3) **`scripts/workflows/load-constitution-reconcile-inputs.sh`**：`CONSTITUTION_PATH` 與 `read_project_meta()` dual-path；`missing_current_constitution` 錯誤訊息列出兩個路徑。(4) **`scripts/workflows/emit-handoff-ticket.sh`**：`resolve_runtime_project_id` fallback dual-path；ticket `context_payload.project_constitution_path` 用 lambda 解析「new wins / 缺新→legacy / 都缺→預設新路徑」三種情境。(5) **`scripts/workflows/provider-parity-check.sh`**：`design_source.type` 讀取 dual-path。(6) **`scripts/workflows/ingest-design-source.sh`**：僅 docstring 更新（邏輯已透過 `engine/step_runtime.py:_read_constitution_design_source` 走 dual-path，rc11 `58f7f25` 已落地）。**Verified**：6 個 impacted-suite 60 cases passed — `test-persist-constitution-exit-code` (6) + `test-bootstrap-constitution-defaults-exit-code` (4) + `test-load-constitution-reconcile-inputs-exit-code` (2) + `test-emit-handoff-ticket` (19) + `test-design-source-ingest` (21) + `test-provider-parity-check` (8)；4 個 P0c gate 132 cases passed — `test-cap-config-namespace-resolver` (27) + `test-cap-config-namespace-readers` (27) + `test-cap-project-init-namespace` (31) + `test-cap-project-migrate-config` (47)，與 rc11 baseline 一致零 regression。`test-cap-project-constitution.sh` case 4 「validation.json lists errors」64 passed / 1 failed 屬 master pre-existing issue（`git stash` 對照 d34c16a base 同樣 fail），與本批變更無關，後續另開 ticket 處理。**未動執行行為**：legacy 4 個散檔仍在原處（如 `e9bb5ca` dogfooding 後保留），`--remove-legacy` 維持 deferred；本 commit 走 06-devops 版本控制 pipeline (`vc_scan` + `vc_compose` + `vc_apply`) 落地，governed strategy 自動 push 上 `origin/main`。
 
+### Documentation
+
+- **`docs(cap-config-namespace)` release-doc closeout** (`90e37cb`)：把 Batch 2.6 的 closure narrative 補進三個 release-doc surface — `CHANGELOG.md` 新增本段 release block、`docs/cap/RELEASE-NOTES.md` 在 rc11 上方插入 v0.22.0-rc12 條目、`docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md` 「更新日期」bumped 到 2026-05-05。No executable behavior change；commit 走 06-devops `vc_scan` + `vc_compose` + `vc_apply` pipeline 落地。
+
 ### Notes
 
-- 本段（rc11 之後的 fix-class commit）尚未被任何 release tag 收斂；`Batch 2.6` 至此完成的範圍是 6 writer × dual-path migration，**未做** `--remove-legacy` 與下一 rc tag 的 doc 收斂；P7 Result Report and Run Archive 是下一個排程項目。
+- **`Batch 2.6` 範圍**：6 writer × dual-path migration（`persist-constitution.sh` 等）；**未做** `--remove-legacy`；本 tag 不取代 `v0.22.0` 正式版。
+- **下一個排程項目**：P7 Result Report and Run Archive（result.md builder + final archive + `cap workflow inspect`），SSOT 來源限於 `<run_dir>/runtime-state.json` / `agent-sessions.json` / `workflow.log` / `run-summary.md` / `route-history.jsonl` + `~/.cap/projects/<id>/handoffs/*.ticket.json` + dry-run preflight report。
+- **`--remove-legacy` deferred**：rc12 後仍保留 4 個 legacy `.cap.*` 散檔，按計畫等下一輪正常 CAP 操作（含 workflow run / promote / e2e）確認無 reader 漏掉再執行。
+
+### Verified
+
+- 6 個 impacted-suite **60 cases passed**：`test-persist-constitution-exit-code` (6) + `test-bootstrap-constitution-defaults-exit-code` (4) + `test-load-constitution-reconcile-inputs-exit-code` (2) + `test-emit-handoff-ticket` (19) + `test-design-source-ingest` (21) + `test-provider-parity-check` (8)。
+- 4 個 P0c gate **132 cases passed**：`test-cap-config-namespace-resolver` (27) + `test-cap-config-namespace-readers` (27) + `test-cap-project-init-namespace` (31) + `test-cap-project-migrate-config` (47)，與 rc11 baseline 完全一致零 regression。
+- `test-cap-project-constitution.sh` case 4 「validation.json lists errors」維持 64 passed / 1 failed，屬 master pre-existing issue（`git stash` 對照 `d34c16a` base 同樣 fail）；不在本 tag scope。
 
 ---
 
