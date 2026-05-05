@@ -149,6 +149,111 @@ def build_workflow_result(
     return result
 
 
+def render_result_md(result: dict[str, Any]) -> str:
+    """Render a workflow-result dict (matching workflow-result schema) as
+    a human-readable Markdown projection.
+
+    Mirrors the same top-level ``# Workflow Result`` heading the legacy
+    hardcoded ``result.md`` template used (so any reader that grep'd
+    ``- workflow_id:`` / ``- run_id:`` / ``- final_state:`` keeps
+    working) and adds ``## Summary`` / ``## Steps`` / ``## Artifacts``
+    / ``## Failures`` / ``## Logs`` sections that surface the new
+    builder output. Does not write to disk; pure function.
+    """
+    lines: list[str] = []
+    lines.append("# Workflow Result")
+    lines.append("")
+    lines.append(f"- workflow_id: {result.get('workflow_id', '')}")
+    if result.get("workflow_name"):
+        lines.append(f"- workflow_name: {result['workflow_name']}")
+    lines.append(f"- run_id: {result.get('run_id', '')}")
+    lines.append(f"- project_id: {result.get('project_id', '')}")
+    if result.get("task_id"):
+        lines.append(f"- task_id: {result['task_id']}")
+    lines.append(f"- started_at: {result.get('started_at', '')}")
+    finished_at = result.get("finished_at")
+    lines.append(f"- finished_at: {finished_at if finished_at else 'null'}")
+    lines.append(f"- final_state: {result.get('final_state', '')}")
+    fr = result.get("final_result")
+    lines.append(f"- final_result: {fr if fr else 'null'}")
+    td = result.get("total_duration_seconds")
+    lines.append(f"- total_duration_seconds: {td if td is not None else 'null'}")
+
+    summary = result.get("summary", {}) or {}
+    lines.append("")
+    lines.append("## Summary")
+    lines.append("")
+    lines.append(f"- total_steps: {summary.get('total_steps', 0)}")
+    lines.append(f"- completed: {summary.get('completed', 0)}")
+    lines.append(f"- failed: {summary.get('failed', 0)}")
+    lines.append(f"- skipped: {summary.get('skipped', 0)}")
+    lines.append(f"- blocked: {summary.get('blocked', 0)}")
+
+    steps = result.get("steps") or []
+    lines.append("")
+    lines.append("## Steps")
+    lines.append("")
+    if not steps:
+        lines.append("_(none)_")
+    else:
+        for step in steps:
+            sid = step.get("step_id", "")
+            status = step.get("status", "")
+            phase = step.get("phase", "")
+            cap = step.get("capability", "")
+            dur = step.get("duration_seconds")
+            dur_str = f"{dur}s" if dur is not None else "n/a"
+            lines.append(
+                f"- {sid} [{status}] (phase={phase}, capability={cap}, duration={dur_str})"
+            )
+
+    artifacts = result.get("artifacts") or []
+    lines.append("")
+    lines.append("## Artifacts")
+    lines.append("")
+    if not artifacts:
+        lines.append("_(none)_")
+    else:
+        for art in artifacts:
+            lines.append(f"- {art.get('name', '')}: {art.get('path', '')}")
+
+    failures = result.get("failures") or []
+    if failures:
+        lines.append("")
+        lines.append("## Failures")
+        lines.append("")
+        for failure in failures:
+            sid = failure.get("step_id", "")
+            reason = failure.get("reason", "")
+            detail = failure.get("detail")
+            rb = failure.get("route_back_to")
+            lines.append(f"- step_id: {sid}")
+            lines.append(f"  - reason: {reason}")
+            if detail:
+                lines.append(f"  - detail: {detail}")
+            lines.append(f"  - route_back_to: {rb if rb else 'null'}")
+
+    logs = result.get("logs") or {}
+    if isinstance(logs, dict) and logs:
+        lines.append("")
+        lines.append("## Logs")
+        lines.append("")
+        if logs.get("workflow_log"):
+            lines.append(f"- workflow_log: {logs['workflow_log']}")
+        wll = logs.get("workflow_log_lines")
+        if wll is not None:
+            lines.append(f"- workflow_log_lines: {wll}")
+
+    lines.append("")
+    lines.append("## Notes")
+    lines.append("")
+    lines.append(
+        "Rendered from workflow-result.json by P7 result_report_builder."
+    )
+    lines.append("")
+    return "\n".join(lines)
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Load helpers
 # ─────────────────────────────────────────────────────────────────────────

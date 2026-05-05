@@ -829,6 +829,62 @@ PY
 )"
 assert_eq "missing run_dir raises FileNotFoundError" "OK:FileNotFoundError" "${out11}"
 
+# ── Case 12: render_result_md → human-readable Markdown projection ─────
+
+echo ""
+echo "Case 12: render_result_md → headings + key fields rendered"
+RENDERED_MD="${SANDBOX}/happy.result.md"
+PYTHONPATH="${REPO_ROOT}" "${PYTHON_BIN}" - "${OUT1}" "${RENDERED_MD}" <<'PY'
+import json, sys
+from pathlib import Path
+from engine.result_report_builder import render_result_md
+
+result = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+Path(sys.argv[2]).write_text(render_result_md(result), encoding="utf-8")
+PY
+
+assert_md_contains() {
+  local desc="$1" md_path="$2" needle="$3"
+  if grep -qF -- "${needle}" "${md_path}"; then
+    echo "  PASS: ${desc}"
+    pass_count=$((pass_count + 1))
+  else
+    echo "  FAIL: ${desc}"
+    echo "    needle: ${needle}"
+    echo "    file:   ${md_path}"
+    fail_count=$((fail_count + 1))
+  fi
+}
+
+assert_md_contains "render: top heading" "${RENDERED_MD}" "# Workflow Result"
+assert_md_contains "render: workflow_id field" "${RENDERED_MD}" "- workflow_id: test-wf"
+assert_md_contains "render: run_id field" "${RENDERED_MD}" "- run_id: run_happy"
+assert_md_contains "render: project_id field" "${RENDERED_MD}" "- project_id: test-proj"
+assert_md_contains "render: final_state field" "${RENDERED_MD}" "- final_state: completed"
+assert_md_contains "render: final_result field" "${RENDERED_MD}" "- final_result: success"
+assert_md_contains "render: Summary section" "${RENDERED_MD}" "## Summary"
+assert_md_contains "render: Steps section" "${RENDERED_MD}" "## Steps"
+assert_md_contains "render: spec_step bullet" "${RENDERED_MD}" "- spec_step [ok]"
+assert_md_contains "render: review_step bullet" "${RENDERED_MD}" "- review_step [ok]"
+assert_md_contains "render: Artifacts section" "${RENDERED_MD}" "## Artifacts"
+assert_md_contains "render: spec_doc artifact" "${RENDERED_MD}" "- spec_doc: /tmp/spec.md"
+assert_md_contains "render: Logs section" "${RENDERED_MD}" "## Logs"
+assert_md_contains "render: Notes section" "${RENDERED_MD}" "## Notes"
+
+# Failed fixture exercises the optional ## Failures branch.
+RENDERED_FAILED_MD="${SANDBOX}/failed.result.md"
+PYTHONPATH="${REPO_ROOT}" "${PYTHON_BIN}" - "${OUT3}" "${RENDERED_FAILED_MD}" <<'PY'
+import json, sys
+from pathlib import Path
+from engine.result_report_builder import render_result_md
+
+result = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+Path(sys.argv[2]).write_text(render_result_md(result), encoding="utf-8")
+PY
+assert_md_contains "render(failed): Failures section" "${RENDERED_FAILED_MD}" "## Failures"
+assert_md_contains "render(failed): bad_step entry" "${RENDERED_FAILED_MD}" "- step_id: bad_step"
+assert_md_contains "render(failed): reason rendered" "${RENDERED_FAILED_MD}" "reason: schema_validation_failed"
+
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"
 [ "${fail_count}" -eq 0 ]
