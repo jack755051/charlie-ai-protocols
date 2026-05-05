@@ -58,6 +58,46 @@ resolve_real_bin() {
   exit 1
 }
 
+has_cap_project_context() {
+  local project_root
+
+  if [ -n "${CAP_PROJECT_ID_OVERRIDE:-}" ]; then
+    return 0
+  fi
+
+  if git rev-parse --show-toplevel >/dev/null 2>&1; then
+    project_root="$(git rev-parse --show-toplevel)"
+  else
+    project_root="${PWD}"
+  fi
+
+  if [ -f "${project_root}/.cap.project.yaml" ]; then
+    return 0
+  fi
+
+  if git -C "${project_root}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [ "${CAP_ALLOW_BASENAME_FALLBACK:-0}" = "1" ]; then
+    return 0
+  fi
+
+  return 1
+}
+
+launch_native_without_cap_context() {
+  local cli_name="$1"
+  shift
+
+  local real_bin
+  real_bin="$(resolve_real_bin "${cli_name}")"
+
+  printf 'cap %s: no CAP project detected; launching native %s.\n' "${cli_name}" "${cli_name}" >&2
+  printf 'cap %s: run inside a git repo, add .cap.project.yaml, or set CAP_PROJECT_ID_OVERRIDE to enable CAP-managed trace.\n' "${cli_name}" >&2
+  exec "${real_bin}" "$@"
+}
+
 [ "$#" -ge 1 ] || usage
 
 CLI_NAME="$1"
@@ -80,6 +120,10 @@ case "${CLI_NAME}" in
     usage
     ;;
 esac
+
+if ! has_cap_project_context; then
+  launch_native_without_cap_context "${CLI_NAME}" "$@"
+fi
 
 REAL_BIN="$(resolve_real_bin "${CLI_NAME}")"
 SESSION_ID="${CLI_NAME}-$(date '+%Y%m%d-%H%M%S')-$$"

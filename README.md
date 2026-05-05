@@ -100,9 +100,9 @@ cap session inspect --run-id <run_id> --json
 cap session analyze --top 10                       # 彙整 token/time 熱點分析
 cap session analyze --run-id <run_id> --json
 
-# CAP-managed provider session（顯式入口）
-cap claude [ARGS...]                               # 走 CAP wrapper 啟動 Claude，記錄 trace
-cap codex  [ARGS...]                               # 走 CAP wrapper 啟動 Codex，記錄 trace
+# CAP-managed provider session（顯式入口；非 CAP 目錄會退回原生 provider）
+cap claude [ARGS...]                               # CAP project 內記錄 trace；非 CAP 目錄退回原生 Claude
+cap codex  [ARGS...]                               # CAP project 內記錄 trace；非 CAP 目錄退回原生 Codex
 ```
 
 完整 CLI 入口由 `scripts/cap-entry.sh` 派發；策略 / dry-run / agent-session 等行為以 [docs/cap/ARCHITECTURE.md](docs/cap/ARCHITECTURE.md) 為準。
@@ -112,7 +112,7 @@ cap codex  [ARGS...]                               # 走 CAP wrapper 啟動 Code
 CAP **不會**預設包裹（hijack）裸 `claude` / `codex`：
 
 - **裸 `claude` / `codex`** — 永遠是原生 provider CLI；在 `~` 或任何非 CAP 目錄呼叫不會觸發 `cap-paths`、`project_id` resolver 或要求 `.cap.project.yaml`。
-- **`cap claude` / `cap codex`** — CAP-managed provider 入口；會走 `cap-entry.sh` → `cap-session.sh`，自動寫入 session trace、套用 project_id 解析。
+- **`cap claude` / `cap codex`** — CAP-managed provider 入口；在 git repo、`.cap.project.yaml` 或 `CAP_PROJECT_ID_OVERRIDE` 可解析時寫入 session trace；若在 `~` 這類非 CAP 目錄執行，會退回原生 provider，不觸發 `cap-paths` 錯誤。
 - **舊行為（CAP 包裹原生 CLI）** — 從 v0.22.x 起為 opt-in，`CAP_WRAP_NATIVE_CLI=1 make install` 才會把裸命令重導向 CAP。
 
 理由：global `~/.zshrc` 的 shell function 影響範圍橫跨所有目錄；專案級 runtime 不該預設劫持 provider 命令。詳見 [docs/cap/ARCHITECTURE.md §Provider Isolation](docs/cap/ARCHITECTURE.md#provider-isolation)。

@@ -202,6 +202,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-cap-artifact-inspect.sh" "cap artif
 run_fixture "${REPO_ROOT}/tests/scripts/test-capability-validator.sh" "capability validator registry (P6 #5+#6+#7)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-required-output-enforcement.sh" "required-output enforcement opt-in gate (P6 #4)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-manage-cap-alias-defaults.sh" "installer native CLI isolation (P0b)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-cap-session-native-fallback.sh" "cap session native fallback outside project (P0b)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-mapper-global-isolation.sh" "mapper global rule isolation (P0b)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-cap-config-namespace-resolver.sh" "config namespace resolver dual-path (P0c batch 1)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-handoff-schema-gate.sh" "handoff schema pre-dispatch opt-in gate (P6 #3)"

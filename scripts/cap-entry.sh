@@ -70,8 +70,8 @@ COMMAND                            DESCRIPTION
 [Execution]
   cap run                          啟動 CrewAI 引擎 (FRAMEWORK=nextjs|angular|nuxt)
   cap agent <agent> [prompt]       啟動指定 agent 互動 session
-  cap codex [ARGS...]              透過 wrapper 啟動 Codex（含 trace）
-  cap claude [ARGS...]             透過 wrapper 啟動 Claude（含 trace）
+  cap codex [ARGS...]              CAP project 內記錄 trace；非 CAP 目錄退回原生 Codex
+  cap claude [ARGS...]             CAP project 內記錄 trace；非 CAP 目錄退回原生 Claude
   cap session inspect <session_id> [--json]  查 agent session ledger（read-only）
   cap session analyze [--top N] [--json]    彙整 token / time 熱點分析（read-only）
   cap artifact list / inspect / by-step      查 runtime-state.json artifact registry（read-only）
