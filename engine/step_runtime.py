@@ -88,13 +88,22 @@ def _project_id_from_config() -> str:
 
 def _read_constitution_design_source() -> dict[str, Any] | None:
     """Best-effort read of design_source block from the project's
-    .cap.constitution.yaml. Returns the dict when found, None when the
+    Project Constitution. Returns the dict when found, None when the
     constitution is missing, the block is absent, type is 'none', or YAML
     parsing fails. Never raises — callers fall back to the legacy
     ~/.cap/designs/<project_id> path on None.
+
+    P0c batch 2.5 dual-path: prefer .cap/constitution.yaml (new namespace),
+    fall back to legacy .cap.constitution.yaml. Same precedence as the
+    project_id resolver in scripts/cap-paths.sh.
     """
-    constitution_path = Path.cwd() / ".cap.constitution.yaml"
-    if not constitution_path.is_file():
+    namespaced = Path.cwd() / ".cap" / "constitution.yaml"
+    legacy = Path.cwd() / ".cap.constitution.yaml"
+    if namespaced.is_file():
+        constitution_path = namespaced
+    elif legacy.is_file():
+        constitution_path = legacy
+    else:
         return None
     try:
         import yaml  # type: ignore[import]

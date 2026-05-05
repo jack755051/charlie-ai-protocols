@@ -87,7 +87,13 @@ def ensure_binding_status_executable(
 class RuntimeBinder:
     """Workflow runtime binder: semantic plan -> binding report / bound phases."""
 
+    # P0c batch 2.5 reader dual-path: prefer .cap/<name> namespace, fall back
+    # to legacy .cap.<name> flat-file. Constants below name both forms so
+    # _resolve_skill_registry_path / _load_legacy_registry_adapter can apply
+    # the same precedence (new wins) without duplicating the logic.
+    DEFAULT_REGISTRY_PATH_NAMESPACED = ".cap/skills.yaml"
     DEFAULT_REGISTRY_PATH = ".cap.skills.yaml"
+    LEGACY_AGENT_REGISTRY_PATH_NAMESPACED = ".cap/agents.json"
     LEGACY_AGENT_REGISTRY_PATH = ".cap.agents.json"
     DEFAULT_BINDING_MODE = "strict"
     DEFAULT_MISSING_POLICY = "halt"
@@ -105,9 +111,16 @@ class RuntimeBinder:
         self.project_context_loader = ProjectContextLoader(self.base_dir)
 
     def load_skill_registry(self, registry_ref: str | None = None) -> dict:
-        registry_path = Path(registry_ref) if registry_ref else self.base_dir / self.DEFAULT_REGISTRY_PATH
-        if not registry_path.is_absolute():
-            registry_path = self.base_dir / registry_path
+        if registry_ref:
+            registry_path = Path(registry_ref)
+            if not registry_path.is_absolute():
+                registry_path = self.base_dir / registry_path
+        else:
+            # P0c batch 2.5 dual-path: namespaced new path wins; legacy flat-
+            # file is only consulted if the new path is absent.
+            namespaced = self.base_dir / self.DEFAULT_REGISTRY_PATH_NAMESPACED
+            legacy = self.base_dir / self.DEFAULT_REGISTRY_PATH
+            registry_path = namespaced if namespaced.is_file() else legacy
 
         if not registry_path.exists():
             return self._load_legacy_registry_adapter(registry_path)
@@ -578,7 +591,14 @@ class RuntimeBinder:
         return "within_budget"
 
     def _load_legacy_registry_adapter(self, missing_registry_path: Path) -> dict:
-        legacy_path = self.base_dir / self.LEGACY_AGENT_REGISTRY_PATH
+        # P0c batch 2.5 dual-path for legacy agents.json: namespaced new path
+        # is consulted first; fall back to the legacy flat-file. The class
+        # name still says "legacy" because it's the legacy AGENT-binding
+        # adapter (translates .cap.agents.json into the modern skill
+        # registry shape) — distinct from "legacy path" here.
+        namespaced_agents = self.base_dir / self.LEGACY_AGENT_REGISTRY_PATH_NAMESPACED
+        legacy_agents = self.base_dir / self.LEGACY_AGENT_REGISTRY_PATH
+        legacy_path = namespaced_agents if namespaced_agents.is_file() else legacy_agents
         if not legacy_path.exists():
             return {
                 "schema_version": 1,

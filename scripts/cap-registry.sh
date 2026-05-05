@@ -4,7 +4,17 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CAP_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-REGISTRY_FILE="${CAP_ROOT}/.cap.agents.json"
+# P0c batch 2.5 dual-path: prefer namespaced .cap/agents.json; fall back to
+# legacy .cap.agents.json. Same precedence as engine/workflow_loader.py and
+# engine/runtime_binder.py so CLI and engine readers agree on the source
+# of truth when both happen to exist.
+NAMESPACED_REGISTRY_FILE="${CAP_ROOT}/.cap/agents.json"
+LEGACY_REGISTRY_FILE="${CAP_ROOT}/.cap.agents.json"
+if [ -f "${NAMESPACED_REGISTRY_FILE}" ]; then
+  REGISTRY_FILE="${NAMESPACED_REGISTRY_FILE}"
+else
+  REGISTRY_FILE="${LEGACY_REGISTRY_FILE}"
+fi
 VENV_PYTHON="${CAP_ROOT}/.venv/bin/python"
 STEP_PY="${CAP_ROOT}/engine/step_runtime.py"
 

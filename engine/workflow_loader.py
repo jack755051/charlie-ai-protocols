@@ -13,7 +13,13 @@ class WorkflowLoader:
         self.base_dir = Path(base_dir) if base_dir else Path(__file__).resolve().parents[1]
         self.workflows_dir = self.base_dir / "schemas" / "workflows"
         self.capabilities_path = self.base_dir / "schemas" / "capabilities.yaml"
-        self.agents_path = self.base_dir / ".cap.agents.json"
+        # P0c batch 2.5 dual-path: prefer .cap/agents.json (new namespace);
+        # fall back to legacy .cap.agents.json. When neither exists,
+        # `load_agents()` raises FileNotFoundError naming the new path so
+        # the message points users at the canonical location.
+        namespaced_agents = self.base_dir / ".cap" / "agents.json"
+        legacy_agents = self.base_dir / ".cap.agents.json"
+        self.agents_path = namespaced_agents if namespaced_agents.is_file() else legacy_agents
 
     def load_workflow(self, workflow_ref):
         workflow_path = Path(workflow_ref)

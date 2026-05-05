@@ -543,7 +543,8 @@ type cap                      # shell function from ~/.zshrc CAP block
 |---|---|---|
 | **batch 1（已完成 v0.22.x）** | resolver 雙路徑讀（4 reader）+ tests + docs | 極低 — 純加讀取相容，不搬檔、不改 default producer |
 | **batch 2（已完成 v0.22.x）** | `cap project migrate-config` helper：non-destructive copy / `--dry-run` / `--force` / `--remove-legacy`；`cap project init` producer 改寫 deferred 至 batch 2.5 | 低 — 純新增 helper，預設 copy + keep；不動 init / mapper / installer |
-| **batch 2.5（pending）** | `cap project init` 改寫 `.cap/project.yaml`、mapper / installer 讀新路徑 | 中 — producer 預設改寫；仍保留 legacy 讀 |
+| **batch 2.5（已完成 v0.22.x）** | `cap project init` 寫 `.cap/project.yaml` 為預設 + skills / agents / constitution 4 個 reader 雙路徑（`engine/runtime_binder.py` / `engine/workflow_loader.py` / `scripts/cap-registry.sh` / `engine/step_runtime.py:_read_constitution_design_source`）；P2-tested constitution 寫入 workflow（persist-constitution.sh / bootstrap-defaults / 4 個 ingest workflow）保留舊路徑，移到 batch 2.6 | 低 — producer flip + reader 雙路徑都新→legacy fallback；不動 P2 workflow 寫入 |
+| **batch 2.6（pending）** | P2-tested constitution 寫入 workflow 改寫新路徑：`scripts/workflows/persist-constitution.sh` / `bootstrap-constitution-defaults.sh` template strings；`load-constitution-reconcile-inputs.sh` / `emit-handoff-ticket.sh` / `provider-parity-check.sh` / `ingest-design-source.sh` reader 加雙路徑 | 中 — 動 P2 workflow，需 promote / e2e 都跑過 |
 | **batch 3（pending）** | 本 repo 自身遷移（`.cap.*` → `.cap/*`），跑全 smoke 驗證後 commit | 低 — 若前兩批正確，搬檔只是把現實對齊既有 resolver |
 
 ### Runtime storage 不在本節範圍
@@ -565,6 +566,17 @@ type cap                      # shell function from ~/.zshrc CAP block
 - Exit 0 / 1：成功（含 dry-run / nothing-to-do）/ 至少一條 conflict 且未 `--force`
 - Test：`tests/scripts/test-cap-project-migrate-config.sh` — 9 case / 47 assertions
 - 邊界：本模組 **不** 重新解析 project_id、**不** 寫 `~/.cap/projects/<id>/`；只搬 repo-root 散檔。Resolver / runtime storage 各有自己的 SSOT。
+
+### Producer flip + secondary readers（batch 2.5）
+
+- **Producer flip** — `scripts/cap-project.sh:cmd_init` 預設寫 `.cap/project.yaml`；既有 legacy 視為「已初始化」，refusal message 提示用 `cap project migrate-config`；--force 在 legacy-only 場景寫新路徑、保留 legacy（不自動刪），在 new-path 場景做 in-place rewrite（保留未知 keys）。Test：`tests/scripts/test-cap-project-init-namespace.sh` — 7 case / 31 assertions。
+- **Reader dual-path（4 個 surface）** — 同上 4 reader 模式（new 優先 → legacy fallback）：
+  - `engine/runtime_binder.py` — `DEFAULT_REGISTRY_PATH_NAMESPACED` / `LEGACY_AGENT_REGISTRY_PATH_NAMESPACED` 雙常數，`load_skill_registry()` 與 `_load_legacy_registry_adapter()` 都查新路徑優先
+  - `engine/workflow_loader.py` — `__init__` 解析 `agents_path` 時優先 `.cap/agents.json`
+  - `scripts/cap-registry.sh` — `REGISTRY_FILE` resolution 同樣 prefer 新路徑
+  - `engine/step_runtime.py:_read_constitution_design_source` — design_source 讀取雙路徑
+- Test：`tests/scripts/test-cap-config-namespace-readers.sh` — 4 reader × 3-6 場景 = 27 cases
+- 邊界：P2-tested constitution 寫入 workflow（persist-constitution.sh / bootstrap-defaults 等 6 個 workflow script）**未動**，留 batch 2.6 處理 — 那批會動 P2 e2e gate，需要更謹慎的 regression 範圍
 
 ---
 
