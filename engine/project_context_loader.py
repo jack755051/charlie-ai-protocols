@@ -58,13 +58,25 @@ class ProjectContextLoader:
     """
 
     DEFAULT_PROJECT_CONFIG = ".cap.project.yaml"
+    DEFAULT_PROJECT_CONFIG_NAMESPACED = ".cap/project.yaml"
     DEFAULT_PROJECT_CONSTITUTION = ".cap.constitution.yaml"
 
     def __init__(self, base_dir: Path | None = None):
         self.base_dir = Path(base_dir) if base_dir else Path(__file__).resolve().parents[1]
 
     def load(self) -> dict:
-        project_config_path = self.base_dir / self.DEFAULT_PROJECT_CONFIG
+        # Config namespace migration (v0.22.x batch 1, read-only compat layer):
+        # prefer .cap/project.yaml; fall back to legacy .cap.project.yaml.
+        # Same contract as scripts/cap-paths.sh:read_project_id_from_config.
+        namespaced_path = self.base_dir / self.DEFAULT_PROJECT_CONFIG_NAMESPACED
+        legacy_path = self.base_dir / self.DEFAULT_PROJECT_CONFIG
+        if namespaced_path.is_file():
+            project_config_path = namespaced_path
+        else:
+            # Always fall through to the legacy path even when missing — the
+            # downstream YAML loader handles "missing → empty config" without
+            # raising, preserving the bootstrap-friendly behavior callers rely on.
+            project_config_path = legacy_path
         project_config = self._load_yaml(project_config_path)
         project_id, project_id_mode = self._resolve_project_id(project_config)
         self._verify_or_write_ledger(project_id, project_id_mode)

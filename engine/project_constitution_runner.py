@@ -129,17 +129,29 @@ def resolve_cap_home(override: Path | None = None) -> Path:
 
 
 def resolve_project_id(project_root: Path) -> str:
-    """Read ``project_id`` from ``<project_root>/.cap.project.yaml``.
+    """Read ``project_id`` from the project config (config namespace aware).
 
-    Raises ``ProjectConstitutionRunnerError`` if the config is missing or
-    the field is empty / malformed. We refuse to fall back to the directory
-    basename here — the runner's contract requires an explicit, persisted
-    project identity (the same contract ``cap project init`` enforces).
+    Resolution order matches ``scripts/cap-paths.sh:read_project_id_from_config``:
+
+      1. ``<project_root>/.cap/project.yaml`` (new namespace, batch 1+)
+      2. ``<project_root>/.cap.project.yaml`` (legacy flat-file, still
+         honored for backward compatibility)
+
+    Raises ``ProjectConstitutionRunnerError`` if neither file exists or if
+    the present file's ``project_id`` field is empty / malformed. We refuse
+    to fall back to the directory basename here — the runner's contract
+    requires an explicit, persisted project identity (the same contract
+    ``cap project init`` enforces).
     """
-    config_path = project_root / ".cap.project.yaml"
-    if not config_path.is_file():
+    new_path = project_root / ".cap" / "project.yaml"
+    legacy_path = project_root / ".cap.project.yaml"
+    if new_path.is_file():
+        config_path = new_path
+    elif legacy_path.is_file():
+        config_path = legacy_path
+    else:
         raise ProjectConstitutionRunnerError(
-            f".cap.project.yaml not found at {config_path}; "
+            f"project config not found at {new_path} or {legacy_path}; "
             "run `cap project init` before invoking the constitution runner."
         )
     try:

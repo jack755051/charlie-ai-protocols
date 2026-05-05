@@ -66,14 +66,24 @@ def _load_registry(registry_path: Path) -> dict[str, Any]:
 
 
 def _project_id_from_config() -> str:
-    """Best-effort read of the current project's .cap.project.yaml project_id."""
-    config_path = Path.cwd() / ".cap.project.yaml"
-    if config_path.is_file():
+    """Best-effort read of the current project's project_id (namespace aware).
+
+    Resolution order matches ``scripts/cap-paths.sh:read_project_id_from_config``:
+      1. ``$PWD/.cap/project.yaml`` (new namespace, batch 1+)
+      2. ``$PWD/.cap.project.yaml`` (legacy flat-file)
+      3. fall back to ``$PWD.name`` so callers in non-CAP directories still
+         get *some* string (matches pre-namespace behavior).
+    """
+    cwd = Path.cwd()
+    candidates = [cwd / ".cap" / "project.yaml", cwd / ".cap.project.yaml"]
+    for config_path in candidates:
+        if not config_path.is_file():
+            continue
         for line in config_path.read_text(encoding="utf-8").splitlines():
             match = re.match(r'^project_id:\s*"?([^"#]+)"?\s*$', line)
             if match:
                 return match.group(1).strip()
-    return Path.cwd().name
+    return cwd.name
 
 
 def _read_constitution_design_source() -> dict[str, Any] | None:

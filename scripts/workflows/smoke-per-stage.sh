@@ -203,6 +203,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-capability-validator.sh" "capabilit
 run_fixture "${REPO_ROOT}/tests/scripts/test-required-output-enforcement.sh" "required-output enforcement opt-in gate (P6 #4)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-manage-cap-alias-defaults.sh" "installer native CLI isolation (P0b)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-mapper-global-isolation.sh" "mapper global rule isolation (P0b)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-cap-config-namespace-resolver.sh" "config namespace resolver dual-path (P0c batch 1)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-handoff-schema-gate.sh" "handoff schema pre-dispatch opt-in gate (P6 #3)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-handoff-route-back.sh" "handoff route_back_to opt-in control flow (P6 #8)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-binding-report-schema.sh" "binding-report schema gate (P0 #3)"

@@ -5,10 +5,19 @@ set -euo pipefail
 CAP_HOME="${CAP_HOME:-${HOME}/.cap}"
 
 # project_id resolver: strict mode (P1 #1) and identity ledger (P1 #2 + #3).
-# Resolution chain: CAP_PROJECT_ID_OVERRIDE → .cap.project.yaml → git basename.
+# Resolution chain: CAP_PROJECT_ID_OVERRIDE → .cap/project.yaml → .cap.project.yaml → git basename.
 # Non-git folders without override or config halt with exit 52 unless
 # CAP_ALLOW_BASENAME_FALLBACK=1 is set (legacy escape hatch — ledger still
 # written so the fallback path stays auditable).
+#
+# Config namespace migration (v0.22.x batch 1, read-only compat layer):
+# new canonical path is ``<project_root>/.cap/project.yaml`` (config namespace
+# directory); legacy ``<project_root>/.cap.project.yaml`` is still recognized.
+# When both exist, new path wins. cap project init still writes the legacy
+# path until batch 2 flips the producer; batch 3 migrates this repo. Same
+# resolution semantics implemented in engine/project_context_loader.py,
+# engine/project_constitution_runner.py:resolve_project_id, and
+# engine/step_runtime.py:_project_id_from_config — keep all four in sync.
 #
 # Identity ledger schema is v2 (P1 #3); v1 ledgers (P1 #2 inline shape) are
 # auto-migrated on `cap-paths ensure`. See schemas/identity-ledger.schema.yaml
@@ -38,9 +47,19 @@ is_inside_git_repo() {
 
 read_project_id_from_config() {
   local project_root="$1"
-  local config_file="${project_root}/.cap.project.yaml"
+  local config_file=""
 
-  [ -f "${config_file}" ] || return 1
+  # Prefer the new namespace path; fall back to the legacy flat-file path.
+  # Order is the contract: legacy file present + new file present →
+  # new wins (caller treats both as mode="config" so the ledger entry
+  # is identical regardless of which path served the read).
+  if [ -f "${project_root}/.cap/project.yaml" ]; then
+    config_file="${project_root}/.cap/project.yaml"
+  elif [ -f "${project_root}/.cap.project.yaml" ]; then
+    config_file="${project_root}/.cap.project.yaml"
+  else
+    return 1
+  fi
 
   sed -n -E 's/^project_id:[[:space:]]*"?([^"#]+)"?[[:space:]]*$/\1/p' "${config_file}" | head -n 1
 }
@@ -100,9 +119,10 @@ resolve_project_identity() {
       printf 'cap-paths: warning — project_id=%s resolved from basename(%s); set .cap.project.yaml or CAP_PROJECT_ID_OVERRIDE for stable identity\n' "${id}" "${project_root}" >&2
     else
       printf 'cap-paths: error — cannot resolve a stable project_id\n' >&2
-      printf '  not in a git repository, no .cap.project.yaml, no CAP_PROJECT_ID_OVERRIDE set\n' >&2
+      printf '  not in a git repository, no .cap/project.yaml or .cap.project.yaml, no CAP_PROJECT_ID_OVERRIDE set\n' >&2
       printf '  fix one of:\n' >&2
-      printf '    1. create .cap.project.yaml at %s with `project_id: <stable-id>`\n' "${project_root}" >&2
+      printf '    1. create .cap/project.yaml at %s with `project_id: <stable-id>` (new path)\n' "${project_root}" >&2
+      printf '       — or legacy .cap.project.yaml (still supported)\n' >&2
       printf '    2. export CAP_PROJECT_ID_OVERRIDE=<stable-id>\n' >&2
       printf '    3. export CAP_ALLOW_BASENAME_FALLBACK=1 (legacy escape hatch, not recommended)\n' >&2
       exit 52
