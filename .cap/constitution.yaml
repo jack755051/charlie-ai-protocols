@@ -1,0 +1,135 @@
+schema_version: 1
+constitution_id: cap-platform
+project_id: charlie-ai-protocols
+name: CAP Platform Constitution
+summary: >
+  定義 CAP 作為平台時的正式來源分層、專案擴充邊界與 runtime storage 規則。
+
+inherits:
+  - agent-skills/00-core-protocol.md
+
+platform_role:
+  type: platform
+  provides:
+    - base_agent_skills
+    - base_workflows
+    - capability_contracts
+    - runtime_binder
+    - task_compiler
+    - promote_mechanism
+  does_not_store_as_runtime_source:
+    - project_specific_skills
+    - project_specific_workflows
+    - project_specific_constitutions
+
+source_of_truth:
+  project_constitution: .cap.constitution.yaml
+  project_config: .cap.project.yaml
+  skill_registry: .cap.skills.yaml
+  agent_registry: .cap.agents.json
+  builtin_workflows_dir: schemas/workflows
+  builtin_capabilities: schemas/capabilities.yaml
+
+project_asset_policy:
+  principles:
+    - repo_contains_versioned_source
+    - runtime_contains_snapshots_only
+    - project_specific_assets_stay_with_project_repo
+  required_repo_assets:
+    - project_constitution
+    - project_skill_registry
+    - project_workflow_definitions
+  allowed_repo_paths:
+    constitution:
+      - .cap.constitution.yaml
+      - docs/cap/constitution.md
+    skills:
+      - .cap.skills.yaml
+      - agent-skills/
+      - skills/
+    workflows:
+      - workflows/
+      - schemas/workflows/
+
+runtime_workspace:
+  root: ~/.cap/projects/<project_id>/
+  stores:
+    - constitutions
+    - compiled-workflows
+    - bindings
+    - traces
+    - logs
+    - reports
+    - sessions
+    - drafts
+  does_not_store_as_only_source:
+    - project_constitution
+    - project_skill_markdown
+    - project_workflow_markdown
+
+multi_repo_model:
+  rule: each_repo_is_an_independent_project
+  expected_flow:
+    - define_project_constitution
+    - derive_project_skills_and_workflows
+    - compile_to_runtime_workspace
+  sharing_policy:
+    cross_project_reuse:
+      - promote_to_platform_builtin
+      - publish_to_shared_registry
+    local_project_customization:
+      - keep_in_project_repo
+
+generation_pipeline:
+  order:
+    - establish_project_constitution
+    - declare_project_source_assets
+    - resolve_binding
+    - compile_task_scoped_workflow
+    - persist_runtime_artifacts
+  note: >
+    Project Constitution 是正式來源；task constitution snapshot 則是 runtime artifact。
+
+binding_policy:
+  defaults:
+    binding_mode: fallback_allowed
+    missing_policy: manual
+  allowed_capabilities:
+    - project_constitution
+    - constitution_reconciliation
+    - constitution_reconciliation_inputs
+    - prompt_outline_normalize
+    - prd_generation
+    - workflow_orchestration
+    - task_constitution_planning
+    - task_constitution_persistence
+    - handoff_ticket_emit
+    - design_source_ingest
+    - technical_planning
+    - technical_review
+    - business_analysis
+    - database_api_design
+    - ui_design
+    - figma_sync
+    - analytics_specification
+    - analytics_post_launch
+    - frontend_implementation
+    - backend_implementation
+    - code_structure_audit
+    - tool_spec_audit
+    - security_audit
+    - qa_testing
+    - troubleshooting
+    - sre_optimization
+    - devops_delivery
+    - version_control_commit
+    - version_control_tag
+    - technical_logging
+    - readme_normalization
+    - supervisor_envelope_validation
+
+workflow_policy:
+  enforce_allowed_source_roots: true
+  allowed_source_roots:
+    - schemas/workflows
+    - workflows

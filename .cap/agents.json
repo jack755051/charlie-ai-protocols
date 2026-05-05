@@ -1,0 +1,90 @@
+{
+  "default_cli": "codex",
+  "agents": {
+    "supervisor": {
+      "provider": "builtin",
+      "prompt_file": "01-supervisor-agent.md",
+      "cli": "codex"
+    },
+    "techlead": {
+      "provider": "builtin",
+      "prompt_file": "02-techlead-agent.md",
+      "cli": "codex"
+    },
+    "ba": {
+      "provider": "builtin",
+      "prompt_file": "02a-ba-agent.md",
+      "cli": "codex"
+    },
+    "dba": {
+      "provider": "builtin",
+      "prompt_file": "02b-dba-api-agent.md",
+      "cli": "codex"
+    },
+    "ui": {
+      "provider": "builtin",
+      "prompt_file": "03-ui-agent.md",
+      "cli": "codex"
+    },
+    "frontend": {
+      "provider": "builtin",
+      "prompt_file": "04-frontend-agent.md",
+      "cli": "codex"
+    },
+    "backend": {
+      "provider": "builtin",
+      "prompt_file": "05-backend-agent.md",
+      "cli": "codex"
+    },
+    "devops": {
+      "provider": "builtin",
+      "prompt_file": "06-devops-agent.md",
+      "cli": "codex"
+    },
+    "qa": {
+      "provider": "builtin",
+      "prompt_file": "07-qa-agent.md",
+      "cli": "codex"
+    },
+    "security": {
+      "provider": "builtin",
+      "prompt_file": "08-security-agent.md",
+      "cli": "codex"
+    },
+    "analytics": {
+      "provider": "builtin",
+      "prompt_file": "09-analytics-agent.md",
+      "cli": "codex"
+    },
+    "troubleshoot": {
+      "provider": "builtin",
+      "prompt_file": "10-troubleshoot-agent.md",
+      "cli": "codex"
+    },
+    "sre": {
+      "provider": "builtin",
+      "prompt_file": "11-sre-agent.md",
+      "cli": "codex"
+    },
+    "figma": {
+      "provider": "builtin",
+      "prompt_file": "12-figma-agent.md",
+      "cli": "codex"
+    },
+    "watcher": {
+      "provider": "builtin",
+      "prompt_file": "90-watcher-agent.md",
+      "cli": "codex"
+    },
+    "logger": {
+      "provider": "builtin",
+      "prompt_file": "99-logger-agent.md",
+      "cli": "codex"
+    },
+    "readme": {
+      "provider": "builtin",
+      "prompt_file": "101-readme-agent.md",
+      "cli": "codex"
+    }
+  }
+}
