@@ -6,6 +6,44 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.22.0-rc11] - 2026-05-05
+
+> Release candidate — collect 9 commits since v0.22.0-rc10 into a complete checkpoint covering two parallel cleanup tracks: **P0b Provider Isolation** (CAP no longer hijacks bare `claude` / `codex` and no longer overwrites global `~/.claude/CLAUDE.md`) + **P0c CAP Config Namespace Migration** (`.cap.*` repo-root dotfiles consolidate into a `.cap/` namespace; resolver, init, secondary readers all dual-path; this repo dogfooded copy-only). All P0c writes are non-destructive (legacy files preserved); P0c batch 2.6 (6 P2-tested constitution workflow writers) and `--remove-legacy` deliberately deferred to a follow-up tag.
+
+### Added
+
+- **`cap project migrate-config` helper** (`237ac74`)：新模組 `engine/migrate_config.py` 提供 `plan_migration` / `apply_migration` 純函式 + `MigrationPlan / PlanEntry / MigrationResult / ApplyEntry` dataclass + `Action` 4 enum (`skip_no_legacy` / `copy` / `already_migrated` / `conflict`)。CLI `cap project migrate-config [--project-root PATH] [--dry-run] [--force] [--remove-legacy] [--format text|json|yaml]`。預設 non-destructive（保留 legacy）；`--force` 才覆寫 `.cap/<name>` 已存在；`--remove-legacy` 才刪原檔。Idempotent re-run 返回 `already_migrated`。Exit 0 / 1（成功 / conflict 未 force）。`tests/scripts/test-cap-project-migrate-config.sh` 9 cases / 47 passed。
+- **`cap-session.sh` 在非 CAP 目錄退回原生 provider** (`35e4e4b`)：`has_cap_project_context()` 偵測 4 條 CAP signal（`CAP_PROJECT_ID_OVERRIDE` / `.cap.project.yaml` / git repo / `CAP_ALLOW_BASENAME_FALLBACK=1`），缺失時 `launch_native_without_cap_context()` exec 原生 binary + stderr 印 fallback hint。覆蓋 P0b 最後一塊：裸 `claude/codex` 已不被劫持（`97a855a`），`cap claude/cap codex` 也優雅 degrade，不再在 `~` 觸發 `cap-paths` strict 錯誤。`tests/scripts/test-cap-session-native-fallback.sh` 3 cases / 14 passed。
+- **`.cap/project.yaml` resolver dual-path** (`9dcbc2a`)：4 個 reader 同步加新→legacy 雙路徑（新優先，drift 即 bug）：`scripts/cap-paths.sh:read_project_id_from_config` / `engine/project_constitution_runner.py:resolve_project_id` / `engine/project_context_loader.py:ProjectContextLoader.load` / `engine/step_runtime.py:_project_id_from_config`。Producer flip + 其他 reader 切到 batch 2.5 / 2.6。`tests/scripts/test-cap-config-namespace-resolver.sh` 4 reader × 4 場景 = 27 cases。
+- **`cap project init` 寫 `.cap/project.yaml`** (`83ca4b3`)：`scripts/cap-project.sh:cmd_init` 預設寫新路徑；既有 legacy 視為「已初始化」，refusal message 提示用 `cap project migrate-config`；`--force` 在 legacy-only 寫新路徑保留 legacy（不自動刪），在新路徑做 in-place rewrite（保留未知 keys）。`tests/scripts/test-cap-project-init-namespace.sh` 7 cases / 31 passed。`tests/scripts/test-project-init.sh` Case 1 / Case 5 同步更新到新 contract（35 passed）。
+- **skills / agents / constitution reader dual-path** (`58f7f25`)：4 個 secondary reader 同樣新→legacy fallback：`engine/runtime_binder.py:load_skill_registry` + `_load_legacy_registry_adapter` / `engine/workflow_loader.py:agents_path` / `scripts/cap-registry.sh:REGISTRY_FILE` / `engine/step_runtime.py:_read_constitution_design_source`。runtime_binder constants 加 `*_NAMESPACED` 兄弟讓 precedence 在 class level 可見。`tests/scripts/test-cap-config-namespace-readers.sh` 4 reader × 3-6 場景 = 27 cases。
+
+### Fixed
+
+- **installer 預設不劫持裸 `claude` / `codex`** (`97a855a`)：`scripts/manage-cap-alias.sh:WRAP_NATIVE_CLI` 預設從 1 翻 0；fresh `make install` 後 `~/.zshrc` CAP block 只裝 `cap()` shell function，裸命令保留原生 provider 行為。`CAP_WRAP_NATIVE_CLI=1 make install` 為 opt-in escape hatch 給依賴舊行為的使用者。`install.sh` + `README.md` + `docs/cap/ARCHITECTURE.md` 同步更新文案；新增 Provider Isolation 段落 + 既有用戶遷移步驟。`tests/scripts/test-manage-cap-alias-defaults.sh` 7 sub-suites / 26 passed。
+- **mapper 不再覆寫全域 `~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md`** (`965e09f`)：`scripts/mapper.sh --global` 移除兩個全域檔的寫入路徑（83 行 → 0 行）；`~/.claude/rules/*-agent.md` symlink 仍同步（被動 reference，不會自動載入）。Uninstall 偵測到 legacy auto-gen 檔時印 backup 提示。專案規則改由 repo-local `CLAUDE.md` / `AGENTS.md` 透過 `@` import 載入，不再強塞每個 claude/codex global session。`tests/scripts/test-mapper-global-isolation.sh` 7 cases / 14 passed。
+
+### Changed
+
+- **本 repo 自身 dogfooding 搬檔** (`e9bb5ca`)：跑 `cap project migrate-config` 把 charlie-ai-protocols 自身的 4 個 legacy `.cap.*` 散檔 copy 進 `.cap/`。`cmp -s` 驗證 byte-equal；`cap project status` 顯示 `health_status=ok`；4 個 P0c gates 132 passed / 0 failed；第二次 dry-run 全 `already_migrated`（idempotent）。Legacy 4 檔仍在 root，`--remove-legacy` 等下一輪確認後才執行。
+- **Convergence Checkpoint #2** (`c5c956c`)：`docs/cap/ARCHITECTURE.md` 新增 P0–P6 Runtime Module Map 段（15 行 SSOT 表 + P7 應讀的 7 source list + 「不是 SSOT 的東西」警示），確保 P7 開工時不會重新發明 aggregate logic。**未搬檔、未動模組**，純 docs 收斂。
+
+### Notes
+
+- **未動執行行為**：本批所有 commit 都加雙路徑 read / additive helper / opt-in flag；既有 reader 都繼續 fallback legacy，沒有破壞 v0.22.0-rc10 之前安裝的專案。
+- **Batch 2.6 deferred**：6 個 P2-tested constitution writer (`scripts/workflows/persist-constitution.sh` / `bootstrap-constitution-defaults.sh` / `load-constitution-reconcile-inputs.sh` / `emit-handoff-ticket.sh` / `provider-parity-check.sh` / `ingest-design-source.sh`) 仍 grep 舊路徑；改它們需要 P2 e2e regression sweep，刻意延後至下一 tag。
+- **`--remove-legacy` deferred**：現在 4 個 legacy 散檔保留是設計選擇 — 若任何漏掉的 reader 仍指 legacy，至少還能讀到。等一輪正常 CAP 操作後（含 workflow run / promote / e2e）若無 reader 漏掉再執行 `--remove-legacy`。
+- **既有用戶遷移**：升 rc11 後跑 `make uninstall && make install && exec zsh` 才會看到新 `~/.zshrc` block（裸 claude/codex 變回原生）；`~/.claude/CLAUDE.md` 若內含 `charlie-ai-protocols` marker 會被 uninstall 移除（先備份個人 section）。專案內若想搬檔，跑 `cap project migrate-config --dry-run` → `cap project migrate-config`。
+- **本 tag** 是「Provider Isolation + CAP Config Namespace 收斂完整 / Batch 2.6 + `--remove-legacy` + P7 Result Report 可開工」的乾淨基線，不取代 `v0.22.0` 正式版。
+
+### Verified
+
+- 所有 P0b 測試 (`test-manage-cap-alias-defaults` 26 / `test-mapper-global-isolation` 14 / `test-cap-session-native-fallback` 14) 與 P0c 測試 (`test-cap-config-namespace-resolver` 27 / `test-cap-project-migrate-config` 47 / `test-cap-project-init-namespace` 31 / `test-cap-config-namespace-readers` 27) 全綠，合計 **186 passed / 0 failed**。
+- 既有測試 `test-project-init` 同步更新至新 contract，35 passed。
+- 本 repo dogfooding 後 `cap project status` 顯示 `health_status=ok`、`cap version` 印 `v0.22.0-rc10+dev (58f7f25) on main`、`cap project migrate-config --dry-run` 第二次回 `nothing to migrate (all entries skip_no_legacy or already_migrated)`。
+
+---
+
 ## [v0.22.0-rc9] - 2026-05-04
 
 > Release candidate — collect 4 observability commits since v0.22.0-rc8 into a clean checkpoint covering docs index + session cost analyzer + production-shell prompt snapshot wiring + workflow-exec failure detail wiring. **Untouched**: workflow / supervisor / dispatch behaviour. All metadata + docs + analysis surfaces; no execution semantics change. Smoke升至 48 step / 48 passed / 0 failed.
