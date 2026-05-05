@@ -106,8 +106,17 @@ resolve_runtime_project_id() {
     CAP_HOME="${CAP_HOME:-${HOME}/.cap}" bash "${PATH_HELPER}" get project_id 2>/dev/null && return 0
   fi
 
-  if [ -f "${CAP_ROOT}/.cap.project.yaml" ]; then
-    "${PYTHON_BIN}" - "${CAP_ROOT}/.cap.project.yaml" <<'PY'
+  # P0c batch 2.6 dual-path fallback: prefer .cap/project.yaml, fall back
+  # to legacy .cap.project.yaml when cap-paths helper is unavailable.
+  local project_config=""
+  if [ -f "${CAP_ROOT}/.cap/project.yaml" ]; then
+    project_config="${CAP_ROOT}/.cap/project.yaml"
+  elif [ -f "${CAP_ROOT}/.cap.project.yaml" ]; then
+    project_config="${CAP_ROOT}/.cap.project.yaml"
+  fi
+
+  if [ -n "${project_config}" ]; then
+    "${PYTHON_BIN}" - "${project_config}" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -309,7 +318,13 @@ ticket = {
         "core_protocol": "agent-skills/00-core-protocol.md",
     },
     "context_payload": {
-        "project_constitution_path": str(Path.cwd() / ".cap.constitution.yaml"),
+        # P0c batch 2.6 dual-path: prefer .cap/constitution.yaml (new
+        # namespace); fall back to legacy .cap.constitution.yaml when only
+        # the legacy file exists. Default to the new path when neither is
+        # present so downstream readers see a forward-looking pointer.
+        "project_constitution_path": (
+            lambda new_p, legacy_p: str(new_p) if new_p.is_file() or not legacy_p.is_file() else str(legacy_p)
+        )(Path.cwd() / ".cap" / "constitution.yaml", Path.cwd() / ".cap.constitution.yaml"),
         "task_constitution_path": str(tc_path),
         "upstream_handoff_summaries": upstream_summaries,
         "upstream_full_artifacts": [],

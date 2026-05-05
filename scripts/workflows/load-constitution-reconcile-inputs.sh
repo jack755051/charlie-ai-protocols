@@ -5,7 +5,9 @@
 # for the reconcile workflow.
 #
 # Reads:
-#   - current repo .cap.constitution.yaml
+#   - current repo Project Constitution; prefers .cap/constitution.yaml (new
+#     namespace) and falls back to legacy .cap.constitution.yaml when the new
+#     path is absent (P0c batch 2.6 dual-path)
 #   - CAP_PROJECT_CONSTITUTION_ADDENDUM_PATH (optional)
 #   - CAP_WORKFLOW_USER_PROMPT (fallback addendum text from the workflow CLI prompt)
 #
@@ -29,7 +31,16 @@ else
   PYTHON_BIN="python3"
 fi
 
-CONSTITUTION_PATH="${CAP_ROOT}/.cap.constitution.yaml"
+# P0c batch 2.6 dual-path: prefer .cap/constitution.yaml; fall back to
+# legacy .cap.constitution.yaml so projects that have not run
+# ``cap project migrate-config`` yet still resolve.
+NAMESPACE_CONSTITUTION_PATH="${CAP_ROOT}/.cap/constitution.yaml"
+LEGACY_CONSTITUTION_PATH="${CAP_ROOT}/.cap.constitution.yaml"
+if [ -f "${NAMESPACE_CONSTITUTION_PATH}" ]; then
+  CONSTITUTION_PATH="${NAMESPACE_CONSTITUTION_PATH}"
+else
+  CONSTITUTION_PATH="${LEGACY_CONSTITUTION_PATH}"
+fi
 ADDENDUM_PATH="${CAP_PROJECT_CONSTITUTION_ADDENDUM_PATH:-}"
 USER_PROMPT="${CAP_WORKFLOW_USER_PROMPT:-}"
 
@@ -53,25 +64,28 @@ fail_with() {
 }
 
 read_project_meta() {
-  "${PYTHON_BIN}" - "${CAP_ROOT}/.cap.project.yaml" <<'PY'
+  # P0c batch 2.6 dual-path: prefer .cap/project.yaml, fall back to legacy
+  # .cap.project.yaml.
+  "${PYTHON_BIN}" - "${CAP_ROOT}/.cap/project.yaml" "${CAP_ROOT}/.cap.project.yaml" <<'PY'
 import sys
 from pathlib import Path
 
-path = Path(sys.argv[1])
-if not path.exists():
-    print("project_id: -")
-    print("project_name: -")
+for arg in sys.argv[1:]:
+    path = Path(arg)
+    if not path.exists():
+        continue
+    project_id = "-"
+    project_name = "-"
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("project_id:"):
+            project_id = line.split(":", 1)[1].strip().strip('"').strip("'")
+        elif line.startswith("project_name:"):
+            project_name = line.split(":", 1)[1].strip().strip('"').strip("'")
+    print(f"project_id: {project_id}")
+    print(f"project_name: {project_name}")
     raise SystemExit(0)
-
-project_id = "-"
-project_name = "-"
-for line in path.read_text(encoding="utf-8").splitlines():
-    if line.startswith("project_id:"):
-        project_id = line.split(":", 1)[1].strip().strip('"').strip("'")
-    elif line.startswith("project_name:"):
-        project_name = line.split(":", 1)[1].strip().strip('"').strip("'")
-print(f"project_id: {project_id}")
-print(f"project_name: {project_name}")
+print("project_id: -")
+print("project_name: -")
 PY
 }
 
@@ -94,7 +108,8 @@ print_header
 
 if [ ! -f "${CONSTITUTION_PATH}" ]; then
   fail_with "missing_current_constitution" \
-    "expected current constitution at ${CONSTITUTION_PATH}" \
+    "expected current constitution at ${NAMESPACE_CONSTITUTION_PATH} (new namespace)" \
+    "or legacy ${LEGACY_CONSTITUTION_PATH}" \
     "run project-constitution first before reconcile"
 fi
 

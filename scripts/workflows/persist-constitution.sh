@@ -4,7 +4,7 @@
 # Constitution JSON produced upstream and write it to its two canonical
 # homes:
 #
-#   1. Target project root : <scaffold_root>/<project_id>/.cap.constitution.yaml
+#   1. Target project root : <scaffold_root>/<project_id>/.cap/constitution.yaml
 #   2. CAP store           : ~/.cap/projects/<id>/constitutions/<ts>.json (snapshot)
 #   3. CAP store           : ~/.cap/projects/<id>/workspace/ (project scaffold root)
 #
@@ -17,11 +17,17 @@
 # Behavior:
 #   - Locate the constitution JSON (either explicit fence or
 #     project_constitution_json artifact path).
-#   - Convert JSON → YAML for the target project .cap.constitution.yaml.
+#   - Convert JSON → YAML for the target project .cap/constitution.yaml.
 #   - Write the original JSON to the timestamped snapshot path.
 #   - Scaffold the per-project workspace directory and repo skeleton for downstream dev tasks.
 #   - Emit a markdown report listing both written paths so downstream task
 #     workflows can resolve them.
+#
+# P0c batch 2.6 namespace migration: writes go to the new .cap/<name>
+# namespace path; the legacy .cap.<name> flat-file path is recognized as an
+# "already initialised" signal during the exists check (so we do not silently
+# overwrite a project that only has the legacy SSOT) but is never written or
+# deleted. Use ``cap project migrate-config`` to consolidate legacy + new.
 #
 # Overwrite / dry-run modes (env-driven):
 #   - CAP_CONSTITUTION_DRY_RUN=1 : compute and emit the unified diff between
@@ -29,10 +35,11 @@
 #       Snapshot, scaffold and project-config writes still proceed because they
 #       target the runtime workspace, not the repo SSOT.
 #   - CAP_CONSTITUTION_OVERWRITE=1 : replace an existing
-#       .cap.constitution.yaml. Before writing the script copies the existing
-#       file to .cap.constitution.yaml.backup-<TIMESTAMP> for rollback.
-#   - default : if .cap.constitution.yaml exists and overwrite is not set, the
-#       repo write is skipped (snapshot still recorded).
+#       .cap/constitution.yaml. Before writing the script copies the existing
+#       file to .cap/constitution.yaml.backup-<TIMESTAMP> for rollback.
+#   - default : if .cap/constitution.yaml or legacy .cap.constitution.yaml
+#       exists and overwrite is not set, the repo write is skipped (snapshot
+#       still recorded).
 #
 # Exit codes (per policies/workflow-executor-exit-codes.md):
 #   - 0  : success (write performed, write skipped, or dry-run completed)
@@ -89,21 +96,22 @@ fail_with() {
 }
 
 read_current_project_id() {
-  "${PYTHON_BIN}" - "${CAP_ROOT}/.cap.project.yaml" <<'PY'
+  # P0c batch 2.6 dual-path read: prefer .cap/project.yaml, fall back to
+  # legacy .cap.project.yaml. Same precedence as scripts/cap-paths.sh
+  # read_project_id_from_config.
+  "${PYTHON_BIN}" - "${CAP_ROOT}/.cap/project.yaml" "${CAP_ROOT}/.cap.project.yaml" <<'PY'
 import sys
 from pathlib import Path
 
-path = Path(sys.argv[1])
-if not path.exists():
-    print("")
-    raise SystemExit(0)
-
-for line in path.read_text(encoding="utf-8").splitlines():
-    if line.startswith("project_id:"):
-        print(line.split(":", 1)[1].strip().strip('"').strip("'"))
-        break
-else:
-    print("")
+for arg in sys.argv[1:]:
+    path = Path(arg)
+    if not path.exists():
+        continue
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("project_id:"):
+            print(line.split(":", 1)[1].strip().strip('"').strip("'"))
+            raise SystemExit(0)
+print("")
 PY
 }
 
@@ -234,7 +242,12 @@ if [ "${CURRENT_PROJECT_ID}" != "${project_id_from_json}" ]; then
   TARGET_PROJECT_ROOT="${SCaffold_ROOT}/${project_id_from_json}"
 fi
 
-REPO_TARGET="${TARGET_PROJECT_ROOT}/.cap.constitution.yaml"
+# P0c batch 2.6 producer flip: write to .cap/constitution.yaml (new namespace)
+# while honoring legacy .cap.constitution.yaml as an "already initialised"
+# signal so an existing legacy SSOT is not silently shadowed by an empty
+# default skip-or-write decision.
+REPO_TARGET="${TARGET_PROJECT_ROOT}/.cap/constitution.yaml"
+LEGACY_REPO_TARGET="${TARGET_PROJECT_ROOT}/.cap.constitution.yaml"
 if [ -x "${PATH_HELPER}" ]; then
   CAP_HOME="${CAP_HOME:-${HOME}/.cap}"
   CONSTITUTION_DIR="${CAP_HOME}/projects/${project_id_from_json}/constitutions"
@@ -245,6 +258,7 @@ else
 fi
 
 mkdir -p "${TARGET_PROJECT_ROOT}" || fail_with "project_root_create_failed" "${TARGET_PROJECT_ROOT}"
+mkdir -p "${TARGET_PROJECT_ROOT}/.cap" || fail_with "project_namespace_dir_create_failed" "${TARGET_PROJECT_ROOT}/.cap"
 mkdir -p "${CONSTITUTION_DIR}" || fail_with "snapshot_dir_create_failed" "${CONSTITUTION_DIR}"
 mkdir -p "${WORKSPACE_DIR}" || fail_with "workspace_dir_create_failed" "${WORKSPACE_DIR}"
 mkdir -p "${TARGET_PROJECT_ROOT}/docs" "${TARGET_PROJECT_ROOT}/workspace" "${TARGET_PROJECT_ROOT}/schemas/workflows" || \
@@ -281,16 +295,26 @@ with open(dst, "w", encoding="utf-8") as fh:
     yaml.safe_dump(data, fh, allow_unicode=True, sort_keys=False)
 ' "${tmp_json}" "${tmp_yaml}" || fail_with "repo_target_render_failed" "${tmp_yaml}"
 
+# Diff & exists-check are dual-path-aware: a project that has only the
+# legacy .cap.constitution.yaml (and has not run cap project migrate-config
+# yet) still counts as "already initialised" so we do not silently shadow
+# the existing SSOT. Diff prefers the new path when both are present.
+EXISTING_REPO_TARGET=""
 if [ -f "${REPO_TARGET}" ]; then
-  REPO_DIFF="$(diff -u "${REPO_TARGET}" "${tmp_yaml}" 2>/dev/null | head -n 200 || true)"
+  EXISTING_REPO_TARGET="${REPO_TARGET}"
+elif [ -f "${LEGACY_REPO_TARGET}" ]; then
+  EXISTING_REPO_TARGET="${LEGACY_REPO_TARGET}"
+fi
+if [ -n "${EXISTING_REPO_TARGET}" ]; then
+  REPO_DIFF="$(diff -u "${EXISTING_REPO_TARGET}" "${tmp_yaml}" 2>/dev/null | head -n 200 || true)"
 fi
 
 if [ "${CAP_CONSTITUTION_DRY_RUN:-0}" = "1" ]; then
   REPO_WRITTEN=0
   printf 'repo_target_dry_run: %s (no write performed; CAP_CONSTITUTION_DRY_RUN=1)\n' "${REPO_TARGET}"
-elif [ -f "${REPO_TARGET}" ] && [ "${CAP_CONSTITUTION_OVERWRITE:-0}" != "1" ]; then
+elif [ -n "${EXISTING_REPO_TARGET}" ] && [ "${CAP_CONSTITUTION_OVERWRITE:-0}" != "1" ]; then
   REPO_WRITTEN=0
-  printf 'repo_target_skipped: %s (already exists; set CAP_CONSTITUTION_OVERWRITE=1 to replace)\n' "${REPO_TARGET}"
+  printf 'repo_target_skipped: %s (already exists; set CAP_CONSTITUTION_OVERWRITE=1 to replace)\n' "${EXISTING_REPO_TARGET}"
 else
   if [ -f "${REPO_TARGET}" ]; then
     REPO_BACKUP_PATH="${REPO_TARGET}.backup-${TIMESTAMP}"
@@ -300,8 +324,18 @@ else
   REPO_WRITTEN=1
 fi
 
-PROJECT_CONFIG_PATH="${TARGET_PROJECT_ROOT}/.cap.project.yaml"
-if [ ! -f "${PROJECT_CONFIG_PATH}" ] || [ "${CAP_CONSTITUTION_OVERWRITE:-0}" = "1" ]; then
+# P0c batch 2.6 producer flip: project config goes to .cap/project.yaml
+# (new namespace). Existence check honors legacy .cap.project.yaml so we
+# do not silently shadow a project that has only the legacy file.
+PROJECT_CONFIG_PATH="${TARGET_PROJECT_ROOT}/.cap/project.yaml"
+LEGACY_PROJECT_CONFIG_PATH="${TARGET_PROJECT_ROOT}/.cap.project.yaml"
+EXISTING_PROJECT_CONFIG=""
+if [ -f "${PROJECT_CONFIG_PATH}" ]; then
+  EXISTING_PROJECT_CONFIG="${PROJECT_CONFIG_PATH}"
+elif [ -f "${LEGACY_PROJECT_CONFIG_PATH}" ]; then
+  EXISTING_PROJECT_CONFIG="${LEGACY_PROJECT_CONFIG_PATH}"
+fi
+if [ -z "${EXISTING_PROJECT_CONFIG}" ] || [ "${CAP_CONSTITUTION_OVERWRITE:-0}" = "1" ]; then
   "${PYTHON_BIN}" - "${PROJECT_CONFIG_PATH}" "${project_id_from_json}" "${project_name_from_json}" <<'PY' || fail_with "project_config_write_failed" "${PROJECT_CONFIG_PATH}"
 import sys
 from pathlib import Path
@@ -315,10 +349,10 @@ payload = {
     "project_id": project_id,
     "project_name": project_name,
     "project_type": "application",
-    "constitution_file": ".cap.constitution.yaml",
-    "skill_registry": ".cap.skills.yaml",
+    "constitution_file": ".cap/constitution.yaml",
+    "skill_registry": ".cap/skills.yaml",
     "workflow_dir": "schemas/workflows",
-    "agent_registry": ".cap.agents.json",
+    "agent_registry": ".cap/agents.json",
 }
 dst.write_text(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False), encoding="utf-8")
 PY
@@ -331,7 +365,7 @@ if [ ! -f "${README_PATH}" ]; then
 
 This project scaffold was generated from Project Constitution workflow.
 
-- constitution: .cap.constitution.yaml
+- constitution: .cap/constitution.yaml
 - project_id: ${project_id_from_json}
 - project_name: ${project_name_from_json}
 EOF

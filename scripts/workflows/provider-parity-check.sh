@@ -206,11 +206,19 @@ done
 # ── 4.5 Design Source ──
 echo ""
 echo "[4.5] Design Source artifacts"
-# Read design_source.type from cwd .cap.constitution.yaml (best effort) so we
+# Read design_source.type from cwd Project Constitution (best effort) so we
 # can distinguish "expected to have artifacts" from "expected to be empty".
+# P0c batch 2.6 dual-path: prefer .cap/constitution.yaml (new namespace);
+# fall back to legacy .cap.constitution.yaml when only the legacy file exists.
+constitution_for_design=""
+if [ -f "${PWD}/.cap/constitution.yaml" ]; then
+  constitution_for_design="${PWD}/.cap/constitution.yaml"
+elif [ -f "${PWD}/.cap.constitution.yaml" ]; then
+  constitution_for_design="${PWD}/.cap.constitution.yaml"
+fi
 DESIGN_TYPE="$(
-  if [ -f "${PWD}/.cap.constitution.yaml" ]; then
-    "${PYTHON_BIN}" - "${PWD}/.cap.constitution.yaml" <<'PY'
+  if [ -n "${constitution_for_design}" ]; then
+    "${PYTHON_BIN}" - "${constitution_for_design}" <<'PY'
 import sys
 try:
     import yaml  # type: ignore[import]

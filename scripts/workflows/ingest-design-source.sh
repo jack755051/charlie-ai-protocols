@@ -6,7 +6,12 @@
 # instead of re-reading the raw design package every run.
 #
 # Reads:
-#   - .cap.constitution.yaml in $CWD (design_source block; v0.20.0+ shape)
+#   - Project Constitution in $CWD (design_source block; v0.20.0+ shape).
+#     P0c batch 2.6 dual-path: prefers .cap/constitution.yaml (new namespace)
+#     and falls back to legacy .cap.constitution.yaml when only the legacy
+#     file exists. The actual lookup is delegated to
+#     engine/step_runtime._read_constitution_design_source so this script
+#     stays in sync with the rest of the engine.
 #   - Project's runtime workspace via $CAP_HOME (defaults ~/.cap)
 #
 # Behavior:

@@ -140,12 +140,18 @@ free-form derived from the user prompt.**
 
 ### source_of_truth (verbatim)
 
+> P0c batch 2.6: paths emitted here use the new \`.cap/<name>\` namespace
+> introduced in batch 1. Legacy \`.cap.<name>\` flat-file paths remain
+> readable through the dual-path resolver (cap-paths.sh) but are no longer
+> the canonical write target. Run \`cap project migrate-config\` on
+> existing repos to consolidate.
+
 \`\`\`yaml
 source_of_truth:
-  project_constitution: .cap.constitution.yaml
-  project_config: .cap.project.yaml
-  skill_registry: .cap.skills.yaml
-  agent_registry: .cap.agents.json
+  project_constitution: .cap/constitution.yaml
+  project_config: .cap/project.yaml
+  skill_registry: .cap/skills.yaml
+  agent_registry: .cap/agents.json
   builtin_workflows_dir: schemas/workflows
   builtin_capabilities: schemas/capabilities.yaml
 \`\`\`
