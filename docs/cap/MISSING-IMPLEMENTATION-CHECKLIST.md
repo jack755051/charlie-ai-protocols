@@ -404,33 +404,40 @@
 
 ## P7：Result Report and Run Archive
 
-- [ ] 實作 result report builder
+- [x] 實作 result report builder
   - 交付物：report builder module
   - 驗收：`result.md` 由結構化 runtime state 產生
+  - 進度：done in commits `580eace` (Phase A) + `a7f2eb2` (Phase B)。Phase A 新增 `engine/result_report_builder.py:build_workflow_result(run_dir, *, cap_home, status_file)`，純讀 `runtime-state.json` / `agent-sessions.json` / `run-summary.md` / 選用 `workflow.log` / handoff tickets，輸出符合 `schemas/workflow-result.schema.yaml` 的 dict（11 cases / 61 assertions in `tests/scripts/test-result-report-builder.sh`）。Phase B 新增 `render_result_md` 純函式 + `scripts/cap-result-emit.sh` helper，`cap-workflow-exec.sh` 結尾改先呼叫 builder：schema pass 才寫 `workflow-result.json` 並用 builder 渲染 `result.md`，schema fail / builder error / mv fail 全走 legacy hardcoded `result.md` template fallback；兩個 mv 都檢 rc，第二個 mv 失敗會 rollback 已落地的 JSON 維持 atomicity（Phase B test 4 cases / 28 assertions）。
 
-- [ ] `result.md` 彙整 constitution、compiled workflow、binding、sessions、artifacts、failures
+- [partial] `result.md` 彙整 constitution、compiled workflow、binding、sessions、artifacts、failures
   - 交付物：完整 result report
   - 驗收：單檔可讀懂 run 結果與失敗原因
+  - 進度：sessions / artifacts / failures 已完成（隨 P7 #1 同 commit）。constitution / compiled workflow / binding pointer **尚未引入**——這三者需要先確認穩定來源（如 `~/.cap/projects/<id>/.cap.constitution.yaml`、`<run_dir>/compiled-workflow.json`、binding snapshot path），避免 builder 開始讀不該讀的 source。延後到穩定 source 確立後再做。
 
-- [ ] 明確區分 `runtime-state.json` 與人類可讀 result report
+- [x] 明確區分 `runtime-state.json` 與人類可讀 result report
   - 交付物：欄位職責文件與實作
   - 驗收：machine state 不混入敘事，人類報告不作為唯一資料源
+  - 進度：done in commit `a7f2eb2`。`workflow-result.json`（schemas/workflow-result.schema.yaml）為 normalized machine artifact，由 builder 產出；`result.md`（render_result_md）為 human-readable projection，從同一份 builder dict 渲染。`runtime-state.json` 維持 raw step-level state（artifacts + steps map），不再混入彙整敘事。Phase B `cap-workflow-exec.sh` 把 `## Finished` append 移到 result.md 生成前，讓 builder 能從 run-summary.md 推 final_state，machine source 與 human projection 的職責邊界清楚。
 
-- [ ] 補 failure summary
+- [x] 補 failure summary
   - 交付物：failure summary section
   - 驗收：包含 failed step、reason、route_back_to、logs pointer
+  - 進度：done in commits `580eace` + `a7f2eb2`。`workflow-result.json` `failures[]` 對每個 status ∈ {failed, blocked} 的 step 產出 `{step_id, reason, detail, route_back_to}`：reason / detail 來自 session 的 `failure_reason`（rc9 compact `reason=X;detail=Y` 形式自動拆分）或 step 的 `blocked_reason` fallback；`route_back_to` 來自 handoff ticket 的 `failure_routing.route_back_to_step`。每個 step 內也帶 inline `failure` 欄位供 in-line view 消費。`render_result_md` 對應 `## Failures` section（empty 時整段省略）；`cap workflow inspect` text view 也有 `# Failures` section。Logs pointer 由 builder 的 `logs` 欄位（`workflow_log` + `workflow_log_lines`）覆蓋。
 
-- [ ] 補 promote candidates
+- [partial] 補 promote candidates
   - 交付物：promote candidates section
   - 驗收：標出可回寫 repo 的產物
+  - 進度：schema slot + builder skeleton ready；**實際 producer 由 P10 owns**。`schemas/workflow-result.schema.yaml` 已定義 `promote_candidates[]` 欄位，`build_workflow_result` 永遠輸出 `[]`（builder docstring line 108 標註 `v1: always empty (P10 owns producer)`），下游 promote pipeline 介面已對齊。等 P10 Detached Runtime and Promote / Publish 開始時才會有真實 producer 寫入候選清單。
 
 - [ ] 補 final archive 規則
   - 交付物：Logger handoff / archive policy
   - 驗收：Logger 可接手整理結案摘要
+  - 現況：尚未開始。等 Phase C 已穩定（workflow-result.json / result.md / cap workflow inspect 三個 artifact 都有了），下一步處理。
 
-- [ ] 新增 `cap workflow inspect <run-id>`
+- [x] 新增 `cap workflow inspect <run-id>`
   - 交付物：CLI command
   - 驗收：可讀取 result、sessions、artifacts、logs pointer
+  - 進度：done in commit `3d378e5` (Phase C)。`engine/workflow_cli.py:cmd_inspect` 改為三層 resolution：(1) `<cap_home>/projects/*/reports/workflows/*/<run_id>/workflow-result.json` 直接讀；(2) run_dir 存在但無 JSON 時 fall back 到 `result_report_builder.build_workflow_result()` in-memory 構造；(3) run_dir 不存在則沿用舊 status-store `runs[]` 邏輯，pre-P7 entries 仍可讀。新增 `--json` flag dump JSON、`--cap-home` flag 與 `CAP_HOME` env var 雙路徑（precedence: flag > env > `~/.cap`），`_find_run_dir` 採 `sorted(glob(...))` 確保 deterministic。Text view 6 sections：Run Header / Summary / Failures / Sessions / Artifacts / Logs Pointer。`scripts/cap-workflow.sh inspect` dispatcher 改 `shift` + `"$@"` forward 讓 argparse 處理 flag。`tests/scripts/test-cap-workflow-inspect.sh` 6 cases / 40 assertions（workflow-result.json 優先 / `--json` / builder fallback / legacy status-store / not found exit 1 / CAP_HOME env var）。
 
 ## P8：Governance Gates
 
