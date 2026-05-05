@@ -94,7 +94,13 @@ assert_eq "case 1 exit 0" "0" "${exit1}"
 assert_contains "case 1 result=ok" "result=ok" "${out1}"
 assert_contains "case 1 project_id=case1-git" "project_id=case1-git" "${out1}"
 assert_contains "case 1 source=git_basename" "project_id_source=git_basename" "${out1}"
-assert_file_exists "case 1 .cap.project.yaml created" "${case1_root}/.cap.project.yaml"
+# P0c batch 2.5: init now writes to the new namespace path .cap/project.yaml.
+# The legacy flat-file .cap.project.yaml must NOT be created by a fresh init.
+assert_file_exists "case 1 .cap/project.yaml created" "${case1_root}/.cap/project.yaml"
+[ ! -f "${case1_root}/.cap.project.yaml" ] \
+  && echo "  PASS: case 1 no legacy .cap.project.yaml leaked" \
+  && pass_count=$((pass_count + 1)) \
+  || { echo "  FAIL: case 1 legacy .cap.project.yaml unexpectedly created"; fail_count=$((fail_count + 1)); }
 assert_file_exists "case 1 ledger created" "${case1_home}/projects/case1-git/.identity.json"
 
 # ── Case 2 ──────────────────────────────────────────────────────────────
@@ -142,7 +148,15 @@ existing_id="$(grep -E '^project_id:' "${case4_root}/.cap.project.yaml" | head -
 assert_contains "case 4 original config preserved" "pre-existing-id" "${existing_id}"
 
 # ── Case 5 ──────────────────────────────────────────────────────────────
-echo "Case 5: existing .cap.project.yaml + --force replaces in place"
+echo "Case 5: legacy .cap.project.yaml + --force → write new path, legacy preserved"
+# P0c batch 2.5 contract change: --force on a legacy-only project no longer
+# rewrites the legacy file in place. Init writes a fresh .cap/project.yaml
+# at the new namespace path; the legacy file is left untouched (use
+# `cap project migrate-config --remove-legacy` to clean it up after
+# verification). Unknown keys in the legacy file are NOT silently
+# folded into the new path — that would be implicit data movement.
+# The in-place rewrite path is still exercised when the existing config
+# is already on the new path (see test-cap-project-init-namespace.sh:Case 5).
 case5_root="${SANDBOX}/case5-force"
 case5_home="${SANDBOX}/cap-case5"
 mkdir -p "${case5_root}"
@@ -154,12 +168,16 @@ EOF
 result="$(run_init "${case5_root}" "${case5_home}" --project-id replaced-id --force)"
 out5="${result%%|*}"; rest="${result#*|}"; exit5="${rest##*|}"
 assert_eq "case 5 exit 0" "0" "${exit5}"
-assert_contains "case 5 rewrote existing" "config_rewrote_existing=1" "${out5}"
+assert_contains "case 5 wrote fresh new path (no in-place rewrite)" \
+  "config_rewrote_existing=0" "${out5}"
 
-new_id_line="$(grep -E '^project_id:' "${case5_root}/.cap.project.yaml" | head -1)"
-assert_contains "case 5 project_id replaced" "replaced-id" "${new_id_line}"
-project_name_line="$(grep -E '^project_name:' "${case5_root}/.cap.project.yaml" | head -1)"
-assert_contains "case 5 unrelated keys preserved" "Has Other Keys" "${project_name_line}"
+new_id_line="$(grep -E '^project_id:' "${case5_root}/.cap/project.yaml" | head -1)"
+assert_contains "case 5 new path holds replaced id" "replaced-id" "${new_id_line}"
+legacy_after="$(grep -E '^project_id:' "${case5_root}/.cap.project.yaml" | head -1)"
+assert_contains "case 5 legacy file preserved (no auto-delete)" "old-id" "${legacy_after}"
+legacy_extra="$(grep -E '^project_name:' "${case5_root}/.cap.project.yaml" | head -1)"
+assert_contains "case 5 legacy unknown keys preserved in legacy file" \
+  "Has Other Keys" "${legacy_extra}"
 
 # ── Case 6 ──────────────────────────────────────────────────────────────
 echo "Case 6: --force without --project-id keeps existing id"

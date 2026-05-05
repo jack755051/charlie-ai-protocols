@@ -3,14 +3,19 @@
 # cap-project.sh — Subcommand dispatcher for `cap project` (P1 #5/#6/#7 + P2 #2).
 #
 # Subcommands:
-#   init          Bootstrap a project: write .cap.project.yaml + initialise CAP storage.
+#   init          Bootstrap a project: write .cap/project.yaml (new namespace
+#                 since P0c batch 2.5; legacy .cap.project.yaml still readable
+#                 via the dual-path resolver) + initialise CAP storage.
 #   status        Read-only project summary: id, paths, ledger, constitution, latest run.
 #   doctor        Read-only diagnostic with remediation suggestions.
 #   constitution  Generate or import a Project Constitution snapshot under
 #                 ~/.cap/projects/<id>/constitutions/project/<stamp>/.
+#   migrate-config  Copy legacy .cap.* dotfiles into the .cap/ namespace
+#                   (P0c batch 2; default copy + keep, --remove-legacy
+#                   to delete originals after verification).
 #
 # Design boundaries:
-#   - init is pure shell (writes .cap.project.yaml, delegates to cap-paths.sh
+#   - init is pure shell (writes .cap/project.yaml, delegates to cap-paths.sh
 #     ensure for storage + ledger creation; never duplicates ledger logic).
 #   - status / doctor / constitution delegate to Python helpers; we never
 #     re-implement health, validation or workflow-orchestration logic in
@@ -33,7 +38,9 @@ Usage: cap project <subcommand> [options]
 
 Subcommands:
   init    [--project-id ID] [--force] [--format text|json|yaml]
-          Initialise .cap.project.yaml and the matching CAP storage.
+          Initialise .cap/project.yaml (new namespace as of P0c batch 2.5;
+          legacy .cap.project.yaml still works via dual-path resolver) and
+          the matching CAP storage.
 
   status  [--project-root PATH] [--format text|json|yaml]
           Read-only project summary (id, storage path, ledger, constitution
@@ -147,18 +154,34 @@ cmd_init() {
   [ -d "${project_root}" ] || die "project_root does not exist: ${project_root}"
   project_root="$(cd "${project_root}" && pwd)"
 
-  local config_file="${project_root}/.cap.project.yaml"
-  local config_existed=0
+  # P0c batch 2.5 producer flip: write to <repo>/.cap/project.yaml by default
+  # (the new namespace introduced in P0c batch 1, 9dcbc2a). Legacy
+  # <repo>/.cap.project.yaml is still recognized as "already initialised"
+  # so existing projects keep working; --force re-init preserves the
+  # existing project_id from whichever path is present and writes the new
+  # path. Legacy files are not auto-deleted — use ``cap project migrate-config
+  # --remove-legacy`` after verification.
+  local config_file="${project_root}/.cap/project.yaml"
+  local legacy_config_file="${project_root}/.cap.project.yaml"
+  local existing_config=""
   if [ -f "${config_file}" ]; then
+    existing_config="${config_file}"
+  elif [ -f "${legacy_config_file}" ]; then
+    existing_config="${legacy_config_file}"
+  fi
+  local config_existed=0
+  if [ -n "${existing_config}" ]; then
     config_existed=1
     if [ "${force}" -ne 1 ]; then
-      die "${config_file} already exists; pass --force to overwrite"
+      die "${existing_config} already exists; pass --force to overwrite (or run 'cap project migrate-config' to consolidate legacy + new paths)"
     fi
   fi
 
   # Decide project_id:
   #   1. --project-id flag (highest)
-  #   2. existing .cap.project.yaml project_id when --force
+  #   2. existing config project_id when --force (read from whichever path
+  #      currently has the file — new path takes precedence over legacy
+  #      so we mirror the resolver in scripts/cap-paths.sh)
   #   3. git basename when inside a git repo
   #   4. fail with explicit guidance (mirrors cap-paths strict mode)
   local effective_project_id=""
@@ -168,7 +191,7 @@ cmd_init() {
     id_source="flag"
   elif [ "${config_existed}" -eq 1 ] && [ "${force}" -eq 1 ]; then
     # Preserve the previously chosen id unless user explicitly overrides.
-    effective_project_id="$(sed -n -E 's/^project_id:[[:space:]]*"?([^"#]+)"?[[:space:]]*$/\1/p' "${config_file}" | head -n 1)"
+    effective_project_id="$(sed -n -E 's/^project_id:[[:space:]]*"?([^"#]+)"?[[:space:]]*$/\1/p' "${existing_config}" | head -n 1)"
     if [ -n "${effective_project_id}" ]; then
       id_source="existing_config"
     fi
@@ -191,14 +214,21 @@ cmd_init() {
     die "sanitised project_id is empty; provide a stable identifier via --project-id"
   fi
 
-  # Write .cap.project.yaml. Preserve unknown keys when --force re-runs by
-  # only rewriting the project_id line; if the file does not exist or has
-  # no project_id field, write a minimal new file.
+  # Write .cap/project.yaml. Producer-side scope (P0c batch 2.5):
+  #   * always target the new namespace path (.cap/project.yaml).
+  #   * mkdir -p .cap/ before writing.
+  #   * --force re-init: when an existing config is on the new path, rewrite
+  #     project_id in place (preserving unknown keys); when the existing
+  #     config is on the legacy path only, write a fresh file at the new
+  #     path (the legacy file is left in place — use cap project
+  #     migrate-config --remove-legacy to clean it up after verification).
+  mkdir -p "${project_root}/.cap"
   local rewrote_existing=0
   if [ "${config_existed}" -eq 1 ] && [ "${force}" -eq 1 ] \
+     && [ "${existing_config}" = "${config_file}" ] \
      && grep -qE '^project_id:' "${config_file}"; then
-    # Replace the existing project_id line in-place. Use a temp file so a
-    # mid-write crash never leaves a half-edited config on disk.
+    # In-place rewrite of the new path. Temp file so a mid-write crash
+    # never leaves a half-edited config on disk.
     local tmp
     tmp="$(mktemp)"
     awk -v new_id="${effective_project_id}" '
@@ -246,11 +276,11 @@ EOF
     echo "${ensure_out}" >&2
     case "${ensure_rc}" in
       41|52|53)
-        echo "cap-project: cap-paths.sh ensure halted with exit ${ensure_rc}; .cap.project.yaml may have been written but storage was not initialised" >&2
+        echo "cap-project: cap-paths.sh ensure halted with exit ${ensure_rc}; ${config_file} may have been written but storage was not initialised" >&2
         exit "${ensure_rc}"
         ;;
       *)
-        die "cap-paths.sh ensure failed (rc=${ensure_rc}); .cap.project.yaml may have been written but storage was not initialised"
+        die "cap-paths.sh ensure failed (rc=${ensure_rc}); ${config_file} may have been written but storage was not initialised"
         ;;
     esac
   fi

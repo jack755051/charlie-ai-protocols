@@ -206,6 +206,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-cap-session-native-fallback.sh" "ca
 run_fixture "${REPO_ROOT}/tests/scripts/test-mapper-global-isolation.sh" "mapper global rule isolation (P0b)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-cap-config-namespace-resolver.sh" "config namespace resolver dual-path (P0c batch 1)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-cap-project-migrate-config.sh" "cap project migrate-config (P0c batch 2)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-cap-project-init-namespace.sh" "cap project init writes new namespace (P0c batch 2.5)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-handoff-schema-gate.sh" "handoff schema pre-dispatch opt-in gate (P6 #3)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-handoff-route-back.sh" "handoff route_back_to opt-in control flow (P6 #8)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-binding-report-schema.sh" "binding-report schema gate (P0 #3)"
