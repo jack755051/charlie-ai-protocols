@@ -1,6 +1,6 @@
 # CAP Missing Implementation Checklist
 
-更新日期：2026-05-04（P6 #8 opt-in CAP_ENFORCE_ROUTE_BACK control flow 落地，production 預設行為不變；P6 全 8 項已完成，待 closeout 批次）
+更新日期：2026-05-05（P0c batch 2.6 收尾：6 個 P2-tested constitution workflow writers 完成 `.cap` namespace migration，commit `b5717d0`；6 impacted-suite 60 cases pass + 4 P0c gate 132 cases pass，與 rc11 baseline 一致零 regression。`test-cap-project-constitution.sh` case 4 為 master pre-existing issue 不在本批 scope。`--remove-legacy` 維持 deferred；下一個排程為 P7 Result Report and Run Archive。）
 
 本清單承接 `TODOLIST.md` 與 `docs/cap/IMPLEMENTATION-ROADMAP.md` 的「尚未完成」項目，整理成可執行的工程工作清單。原則是先補 runtime contract 與 validator，再補 runner、orchestration、session、gate 與 promote/publish 閉環。
 
