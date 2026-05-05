@@ -7,7 +7,15 @@ CAP_ROOT="${2:-}"
 CAP_TAG="# CAP - Charlie AI Protocols"
 CAP_BLOCK_START="# CAP - Charlie AI Protocols [start]"
 CAP_BLOCK_END="# CAP - Charlie AI Protocols [end]"
-WRAP_NATIVE_CLI="${CAP_WRAP_NATIVE_CLI:-1}"
+# P0b Provider Isolation (v0.22.x): native CLI wrapping is now opt-in. The
+# previous default (1) silently re-routed bare ``claude`` / ``codex`` through
+# cap-entry.sh, which forced the project_id resolver to fire even outside any
+# CAP project (e.g. running ``claude`` in ``$HOME``). To restore CAP-managed
+# trace recording, run:  ``CAP_WRAP_NATIVE_CLI=1 make install``  — the wrapper
+# block then re-installs ``codex()`` / ``claude()`` shell functions. Without
+# the env override only ``cap()`` is registered; ``cap claude`` / ``cap codex``
+# remain the supported CAP-managed entry points (cap-entry.sh:93-100).
+WRAP_NATIVE_CLI="${CAP_WRAP_NATIVE_CLI:-0}"
 
 detect_shell_rc() {
   if [ -n "${CAP_SHELL_RC:-}" ]; then
@@ -104,6 +112,11 @@ EOF
   echo "✅ 已註冊 CAP shell wrapper → ${rc_file}"
   if [ "${WRAP_NATIVE_CLI}" = "1" ]; then
     echo "   ✓ codex / claude 將透過 CAP wrapper 啟動並自動記錄 session trace"
+    echo "   ⚠ 注意：裸 codex / claude 將被 CAP 接管，project_id resolver 會於每次呼叫時執行"
+  else
+    echo "   ✓ 裸 codex / claude 維持原生 provider 行為（不經 CAP）"
+    echo "   ✓ CAP-managed session 請走 cap codex / cap claude"
+    echo "   ℹ 若需要回到舊行為（CAP 包裹原生 CLI 並記錄 trace），改用 CAP_WRAP_NATIVE_CLI=1 make install"
   fi
   echo "👉 請執行 source ${rc_file} 或開新終端機生效"
 }

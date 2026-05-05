@@ -439,6 +439,72 @@ supervisor sub-agent  →  envelope JSON (fence-wrapped)
 
 ---
 
+## 🚧 Provider Isolation
+
+> 落點：v0.22.x P0b 緊急修復。修正 v0.22.x 之前 installer 預設會把裸 `claude` / `codex` 重新導向 CAP wrapper、導致使用者在 `~` 也被要求 `project_id` 的設計缺陷。
+
+### 預設行為（v0.22.x+）
+
+| Shell 命令 | 路由 | 何時觸發 cap-paths / project_id resolver |
+|---|---|---|
+| 裸 `claude` | 原生 Claude CLI | **永不**（不經 CAP） |
+| 裸 `codex` | 原生 Codex CLI | **永不**（不經 CAP） |
+| `cap` | [`scripts/cap-entry.sh`](../../scripts/cap-entry.sh) | 是（CAP 主入口） |
+| `cap claude [ARGS...]` | `cap-entry.sh:claude` → [`scripts/cap-session.sh`](../../scripts/cap-session.sh) | 是（CAP-managed Claude session，記 trace） |
+| `cap codex [ARGS...]` | `cap-entry.sh:codex` → `cap-session.sh` | 是（CAP-managed Codex session，記 trace） |
+| `cap workflow run --cli claude` | `cap-workflow-exec.sh` 派工 | 是（workflow runtime 內 step 才觸發） |
+
+**核心規則**：global `~/.zshrc` 只應註冊 `cap()` 一個 shell function；裸 `claude` / `codex` 必須維持原生 provider 行為。CAP 自動 trace recording 透過顯式 `cap claude` / `cap codex` 入口取得，不靠隱式劫持裸命令。
+
+### 為什麼 isolate
+
+- **Blast radius**：`~/.zshrc` 的 shell function 是全域 user state，跨所有目錄生效；CAP runtime 是專案級工具，預設預期使用者在 CAP 專案內。把專案級行為注入 user-global 層 = 跨層污染。
+- **`project_id` resolver 副作用**：CAP-wrapped `claude` 在 `~` 或任何非 CAP 目錄呼叫時，`cap-session.sh` → `cap-paths.sh` 會觸發 fallback project_id 解析，可能寫入 `~/.cap/identity-ledger.json` 或產生意外的 `~/.cap/projects/<dir>/...` 目錄結構。
+- **使用者預期**：`claude` 來自 Anthropic CLI 安裝程序，是該工具的契約；CAP 不應該重定義 third-party CLI 的呼叫語意。
+
+### Opt-in 包裹（保留舊行為）
+
+如果使用者**明確**想要 CAP 自動包裹 + trace recording，仍可 opt-in：
+
+```bash
+CAP_WRAP_NATIVE_CLI=1 make install     # installer 路徑
+# 或在既有 .zshrc 手動加入 codex() / claude() shell function
+```
+
+opt-in 後 `~/.zshrc` 的 CAP block 會額外寫入 `claude()` 與 `codex()`，把裸命令重導向 `cap-entry.sh codex` / `cap-entry.sh claude`。
+
+### 執行邊界對照
+
+| 概念 | 預設 | Opt-in (`CAP_WRAP_NATIVE_CLI=1`) |
+|---|---|---|
+| `~/.zshrc` CAP block 內容 | 只有 `cap()` | `cap()` + `claude()` + `codex()` |
+| 裸 `claude` 在 `~` 執行 | 原生 CLI 啟動 | 進 CAP wrapper，觸發 project_id resolver fallback |
+| `cap claude` 在 `~` 執行 | 進 CAP wrapper，觸發 project_id resolver fallback | 同左（行為不變） |
+| Global `~/.claude/CLAUDE.md` 是否被 CAP 覆寫 | **否**（v0.22.x P0b 後 mapper.sh 不再寫入） | 同左 |
+| Repo-local `CLAUDE.md` 是否生效 | 是（claude 自動載入專案目錄的 CLAUDE.md） | 同左 |
+
+### 實作 SSOT
+
+- `scripts/manage-cap-alias.sh:WRAP_NATIVE_CLI`（預設 0）— 控制 `~/.zshrc` block 是否寫入 `claude()` / `codex()` shell function
+- `scripts/cap-entry.sh:claude` / `:codex`（lines 93-100）— `cap claude` / `cap codex` subcommand 路由
+- `scripts/mapper.sh:--global` 模式 — **不再**寫入 `~/.claude/CLAUDE.md` 或 `~/.codex/AGENTS.md`（v0.22.x P0b 後）；只同步 `~/.claude/rules/*-agent.md` symlink（被動 reference，不會自動載入）
+- `tests/scripts/test-manage-cap-alias-defaults.sh` — regression：default install 不寫 native CLI wrapper、opt-in 仍 work、`cap claude` / `cap codex` 路由不變
+
+### 既有用戶遷移
+
+升級到 v0.22.x 後：
+
+```bash
+make uninstall                # 清掉舊的 ~/.zshrc CAP block（含 claude/codex hijack）
+make install                  # 重灌（預設不再包 native CLI）
+exec zsh                      # 重啟 shell 讓新 block 生效
+type claude                   # 應該指向 /opt/homebrew/bin/claude 等原生路徑
+type codex                    # 同上
+type cap                      # shell function from ~/.zshrc CAP block
+```
+
+---
+
 ## 🗺 P0–P6 Runtime Module Map (Convergence Checkpoint #2)
 
 > 落點：v0.22.0-rc10 後（P0–P6 全部 batch 已 commit）。本節是**輕量收斂 checkpoint**，目的是讓 P7（result report / run archive）開工時不必全 repo grep 才知道每個概念的 SSOT；它**不是**boundary memo，也**沒有**搬檔重構 — 只是把已經散落的 truth 一次列齊。新增 / 修改 runtime module 時請同步這張表；衝突時以表格欄位為準。
