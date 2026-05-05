@@ -26,17 +26,13 @@ Boundary:
   threshold → ``medium`` (warn rather than fail). This diverges from
   security where critical secret leaks halt immediately.
 
-Code-shape rationale:
-
-This is the **third caller** in the gate-runner family
-(watcher / security / qa). Verdict aggregation, identity dataclass,
-filesystem helpers and existence/non-empty checks are now
-copy-paste duplicated three ways. The natural extraction point —
-``engine/gate_runner_common.py`` — is intentionally **deferred to a
-follow-up refactor commit** so this commit only adds new behaviour
-and the refactor diff stays orthogonal. Every "MIRROR OF
-watcher_gate_runner" / "MIRROR OF security_gate_runner" comment
-below identifies the candidate to lift into the shared module.
+After v0.22.0 P8 refactor: rail-agnostic mechanics
+(severity/aggregate/now_iso/output-path/check primitives/
+read_text_safely) live in :mod:`engine.gate_runner_common`; this
+module retains the QA domain-specific bits (input dataclass with
+``coverage_threshold`` knob, test/coverage pattern banks, finding
+text, summary-line builder with metric snippets, escalate-on-fail
+fail_routing policy).
 """
 
 from __future__ import annotations
@@ -44,67 +40,13 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-
-# ─────────────────────────────────────────────────────────
-# Severity → risk_level mapping
-# (MIRROR OF watcher_gate_runner / security_gate_runner.)
-# ─────────────────────────────────────────────────────────
-
-_SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
-
-
-def _severity_to_risk(sev: str) -> str:
-    return {
-        "info": "low",
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "critical": "critical",
-    }.get(sev, "low")
-
-
-def _aggregate_verdict(
-    findings: list[dict[str, Any]],
-    *,
-    has_blocking_input_error: bool,
-) -> tuple[str, str]:
-    """Pick (result, risk_level). MIRROR OF watcher / security runners."""
-    if has_blocking_input_error:
-        return "blocked", "high"
-    if not findings:
-        return "pass", "none"
-    worst = max(findings, key=lambda f: _SEVERITY_RANK.get(f.get("severity", "info"), 0))
-    worst_sev = worst.get("severity", "info")
-    rank = _SEVERITY_RANK.get(worst_sev, 0)
-    if rank >= _SEVERITY_RANK["high"]:
-        return "fail", _severity_to_risk(worst_sev)
-    if rank == _SEVERITY_RANK["medium"]:
-        return "warn", "medium"
-    return "pass", "low"
-
-
-# ─────────────────────────────────────────────────────────
-# File ingestion (MIRROR OF security_gate_runner)
-# ─────────────────────────────────────────────────────────
-
-_MAX_SCAN_BYTES = 2 * 1024 * 1024  # 2 MiB; reports beyond this are likely generated noise
-
-
-def _read_text_safely(path: Path) -> tuple[str | None, str | None]:
-    try:
-        size = path.stat().st_size
-    except FileNotFoundError:
-        return None, "vanished_during_scan"
-    if size > _MAX_SCAN_BYTES:
-        return None, f"file_exceeds_scan_cap:{size}_bytes"
-    try:
-        return path.read_text(encoding="utf-8", errors="replace"), None
-    except OSError as exc:  # pragma: no cover — disk error guard
-        return None, f"read_failed:{exc}"
+try:
+    from . import gate_runner_common as common
+except ImportError:  # pragma: no cover — direct-script fallback
+    import gate_runner_common as common  # type: ignore[no-redef]
 
 
 # ─────────────────────────────────────────────────────────
@@ -182,105 +124,119 @@ _COVERAGE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 
 
 # ─────────────────────────────────────────────────────────
+# Domain-specific finding constructors
+# ─────────────────────────────────────────────────────────
+
+
+def _missing_artifact_finding(artifact: str) -> dict[str, Any]:
+    return {
+        "finding_id": None,
+        "severity": "high",
+        "category": "artifact_missing",
+        "location": artifact,
+        "description": f"Target QA report missing on disk: {artifact}",
+        "recommendation": (
+            "Verify the QA producer step (jest / pytest / Playwright / "
+            "k6 / Lighthouse) actually emitted this report before the "
+            "gate fires; if intentional, drop it from target_artifacts."
+        ),
+        "target_capability": None,
+    }
+
+
+def _empty_artifact_finding(artifact: str) -> dict[str, Any]:
+    """QA reports producing zero bytes almost always mean the runner
+    crashed before flushing — flag at ``medium`` (matches watcher,
+    deliberately stronger than security's ``low`` because QA has no
+    legitimate "placeholder before generation" use case).
+    """
+    return {
+        "finding_id": None,
+        "severity": "medium",
+        "category": "artifact_empty",
+        "location": artifact,
+        "description": f"QA report present but zero bytes: {artifact}",
+        "recommendation": (
+            "Inspect the QA producer for silent crash; an empty test "
+            "report usually means the runner died before flushing."
+        ),
+        "target_capability": None,
+    }
+
+
+def _race_finding(artifact: str) -> dict[str, Any]:
+    return {
+        "finding_id": None,
+        "severity": "low",
+        "category": "artifact_race_disappeared",
+        "location": artifact,
+        "description": "Artifact existed at gate entry but vanished mid-scan.",
+        "recommendation": "Re-run the gate after upstream stabilizes.",
+        "target_capability": None,
+    }
+
+
+def _no_target_artifacts_finding() -> dict[str, Any]:
+    return {
+        "finding_id": None,
+        "severity": "high",
+        "category": "no_target_artifacts",
+        "location": None,
+        "description": (
+            "QA gate fired with empty target_artifacts; "
+            "governance has nothing to audit."
+        ),
+        "recommendation": (
+            "Wire upstream QA report paths into the gate step's "
+            "target_artifacts before re-running."
+        ),
+        "target_capability": None,
+    }
+
+
+def _scan_skipped_finding(artifact: str, err: str) -> dict[str, Any]:
+    return {
+        "finding_id": None,
+        "severity": "low",
+        "category": "scan_skipped",
+        "location": artifact,
+        "description": f"Content scan skipped: {err}",
+        "recommendation": (
+            "If the artifact should be scanned, ensure it is plain "
+            "text and below the 2 MiB scan cap; otherwise drop it "
+            "from target_artifacts."
+        ),
+        "target_capability": None,
+    }
+
+
+# ─────────────────────────────────────────────────────────
 # Built-in mechanical checks
 # ─────────────────────────────────────────────────────────
 
 
-@dataclass
-class CheckOutcome:
-    """One check's outcome.
-
-    ``extra_findings`` is used by the content scanners (test summary +
-    coverage) to surface multiple findings from one read of the file.
-    ``input_blocking`` flags missing artifacts that escalate the verdict
-    to ``blocked`` regardless of finding severity (consistent with
-    sibling runners).
+def _check_artifact_exists(artifact: str) -> common.CheckOutcome:
+    """Missing report blocks the QA audit; same severity ladder as
+    watcher / security.
     """
-
-    name: str
-    passed: bool
-    finding: dict[str, Any] | None = None
-    input_blocking: bool = False
-    extra_findings: list[dict[str, Any]] = field(default_factory=list)
-    metrics: dict[str, Any] | None = None
-
-
-def _check_artifact_exists(artifact: str) -> CheckOutcome:
-    """Missing report blocks the QA audit.
-
-    Same severity ladder as watcher / security: governance cannot
-    rule on QA quality from an absent artifact, so we surface ``high``
-    + ``input_blocking=True`` and the aggregator escalates to
-    ``result=blocked``.
-    """
-    if Path(artifact).exists():
-        return CheckOutcome(name="artifact_exists", passed=True)
-    return CheckOutcome(
-        name="artifact_exists",
-        passed=False,
-        input_blocking=True,
-        finding={
-            "finding_id": None,
-            "severity": "high",
-            "category": "artifact_missing",
-            "location": artifact,
-            "description": f"Target QA report missing on disk: {artifact}",
-            "recommendation": (
-                "Verify the QA producer step (jest / pytest / Playwright / "
-                "k6 / Lighthouse) actually emitted this report before the "
-                "gate fires; if intentional, drop it from target_artifacts."
-            ),
-            "target_capability": None,
-        },
+    return common.check_artifact_exists(
+        artifact,
+        missing_finding=_missing_artifact_finding(artifact),
     )
 
 
-def _check_artifact_non_empty(artifact: str) -> CheckOutcome:
-    """Empty QA report is a strong negative signal.
-
-    QA reports that produce zero bytes almost always mean the runner
-    crashed before writing — flagging ``medium`` (matches watcher's
-    behaviour, deliberately stronger than security's ``low`` because
-    QA has no legitimate "placeholder before generation" use case).
+def _check_artifact_non_empty(artifact: str) -> common.CheckOutcome:
+    """Empty QA report flags ``medium`` (matches watcher; stronger than
+    security's ``low``).
     """
-    p = Path(artifact)
-    try:
-        size = p.stat().st_size
-    except FileNotFoundError:  # pragma: no cover — race guard
-        return CheckOutcome(
-            name="artifact_non_empty",
-            passed=False,
-            finding={
-                "finding_id": None,
-                "severity": "low",
-                "category": "artifact_race_disappeared",
-                "location": artifact,
-                "description": "Artifact existed at gate entry but vanished mid-scan.",
-                "recommendation": "Re-run the gate after upstream stabilizes.",
-                "target_capability": None,
-            },
-        )
-    if size > 0:
-        return CheckOutcome(name="artifact_non_empty", passed=True)
-    return CheckOutcome(
-        name="artifact_non_empty",
-        passed=False,
-        finding={
-            "finding_id": None,
-            "severity": "medium",
-            "category": "artifact_empty",
-            "location": artifact,
-            "description": f"QA report present but zero bytes: {artifact}",
-            "recommendation": (
-                "Inspect the QA producer for silent crash; an empty test "
-                "report usually means the runner died before flushing."
-            ),
-            "target_capability": None,
-        },
+    return common.check_artifact_non_empty(
+        artifact,
+        empty_finding=_empty_artifact_finding(artifact),
+        race_finding=_race_finding(artifact),
     )
 
 
-def _scan_test_summary(artifact: str, text: str) -> CheckOutcome:
+def _scan_test_summary(artifact: str, text: str) -> common.CheckOutcome:
     """Run the test-summary pattern bank; return findings + counts.
 
     First-match-wins per artifact; downstream callers pick the global
@@ -308,7 +264,7 @@ def _scan_test_summary(artifact: str, text: str) -> CheckOutcome:
         }
 
         if failed > 0:
-            return CheckOutcome(
+            return common.CheckOutcome(
                 name="test_summary_scan",
                 passed=False,
                 metrics=metrics,
@@ -328,11 +284,11 @@ def _scan_test_summary(artifact: str, text: str) -> CheckOutcome:
                     "target_capability": None,
                 },
             )
-        return CheckOutcome(name="test_summary_scan", passed=True, metrics=metrics)
+        return common.CheckOutcome(name="test_summary_scan", passed=True, metrics=metrics)
 
     # No pattern matched — record info finding so governance can see
     # the artifact was considered but unparseable.
-    return CheckOutcome(
+    return common.CheckOutcome(
         name="test_summary_scan",
         passed=True,
         finding={
@@ -358,7 +314,7 @@ def _scan_coverage(
     artifact: str,
     text: str,
     threshold: float,
-) -> CheckOutcome:
+) -> common.CheckOutcome:
     """Run the coverage pattern bank; return finding + percent metric.
 
     First-match-wins per artifact. ``threshold`` is inclusive: a
@@ -375,7 +331,7 @@ def _scan_coverage(
             "coverage_percent": percent,
         }
         if percent < threshold:
-            return CheckOutcome(
+            return common.CheckOutcome(
                 name="coverage_scan",
                 passed=False,
                 metrics=metrics,
@@ -395,12 +351,12 @@ def _scan_coverage(
                     "target_capability": None,
                 },
             )
-        return CheckOutcome(name="coverage_scan", passed=True, metrics=metrics)
+        return common.CheckOutcome(name="coverage_scan", passed=True, metrics=metrics)
 
     # No pattern matched — coverage is genuinely optional, so we record
     # a low-severity informational finding rather than treating absence
     # as a regression. Aggregator keeps `pass` if nothing else trips.
-    return CheckOutcome(
+    return common.CheckOutcome(
         name="coverage_scan",
         passed=True,
         finding={
@@ -421,34 +377,22 @@ def _scan_coverage(
     )
 
 
-def _content_check(artifact: str, threshold: float) -> CheckOutcome:
+def _content_check(artifact: str, threshold: float) -> common.CheckOutcome:
     """Combined content scan: read once, run test + coverage banks.
 
     Returns one ``CheckOutcome`` carrying merged findings + merged
     metrics. Caller is responsible for de-duplicating metrics across
     multiple artifacts (worst-coverage / sum-failed semantics).
     """
-    text, err = _read_text_safely(Path(artifact))
+    text, err = common.read_text_safely(Path(artifact))
     if err:
-        return CheckOutcome(
+        return common.CheckOutcome(
             name="content_scan",
             passed=False,
-            finding={
-                "finding_id": None,
-                "severity": "low",
-                "category": "scan_skipped",
-                "location": artifact,
-                "description": f"Content scan skipped: {err}",
-                "recommendation": (
-                    "If the artifact should be scanned, ensure it is plain "
-                    "text and below the 2 MiB scan cap; otherwise drop it "
-                    "from target_artifacts."
-                ),
-                "target_capability": None,
-            },
+            finding=_scan_skipped_finding(artifact, err),
         )
     if text is None:  # pragma: no cover — defensive guard
-        return CheckOutcome(name="content_scan", passed=True)
+        return common.CheckOutcome(name="content_scan", passed=True)
 
     test_outcome = _scan_test_summary(artifact, text)
     coverage_outcome = _scan_coverage(artifact, text, threshold)
@@ -465,7 +409,7 @@ def _content_check(artifact: str, threshold: float) -> CheckOutcome:
     if coverage_outcome.metrics:
         merged_metrics.update(coverage_outcome.metrics)
 
-    return CheckOutcome(
+    return common.CheckOutcome(
         name="content_scan",
         passed=test_outcome.passed and coverage_outcome.passed,
         extra_findings=extra_findings,
@@ -531,23 +475,7 @@ def run_qa_gate(spec: QAGateInput) -> dict[str, Any]:
 
     if not spec.target_artifacts:
         has_blocking_input_error = True
-        findings.append(
-            {
-                "finding_id": None,
-                "severity": "high",
-                "category": "no_target_artifacts",
-                "location": None,
-                "description": (
-                    "QA gate fired with empty target_artifacts; "
-                    "governance has nothing to audit."
-                ),
-                "recommendation": (
-                    "Wire upstream QA report paths into the gate step's "
-                    "target_artifacts before re-running."
-                ),
-                "target_capability": None,
-            }
-        )
+        findings.append(_no_target_artifacts_finding())
 
     for artifact in spec.target_artifacts:
         # 1. Existence
@@ -594,7 +522,7 @@ def run_qa_gate(spec: QAGateInput) -> dict[str, Any]:
         if "coverage_dialect" in m and m["coverage_dialect"] not in coverage_dialects:
             coverage_dialects.append(str(m["coverage_dialect"]))
 
-    result, risk_level = _aggregate_verdict(
+    result, risk_level = common.aggregate_verdict(
         findings,
         has_blocking_input_error=has_blocking_input_error,
     )
@@ -633,7 +561,7 @@ def run_qa_gate(spec: QAGateInput) -> dict[str, Any]:
         "step_id": spec.step_id,
         "project_id": spec.project_id,
         "task_id": spec.task_id,
-        "produced_at": _now_iso(),
+        "produced_at": common.now_iso(),
         "produced_by": spec.produced_by,
         "target_artifacts": list(spec.target_artifacts),
         "result": result,
@@ -647,11 +575,6 @@ def run_qa_gate(spec: QAGateInput) -> dict[str, Any]:
         envelope["fail_routing"] = _derive_fail_routing(result, findings)
 
     return envelope
-
-
-def _now_iso() -> str:
-    """ISO-8601 UTC timestamp. MIRROR OF watcher / security runners."""
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _build_summary(
@@ -705,24 +628,18 @@ def _derive_fail_routing(result: str, findings: list[dict[str, Any]]) -> dict[st
 # ─────────────────────────────────────────────────────────
 
 
-def _default_output_path(spec: QAGateInput) -> Path:
-    return Path.cwd() / f"{spec.step_id}.gate-result.json"
-
-
 def emit_qa_gate_result(
     spec: QAGateInput,
     output_path: Path | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Run the gate, persist envelope, return (path, envelope)."""
     envelope = run_qa_gate(spec)
-    target = output_path or _default_output_path(spec)
+    target = output_path or common.default_output_path(spec.step_id)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(envelope, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return target, envelope
 
 
 def parse_target_artifacts(values: Iterable[str] | None) -> list[str]:
-    """MIRROR OF sibling runners; kept local for module independence."""
-    if not values:
-        return []
-    return [v for v in values if v]
+    """Re-export :func:`gate_runner_common.parse_target_artifacts`."""
+    return common.parse_target_artifacts(values)

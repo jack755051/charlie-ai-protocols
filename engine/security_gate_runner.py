@@ -28,22 +28,12 @@ Boundary:
   policy are the consumers that read ``risk_level`` / ``fail_routing``
   and apply workflow-level routing.
 
-Code-shape rationale:
-
-The verdict aggregation, identity dataclass, and filesystem helpers
-mirror ``watcher_gate_runner`` deliberately. We did NOT extract a
-shared ``gate_runner_common`` module yet because:
-
-  1. Two callers is below the rule-of-three threshold for extraction.
-  2. The QA runner (P8 #4) will add a third caller with new shapes
-     (Lighthouse JSON ingestion, k6 threshold parsing); the natural
-     extraction point is when that third producer arrives and the
-     cross-runner abstractions are visible from real data, not
-     speculative design.
-
-When that refactor lands, every "MIRROR OF watcher_gate_runner" comment
-below identifies a candidate to lift into the shared module without
-re-reading both files.
+After v0.22.0 P8 refactor: rail-agnostic mechanics
+(severity/aggregate/now_iso/output-path/check primitives/
+read_text_safely) live in :mod:`engine.gate_runner_common`; this
+module retains the security domain-specific bits (input dataclass,
+pattern banks, finding text, summary line, halt-on-critical
+fail_routing policy).
 """
 
 from __future__ import annotations
@@ -51,82 +41,23 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-
-# ─────────────────────────────────────────────────────────
-# Severity → risk_level mapping
-# (MIRROR OF watcher_gate_runner; extract on third caller.)
-# ─────────────────────────────────────────────────────────
-
-_SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
-
-
-def _severity_to_risk(sev: str) -> str:
-    return {
-        "info": "low",
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "critical": "critical",
-    }.get(sev, "low")
-
-
-def _aggregate_verdict(
-    findings: list[dict[str, Any]],
-    *,
-    has_blocking_input_error: bool,
-) -> tuple[str, str]:
-    """Pick (result, risk_level). MIRROR OF watcher_gate_runner."""
-    if has_blocking_input_error:
-        return "blocked", "high"
-    if not findings:
-        return "pass", "none"
-    worst = max(findings, key=lambda f: _SEVERITY_RANK.get(f.get("severity", "info"), 0))
-    worst_sev = worst.get("severity", "info")
-    rank = _SEVERITY_RANK.get(worst_sev, 0)
-    if rank >= _SEVERITY_RANK["high"]:
-        return "fail", _severity_to_risk(worst_sev)
-    if rank == _SEVERITY_RANK["medium"]:
-        return "warn", "medium"
-    return "pass", "low"
+try:
+    from . import gate_runner_common as common
+except ImportError:  # pragma: no cover — direct-script fallback
+    import gate_runner_common as common  # type: ignore[no-redef]
 
 
 # ─────────────────────────────────────────────────────────
-# File ingestion
+# Finding-cap policy
 # ─────────────────────────────────────────────────────────
-
-# Hard cap per artifact; deliberately small. Files larger than this are
-# almost certainly binary or generated assets that shouldn't be scanned
-# inline by a governance gate. The runner emits an informational
-# finding instead of trying to read multi-MB blobs into memory.
-_MAX_SCAN_BYTES = 2 * 1024 * 1024  # 2 MiB
 
 # Cap on how many findings any single artifact may contribute. Keeps
 # the gate-result envelope bounded so consumers (P8 #6 / #7 / #8)
 # can predict its size without streaming.
 _MAX_FINDINGS_PER_ARTIFACT = 10
-
-
-def _read_text_safely(path: Path) -> tuple[str | None, str | None]:
-    """Read a file as text within the size cap.
-
-    Returns ``(text, error)``; on success ``error`` is None. Errors
-    are returned as informational strings so the caller can surface
-    them as findings rather than crash the gate.
-    """
-    try:
-        size = path.stat().st_size
-    except FileNotFoundError:
-        return None, "vanished_during_scan"
-    if size > _MAX_SCAN_BYTES:
-        return None, f"file_exceeds_scan_cap:{size}_bytes"
-    try:
-        return path.read_text(encoding="utf-8", errors="replace"), None
-    except OSError as exc:  # pragma: no cover — disk error guard
-        return None, f"read_failed:{exc}"
 
 
 # ─────────────────────────────────────────────────────────
@@ -222,89 +153,133 @@ _RISKY_KEYWORDS: list[tuple[re.Pattern[str], str, str, str, str]] = [
 
 
 # ─────────────────────────────────────────────────────────
-# Built-in mechanical checks
-# (artifact_exists / artifact_non_empty MIRROR watcher_gate_runner.)
+# Domain-specific finding constructors
 # ─────────────────────────────────────────────────────────
 
 
-@dataclass
-class CheckOutcome:
-    name: str
-    passed: bool
-    finding: dict[str, Any] | None = None
-    input_blocking: bool = False
-    extra_findings: list[dict[str, Any]] = field(default_factory=list)
+def _missing_artifact_finding(artifact: str) -> dict[str, Any]:
+    return {
+        "finding_id": None,
+        "severity": "high",
+        "category": "artifact_missing",
+        "location": artifact,
+        "description": f"Target artifact missing on disk: {artifact}",
+        "recommendation": (
+            "Verify the upstream producer step actually emitted this "
+            "artifact before the security gate fires; if intentional, "
+            "drop it from target_artifacts."
+        ),
+        "target_capability": None,
+    }
 
 
-def _check_artifact_exists(artifact: str) -> CheckOutcome:
-    """Missing file blocks the security audit; same severity as watcher
-    runner because governance still cannot review absent code.
+def _empty_artifact_finding(artifact: str) -> dict[str, Any]:
+    """Security tolerates empty files (placeholder before generation
+    is occasionally legitimate); flag at ``low`` severity so a single
+    blank file does not promote the verdict to ``warn``.
     """
-    if Path(artifact).exists():
-        return CheckOutcome(name="artifact_exists", passed=True)
-    return CheckOutcome(
-        name="artifact_exists",
-        passed=False,
-        input_blocking=True,
-        finding={
-            "finding_id": None,
-            "severity": "high",
-            "category": "artifact_missing",
-            "location": artifact,
-            "description": f"Target artifact missing on disk: {artifact}",
-            "recommendation": (
-                "Verify the upstream producer step actually emitted this "
-                "artifact before the security gate fires; if intentional, "
-                "drop it from target_artifacts."
-            ),
-            "target_capability": None,
-        },
+    return {
+        "finding_id": None,
+        "severity": "low",
+        "category": "artifact_empty",
+        "location": artifact,
+        "description": f"Target artifact present but zero bytes: {artifact}",
+        "recommendation": (
+            "Investigate the upstream producer for silent write failure; "
+            "empty files cannot be security-audited."
+        ),
+        "target_capability": None,
+    }
+
+
+def _race_finding(artifact: str) -> dict[str, Any]:
+    return {
+        "finding_id": None,
+        "severity": "low",
+        "category": "artifact_race_disappeared",
+        "location": artifact,
+        "description": "Artifact existed at gate entry but vanished mid-scan.",
+        "recommendation": "Re-run the gate after upstream stabilizes.",
+        "target_capability": None,
+    }
+
+
+def _no_target_artifacts_finding() -> dict[str, Any]:
+    return {
+        "finding_id": None,
+        "severity": "high",
+        "category": "no_target_artifacts",
+        "location": None,
+        "description": (
+            "Security gate fired with empty target_artifacts; "
+            "governance has nothing to audit."
+        ),
+        "recommendation": (
+            "Wire upstream artifact paths into the gate step's "
+            "target_artifacts before re-running."
+        ),
+        "target_capability": None,
+    }
+
+
+def _scan_skipped_finding(artifact: str, err: str) -> dict[str, Any]:
+    return {
+        "finding_id": None,
+        "severity": "low",
+        "category": "scan_skipped",
+        "location": artifact,
+        "description": f"Content scan skipped: {err}",
+        "recommendation": (
+            "If the artifact should be scanned, ensure it is plain "
+            "text and below the 2 MiB scan cap; otherwise drop it "
+            "from target_artifacts."
+        ),
+        "target_capability": None,
+    }
+
+
+def _findings_capped_finding(artifact: str, count: int) -> dict[str, Any]:
+    return {
+        "finding_id": None,
+        "severity": "info",
+        "category": "findings_capped",
+        "location": artifact,
+        "description": (
+            f"Artifact produced {count} findings; "
+            f"truncated to {_MAX_FINDINGS_PER_ARTIFACT}."
+        ),
+        "recommendation": (
+            "Run a dedicated SAST tool (semgrep / snyk) "
+            "for full coverage on this artifact."
+        ),
+        "target_capability": None,
+    }
+
+
+# ─────────────────────────────────────────────────────────
+# Built-in mechanical checks (thin wrappers over common primitives)
+# ─────────────────────────────────────────────────────────
+
+
+def _check_artifact_exists(artifact: str) -> common.CheckOutcome:
+    """Missing file blocks the security audit; high severity (matches
+    watcher) because governance still cannot review absent code.
+    """
+    return common.check_artifact_exists(
+        artifact,
+        missing_finding=_missing_artifact_finding(artifact),
     )
 
 
-def _check_artifact_non_empty(artifact: str) -> CheckOutcome:
-    """Empty source/config files in a security audit are mostly noise.
-
-    Diverges from watcher (which flags ``medium``) by recording a
-    ``low`` finding instead — empty config is occasionally legitimate
-    (placeholder file before generation), and we don't want a single
-    blank file to escalate the verdict to ``warn``. Other security
-    findings dominate the verdict anyway.
+def _check_artifact_non_empty(artifact: str) -> common.CheckOutcome:
+    """Empty source/config files in a security audit are mostly noise;
+    flag at ``low`` (diverges from watcher's ``medium`` because a
+    single blank file should not promote the verdict to ``warn``).
     """
-    p = Path(artifact)
-    try:
-        size = p.stat().st_size
-    except FileNotFoundError:  # pragma: no cover — race guard
-        return CheckOutcome(
-            name="artifact_non_empty",
-            passed=False,
-            finding={
-                "finding_id": None,
-                "severity": "low",
-                "category": "artifact_race_disappeared",
-                "location": artifact,
-                "description": "Artifact existed at gate entry but vanished mid-scan.",
-                "recommendation": "Re-run the gate after upstream stabilizes.",
-                "target_capability": None,
-            },
-        )
-    if size > 0:
-        return CheckOutcome(name="artifact_non_empty", passed=True)
-    return CheckOutcome(
-        name="artifact_non_empty",
-        passed=False,
-        finding={
-            "finding_id": None,
-            "severity": "low",
-            "category": "artifact_empty",
-            "location": artifact,
-            "description": f"Target artifact present but zero bytes: {artifact}",
-            "recommendation": (
-                "Investigate the upstream producer for silent write failure; "
-                "empty files cannot be security-audited."
-            ),
-            "target_capability": None,
-        },
+    return common.check_artifact_non_empty(
+        artifact,
+        empty_finding=_empty_artifact_finding(artifact),
+        race_finding=_race_finding(artifact),
     )
 
 
@@ -359,40 +334,28 @@ def _scan_risky_keywords(artifact: str, text: str) -> list[dict[str, Any]]:
     return out
 
 
-def _content_check(artifact: str) -> CheckOutcome:
+def _content_check(artifact: str) -> common.CheckOutcome:
     """Combined content scan: read once, then run pattern + keyword banks.
 
     Returns one ``CheckOutcome`` carrying every match in
     ``extra_findings``. Capping happens at the caller so cap policy is
     visible at the runner top level rather than buried in helpers.
     """
-    text, err = _read_text_safely(Path(artifact))
+    text, err = common.read_text_safely(Path(artifact))
     if err:
         # Treat skipped files as low-severity informational findings;
         # the runner still reports they were considered.
-        return CheckOutcome(
+        return common.CheckOutcome(
             name="content_scan",
             passed=False,
-            finding={
-                "finding_id": None,
-                "severity": "low",
-                "category": "scan_skipped",
-                "location": artifact,
-                "description": f"Content scan skipped: {err}",
-                "recommendation": (
-                    "If the artifact should be scanned, ensure it is plain "
-                    "text and below the 2 MiB scan cap; otherwise drop it "
-                    "from target_artifacts."
-                ),
-                "target_capability": None,
-            },
+            finding=_scan_skipped_finding(artifact, err),
         )
     if text is None:  # pragma: no cover — defensive guard
-        return CheckOutcome(name="content_scan", passed=True)
+        return common.CheckOutcome(name="content_scan", passed=True)
 
     findings = _scan_secret_patterns(artifact, text)
     findings.extend(_scan_risky_keywords(artifact, text))
-    return CheckOutcome(
+    return common.CheckOutcome(
         name="content_scan",
         passed=not findings,
         extra_findings=findings,
@@ -443,23 +406,7 @@ def run_security_gate(spec: SecurityGateInput) -> dict[str, Any]:
 
     if not spec.target_artifacts:
         has_blocking_input_error = True
-        findings.append(
-            {
-                "finding_id": None,
-                "severity": "high",
-                "category": "no_target_artifacts",
-                "location": None,
-                "description": (
-                    "Security gate fired with empty target_artifacts; "
-                    "governance has nothing to audit."
-                ),
-                "recommendation": (
-                    "Wire upstream artifact paths into the gate step's "
-                    "target_artifacts before re-running."
-                ),
-                "target_capability": None,
-            }
-        )
+        findings.append(_no_target_artifacts_finding())
 
     for artifact in spec.target_artifacts:
         # 1. Existence check
@@ -497,26 +444,12 @@ def run_security_gate(spec: SecurityGateInput) -> dict[str, Any]:
             if len(outcome.extra_findings) > _MAX_FINDINGS_PER_ARTIFACT:
                 artifacts_capped += 1
                 findings.append(
-                    {
-                        "finding_id": None,
-                        "severity": "info",
-                        "category": "findings_capped",
-                        "location": artifact,
-                        "description": (
-                            f"Artifact produced {len(outcome.extra_findings)} "
-                            f"findings; truncated to {_MAX_FINDINGS_PER_ARTIFACT}."
-                        ),
-                        "recommendation": (
-                            "Run a dedicated SAST tool (semgrep / snyk) "
-                            "for full coverage on this artifact."
-                        ),
-                        "target_capability": None,
-                    }
+                    _findings_capped_finding(artifact, len(outcome.extra_findings))
                 )
         else:
             artifacts_scanned += 1
 
-    result, risk_level = _aggregate_verdict(
+    result, risk_level = common.aggregate_verdict(
         findings,
         has_blocking_input_error=has_blocking_input_error,
     )
@@ -534,7 +467,7 @@ def run_security_gate(spec: SecurityGateInput) -> dict[str, Any]:
         "step_id": spec.step_id,
         "project_id": spec.project_id,
         "task_id": spec.task_id,
-        "produced_at": _now_iso(),
+        "produced_at": common.now_iso(),
         "produced_by": spec.produced_by,
         "target_artifacts": list(spec.target_artifacts),
         "result": result,
@@ -554,11 +487,6 @@ def run_security_gate(spec: SecurityGateInput) -> dict[str, Any]:
         envelope["fail_routing"] = _derive_fail_routing(result, findings)
 
     return envelope
-
-
-def _now_iso() -> str:
-    """ISO-8601 UTC timestamp. MIRROR OF watcher_gate_runner."""
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _build_summary(checkpoint: str, result: str, finding_count: int) -> str:
@@ -612,12 +540,7 @@ def _derive_fail_routing(result: str, findings: list[dict[str, Any]]) -> dict[st
 
 # ─────────────────────────────────────────────────────────
 # CLI helpers (called by step_runtime.py)
-# (parse_target_artifacts / _default_output_path MIRROR watcher_gate_runner.)
 # ─────────────────────────────────────────────────────────
-
-
-def _default_output_path(spec: SecurityGateInput) -> Path:
-    return Path.cwd() / f"{spec.step_id}.gate-result.json"
 
 
 def emit_security_gate_result(
@@ -626,20 +549,12 @@ def emit_security_gate_result(
 ) -> tuple[Path, dict[str, Any]]:
     """Run the gate, persist envelope, return (path, envelope)."""
     envelope = run_security_gate(spec)
-    target = output_path or _default_output_path(spec)
+    target = output_path or common.default_output_path(spec.step_id)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(envelope, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return target, envelope
 
 
 def parse_target_artifacts(values: Iterable[str] | None) -> list[str]:
-    """Normalize CLI repeated --target-artifact values into a list.
-
-    MIRROR OF watcher_gate_runner.parse_target_artifacts. Kept local
-    so step_runtime.py can resolve the helper from whichever module it
-    needs without depending on watcher_gate_runner from the security
-    branch.
-    """
-    if not values:
-        return []
-    return [v for v in values if v]
+    """Re-export :func:`gate_runner_common.parse_target_artifacts`."""
+    return common.parse_target_artifacts(values)

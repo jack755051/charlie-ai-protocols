@@ -29,189 +29,116 @@ Boundary:
 * Verdict aggregation is intentionally simple in v1: enough to give
   governance a real decision (pass / warn / blocked / fail) without
   pretending the runner can reproduce full Watcher AI judgement.
+
+After v0.22.0 P8 refactor: rail-agnostic mechanics
+(severity/aggregate/now_iso/output-path/check primitives) live in
+:mod:`engine.gate_runner_common`; this module retains the watcher
+domain-specific bits (input dataclass, finding text, summary line,
+fail_routing policy).
 """
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+try:
+    from . import gate_runner_common as common
+except ImportError:  # pragma: no cover — direct-script fallback
+    import gate_runner_common as common  # type: ignore[no-redef]
+
 
 # ─────────────────────────────────────────────────────────
-# Verdict aggregation
+# Domain-specific finding constructors
 # ─────────────────────────────────────────────────────────
 
-# Severity ranks for picking the dominant finding (higher = worse).
-_SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
-
-def _severity_to_risk(sev: str) -> str:
-    """Map finding severity to envelope risk_level.
-
-    Mirrors the schema enum so consumer halt-on-risk policy can use
-    risk_level directly without re-deriving from findings.
-    """
+def _missing_artifact_finding(artifact: str) -> dict[str, Any]:
     return {
-        "info": "low",
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "critical": "critical",
-    }.get(sev, "low")
+        "finding_id": None,
+        "severity": "high",
+        "category": "artifact_missing",
+        "location": artifact,
+        "description": f"Target artifact missing on disk: {artifact}",
+        "recommendation": (
+            "Verify the upstream producer step actually emitted this "
+            "artifact before the watcher gate fires; if intentional, "
+            "drop it from target_artifacts."
+        ),
+        "target_capability": None,
+    }
 
 
-def _aggregate_verdict(
-    findings: list[dict[str, Any]],
-    *,
-    has_blocking_input_error: bool,
-) -> tuple[str, str]:
-    """Pick (result, risk_level) from a list of findings.
+def _empty_artifact_finding(artifact: str) -> dict[str, Any]:
+    return {
+        "finding_id": None,
+        "severity": "medium",
+        "category": "artifact_empty",
+        "location": artifact,
+        "description": f"Target artifact present but zero bytes: {artifact}",
+        "recommendation": (
+            "Inspect the upstream producer for silent write failure; "
+            "an empty SSOT file usually means the producer crashed "
+            "after mkdir but before the content write."
+        ),
+        "target_capability": None,
+    }
 
-    Rules:
-      * Any blocking input error (e.g., target artifact missing) →
-        ``blocked`` / ``high``. The gate could not run cleanly so
-        downstream MUST halt regardless of other findings.
-      * Any ``critical`` / ``high`` severity finding → ``fail`` /
-        matching risk; consumer reads fail_routing for next action.
-      * Any ``medium`` severity finding → ``warn`` / ``medium``;
-        downstream MAY proceed but the finding is worth surfacing.
-      * Empty findings → ``pass`` / ``none``.
-      * ``low`` / ``info`` only → ``pass`` / ``low``. We keep them on
-        the envelope for traceability but do not promote to warn.
 
-    Severity rank is taken from the worst finding to keep the output
-    deterministic for tests.
-    """
-    if has_blocking_input_error:
-        return "blocked", "high"
+def _race_finding(artifact: str) -> dict[str, Any]:
+    return {
+        "finding_id": None,
+        "severity": "low",
+        "category": "artifact_race_disappeared",
+        "location": artifact,
+        "description": (
+            "Artifact existed at gate entry but was unreadable "
+            "during size check; possible upstream race."
+        ),
+        "recommendation": "Re-run the gate after upstream stabilizes.",
+        "target_capability": None,
+    }
 
-    if not findings:
-        return "pass", "none"
 
-    worst = max(
-        findings,
-        key=lambda f: _SEVERITY_RANK.get(f.get("severity", "info"), 0),
-    )
-    worst_sev = worst.get("severity", "info")
-    rank = _SEVERITY_RANK.get(worst_sev, 0)
-
-    if rank >= _SEVERITY_RANK["high"]:
-        return "fail", _severity_to_risk(worst_sev)
-    if rank == _SEVERITY_RANK["medium"]:
-        return "warn", "medium"
-    return "pass", "low"
+def _no_target_artifacts_finding() -> dict[str, Any]:
+    return {
+        "finding_id": None,
+        "severity": "high",
+        "category": "no_target_artifacts",
+        "location": None,
+        "description": (
+            "Watcher gate fired with empty target_artifacts; "
+            "governance has nothing to audit."
+        ),
+        "recommendation": (
+            "Wire upstream artifact paths into the gate step's "
+            "target_artifacts before re-running."
+        ),
+        "target_capability": None,
+    }
 
 
 # ─────────────────────────────────────────────────────────
-# Built-in mechanical checks
+# Built-in mechanical checks (thin wrappers over common primitives)
 # ─────────────────────────────────────────────────────────
 
 
-@dataclass
-class CheckOutcome:
-    """One mechanical check's outcome.
-
-    ``finding`` is non-None only when the check actually surfaces an
-    issue; passing checks contribute to ``checks_passed`` counter on
-    the envelope ``metrics`` block but do not pollute findings.
-
-    ``input_blocking`` flags missing / unreadable artifacts that prevent
-    the gate from running cleanly. The aggregator escalates any such
-    outcome to ``result=blocked`` regardless of finding severity.
-    """
-
-    name: str
-    passed: bool
-    finding: dict[str, Any] | None = None
-    input_blocking: bool = False
-
-
-def _check_artifact_exists(artifact: str) -> CheckOutcome:
-    """Verify the target artifact exists on disk.
-
-    Watcher governance cannot audit what isn't written; missing
-    artifact escalates to ``input_blocking`` so the runner emits
-    ``result=blocked`` rather than fabricating a pass.
-    """
-    if Path(artifact).exists():
-        return CheckOutcome(name="artifact_exists", passed=True)
-    return CheckOutcome(
-        name="artifact_exists",
-        passed=False,
-        input_blocking=True,
-        finding={
-            "finding_id": None,
-            "severity": "high",
-            "category": "artifact_missing",
-            "location": artifact,
-            "description": f"Target artifact missing on disk: {artifact}",
-            "recommendation": (
-                "Verify the upstream producer step actually emitted this "
-                "artifact before the watcher gate fires; if intentional, "
-                "drop it from target_artifacts."
-            ),
-            "target_capability": None,
-        },
+def _check_artifact_exists(artifact: str) -> common.CheckOutcome:
+    """Watcher-flavoured existence check; missing → blocked/high."""
+    return common.check_artifact_exists(
+        artifact,
+        missing_finding=_missing_artifact_finding(artifact),
     )
 
 
-def _check_artifact_non_empty(artifact: str) -> CheckOutcome:
-    """Verify the target artifact has non-zero size.
-
-    Empty markdown / JSON SSOT files are a common upstream silent
-    failure (mkdir succeeded, write failed). Surface as ``medium``
-    finding which aggregates to ``result=warn`` rather than fail —
-    governance MAY still proceed but the finding is worth surfacing.
-
-    Pre-condition: caller MUST ensure the artifact exists before
-    invoking this check (existence is a separate check). If the file
-    disappears between the two checks (extremely rare race), we record
-    a ``low`` informational finding rather than crashing.
-    """
-    p = Path(artifact)
-    try:
-        size = p.stat().st_size
-    except FileNotFoundError:  # pragma: no cover — race guard only
-        return CheckOutcome(
-            name="artifact_non_empty",
-            passed=False,
-            input_blocking=False,
-            finding={
-                "finding_id": None,
-                "severity": "low",
-                "category": "artifact_race_disappeared",
-                "location": artifact,
-                "description": (
-                    "Artifact existed at gate entry but was unreadable "
-                    "during size check; possible upstream race."
-                ),
-                "recommendation": "Re-run the gate after upstream stabilizes.",
-                "target_capability": None,
-            },
-        )
-
-    if size > 0:
-        return CheckOutcome(name="artifact_non_empty", passed=True)
-    return CheckOutcome(
-        name="artifact_non_empty",
-        passed=False,
-        input_blocking=False,
-        finding={
-            "finding_id": None,
-            "severity": "medium",
-            "category": "artifact_empty",
-            "location": artifact,
-            "description": f"Target artifact present but zero bytes: {artifact}",
-            "recommendation": (
-                "Inspect the upstream producer for silent write failure; "
-                "an empty SSOT file usually means the producer crashed "
-                "after mkdir but before the content write."
-            ),
-            "target_capability": None,
-        },
+def _check_artifact_non_empty(artifact: str) -> common.CheckOutcome:
+    """Watcher-flavoured non-empty check; empty file → medium finding."""
+    return common.check_artifact_non_empty(
+        artifact,
+        empty_finding=_empty_artifact_finding(artifact),
+        race_finding=_race_finding(artifact),
     )
 
 
@@ -249,7 +176,7 @@ def run_watcher_gate(spec: WatcherGateInput) -> dict[str, Any]:
       2. Run built-in mechanical checks per target artifact:
          * artifact_exists
          * artifact_non_empty (only when artifact_exists passed)
-      3. Aggregate findings into (result, risk_level).
+      3. Aggregate findings into (result, risk_level) via common helper.
       4. Populate metrics counters (checks_executed / checks_passed
          / checks_failed) so consumers can spot gates with mostly
          clean checks vs gates where every check tripped.
@@ -272,23 +199,7 @@ def run_watcher_gate(spec: WatcherGateInput) -> dict[str, Any]:
         # supervisor should fix the workflow YAML to point the gate at
         # real outputs.
         has_blocking_input_error = True
-        findings.append(
-            {
-                "finding_id": None,
-                "severity": "high",
-                "category": "no_target_artifacts",
-                "location": None,
-                "description": (
-                    "Watcher gate fired with empty target_artifacts; "
-                    "governance has nothing to audit."
-                ),
-                "recommendation": (
-                    "Wire upstream artifact paths into the gate step's "
-                    "target_artifacts before re-running."
-                ),
-                "target_capability": None,
-            }
-        )
+        findings.append(_no_target_artifacts_finding())
 
     for artifact in spec.target_artifacts:
         outcome = _check_artifact_exists(artifact)
@@ -310,7 +221,7 @@ def run_watcher_gate(spec: WatcherGateInput) -> dict[str, Any]:
         if outcome.finding:
             findings.append(outcome.finding)
 
-    result, risk_level = _aggregate_verdict(
+    result, risk_level = common.aggregate_verdict(
         findings,
         has_blocking_input_error=has_blocking_input_error,
     )
@@ -328,7 +239,7 @@ def run_watcher_gate(spec: WatcherGateInput) -> dict[str, Any]:
         "step_id": spec.step_id,
         "project_id": spec.project_id,
         "task_id": spec.task_id,
-        "produced_at": _now_iso(),
+        "produced_at": common.now_iso(),
         "produced_by": spec.produced_by,
         "target_artifacts": list(spec.target_artifacts),
         "result": result,
@@ -346,17 +257,6 @@ def run_watcher_gate(spec: WatcherGateInput) -> dict[str, Any]:
         envelope["fail_routing"] = _derive_fail_routing(result, findings)
 
     return envelope
-
-
-def _now_iso() -> str:
-    """Produce an ISO-8601 timestamp with explicit UTC offset.
-
-    Schema only requires the field be a string; the explicit offset
-    keeps the artifact reproducible-friendly (no local-tz drift between
-    machines) and matches the timestamps already emitted by P3
-    orchestration snapshots.
-    """
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _build_summary(checkpoint: str, result: str, finding_count: int) -> str:
@@ -408,17 +308,6 @@ def _derive_fail_routing(
 # ─────────────────────────────────────────────────────────
 
 
-def _default_output_path(spec: WatcherGateInput) -> Path:
-    """Default emit location: ``<cwd>/<step_id>.gate-result.json``.
-
-    Callers that want to land the artifact under
-    ``~/.cap/projects/<id>/runs/<run>/`` MUST pass --output explicitly.
-    The runner deliberately does **not** know cap storage layout to keep
-    this module decoupled from project_context_loader.
-    """
-    return Path.cwd() / f"{spec.step_id}.gate-result.json"
-
-
 def emit_watcher_gate_result(
     spec: WatcherGateInput,
     output_path: Path | None = None,
@@ -430,19 +319,18 @@ def emit_watcher_gate_result(
     inside the same step_runtime.py).
     """
     envelope = run_watcher_gate(spec)
-    target = output_path or _default_output_path(spec)
+    target = output_path or common.default_output_path(spec.step_id)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(envelope, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return target, envelope
 
 
 def parse_target_artifacts(values: Iterable[str] | None) -> list[str]:
-    """Normalize CLI repeated --target-artifact values into a list.
+    """Re-export :func:`gate_runner_common.parse_target_artifacts`.
 
-    argparse hands us either ``None`` (flag never used) or a list. The
-    runner treats ``None`` as the same degenerate case as an empty list
-    so the verdict aggregator can flag it consistently.
+    Kept as a module-level callable so existing imports
+    (``from engine.watcher_gate_runner import parse_target_artifacts``)
+    continue to resolve without forcing call sites into the common
+    module.
     """
-    if not values:
-        return []
-    return [v for v in values if v]
+    return common.parse_target_artifacts(values)

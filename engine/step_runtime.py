@@ -1331,17 +1331,6 @@ def validate_handoff_ticket_cli(ticket_path: str, schema_path: str | None = None
 # ─────────────────────────────────────────────────────────
 
 
-def _default_gate_result_schema_path() -> Path:
-    """Resolve the canonical gate-result schema shipped with the repo.
-
-    Mirrors :func:`_default_handoff_schema_path` but points at
-    ``schemas/gate-result.schema.yaml``. Lets ``cap-workflow-exec.sh``
-    and per-rail runners (Watcher / Security / QA / Logger) call
-    the validator without re-deriving the path.
-    """
-    return Path(__file__).resolve().parent.parent / "schemas" / "gate-result.schema.yaml"
-
-
 def validate_gate_result_cli(result_path: str, schema_path: str | None = None) -> None:
     """P8 #5 gate-result validation gate — re-checks a per-gate decision
     envelope against ``schemas/gate-result.schema.yaml`` before
@@ -1382,7 +1371,11 @@ def validate_gate_result_cli(result_path: str, schema_path: str | None = None) -
         print(f"reason=parse_error;detail=gate-result read failed: {exc}")
         sys.exit(1)
 
-    schema_p = Path(schema_path) if schema_path else _default_gate_result_schema_path()
+    try:
+        from .gate_runner_common import default_gate_result_schema_path
+    except ImportError:  # pragma: no cover — direct-script fallback
+        from gate_runner_common import default_gate_result_schema_path  # type: ignore[no-redef]
+    schema_p = Path(schema_path) if schema_path else default_gate_result_schema_path()
     if not schema_p.exists():
         print(f"reason=missing_artifact;detail=schema not found: {schema_p}")
         sys.exit(1)
@@ -1416,47 +1409,6 @@ def validate_gate_result_cli(result_path: str, schema_path: str | None = None) -
 
     print("reason=ok;detail=gate_result_schema_valid")
     sys.exit(0)
-
-
-def _validate_gate_result_payload(envelope: dict[str, Any]) -> list[str]:
-    """In-process validation helper used by run-watcher-gate.
-
-    Mirrors :func:`validate_gate_result_cli` validator path but operates
-    on an already-loaded envelope dict (no file I/O) so producers that
-    already hold the envelope in memory can self-validate before
-    persisting. Returns an ordered list of human-readable error
-    messages — empty list means the envelope is clean.
-
-    Producers SHOULD round-trip persisted output through
-    :func:`validate_gate_result_cli` (or the CLI subcommand) as well so
-    on-disk drift between persist time and consumer read time is also
-    caught; the in-memory pass is an early guard, not a replacement.
-    """
-    schema_p = _default_gate_result_schema_path()
-    if not schema_p.exists():
-        return [f"schema not found: {schema_p}"]
-
-    try:
-        import yaml  # type: ignore[import]
-
-        schema = yaml.safe_load(schema_p.read_text(encoding="utf-8")) or {}
-    except ImportError:
-        return ["PyYAML unavailable; cannot load gate-result schema"]
-    except Exception as exc:  # pragma: no cover — defensive YAML guard
-        return [f"schema YAML invalid: {exc}"]
-
-    errors: list[str] = []
-    try:
-        from jsonschema import Draft202012Validator  # type: ignore[import]
-
-        validator = Draft202012Validator(schema)
-        for err in sorted(validator.iter_errors(envelope), key=lambda e: list(e.absolute_path)):
-            loc = "/".join(str(p) for p in err.absolute_path) or "<root>"
-            errors.append(f"{loc}: {err.message}")
-    except ImportError:
-        errors.extend(validate_jsonschema_fallback(envelope, schema))
-
-    return errors
 
 
 # ─────────────────────────────────────────────────────────
@@ -1504,17 +1456,11 @@ def run_watcher_gate_cli(
                   ``missing_artifact``-equivalent.
     """
     try:
-        from .watcher_gate_runner import (
-            WatcherGateInput,
-            emit_watcher_gate_result,
-            run_watcher_gate,
-        )
-    except ImportError:  # pragma: no cover — sibling fallback for direct script use
-        from watcher_gate_runner import (  # type: ignore[no-redef]
-            WatcherGateInput,
-            emit_watcher_gate_result,
-            run_watcher_gate,
-        )
+        from .watcher_gate_runner import WatcherGateInput, run_watcher_gate
+        from .gate_runner_common import emit_and_validate_or_exit
+    except ImportError:  # pragma: no cover — direct-script fallback
+        from watcher_gate_runner import WatcherGateInput, run_watcher_gate  # type: ignore[no-redef]
+        from gate_runner_common import emit_and_validate_or_exit  # type: ignore[no-redef]
 
     spec = WatcherGateInput(
         gate_id=gate_id,
@@ -1528,47 +1474,8 @@ def run_watcher_gate_cli(
         gate_subtype=gate_subtype,
         produced_by=produced_by,
     )
-
-    # 1. Build envelope in-memory and validate before persistence so
-    #    producer drift is caught without polluting disk.
     envelope = run_watcher_gate(spec)
-    pre_errors = _validate_gate_result_payload(envelope)
-    if pre_errors:
-        joined = " | ".join(pre_errors)
-        print(f"reason=producer_envelope_invalid;detail={joined}")
-        sys.exit(41)
-
-    # 2. Persist envelope. We write even when post-write validation
-    #    fails so triage has the bytes to inspect; the exit code still
-    #    signals failure.
-    target = Path(output_path) if output_path else Path.cwd() / f"{step_id}.gate-result.json"
-    try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(
-            json.dumps(envelope, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-    except OSError as exc:
-        print(f"reason=persist_failed;detail={exc}")
-        sys.exit(1)
-
-    # 3. Re-load and re-validate from disk to catch persistence drift.
-    try:
-        on_disk = json.loads(target.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"reason=persist_readback_failed;detail={exc}")
-        sys.exit(1)
-
-    post_errors = _validate_gate_result_payload(on_disk)
-    if post_errors:
-        joined = " | ".join(post_errors)
-        print(f"reason=gate_result_schema_invalid;detail={joined}")
-        sys.exit(41)
-
-    print(
-        f"status=ok;result={envelope['result']};risk={envelope['risk_level']};path={target}"
-    )
-    sys.exit(0)
+    emit_and_validate_or_exit(envelope, step_id=step_id, output_path=output_path)
 
 
 # ─────────────────────────────────────────────────────────
@@ -1611,15 +1518,11 @@ def run_security_gate_cli(
       * exit 1  — operational error (write failed, schema unreadable).
     """
     try:
-        from .security_gate_runner import (
-            SecurityGateInput,
-            run_security_gate,
-        )
+        from .security_gate_runner import SecurityGateInput, run_security_gate
+        from .gate_runner_common import emit_and_validate_or_exit
     except ImportError:  # pragma: no cover — direct-script fallback
-        from security_gate_runner import (  # type: ignore[no-redef]
-            SecurityGateInput,
-            run_security_gate,
-        )
+        from security_gate_runner import SecurityGateInput, run_security_gate  # type: ignore[no-redef]
+        from gate_runner_common import emit_and_validate_or_exit  # type: ignore[no-redef]
 
     spec = SecurityGateInput(
         gate_id=gate_id,
@@ -1633,41 +1536,8 @@ def run_security_gate_cli(
         gate_subtype=gate_subtype,
         produced_by=produced_by,
     )
-
     envelope = run_security_gate(spec)
-    pre_errors = _validate_gate_result_payload(envelope)
-    if pre_errors:
-        joined = " | ".join(pre_errors)
-        print(f"reason=producer_envelope_invalid;detail={joined}")
-        sys.exit(41)
-
-    target = Path(output_path) if output_path else Path.cwd() / f"{step_id}.gate-result.json"
-    try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(
-            json.dumps(envelope, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-    except OSError as exc:
-        print(f"reason=persist_failed;detail={exc}")
-        sys.exit(1)
-
-    try:
-        on_disk = json.loads(target.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"reason=persist_readback_failed;detail={exc}")
-        sys.exit(1)
-
-    post_errors = _validate_gate_result_payload(on_disk)
-    if post_errors:
-        joined = " | ".join(post_errors)
-        print(f"reason=gate_result_schema_invalid;detail={joined}")
-        sys.exit(41)
-
-    print(
-        f"status=ok;result={envelope['result']};risk={envelope['risk_level']};path={target}"
-    )
-    sys.exit(0)
+    emit_and_validate_or_exit(envelope, step_id=step_id, output_path=output_path)
 
 
 # ─────────────────────────────────────────────────────────
@@ -1706,15 +1576,11 @@ def run_qa_gate_cli(
       * exit 1  — operational error.
     """
     try:
-        from .qa_gate_runner import (
-            QAGateInput,
-            run_qa_gate,
-        )
+        from .qa_gate_runner import QAGateInput, run_qa_gate
+        from .gate_runner_common import emit_and_validate_or_exit
     except ImportError:  # pragma: no cover — direct-script fallback
-        from qa_gate_runner import (  # type: ignore[no-redef]
-            QAGateInput,
-            run_qa_gate,
-        )
+        from qa_gate_runner import QAGateInput, run_qa_gate  # type: ignore[no-redef]
+        from gate_runner_common import emit_and_validate_or_exit  # type: ignore[no-redef]
 
     spec = QAGateInput(
         gate_id=gate_id,
@@ -1729,41 +1595,8 @@ def run_qa_gate_cli(
         produced_by=produced_by,
         coverage_threshold=coverage_threshold,
     )
-
     envelope = run_qa_gate(spec)
-    pre_errors = _validate_gate_result_payload(envelope)
-    if pre_errors:
-        joined = " | ".join(pre_errors)
-        print(f"reason=producer_envelope_invalid;detail={joined}")
-        sys.exit(41)
-
-    target = Path(output_path) if output_path else Path.cwd() / f"{step_id}.gate-result.json"
-    try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(
-            json.dumps(envelope, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-    except OSError as exc:
-        print(f"reason=persist_failed;detail={exc}")
-        sys.exit(1)
-
-    try:
-        on_disk = json.loads(target.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"reason=persist_readback_failed;detail={exc}")
-        sys.exit(1)
-
-    post_errors = _validate_gate_result_payload(on_disk)
-    if post_errors:
-        joined = " | ".join(post_errors)
-        print(f"reason=gate_result_schema_invalid;detail={joined}")
-        sys.exit(41)
-
-    print(
-        f"status=ok;result={envelope['result']};risk={envelope['risk_level']};path={target}"
-    )
-    sys.exit(0)
+    emit_and_validate_or_exit(envelope, step_id=step_id, output_path=output_path)
 
 
 # ─────────────────────────────────────────────────────────
