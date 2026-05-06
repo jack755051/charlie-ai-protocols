@@ -538,17 +538,17 @@ runtime artifact
 
 需要完成：
 
-- [ ] `cap promote list`
-- [ ] `cap promote inspect <artifact>`
-- [ ] `cap promote <artifact> <repo-path>`
-- [ ] `cap promote project-constitution <snapshot-id>`
-- [ ] `cap promote workflow <compiled-workflow-id>`
-- [ ] source artifact metadata
-- [ ] target path policy
-- [ ] overwrite protection
-- [ ] diff preview
-- [ ] validation after promote
-- [ ] trace record
+- [x] `cap promote list` — generic escape hatch（`scripts/cap-promote.sh`，從 v0.x 早期就存在）
+- [x] `cap promote inspect <artifact>` — done in P10 #3 (`3d8f352`)，read-only 三層 resolution + `--json` text/json output
+- [x] `cap promote <artifact> <repo-path>` — generic escape hatch；不走 typed validation pipeline，文件標明邊界（`docs/cap/PROMOTE-LIFECYCLE.md` §6）
+- [x] `cap promote project-constitution <snapshot-id>` — done in P10 #4 (`7361ebe`)，dry-run / apply / force / backup / validation / rollback
+- [x] `cap promote workflow <compiled-workflow-id>` — done in P10 #5 (`7506cea`)，共用 P10 #4 的 apply framework 只差 `expected_artifact_type`
+- [x] source artifact metadata — `policies/runtime-promote.md` §5.2 訂 candidate 形狀；P10 #2.1 (`e8054a5`) 把 `schemas/workflow-result.schema.yaml.promote_candidates[]` migrate 到嚴格 contract（required: `source_path`/`target_path`/`artifact_type`/`reason`，artifact_type enum 限制 `[project_constitution, compiled_workflow]`）；P10 #2.2 (`7ea621d`) 引入 `engine/promote_candidate_producer.py:produce_candidates(...)` 取代 P0 hard-coded `[]`
+- [x] target path policy — `policies/runtime-promote.md` §3：constitution 唯一寫 `<project_root>/.cap/constitution.yaml`（namespaced，**不寫** legacy）；workflow 唯一寫 `<project_root>/.cap/workflows/<workflow_id>.yaml`；禁 partial override（對齊 P9 §4.3）
+- [x] overwrite protection — policy §4 / `apply_promote`：dry-run-first 預設、byte-equal `identical` short-circuit、diff 無 `--force` halt、`--force` 一定先寫 `<target>.bak.<ISO>` backup（policy §4.3 永不自動 prune）
+- [x] diff preview — `cap promote inspect <id>` 顯示 `conflict_kind` 三 enum (`no_target` / `identical` / `diff`)、預期 backup 路徑模板、validation schema、smoke plan；text + JSON 雙 mode；resolver 用 `filecmp.cmp(shallow=False)` 真比 byte
+- [x] validation after promote — done in P10 #6 (shared framework in `engine/promote_apply.py:_validate_target_via_step_runtime` + `_rollback_target`)：schema validation always-on，失敗自動 rollback；P10 #4 + #5 兩種 artifact_type 都驗過 framework；optional `--smoke` flag（policy §6.3 compile/bind smoke）暫不實作 v1
+- [x] trace record — `apply_promote` 回 `ApplyResult` dataclass 含 `action` 11 enum + `error` / `detail` / `validation` / `backup_path` 等可審計欄位；CLI text mode 五段 (Header / Source / Target / Backup / Validation)，JSON mode 形狀穩定供腳本消費
 
 ## 14. Phase 12: Background Runtime
 

@@ -554,14 +554,16 @@
   - 對齊 `policies/runtime-promote.md` §6
   - 進度：done as **shared framework in `engine/promote_apply.py`**，由 P10 #4 引入、P10 #5 共用同一路徑（兩種 artifact_type 都驗過）。`_validate_target_via_step_runtime(target_path, validation_schema, *, cap_root)` 載入 target（YAML / JSON 自動偵測）+ schema、跑 `jsonschema.Draft202012Validator`（缺套件時 fallback `engine.step_runtime.validate_jsonschema_fallback`），回 canonical `{"ok": bool, "errors": list[str]}`。`_rollback_target(target, backup_path, target_existed_before)` 三 branch：原本不存在 → `unlink(missing_ok=True)` 清新檔；原本存在 + backup → `shutil.copy2` 從 backup 還原；原本存在但無 backup → 回 fail 讓 caller 印 `rollback_failed` warning。Apply 流程在 `apply_promote` 結尾自動串：寫完 target → validate → fail 即 rollback → 視 rollback 結果輸出 `validation_failed_rolled_back` 或 `validation_failed_rollback_failed` 兩種 action。**測試覆蓋**：P10 #4 case 9（constitution invalid → validation_failed_rolled_back，target 還原為 pre-apply state）+ P10 #5 case 6（compiled workflow invalid → validation_failed_rolled_back，no_target rollback 用 `unlink` 清掉 fresh write）跨 artifact_type 都驗過 framework；後續若新 artifact_type 加入 promote scope，只要 candidate 帶 `validation_schema` 就自動套用同一路徑。**選配 `--smoke` flag**（policy §6.3 compile / bind smoke）**未實作 v1**；schema validation 為 default always-on 已涵蓋核心治理需求，smoke 等到真實使用情境出現再加。
 
-- [ ] **P10 #7**：promote docs + examples
+- [x] **P10 #7**：promote docs + examples
   - 交付物：使用者面向文件
   - 驗收：promote lifecycle、`inspect → promote → validate` 流程、project constitution / workflow 範例、runtime archive vs repo SSOT 邊界說明
   - 對齊 `policies/runtime-promote.md` §8 / §10
+  - 進度：done。**新增 `docs/cap/PROMOTE-LIFECYCLE.md`** — 12 段使用者面向操作指南：(§1) runtime archive vs repo SSOT 邊界、(§2) lifecycle 三步走 ASCII 流程圖、(§3-§5) 三條 typed CLI (`inspect` / `project-constitution` / `workflow`) 含每條 flag 用法 + JSON 形狀範例、(§6) generic `cap promote list` / `<src> <dst>` 兩條 escape hatch 明確標**不走 typed validation pipeline**，警告不要當主要 promote 入口、(§7) 共用 flag 表（`--apply` / `--force` / `--json` / `--project-root` / `--cap-home` / `--project-id`）、(§8) backup 命名 + validation 引擎 + rollback 三 branch 的對應表、(§9) action enum 速查表（13 個 action 對應 repo 是否被改）、(§10) 與 P7 / P9 / archive 的銜接、(§11) 常見 FAQ、(§12) 腳本消費 `--json` 的穩定欄位清單。**更新 `docs/cap/IMPLEMENTATION-ROADMAP.md`** — Phase 11 promote 段 11 個 `[ ]` 全部翻 `[x]` 並對每條 cross-reference commit hash + policy / 文件位置；source artifact metadata、target path policy、overwrite protection、diff preview、validation after promote、trace record 都標明對應 commit / `policies/runtime-promote.md` 段落。
 
-- [ ] **P10 #8**：tests
+- [x] **P10 #8**：tests
   - 交付物：focused test suites
   - 驗收：promote candidate producer / inspect CLI / project-constitution promote regression / workflow promote / validation failure rollback 全覆蓋
+  - 進度：done。Focused tests 已隨 #2-#5 commit 落地（`test-promote-candidate-producer.sh` 24 / `test-cap-promote-inspect.sh` 32 / `test-cap-promote-project-constitution.sh` 37 / `test-cap-promote-workflow.sh` 32 / `test-workflow-result-schema.sh` 12 = 137 assertions），本 commit 把 4 個 P10-specific 接進 `scripts/workflows/smoke-per-stage.sh`（`test-workflow-result-schema.sh` 自 P0 #5 即已在 smoke）：第 37-40 個 step 為 P10 #2.2 / #3 / #4+#6 / #5+#6。**踩坑修正**：smoke run 揭露 21 個非 P10 的 test 因 git tracked file 缺 `+x` permission 被 harness 直接跳過，作為 P10 closeout 一併修補（`chmod +x` 純檔案 mode 修復，無功能變動）。修補前 smoke 43 pass / 29 fail，修補後 61 pass / 11 fail，新增的 18 通過全是「unable to invoke」的 chmod 問題；剩 11 fail 為 pre-existing P1/P2/P3/P6/P8 環境依賴 e2e（CAP 安裝 / project state / harness 假設），**與 P10 無關**。本 commit 為 docs + smoke wiring + chmod 修復，**未引入新功能**，符合 closeout 收斂範圍。
 
 ### Deferred to a later cycle (out of v1 promote scope)
 

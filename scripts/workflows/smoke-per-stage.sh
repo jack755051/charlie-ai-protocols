@@ -48,6 +48,10 @@
 #  34. tests/e2e/test-supervisor-orchestration-release-gate.sh  (P3 #8 release gate: end-to-end envelope flow across all P3 modules + binding ready)
 #  35. tests/e2e/test-project-spec-pipeline-deterministic.sh     (must report all-pass)
 #  36. tests/e2e/test-ticket-consumption.sh                      (must report all-pass)
+#  37. tests/scripts/test-promote-candidate-producer.sh          (P10 #2.2 producer; populates workflow-result.promote_candidates[])
+#  38. tests/scripts/test-cap-promote-inspect.sh                 (P10 #3 read-only inspect + shared resolver)
+#  39. tests/scripts/test-cap-promote-project-constitution.sh    (P10 #4 + #6 apply/backup/validation/rollback for project_constitution)
+#  40. tests/scripts/test-cap-promote-workflow.sh                (P10 #5 + #6 apply/backup/validation/rollback for compiled_workflow)
 #
 # Resolution order for the bind command:
 #   1. `cap` on PATH (installed via cap installer)
@@ -245,6 +249,10 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-compile-task-from-envelope.sh" "com
 run_fixture "${REPO_ROOT}/tests/e2e/test-supervisor-orchestration-release-gate.sh" "supervisor orchestration release-gate e2e (P3 #8)"
 run_fixture "${REPO_ROOT}/tests/e2e/test-project-spec-pipeline-deterministic.sh" "spec-pipeline deterministic e2e"
 run_fixture "${REPO_ROOT}/tests/e2e/test-ticket-consumption.sh" "ticket consumption e2e"
+run_fixture "${REPO_ROOT}/tests/scripts/test-promote-candidate-producer.sh" "promote_candidate_producer (P10 #2.2)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-cap-promote-inspect.sh" "cap promote inspect (P10 #3)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-cap-promote-project-constitution.sh" "cap promote project-constitution apply / backup / validation / rollback (P10 #4 + #6)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-cap-promote-workflow.sh" "cap promote workflow apply / backup / validation / rollback (P10 #5 + #6)"
 
 echo ""
 echo "----------------------------------------------------------------"
