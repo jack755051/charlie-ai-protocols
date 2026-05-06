@@ -162,7 +162,7 @@ except CompiledWorkflowSchemaError as exc:
     print('error_head=' + exc.errors[0])
 ")"
 assert_contains "halt at post_build (not silently filled)" "stage=post_build" "${out4}"
-assert_contains "missing schema_version still surfaced"    "missing required field 'schema_version'" "${out4}"
+assert_contains "missing schema_version still surfaced"    "'schema_version' is a required property" "${out4}"
 
 # ── Summary ─────────────────────────────────────────────────────────────
 echo ""

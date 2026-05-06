@@ -345,9 +345,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
+    # absolute() not resolve(): cap-paths.sh writes origin_path as logical PWD;
+    # resolve() would diverge on macOS where /var → /private/var.
     report = build_doctor_report(
-        project_root=args.project_root.resolve(),
-        cap_home=args.cap_home.resolve() if args.cap_home else None,
+        project_root=args.project_root.absolute(),
+        cap_home=args.cap_home.absolute() if args.cap_home else None,
         project_id_override=args.project_id,
         stale_days=args.stale_days,
         fix_requested=args.fix,

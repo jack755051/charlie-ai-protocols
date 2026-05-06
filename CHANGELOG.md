@@ -6,6 +6,36 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.22.0-rc17] - 2026-05-06
+
+> Release candidate — fix the 11 pre-existing smoke failures inherited by rc16. Smoke goes from **61 pass / 11 fail** (rc16) to **72 pass / 0 fail** (rc17). The fixes are infrastructure-only — no new features, no schema changes, no policy changes; rc17 is the first rc that runs cleanly end-to-end on a fresh checkout.
+
+### Fixed
+
+- **Smoke `+x` regression — 5 product cap-* scripts checked in as `100644`**：`scripts/cap-task.sh` / `cap-workflow.sh` / `cap-promote.sh` / `cap-release.sh` / `cap-registry.sh` 在 git index 是 `100644`（不可執行）但 smoke 假設它們可直接 `bash -c` / `exec`；rc16 closeout 的 chmod 修補（`b32bdee`）只 cover 21 個 test 腳本，product script 漏修。`git update-index --chmod=+x` 一次補齊，去掉 4 個 smoke step 的 `not executable` / `missing` halt。
+
+- **macOS symlink mismatch — Python `.resolve()` 與 bash logical PWD 不一致** (`engine/project_status.py` / `project_doctor.py` / `storage_health.py`)：CLI 入口呼 `args.project_root.resolve()` 跟 `args.cap_home.resolve()`，在 macOS sandbox（`mktemp -d` 路徑落在 `/var/folders/...`，是 `/private/var` 的 symlink）會把 logical path resolve 成 physical path；但 `scripts/cap-paths.sh:find_project_root` 用 `${PWD}`（logical），把 logical path 寫進 `.identity.json:origin_path`。下一次 status / doctor 比對時 `ledger_origin = /var/...` vs `current_origin = /private/var/...` 就誤判 `ledger_origin_mismatch` exit 53。三檔三個入口統一改成 `.absolute()`（純去 `~` 與 relative，不 follow symlink），並在每個 callsite 留 inline comment 解釋 SSOT。生產 repo（`/Users/...`）行為不變；只修正 sandbox false-collision。
+
+- **P0c config namespace 漏網 — storage health 沒走 namespace fallback** (`engine/storage_health.py:run_health_check`)：P0c 把 project config 從 legacy `<root>/.cap.project.yaml` 搬到 namespaced `<root>/.cap/project.yaml`；`ProjectContextLoader.load()` 早就 prefer-namespaced + fallback-legacy（line 71-79），但 `run_health_check` 內 inline `cfg_path = loader.base_dir / loader.DEFAULT_PROJECT_CONFIG`（**只看 legacy 路徑**），跳過了 namespace 檢查。結果 `cap project init` 寫到 namespaced 後，下一次 `cap project status` 找不到 project_id config → 走 git_basename / basename_legacy / fallback fail 路徑。修補後鏡射 `loader.load()` 的 namespace-first lookup（`namespaced_cfg.is_file() ? namespaced : legacy`），與 `cap-paths.sh:read_project_id_from_config` SSOT 對齊。
+
+- **`jsonschema` 缺 declared dep — 4 個 schema test 在沒裝的環境誤觸 fallback** (`engine/requirements.txt`)：`engine/{compiled_workflow,binding_report,project_constitution,supervisor_envelope}_validator.py` 用 `jsonschema.Draft202012Validator`，靠 `try-except ImportError` fallback 到 `fallback_required_only`（純 required-key check）。但 `requirements.txt` 從未 declare `jsonschema` 為 dep；不同機器跑出不同結果（裝過：`'X' is a required property`；沒裝：`missing required field 'X'`）。加 `jsonschema>=4,<5` 為 hard dep。
+
+- **Schema test fixture — 對齊 `jsonschema` 真實錯誤訊息**（4 個 test 檔）：`tests/scripts/test-compiled-workflow-validation-hook.sh` / `test-binding-report-validation-hook.sh` / `test-compiled-workflow-normalization.sh` 的 missing-field 斷言改 `'schema_version' is a required property`（jsonschema 標準訊息）；`triggers minItems error` 接受 `'should be non-empty'`（jsonschema Draft 2020-12 minItems 訊息）。`tests/e2e/test-supervisor-orchestration-release-gate.sh` 的 9-key shape 改 10-key（多了 `preflight_report`，這是 P4 #10 加進去的，rc16 漏更新 fixture）。
+
+### Verified
+
+- Full smoke (`scripts/workflows/smoke-per-stage.sh`) **72 pass / 0 fail / 0 skipped**（rc16 是 61/11/0；rc17 拿掉 11 個 pre-existing fail）。
+- 17 個 P10 / P9 / P7 dedicated suite 全綠（與 rc16 一致零 regression）。
+- Token-free dogfood：`cap project status` / `cap project doctor` 在當前 repo 上 `health_status=ok` / `errors=0`；`cap promote inspect bogus-id` 正確回 `promote_artifact_not_found` exit 1。
+
+### Notes
+
+- rc17 不引入新功能、不改 policy、不改 schema、不改 CLI surface。所有變動都是把 rc16 closeout review §3 列為 deferred 的「P1/P2/P3/P6/P8 環境依賴 e2e」翻成 PASS。
+- rc17 是第一個在 fresh checkout（裝完 `engine/requirements.txt` 後）就能 72/72 通過 smoke 的 rc。**這是把 rc 升 v0.22.0 GA 前的最後 blocker**。
+- 升 GA 前還剩兩件人工確認的事：(1) 跑一次 live AI dogfood（`cap workflow run project-constitution` 含 token）→ 證明 spec pipeline 在真實 LLM 下穩定；(2) 至少一週的 user dogfood feedback gathering（rc17 ship 後）。
+
+---
+
 ## [v0.22.0-rc16] - 2026-05-06
 
 > Release candidate — close out P10 Detached Runtime and Promote / Publish AND deliver the v0.22 platform-level closeout review covering P0–P10 in one document. Aggregate 7 commits since rc15 (3× docs + 4× feat) into the typed promote surface (`cap promote inspect / project-constitution / workflow`) plus a single SSOT for "what CAP can do now" → `docs/cap/PLATFORM-CLOSEOUT-v0.22.md`. P10 全段 8/8 sub-items 完成；剩下 deferred items（detached runtime / publish / `--smoke` flag）明確列在 closeout review §3.

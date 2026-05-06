@@ -6,3 +6,6 @@ python-dotenv>=1,<2
 
 # Workflow 定義解析
 PyYAML>=6,<7
+
+# Schema 驗證（compiled-workflow / binding-report / project-constitution / supervisor-envelope）
+jsonschema>=4,<5

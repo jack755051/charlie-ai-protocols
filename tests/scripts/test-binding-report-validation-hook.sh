@@ -113,7 +113,7 @@ except BindingReportSchemaError as exc:
     print('error_head=' + exc.errors[0])
 ")"
 assert_contains "raised at post_bind"           "stage=post_bind"                                  "${out2}"
-assert_contains "missing-field error surfaced"  "missing required field 'schema_version'"          "${out2}"
+assert_contains "missing-field error surfaced"  "'schema_version' is a required property"          "${out2}"
 
 # ── Case 3 ──────────────────────────────────────────────────────────────
 echo "Case 3: binding_status not in enum → halt at post_bind"

@@ -537,7 +537,12 @@ def run_health_check(
         project_id = project_id_override
     else:
         loader = ProjectContextLoader(base_dir=project_root)
-        cfg_path = loader.base_dir / loader.DEFAULT_PROJECT_CONFIG
+        # Mirror loader.load() namespace lookup: prefer .cap/project.yaml,
+        # fall back to legacy .cap.project.yaml. Same contract as
+        # scripts/cap-paths.sh:read_project_id_from_config.
+        namespaced_cfg = loader.base_dir / loader.DEFAULT_PROJECT_CONFIG_NAMESPACED
+        legacy_cfg = loader.base_dir / loader.DEFAULT_PROJECT_CONFIG
+        cfg_path = namespaced_cfg if namespaced_cfg.is_file() else legacy_cfg
         cfg = loader._load_yaml(cfg_path)  # noqa: SLF001 — intentional reuse
         try:
             project_id, _ = loader._resolve_project_id(cfg)  # noqa: SLF001
@@ -658,9 +663,12 @@ def _format_text(report: StorageHealthReport) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
+    # absolute() not resolve(): cap-paths.sh writes origin_path as logical PWD
+    # (no symlink resolution); resolve() would diverge on macOS where
+    # /var → /private/var, causing false ledger_origin_mismatch.
     report = run_health_check(
-        project_root=args.project_root.resolve(),
-        cap_home=args.cap_home.resolve() if args.cap_home else None,
+        project_root=args.project_root.absolute(),
+        cap_home=args.cap_home.absolute() if args.cap_home else None,
         project_id_override=args.project_id,
         stale_days=args.stale_days,
     )

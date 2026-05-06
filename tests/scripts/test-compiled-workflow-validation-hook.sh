@@ -117,7 +117,7 @@ except CompiledWorkflowSchemaError as exc:
     print('error_head=' + exc.errors[0])
 ")"
 assert_contains "raised at post_build"        "stage=post_build"                                  "${out2}"
-assert_contains "missing-field error surfaced" "missing required field 'schema_version'"          "${out2}"
+assert_contains "missing-field error surfaced" "'schema_version' is a required property"          "${out2}"
 
 # ── Case 3 ──────────────────────────────────────────────────────────────
 echo "Case 3: version=99 (enum violation) → halt at post_build"
@@ -166,7 +166,7 @@ try:
 except CompiledWorkflowSchemaError as exc:
     print('stage=' + exc.stage)
     for e in exc.errors:
-        if 'triggers' in e and ('minItems' in e or 'too short' in e.lower()):
+        if 'triggers' in e and ('minItems' in e or 'too short' in e.lower() or 'should be non-empty' in e.lower()):
             print('triggers_minitems_error_present')
             break
 ")"

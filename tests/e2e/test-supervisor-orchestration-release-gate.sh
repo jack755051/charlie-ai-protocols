@@ -241,8 +241,8 @@ print('keys=' + ','.join(sorted(out.keys())))
 print('routing_count=' + str(len(out['failure_routing_resolved'])))
 print('routing_tech_source=' + out['failure_routing_resolved'][1]['source'])
 ")"
-assert_contains "case 0 compile output 9-key shape" \
-  "keys=binding,capability_graph,compile_hints_applied,compiled_workflow,failure_routing_resolved,plan,project_context,task_constitution,unresolved_policy" \
+assert_contains "case 0 compile output 10-key shape" \
+  "keys=binding,capability_graph,compile_hints_applied,compiled_workflow,failure_routing_resolved,plan,preflight_report,project_context,task_constitution,unresolved_policy" \
   "${compile_out}"
 assert_contains "case 0 compile resolved 2 routes" "routing_count=2" "${compile_out}"
 assert_contains "case 0 compile carries override label" \
