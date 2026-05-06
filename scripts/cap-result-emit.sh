@@ -60,8 +60,18 @@ cap_result_emit() {
   tmp_json="$(mktemp -t cap-result-emit-XXXXXX.json)"
   tmp_md="$(mktemp -t cap-result-emit-XXXXXX.md)"
 
+  # P10 #2.2 — pass project_root through so promote_candidate_producer
+  # can compute target_path. Resolves to bash's CAP_ROOT helper output
+  # (set by cap-workflow-exec.sh; mirrors PROJECT_ROOT) so the candidate
+  # target_paths land in the user's repo, not wherever the wrapper
+  # subshell happened to start.
+  local project_root_arg="${CAP_PROJECT_ROOT:-}"
+  if [ -z "${project_root_arg}" ] && command -v bash >/dev/null 2>&1 && [ -f "${repo_root}/scripts/cap-paths.sh" ]; then
+    project_root_arg="$(bash "${repo_root}/scripts/cap-paths.sh" get project_root 2>/dev/null || true)"
+  fi
+
   PYTHONPATH="${repo_root}" "${python_bin}" - \
-      "${run_dir}" "${cap_home}" "${status_file}" "${tmp_json}" "${tmp_md}" \
+      "${run_dir}" "${cap_home}" "${status_file}" "${tmp_json}" "${tmp_md}" "${project_root_arg}" \
       <<'PY' 2>>"${workflow_log}"
 import json
 import sys
@@ -69,12 +79,13 @@ from pathlib import Path
 
 from engine.result_report_builder import build_workflow_result, render_result_md
 
-run_dir, cap_home, status_file, out_json, out_md = sys.argv[1:6]
+run_dir, cap_home, status_file, out_json, out_md, project_root = sys.argv[1:7]
 try:
     result = build_workflow_result(
         run_dir,
         cap_home=cap_home or None,
         status_file=status_file or None,
+        project_root=project_root or None,
     )
 except Exception as exc:  # noqa: BLE001 — log-only fallback path.
     print(f"result_report_builder error: {exc}", file=sys.stderr)

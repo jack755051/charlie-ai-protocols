@@ -61,6 +61,7 @@ def build_workflow_result(
     *,
     cap_home: Optional[Path | str] = None,
     status_file: Optional[Path | str] = None,
+    project_root: Optional[Path | str] = None,
 ) -> dict[str, Any]:
     """Aggregate run_dir SSOT into a workflow-result dict.
 
@@ -75,6 +76,14 @@ def build_workflow_result(
             ``failures[*].route_back_to`` falls back to ``None``.
         status_file: Optional path to ``workflow-runs.json`` (typically
             ``<cap_home>/projects/<id>/workflow-runs.json``).
+        project_root: Optional override for ``$CAP_PROJECT_ROOT``.
+            P10 #2 promote candidate producer uses this to compute
+            each candidate's ``target_path`` (where in the repo the
+            artifact would land). When ``None`` the producer falls
+            through to the ``CAP_PROJECT_ROOT`` env var or
+            ``Path.cwd()`` — same precedence as the P9
+            ``WorkflowLoader`` / ``RuntimeBinder`` constructors so a
+            single env var configures both layers.
             Best-effort future-compatible linkage: the current
             ``step_runtime.update_status`` producer does NOT write
             per-run ``task_id`` into ``runs[]`` (it only maintains the
@@ -132,7 +141,6 @@ def build_workflow_result(
     handoff_tickets = _load_handoff_tickets(cap_home, project_id)
     failures = _build_failures(steps, sessions, handoff_tickets)
 
-    promote_candidates: list[dict[str, Any]] = []  # v1: always empty (P10 owns producer).
     logs = _build_logs(run_dir_path)
     task_id = _resolve_task_id(status_file, run_id)
     inputs = _resolve_input_pointers(cap_home, project_id, workflow_id)
@@ -156,10 +164,49 @@ def build_workflow_result(
     result["total_duration_seconds"] = total_duration
     result["final_result"] = final_result
     result["failures"] = failures
-    result["promote_candidates"] = promote_candidates
+    # P10 #2.2 — promote_candidates was hard-coded ``[]`` from P0
+    # through rc15. Now produced by promote_candidate_producer
+    # against the partially-assembled result dict (everything except
+    # promote_candidates itself); empty list when nothing on disk
+    # qualifies, which matches the legacy behaviour for run_dirs
+    # that were never task-scoped or whose final_state is not
+    # ``completed`` (compiled_workflow gate).
+    result["promote_candidates"] = _produce_promote_candidates(
+        result, project_root=project_root, cap_home=cap_home
+    )
     result["logs"] = logs
     result["inputs"] = inputs
     return result
+
+
+def _produce_promote_candidates(
+    result: dict[str, Any],
+    *,
+    project_root: Optional[Path | str],
+    cap_home: Optional[Path | str],
+) -> list[dict[str, Any]]:
+    """Defer to ``promote_candidate_producer.produce_candidates``.
+
+    Wrapped behind a thin local helper so that:
+
+    * The import lives inside ``build_workflow_result`` callers' code
+      path only (avoids a top-level circular-import risk if the
+      producer ever needs to import builder helpers).
+    * If the producer module is unavailable (degraded install) or
+      raises unexpectedly, the builder degrades to ``[]`` instead
+      of bringing the whole result-emit path down. Promote
+      candidates are advisory; their absence never blocks a run.
+    """
+    try:
+        from engine.promote_candidate_producer import produce_candidates
+    except ImportError:
+        return []
+    try:
+        return produce_candidates(
+            result, project_root=project_root, cap_home=cap_home
+        )
+    except Exception:  # noqa: BLE001 — degrade silently per policy §5.3 spirit.
+        return []
 
 
 def render_result_md(result: dict[str, Any]) -> str:
