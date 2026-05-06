@@ -483,7 +483,7 @@
 
 ## P9：Repo-specific Source Resolver
 
-- [ ] 執行 skills method intake（不阻塞 P0-P10 主線）
+- [x] 執行 skills method intake（不阻塞 P0-P10 主線）
   - 交付物：將 `/Users/charlie010583/Desktop/01_private/98_other_skills/skills` 中高價值工程方法改寫為 CAP strategies，而不是直接導入 Claude plugin / slash-command runtime
   - 初始 strategy 清單：
     - `agent-skills/strategies/diagnose-loop.md`
@@ -493,6 +493,7 @@
     - `agent-skills/strategies/vertical-slice-planning.md`
   - 驗收：現有 agent prompt 明確掛載這些 strategy（troubleshoot / QA / frontend / backend / supervisor / techlead / watcher），且不新增第二套 skill resolver
   - 延後：Codex / Claude 原生 `SKILL.md` export、mapper 擴充、plugin / marketplace 安裝流程留到 builtin / project / shared source resolver 完成後再做
+  - 進度：done as **methodology-strategy 改寫**（distilled from external SKILL.md，不複製、不導入 plugin runtime）。新增 5 個 strategy：(1) `diagnose-loop.md` 改寫自 `engineering/diagnose`，六段流程含 Phase 1 feedback loop / 3-5 ranked falsifiable hypotheses / `[DEBUG-...]` 標記 / regression test 必須在 correct seam。(2) `tdd-vertical-slice.md` 改寫自 `engineering/tdd`，紅綠重構 + tracer bullet + 反 horizontal slice。(3) `shared-language-and-adr.md` 改寫自 `engineering/grill-with-docs`，`CONTEXT.md` SSOT + ADR 三條鐵律（hard-to-reverse / surprising without context / real trade-off 同時成立才開）。(4) `architecture-deepening.md` 改寫自 `engineering/improve-codebase-architecture`，嚴格 glossary（Module / Interface / Depth / Seam / Adapter / Leverage / Locality）+ deletion test + one-vs-two-adapters 規則。(5) `vertical-slice-planning.md` 整合 `engineering/to-prd` 模組草圖思路 + tdd tracer bullet 概念，PRD 結構 + module sketch + slice 切分。**Mounting**（7 個 agent）：`10-troubleshoot-agent.md` §5 掛 diagnose-loop（後續銜接 architecture-deepening）；`07-qa-agent.md` §4 掛 tdd-vertical-slice + diagnose-loop；`04-frontend-agent.md` §5 掛 tdd-vertical-slice + vertical-slice-planning；`05-backend-agent.md` §5 掛 tdd-vertical-slice + vertical-slice-planning；`01-supervisor-agent.md` §4 掛 vertical-slice-planning + shared-language-and-adr + architecture-deepening；`02-techlead-agent.md` §5 掛 vertical-slice-planning + architecture-deepening + shared-language-and-adr；`90-watcher-agent.md` §5 把三個與稽核強相關的 strategy（tdd-vertical-slice / architecture-deepening / shared-language-and-adr）轉寫為 audit checkpoint，本 agent 不執行 strategy 但發現違規一律標 `品質異常`。**邊界**：純 markdown 文件，不新增 skill resolver、不改 factory.py glob 行為（`*-agent.md` 規則維持）；strategies/ 仍為 framework / methodology 細節而非 agent。下游 4 條 P9 sub-item（resolver / source roots / source metadata / allowed roots enforcement）的 runtime 實作排在 P9 #2-#5。
 
 - [ ] 支援 repo-local workflow source roots
   - 交付物：workflow resolver

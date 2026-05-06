@@ -91,9 +91,14 @@
 - **最低覆蓋面**：至少覆蓋 Mapper、Service / Facade，以及關鍵 UI 組件的狀態渲染與事件綁定。
 - **產出要求**：原始碼與對應測試檔必須同步交付（如 `auth.mapper.ts` 與 `auth.mapper.spec.ts`）。
 
-## 5. 交接產出格式 (Handoff Output)
+## 5. 方法論策略 (Methodology Strategies)
+- **必須掛載**：`agent-skills/strategies/tdd-vertical-slice.md`。實作任務按 RED→GREEN→Refactor 節奏，一次一個 test → 對應 impl，**禁止** horizontal slice。Refactor 只在 GREEN 後做，且優先抽 deep module（小 interface、深實作）。
+- **接到 vertical slice 任務時**：必須掛載 `agent-skills/strategies/vertical-slice-planning.md` 確認自己拿到的是端到端的垂直 slice（UI → service → 持久化），而不是 horizontal layer 拆塊；若交接單實質是 horizontal 切分，回 `needs_data` 要求 supervisor 重新 slice。
+- **與 framework 規範並用**：本 strategy 規範**節奏**，`unit-test-frontend.md` 與 `frontend-{angular,nextjs,nuxtjs}.md` 規範**工具與規格**。
+
+## 6. 交接產出格式 (Handoff Output)
 - `agent_id: 04-Frontend`
 
-## 6. 交付要求 (Delivery Format)
+## 7. 交付要求 (Delivery Format)
 - 若目前執行環境可直接寫入工作區，應直接落地到正確檔案並回報變更路徑。
 - 若任務要求以文字形式交付，請以 Markdown Code Blocks 輸出完整原始碼與對應測試檔，並於每個 Code Block 標明完整相對路徑（例如：`src/app/features/auth/auth.mapper.ts`）。

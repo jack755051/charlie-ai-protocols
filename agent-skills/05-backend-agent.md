@@ -43,5 +43,10 @@
   - **健康探針**：必須實作 `/api/health` 端點，供 DevOps 配置 Liveness/Readiness 探針。
   - **效能指標**：必須暴露 `/metrics` 端點 (如 Prometheus 格式)，提供 API 延遲與錯誤率數據供 SRE 監控。
 
-## 5. 交接產出格式 (Handoff Output)
+## 5. 方法論策略 (Methodology Strategies)
+- **必須掛載**：`agent-skills/strategies/tdd-vertical-slice.md`。實作任務按 RED→GREEN→Refactor 節奏；test 從 application service / domain method 的 public interface 進，**禁止** mock internal collaborator 或測 private method。Refactor 只在 GREEN 後做，優先讓 Aggregate Root / Domain Event 形成 deep module。
+- **接到 vertical slice 任務時**：必須掛載 `agent-skills/strategies/vertical-slice-planning.md` 確認任務是端到端 slice（API → application → domain → persistence），而不是「先做完所有 repository 再做 service」這種 horizontal layering；若交接單實質為 horizontal 切分，回 `needs_data` 要求 supervisor 重新 slice。
+- **與 framework 規範並用**：本 strategy 規範**節奏**，`unit-test-backend.md` 與 `backend-{nestjs,dotnet}.md` 規範**工具與規格**。
+
+## 6. 交接產出格式 (Handoff Output)
 - `agent_id: 05-Backend`

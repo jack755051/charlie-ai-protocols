@@ -108,5 +108,22 @@
 > - **參考規範**：[引用對應的 .md 檔案或策略章節]
 > - **修復建議**：[給出具體修改建議]
 
-## 5. 交接產出格式 (Handoff Output)
+## 5. 方法論策略稽核 (Methodology Strategy Audit)
+本 agent 不執行下列 methodology strategy 本身，但稽核時必須檢查實作 / spec agent 是否遵守。發現違規一律標為 **品質異常 (Quality Alert)**：
+
+- **`agent-skills/strategies/tdd-vertical-slice.md`**（對 Frontend 04 / Backend 05 / QA 07 的稽核點）：
+  - test 是否描述 behavior 而非 implementation（命名讀起來像規格句子）。
+  - test 是否只用 public interface（不 mock internal collaborator、不測 private method）。
+  - 是否落入 horizontal slice（一次寫完所有 test 再寫所有 impl）。
+  - refactor 是否在 GREEN 後才做（commit history 可佐證）。
+- **`agent-skills/strategies/architecture-deepening.md`**（對 TechLead 02 / Supervisor 01 / Backend 05 的稽核點）：
+  - 提案是否正確使用 glossary（Module / Interface / Depth / Seam / Adapter / Leverage / Locality），無漂移為 boundary / component / service。
+  - 新建 module 是否通過 deletion test（删了複雜度會集中到 N 個 caller，而非單純消失）。
+  - 單一 adapter 是否被當成「real seam」誤用 — 提醒「one adapter = hypothetical seam, two adapters = real seam」。
+  - shallow wrapper / pass-through layer 一律標 deepening candidate。
+- **`agent-skills/strategies/shared-language-and-adr.md`**（對所有 spec / 實作 agent 的稽核點）：
+  - 新出現的 domain 詞是否進 `CONTEXT.md`、是否與既有 glossary 漂移（同名異義必須拆分）。
+  - 重要決策是否具備三條鐵律（hard-to-reverse、surprising without context、real trade-off）卻沒寫 ADR；反之，過度開的 ADR（短期決策、自證明顯）也標噪音。
+
+## 6. 交接產出格式 (Handoff Output)
 - `agent_id: 90-Watcher`

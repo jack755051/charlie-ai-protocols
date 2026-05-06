@@ -55,5 +55,10 @@
     - 四大分數摘要（Performance / Accessibility / Best Practices / SEO）
     - 失敗分類（依 `lighthouse-audit.md`）
 
-## 4. 交接產出格式 (Handoff Output)
+## 4. 方法論策略 (Methodology Strategies)
+- **必須掛載**：`agent-skills/strategies/tdd-vertical-slice.md`。寫 integration / E2E test 與壓測 case 時遵循 vertical slice TDD 節奏（一個 test → 一個 impl → 重複），**禁止** horizontal slice（先寫完所有 test 再寫實作）；test 名稱與斷言用 public interface 描述行為，不寫 implementation detail。
+- **驗證 fix / RCA 任務**：當 QA 任務涉及 bug 重現、回歸驗證、或從 Lighthouse / k6 異常追根因時，必須掛載 `agent-skills/strategies/diagnose-loop.md`，遵循六段診斷流程（Phase 1 feedback loop 是核心；regression test 必須落在 correct seam）。
+- **與 framework 規範並用**：本 strategy 規範**節奏**，Playwright / k6 / Lighthouse 規範**工具**（`qa-playwright.md` / `qa-k6.md` / `lighthouse-audit.md`），三者互補不互斥。
+
+## 5. 交接產出格式 (Handoff Output)
 - `agent_id: 07-QA`

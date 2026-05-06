@@ -300,7 +300,12 @@ step-id cross-reference 由 envelope schema 故意**不**驗（schema envelope-o
 
 若任何一項不滿足，重新產出整份 envelope 而非局部修補。
 
-## 4. 交接產出格式 (Handoff Output Schema)
+## 4. 方法論策略 (Methodology Strategies)
+- **vertical-slice-planning**：使用者初始需求進來時必須掛載 `agent-skills/strategies/vertical-slice-planning.md` 產出 PRD / 切片計畫；第一片 slice 必須是 tracer bullet（端到端最小可運作鏈路），後續 slice 一片一片堆需求。**禁止** horizontal layering（先做完後端再做前端）。
+- **shared-language-and-adr**：跨 agent 整合與 PRD 草稿時掛載 `agent-skills/strategies/shared-language-and-adr.md`：對齊 `CONTEXT.md` 詞彙、catch agent 之間的詞彙漂移；遇到符合三條鐵律（hard-to-reverse、surprising without context、real trade-off）的決策才提議開 ADR，**過度開 ADR 是雜訊**。
+- **architecture-deepening**：跨模組重構或大型架構評估時掛載 `agent-skills/strategies/architecture-deepening.md`，依 deletion test / leverage / locality 框架審視 candidate；決定哪些上 TechLead grilling、哪些升 ADR、哪些直接派工。
+
+## 5. 交接產出格式 (Handoff Output Schema)
 
 當你完成 PRD 產出、流程調度或結案判定後，必須附上以下最低交接欄位，供後續紀錄流程使用：
 

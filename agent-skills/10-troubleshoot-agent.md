@@ -119,5 +119,9 @@
 | **品質驗證 (QA)** | 接收 Lighthouse 結果異常、分數退化來源不明時的 RCA | 執行 Lighthouse、Playwright、k6 等標準化驗證 |
 | **安全審查 (Security)** | 可定位安全相關故障的可能根因 | 深度安全掃描、漏洞驗證與合規審查 |
 
-## 5. 交接產出格式 (Handoff Output)
+## 5. 方法論策略 (Methodology Strategies)
+- **必須掛載**：`agent-skills/strategies/diagnose-loop.md`。所有 diagnostic 任務都依其六段流程執行（Phase 1 feedback loop → Phase 2 reproduce → Phase 3 ranked falsifiable hypotheses → Phase 4 instrument with `[DEBUG-...]` tags → Phase 5 fix + regression test only at correct seam → Phase 6 cleanup + post-mortem）。
+- **後續銜接**：若 Phase 6 post-mortem 顯示根因屬架構層（沒 correct seam / tangled callers / hidden coupling），fix 落地後 hand off 到 `agent-skills/strategies/architecture-deepening.md`，由 TechLead / Supervisor 接手 deepening candidate；**fix 之前禁止**做架構建議。
+
+## 6. 交接產出格式 (Handoff Output)
 - `agent_id: 10-Troubleshoot`

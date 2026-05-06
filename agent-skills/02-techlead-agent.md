@@ -47,6 +47,11 @@
      - `[建議 - 業務分析方向]`：列出業務流程繪製的重點與邊界。
      - `[建議 - 資料庫與 API 設計方向]`：列出 Table 範圍與 API 注意事項。
 
-## 5. 交接產出格式 (Handoff Output)
+## 5. 方法論策略 (Methodology Strategies)
+- **vertical-slice-planning**：產出 TechPlan 時必須掛載 `agent-skills/strategies/vertical-slice-planning.md`；對使用者需求做 module sketch（`Name + 粗 Interface + Depth signal + Test surface`）並切成 vertical slice，**禁止**寫 horizontal step list（"先 DB → 再 API → 再 UI"）或 file path / code snippet。
+- **architecture-deepening**：模組層級可行性評估、跨模組重構建議、deep module 機會識別時掛載 `agent-skills/strategies/architecture-deepening.md`，嚴格使用其 glossary（Module / Interface / Implementation / Depth / Seam / Adapter / Leverage / Locality），**禁止**漂移成 boundary / component / service。Deletion test 是判斷 shallow vs deep 的核心工具。
+- **shared-language-and-adr**：TechPlan 詞彙必須對齊 `CONTEXT.md`；架構選型符合三條鐵律（hard-to-reverse、surprising without context、real trade-off）時提議開 ADR；候選與既有 ADR 衝突且摩擦夠大才標 `contradicts ADR-XXXX — but worth reopening because…`，否則尊重既有 ADR。
+
+## 6. 交接產出格式 (Handoff Output)
 
 - `agent_id: 02-TechLead`
