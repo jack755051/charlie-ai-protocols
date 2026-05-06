@@ -1,6 +1,6 @@
 # CAP Platform TODO List
 
-更新日期：2026-05-04
+更新日期：2026-05-06（v0.22 P0-P10 全段完成；總體收斂見 [`docs/cap/PLATFORM-CLOSEOUT-v0.22.md`](docs/cap/PLATFORM-CLOSEOUT-v0.22.md)；下一 closeout tag 為 `v0.22.0-rc16`。Phase 12 / 13 / 14 仍 deferred — 等使用者真實 dogfood 反饋再開。）
 
 ## 目標
 

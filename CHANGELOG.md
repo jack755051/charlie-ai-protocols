@@ -6,6 +6,47 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.22.0-rc16] - 2026-05-06
+
+> Release candidate — close out P10 Detached Runtime and Promote / Publish AND deliver the v0.22 platform-level closeout review covering P0–P10 in one document. Aggregate 7 commits since rc15 (3× docs + 4× feat) into the typed promote surface (`cap promote inspect / project-constitution / workflow`) plus a single SSOT for "what CAP can do now" → `docs/cap/PLATFORM-CLOSEOUT-v0.22.md`. P10 全段 8/8 sub-items 完成；剩下 deferred items（detached runtime / publish / `--smoke` flag）明確列在 closeout review §3.
+
+### Added
+
+- **P10 #1 runtime-promote policy SSOT** (`b99b201`)：新增 `policies/runtime-promote.md` v1.0 共 11 段；定 promote 範圍（`project_constitution` + `compiled_workflow` 兩類，run-only / binding report 不可 promote）、target paths（namespaced 唯一寫入）、conflict 四 enum + backup `<target>.bak.<ISO>` 永不自動清、validation always-on + rollback 三 branch、CLI surface (`inspect` / `project-constitution` / `workflow`)、anti-patterns（不靜默 overwrite、不跳過 validation、不 chained promote）。後續 #2-#8 commit 都 cross-reference 本文件。
+
+- **P10 #2.1 schema migration** (`e8054a5`)：`schemas/workflow-result.schema.yaml.promote_candidates[].items` 從 P0 carried 的 loose `(artifact_name, path, target_repo_path, reason)` 改為 §5.2 嚴格契約：required `[source_path, target_path, artifact_type, reason]` + optional `validation_schema` / `source_layer` / `source_revision`，`artifact_type` enum 限制 `[project_constitution, compiled_workflow]`。`tests/scripts/test-workflow-result-schema.sh` Negative 9 / 10 加 2 case（10 → 12 cases）。
+
+- **P10 #2.2 promote candidate producer** (`7ea621d`)：新模組 `engine/promote_candidate_producer.py:produce_candidates(run_result, *, project_root, cap_home)` 取代 P0 hard-coded `[]`。Pure read-only path-existence check：`task_id` + constitution snapshot 存在 → emit `project_constitution`；`workflow_id` + `final_state=="completed"` + 任一 .json/.yaml/.yml 在 compiled-workflows/<id>/ → emit `compiled_workflow`（取 mtime 最新）；`final_state != completed` 紅線阻擋（policy §5.3）；missing source / `project_id="unknown"` 靜默 no-emit 不 raise。`engine/result_report_builder.py` 加 `project_root` kwarg + thin `_produce_promote_candidates` wrapper（lazy import + degrade-to-`[]`）；`scripts/cap-result-emit.sh` 補 6 個 args。`tests/scripts/test-promote-candidate-producer.sh` 8 cases / 24 assertions。
+
+- **P10 #3 cap promote inspect + shared resolver** (`3d8f352`)：模組三分（producer / resolver / cli），`engine/promote_resolver.py` 引入 `ResolvedPromote` frozen dataclass + `resolve_promote(artifact_id)` 三層查找（task_id → workflow_id → null）+ `conflict_kind` 三 enum (`no_target` / `identical` / `diff`，`filecmp.cmp(shallow=False)` 真比 byte) + `<target>.bak.<ISO>` template + `make_template_backup_path` helper（給 #4 重用）。`engine/promote_cli.py:cmd_inspect` + `scripts/cap-promote.sh inspect` dispatch；text 4 sections + JSON `ok=true` / 不 found 時 `promote_artifact_not_found` exit 1。`tests/scripts/test-cap-promote-inspect.sh` 10 cases / 32 assertions。
+
+- **P10 #4 + #6 cap promote project-constitution + apply framework** (`7361ebe`)：新模組 `engine/promote_apply.py` 是 generic apply primitives — `ApplyResult` 11 個 action enum + `apply_promote(resolved, *, expected_artifact_type, dry_run, force, ...)` 完整 dry-run / backup / write / validate / rollback；`_validate_target_via_step_runtime` inline YAML/JSON loader + `jsonschema.Draft202012Validator`（fallback `step_runtime.validate_jsonschema_fallback`），canonical `{"ok": bool, "errors": list[str]}`；`_rollback_target` 三 branch（unlink fresh / restore from backup / no-backup-fail）。`cmd_project_constitution` + bash dispatch；`tests/scripts/test-cap-promote-project-constitution.sh` 13 cases / 37 assertions。**P10 #6 validation framework** 與本子項共生 — apply_promote 結尾自動串 validate → rollback；P10 #5 共用同路徑跑第二種 artifact_type 完成 framework 驗證。
+
+- **P10 #5 cap promote workflow** (`7506cea`)：`cmd_workflow` 鏡射 `cmd_project_constitution` 結構，差異只 `expected_artifact_type="compiled_workflow"`；apply_promote framework 已在 #4 generic 化所以本子項只做 typed CLI + bash dispatch。Resolver 用 `require_completed=False` (P10 #3) 給 inspect 描述失敗 run 的 snapshot；apply 的 final_state 安全網由 *producer* 端 emit gate 負責，schema validation 是結構性紅線。`tests/scripts/test-cap-promote-workflow.sh` 9 cases / 32 assertions（dry-run / apply fresh / identical skip / conflict halt / force backup / validation rollback / type mismatch / unknown id / bash 對齊）。
+
+### Documentation
+
+- **P10 #7 cap promote 使用者面向文件 + roadmap 同步** (`b32bdee`)：新增 `docs/cap/PROMOTE-LIFECYCLE.md` 12 段使用者操作指南：lifecycle 三步走 ASCII 流程圖 / 三條 typed CLI 用法 + JSON 形狀範例 / generic escape hatch 邊界（明確標**不走 typed validation pipeline**）/ 共用 flag 表 / backup + validation + rollback 三 branch 對應 / 13 個 action enum 速查 / FAQ + 腳本消費穩定欄位清單。`docs/cap/IMPLEMENTATION-ROADMAP.md` Phase 11 promote 段 11 條 `[ ]` 全部翻 `[x]`，每條 cross-reference commit + policy 段落。
+
+- **P10 #8 smoke wiring + chmod 修復**（同 `b32bdee`）：`scripts/workflows/smoke-per-stage.sh` step 37-40 接 4 個 P10-specific test（test-workflow-result-schema 早在 step 18 P0 #5 已接，不重複）；順手 chmod +x 修 21 個 git tracked 但 working-tree 缺 `+x` 的 pre-existing test files（純 file-mode 修復，無功能變動）。修補前 smoke 43 pass / 29 fail，修補後 **61 pass / 11 fail**（+18 全是 chmod 修出的 fixture）；剩 11 fail 為 P1/P2/P3/P6/P8 環境依賴 e2e 與 P10 無關。
+
+- **v0.22 Platform Closeout Review**（本 commit）：新增 `docs/cap/PLATFORM-CLOSEOUT-v0.22.md` — P0-P10 platform-level 收斂文件，回答三件事：(1) 現在 CAP 能做什麼（capability map by phase）；(2) P1-P10 帶來什麼提升（before / after diff table）；(3) 還剩哪些治理債（deferred items / escape hatches / 文件重複來源 / smoke suite 變肥）。包含 dogfood 7-step verification chain（token-free 部分由 17 個 focused suite 共 ~454 assertions 嚴格覆蓋；live AI run 由使用者選擇是否花 token 跑 step 3）+ 關鍵 SSOT 索引（policies / schemas / docs/cap）+ rc1-rc16 對照表。`TODOLIST.md` / `docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md` 「更新日期」同步 cross-reference 本 closeout 文件。
+
+### Notes
+
+- **v0.22 P0-P10 全段完成**：從「rely on prompt 紀律 + 人工記憶 + agent 自報」走到「schema 為門禁 + runtime 為審計 + promote-validate-rollback 為防線」。詳細 before/after diff 見 closeout review §2。
+- **Deferred to a later cycle**（明確未做，不阻塞 v0.22 GA）：detached / background workflow run（Phase 12）、run status polling、publish workflow（cross-repo）、`cap promote workflow --smoke` flag、Codex / Claude 原生 SKILL.md export、plugin / marketplace 安裝流程、shared layer 完整生態（producer 範本）。
+- **下一輪 closeout 建議**：先讓 v0.22 P0-P10 在使用者真實環境跑一段時間收 dogfood 反饋，再開 Phase 12（detached runtime）。
+- **Smoke 11 個 pre-existing fail**：不是本 P10 closeout 的責任。需各 phase owner（P1 / P2 / P3 / P6 / P8）分別處理 cap install state / project ledger collisions / harness assumptions。建議下一輪 closeout 起一個獨立 cycle 處理這 11 個。
+- **本 tag 不取代 `v0.22.0` 正式版**：rc 系列以 P phase 完成度收斂，不是語意化 GA。
+
+### Verified
+
+- 17 個 P10 / P9 / P7 dedicated suite **454 cases passed**：promote (4 suites = 125) + workflow-result-schema (12) + binding-source-metadata (17) + skill-registry-resolver (22) + workflow-source-resolver (14) + source-roots-enforcement (20) + result-report-builder (91) + result-report-wiring (28) + cap-workflow-inspect (46) + cap-config-namespace-readers (27) + workflow-policy-gates (19) + binding-report-validation-hook (15) + binding-report-schema (10) + compiled-workflow-normalization (8)，與 rc15 baseline 一致零 regression。
+- Full smoke (`scripts/workflows/smoke-per-stage.sh`) **61 pass / 11 fail**（vs rc15 預估 43/29）；新增 18 pass 全是 chmod 修出的 fixture，0 個 P10 pipeline regression。
+
+---
+
 ## [v0.22.0-rc15] - 2026-05-06
 
 > Release candidate — close out P9 Repo-specific Source Resolver. Aggregate 6 commits since rc14 (5× feat + 1× docs) into a layered workflow / skill source resolver with project / shared / builtin precedence, binding-report source metadata, and effective-allowed-roots enforcement. Note: ``v0.22.0-rc14`` (commit ``cd729b2``) closed out P8 Governance Gates as a pure-tag promotion without a CHANGELOG entry; this rc15 narrative therefore covers only the P9 work landed since rc14.

@@ -1,6 +1,6 @@
 # CAP Missing Implementation Checklist
 
-更新日期：2026-05-06（P9 Repo-specific Source Resolver closeout：5/5 sub-items 完成 — design memo `cc37734` + skills method intake `df0cc73` + workflow source resolver `a16df2e` + skill registry merge `3d5f3e6` + binding report source metadata `25e6f7e` + source-policy enforcement `525f385`；13 個 dedicated suite 共 327 cases pass，與 rc14 baseline 一致零 regression。本 closeout tagged `v0.22.0-rc15`。`v0.22.0-rc14` (commit `cd729b2`) 為 P8 Governance Gates closeout pure-tag 未寫 CHANGELOG / RELEASE-NOTES 條目，rc15 narrative 只覆蓋 P9 範圍；P8 變動以 tag annotation 為唯一 release 文字 SSOT。下一個排程為 **P10 Detached Runtime and Promote / Publish**。）
+更新日期：2026-05-06（**v0.22 P0-P10 全段 closeout** — P10 Detached Runtime and Promote / Publish 8/8 sub-items 完成（policy `b99b201` / schema migration `e8054a5` / producer `7ea621d` / inspect `3d8f352` / project-constitution apply `7361ebe` / workflow apply `7506cea` / docs + smoke + chmod fix `b32bdee`），共 7 個 commit；17 個 P10/P9/P7 dedicated suite 共 454 cases pass。完整 platform-level 收斂見 **[`docs/cap/PLATFORM-CLOSEOUT-v0.22.md`](PLATFORM-CLOSEOUT-v0.22.md)**：回答「現在 CAP 能做什麼」+「P1-P10 帶來什麼提升」+「還剩哪些治理債」三件事，附 dogfood 7-step verification chain。本 closeout tagged `v0.22.0-rc16`。Phase 12（detached runtime）/ 13（CLI final shape）/ 14（test matrix）仍 deferred；等使用者真實 dogfood 反饋再開。）
 
 本清單承接 `TODOLIST.md` 與 `docs/cap/IMPLEMENTATION-ROADMAP.md` 的「尚未完成」項目，整理成可執行的工程工作清單。原則是先補 runtime contract 與 validator，再補 runner、orchestration、session、gate 與 promote/publish 閉環。
 
