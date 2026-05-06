@@ -6,6 +6,55 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.22.0] - 2026-05-06
+
+> v0.22.0 GA — promote `v0.22.0-rc18` to the canonical v0.22.0 release. v0.22 is the **Platform Closeout** major: P0-P10 platform-level capabilities all reach steady state across rc1-rc18. The full capability map, before/after diff, dogfood 7-step verification chain, deferred governance debt, and rc1-rc18 對照表 live in `docs/cap/PLATFORM-CLOSEOUT-v0.22.md`. GA = pure promotion of rc18; no commits between rc18 and this tag.
+
+### Highlights (P0-P10)
+
+- **P0** — `cap` CLI baseline、`cap project init / status / doctor`、`.cap/<name>` config namespace SSOT、storage layout policy、provider isolation（`~/.claude` / `~/.codex` 不再被全域改寫）。
+- **P1-P3** — project-constitution workflow、project-spec-pipeline、supervisor orchestration envelope schema (`schemas/supervisor-orchestration.schema.yaml`) + drift validation gate。
+- **P4-P5** — handoff ticket Type C schema (`schemas/handoff-ticket.schema.yaml`)、agent session runner、provider adapter、prompt snapshot ledger（`cap session analyze` 可看 token / time hotspot）。
+- **P6-P8** — governance gate runners (watcher / qa / security / logger)、`schemas/gate-result.schema.yaml`、fail-route consumer、rerun-failed-gate consumer、halt-on-high-risk policy。
+- **P9** — three-layer workflow / skill / agent source resolver（project / shared / builtin precedence）、binding-report source metadata、`effective_allowed_roots` enforcement。
+- **P10** — `cap promote inspect`、`cap promote project-constitution`、`cap promote workflow` typed CLI + apply / backup / validation / rollback framework + `policies/runtime-promote.md` v1.0 SSOT。
+
+### Verified at GA
+
+- Full smoke (`scripts/workflows/smoke-per-stage.sh`) **72 passed / 0 failed / 0 skipped**（與 rc17 / rc18 baseline 一致零 regression）。
+- 17 個 P10 / P9 / P7 dedicated suite 全綠。
+- Real Claude live dogfood（`cap workflow run project-constitution`，apples-to-apples vs rc17 prompt）：`<<<CONSTITUTION_JSON_BEGIN>>>` count = 1，`<<<CONSTITUTION_JSON_END>>>` count = 1（rc17 同 prompt 是 2/2 broken；rc18 prompt contract 修補後翻成 1/1 fixed）。
+
+### Notes
+
+- v0.22.0 = rc18 promoted；rc18 → GA 之間無 code change。
+- rc14（P8 closeout）與 rc18（prompt contract fix）為 pure-tag release，narrative 以各自 tag annotation 為 SSOT，CHANGELOG 條目只做 cross-reference。
+- 後續 deferred items roll over 至 v0.23+；canonical 待辦清單見 `docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md`。
+- v0.22.0 為 v0.22.x 系列首個 tag；目前無 patch。
+
+---
+
+## [v0.22.0-rc18] - 2026-05-06
+
+> Release candidate — close out the rc17 minimal Claude dogfood blocker by hardening the `project_constitution` prompt contract against duplicate `<<<CONSTITUTION_JSON_BEGIN/END>>>` fence pairs. Pure prompt-layer fix — no validator change, no schema change, no CLI surface change. Canonical narrative lives in the `v0.22.0-rc18` annotated tag (commit `efc76d8`).
+
+### Fixed
+
+- **Duplicate constitution fence in `draft_constitution` AI step output** (`schemas/workflows/project-constitution.yaml` + `agent-skills/01-supervisor-agent.md`)：rc17 minimal dogfood 中 AI 先以自由敘事 + fence pair #1 完成回答，再「為了符合 4 固定標題（`## 任務理解` / `## 執行重點` / `## 產出內容` / `## 交接摘要`）」整份重寫並產生 fence pair #2，被 `validate-constitution.sh:multiple_explicit_fences` 正確 halt（exit 41 schema_validation_failed，無 AI fallback）— 是 prompt 契約衝突而非 validator bug。**A**：在 `draft_constitution` step 的 `done_when` 加一條「整份 stdout 只能出現一對 fence」的硬規則並把 anti-pattern 列出（含「不要因為發現自己應該使用 4 個固定標題就重寫整份回答」明文警示）。**C**：`01-supervisor-agent.md` 新增 §2.6 涵蓋 `project_constitution` capability 的 fence 唯一性與 anti-pattern 解釋，鏡射 §2.5 對 `task_constitution` 的嚴格 schema 契約風格。**B**（把 `cap-workflow-exec.sh:structured_sections_for_capability` 從 prompt 末尾提前到開頭）deferred — 會影響所有 AI step prompt 結構，pre-GA 風險過高，留給 v0.23+ 一併 review。
+
+### Verified
+
+- Full smoke (`scripts/workflows/smoke-per-stage.sh`) **72 passed / 0 failed / 0 skipped**（無 deterministic regression vs rc17）。
+- Real Claude dogfood, apples-to-apples（同一個 prompt）：rc17 `run_20260506210226_020492d9` fence BEGIN=2 END=2（broken）→ rc18 `run_20260506220841_001a38b9` fence BEGIN=1 END=1（fixed）。
+
+### Notes
+
+- rc18 是 v0.22.0 GA 前最後一個 rc；rc18 → GA 為 pure promotion，無新 commit。
+- B 留給 v0.23+ 一起 review prompt 結構是否要做更深層改造（影響面是「所有 AI step prompt」而非「單一 capability」）。
+- 本 tag 不取代 `v0.22.0` 正式版（GA 由本 CHANGELOG 上方的 v0.22.0 條目記錄）。
+
+---
+
 ## [v0.22.0-rc17] - 2026-05-06
 
 > Release candidate — fix the 11 pre-existing smoke failures inherited by rc16. Smoke goes from **61 pass / 11 fail** (rc16) to **72 pass / 0 fail** (rc17). The fixes are infrastructure-only — no new features, no schema changes, no policy changes; rc17 is the first rc that runs cleanly end-to-end on a fresh checkout.
