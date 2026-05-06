@@ -127,6 +127,11 @@ case "${1:-}" in
     [ "$#" -ge 1 ] || usage
     "${PYTHON_BIN}" "${PROMOTE_CLI_PY}" project-constitution "$@"
     ;;
+  workflow)
+    shift
+    [ "$#" -ge 1 ] || usage
+    "${PYTHON_BIN}" "${PROMOTE_CLI_PY}" workflow "$@"
+    ;;
   list)
     [ "$#" -le 2 ] || usage
     list_files "${2:-all}"

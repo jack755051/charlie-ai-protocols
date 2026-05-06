@@ -219,6 +219,82 @@ def cmd_project_constitution(
     _emit_apply_result(task_id, result, output_json=output_json)
 
 
+def cmd_workflow(
+    workflow_id: str,
+    *,
+    apply: bool,
+    force: bool,
+    output_json: bool,
+    project_root: Optional[str],
+    cap_home: Optional[str],
+    project_id: Optional[str],
+) -> None:
+    """Implement ``cap promote workflow <workflow_id>`` (P10 #5).
+
+    Mirrors :func:`cmd_project_constitution` but routes the apply
+    through ``apply_promote(expected_artifact_type="compiled_workflow")``
+    so the same dry-run / backup / write / validate / rollback
+    pipeline (P10 #4 ``engine/promote_apply.py``) governs both
+    artifact types. Default is ``--dry-run``; ``--apply`` triggers
+    the write path; ``--force`` enables overwrite-with-backup on
+    diff conflict; post-apply validation runs against
+    ``schemas/compiled-workflow.schema.yaml`` (set on the candidate
+    by P10 #2.2 producer / P10 #3 resolver).
+
+    Note: the resolver intentionally calls
+    ``detect_compiled_workflow_candidate_for(..., require_completed=False)``
+    so inspect can describe failed-run snapshots; the actual policy
+    §5.3 safety filter (no failed-run promotes) lives in the
+    *producer* (P10 #2.2) — direct ``cap promote workflow`` invocation
+    is a deliberate user override. The post-apply schema validator
+    is the structural safety net that catches malformed compiled
+    workflows regardless of the originating run state.
+    """
+    resolved = resolve_promote(
+        workflow_id,
+        project_root=project_root,
+        cap_home=cap_home,
+        project_id=project_id,
+    )
+    if resolved is None or resolved.candidate.get("artifact_type") != "compiled_workflow":
+        if output_json:
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": "promote_artifact_not_found",
+                        "artifact_type": "compiled_workflow",
+                        "workflow_id": workflow_id,
+                        "message": (
+                            "no compiled_workflow snapshot matches this workflow_id; "
+                            "make sure a compiled workflow snapshot exists at "
+                            "<cap_home>/projects/<id>/compiled-workflows/<workflow_id>/"
+                        ),
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        else:
+            print(
+                f"# Promote workflow: {workflow_id}\n"
+                f"\n"
+                f"  No compiled_workflow snapshot matches '{workflow_id}'.\n"
+                f"  Looked under <cap_home>/projects/<id>/compiled-workflows/<workflow_id>/.",
+                file=sys.stdout,
+            )
+        sys.exit(1)
+
+    result = apply_promote(
+        resolved,
+        expected_artifact_type="compiled_workflow",
+        dry_run=not apply,
+        force=force,
+        artifact_id=workflow_id,
+    )
+
+    _emit_apply_result(workflow_id, result, output_json=output_json)
+
+
 def _emit_apply_result(artifact_id: str, result: ApplyResult, *, output_json: bool) -> None:
     """Print the ``ApplyResult`` and exit with the right code.
 
@@ -358,6 +434,29 @@ def main(argv: Optional[list[str]] = None) -> None:
     p.add_argument("--cap-home", dest="cap_home", default=None)
     p.add_argument("--project-id", dest="project_id", default=None)
 
+    p = sub.add_parser(
+        "workflow",
+        help=(
+            "Promote a compiled workflow snapshot to "
+            "<project_root>/.cap/workflows/<workflow_id>.yaml (P10 #5)."
+        ),
+    )
+    p.add_argument("workflow_id")
+    p.add_argument(
+        "--apply",
+        action="store_true",
+        help="Actually write the target. Without this flag the command is dry-run.",
+    )
+    p.add_argument(
+        "--force",
+        action="store_true",
+        help="When the target exists and differs from source, back up to <target>.bak.<ISO> and overwrite. Without --force, diff conflict halts.",
+    )
+    p.add_argument("--json", dest="output_json", action="store_true")
+    p.add_argument("--project-root", dest="project_root", default=None)
+    p.add_argument("--cap-home", dest="cap_home", default=None)
+    p.add_argument("--project-id", dest="project_id", default=None)
+
     args = parser.parse_args(argv)
     if args.cmd == "inspect":
         cmd_inspect(
@@ -370,6 +469,16 @@ def main(argv: Optional[list[str]] = None) -> None:
     elif args.cmd == "project-constitution":
         cmd_project_constitution(
             args.task_id,
+            apply=args.apply,
+            force=args.force,
+            output_json=args.output_json,
+            project_root=args.project_root,
+            cap_home=args.cap_home,
+            project_id=args.project_id,
+        )
+    elif args.cmd == "workflow":
+        cmd_workflow(
+            args.workflow_id,
             apply=args.apply,
             force=args.force,
             output_json=args.output_json,
