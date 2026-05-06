@@ -167,7 +167,15 @@ fixture="$(write_fixture "pos-realistic" '{
     {"step_id": "spec_audit", "reason": "spec_audit_inconsistency", "detail": "BA spec references undefined API endpoint /tokens", "route_back_to": "ba"}
   ],
   "promote_candidates": [
-    {"artifact_name": "prd_document", "path": "/run/1-prd.md", "target_repo_path": "docs/specs/token-monitor-prd.md", "reason": "PRD finalized; safe to promote even though run failed downstream"}
+    {
+      "source_path": "/cap/projects/token-monitor/constitutions/task-x/constitution.yaml",
+      "target_path": "/repos/token-monitor/.cap/constitution.yaml",
+      "artifact_type": "project_constitution",
+      "reason": "task constitution finalized after spec_audit pass",
+      "validation_schema": "schemas/project-constitution.schema.yaml",
+      "source_layer": "project",
+      "source_revision": null
+    }
   ],
   "logs": {
     "workflow_log": "/run/workflow.log",
@@ -288,6 +296,41 @@ fixture="$(write_fixture "neg-bad-version" '{
 }')"
 rc="$(validate_fixture "${fixture}")"
 assert_eq "exit 1 when schema_version unsupported" "1" "${rc}"
+
+# ── Negative 9: promote_candidate missing artifact_type ─────────────
+# P10 #2.1: artifact_type is required per policies/runtime-promote.md §5.2.
+# The pre-P10 schema accepted the field-less "artifact_name + path" shape;
+# rejecting that shape is part of the contract migration.
+echo "Negative 9: promote_candidate missing artifact_type"
+fixture="$(write_fixture "neg-promote-missing-artifact-type" '{
+  "schema_version": 1,
+  "run_id": "x", "workflow_id": "x", "project_id": "x",
+  "started_at": "2026-05-02T01:30:00+08:00",
+  "final_state": "completed",
+  "summary": {"total_steps": 0, "completed": 0, "failed": 0, "skipped": 0, "blocked": 0},
+  "steps": [], "sessions": [], "artifacts": [],
+  "promote_candidates": [
+    {"source_path": "/run/x.yaml", "target_path": "/repo/.cap/x.yaml", "reason": "missing artifact_type"}
+  ]
+}')"
+rc="$(validate_fixture "${fixture}")"
+assert_eq "exit 1 when promote_candidate missing artifact_type" "1" "${rc}"
+
+# ── Negative 10: promote_candidate.artifact_type not in enum ────────
+echo "Negative 10: promote_candidate.artifact_type not in enum"
+fixture="$(write_fixture "neg-promote-bad-artifact-type" '{
+  "schema_version": 1,
+  "run_id": "x", "workflow_id": "x", "project_id": "x",
+  "started_at": "2026-05-02T01:30:00+08:00",
+  "final_state": "completed",
+  "summary": {"total_steps": 0, "completed": 0, "failed": 0, "skipped": 0, "blocked": 0},
+  "steps": [], "sessions": [], "artifacts": [],
+  "promote_candidates": [
+    {"source_path": "/run/x.yaml", "target_path": "/repo/.cap/x.yaml", "artifact_type": "binding_report", "reason": "binding_report is forbidden per policy §2 / §5.2"}
+  ]
+}')"
+rc="$(validate_fixture "${fixture}")"
+assert_eq "exit 1 when promote_candidate.artifact_type not in enum" "1" "${rc}"
 
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"

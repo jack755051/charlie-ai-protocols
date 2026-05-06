@@ -275,21 +275,75 @@ properties:
 
   promote_candidates:
     type: array
-    description: Artifacts the supervisor or builder marked as candidates for promotion to the repo (P10). Empty when nothing is promotable yet.
+    description: |
+      Artifacts the P10 producer marked as candidates for promotion to
+      the repo. Empty when nothing is promotable yet (e.g. ``final_state
+      != "completed"`` runs, or runs whose artifacts are run-only). Shape
+      strictly aligns with ``policies/runtime-promote.md`` §5.2 — the P10
+      #2 producer is forbidden from emitting any other field shape, and
+      consumers (cap promote inspect / cap promote project-constitution
+      / cap promote workflow) read only these fields.
     items:
       type: object
       required:
-        - artifact_name
-        - path
+        - source_path
+        - target_path
+        - artifact_type
+        - reason
       properties:
-        artifact_name:
+        source_path:
           type: string
-        path:
+          description: Absolute filesystem path of the runtime artifact under <cap_home>/projects/<project_id>/.
+        target_path:
           type: string
-        target_repo_path:
-          type: [string, "null"]
+          description: |
+            Repo-relative or absolute path the artifact would be
+            promoted to. For ``artifact_type=project_constitution`` this
+            is ``<project_root>/.cap/constitution.yaml``; for
+            ``compiled_workflow`` it is
+            ``<project_root>/.cap/workflows/<workflow_id>.yaml`` (per
+            policy §3.1 / §3.2).
+        artifact_type:
+          type: string
+          enum:
+            - project_constitution
+            - compiled_workflow
+          description: |
+            Promotable artifact category (policy §2). Only these two
+            values are valid in v1; run-only artifacts (runtime-state /
+            agent-sessions / route-history / step raw logs) and
+            binding reports are explicitly forbidden from being
+            promote candidates.
         reason:
+          type: string
+          description: One-line explanation of why this artifact qualifies for promotion (e.g. "task constitution finalized after spec_audit pass", "compiled workflow validated after run completed without failures").
+        validation_schema:
           type: [string, "null"]
+          description: |
+            Path to the JSON Schema used by the post-apply validation
+            gate (policy §6). Producer fills this with the canonical
+            schema for the artifact_type so the promote CLI does not
+            have to re-derive it.
+        source_layer:
+          type: [string, "null"]
+          enum:
+            - project
+            - shared
+            - builtin
+            - explicit
+            - null
+          description: |
+            Informational. Mirrors the P9 ``source_layer`` enum the
+            artifact's underlying source resolved to (no ``fallback``
+            here because synthetic / adapter sources are never
+            promote candidates per policy §5.3).
+        source_revision:
+          type: [string, "null"]
+          description: |
+            Informational. Hash, timestamp, or version label that
+            identifies the specific snapshot of the artifact (e.g.
+            ``20260506-122014`` for a compiled-workflow timestamp
+            directory). Producer best-effort; ``null`` is acceptable.
 
   inputs:
     type: object
