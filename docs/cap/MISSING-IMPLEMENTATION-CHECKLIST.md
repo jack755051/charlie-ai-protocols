@@ -1,6 +1,6 @@
 # CAP Missing Implementation Checklist
 
-更新日期：2026-05-05（P7 Result Report and Run Archive closeout：6/7 sub-items 完成 — Phase A library `580eace` + Phase B producer wiring `a7f2eb2` + Phase C inspect upgrade `3d378e5` + minimal input pointers `2287deb` + run archive policy + Logger handoff `6c0aa89` + checklist status update `5bb961c`；4 個 P7 dedicated suite 175 cases pass，與 rc12 baseline 一致零 regression。#5 `promote_candidates` 維持「schema slot ready, builder always emits `[]`」**by design**（producer 由 P10 owns）。`--remove-legacy` 仍 deferred；下一個排程為 P8 Governance Gates。本 closeout tagged `v0.22.0-rc13`。）
+更新日期：2026-05-06（P9 Repo-specific Source Resolver closeout：5/5 sub-items 完成 — design memo `cc37734` + skills method intake `df0cc73` + workflow source resolver `a16df2e` + skill registry merge `3d5f3e6` + binding report source metadata `25e6f7e` + source-policy enforcement `525f385`；13 個 dedicated suite 共 327 cases pass，與 rc14 baseline 一致零 regression。本 closeout tagged `v0.22.0-rc15`。`v0.22.0-rc14` (commit `cd729b2`) 為 P8 Governance Gates closeout pure-tag 未寫 CHANGELOG / RELEASE-NOTES 條目，rc15 narrative 只覆蓋 P9 範圍；P8 變動以 tag annotation 為唯一 release 文字 SSOT。下一個排程為 **P10 Detached Runtime and Promote / Publish**。）
 
 本清單承接 `TODOLIST.md` 與 `docs/cap/IMPLEMENTATION-ROADMAP.md` 的「尚未完成」項目，整理成可執行的工程工作清單。原則是先補 runtime contract 與 validator，再補 runner、orchestration、session、gate 與 promote/publish 閉環。
 
