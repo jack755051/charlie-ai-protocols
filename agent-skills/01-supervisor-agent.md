@@ -108,6 +108,27 @@
 - normalize alias 行為（過渡期保留）：`scripts/workflows/persist-task-constitution.sh:normalize_task_constitution_json`
 - 別名 regression 測試：`tests/scripts/test-persist-task-constitution.sh` Case 6（v0.22.0+ 移除 alias 時，此 case 將被改為「驗證固定欄位」而非「驗證 alias 接收」）
 
+### Step 2.6: Project Constitution Fence 唯一性（v0.22.0-rc18+）
+
+當你扮演 `project_constitution` capability 的執行者（`project-constitution` workflow 的 `draft_constitution` step），輸出**整份 stdout** 必須遵守下列硬規則。本節是輸出格式契約，validator 與下游 persist step 都依此判讀；違反不會被 normalize 補洞，會直接 halt。
+
+#### Fence 唯一性（強制）
+
+- 整份輸出**只能出現一對** `<<<CONSTITUTION_JSON_BEGIN>>>` / `<<<CONSTITUTION_JSON_END>>>` fence。
+- 任何章節內（含 `## 任務理解` / `## 執行重點` / `## 產出內容` / `## 交接摘要` 等固定標題章節）**都不得重複出現**這兩個標記，也不得重複以 fence 包覆完整 JSON。
+- 若你已在某章節（建議 `## 產出內容`）寫完 fence pair，後續章節若需提及 JSON 內容，請改用**自由文字描述**（例如：「JSON 已包含 schema_version、constraints、stop_conditions、binding_policy」），**嚴禁**再次以 fence 包覆 JSON 重貼一遍。
+- `scripts/workflows/validate-constitution.sh` 在偵測到 >1 對 fence 時會以 exit 41 halt（schema_validation_failed），**無 AI fallback**——重複會讓整條 workflow 必須由使用者重跑。
+
+#### 為什麼出現重複（已知反模式）
+
+cap-workflow-exec.sh 的 step prompt 同時要求你（a）依 `done_when` 輸出 constitution JSON 並包覆於 fence、（b）使用 4 個固定章節標題（`## 任務理解` / `## 執行重點` / `## 產出內容` / `## 交接摘要`）。歷史上有 AI（含本系列模型自身在 v0.22.0-rc17 dogfood 中）先以自由敘事 + fence pair #1 完成回答，再「為了補上 4 固定標題格式」整份重寫，產生 fence pair #2。**正確的一次到位節奏**：在動筆前就決定「JSON 寫在 `## 產出內容` 章節內，整份輸出一氣呵成使用 4 固定標題」，其他章節僅以自由文字提及內容摘要。
+
+#### 對應 schema 與測試
+
+- 結構契約：`schemas/project-constitution.schema.yaml`
+- fence 唯一性 validator：`scripts/workflows/validate-constitution.sh`（`check_constitution_fences` 函式，halt 條件 `multiple_explicit_fences` / `unbalanced_explicit_fences` / `multiple_json_fenced_blocks`）
+- workflow 層 done_when 強化：`schemas/workflows/project-constitution.yaml` 的 `draft_constitution` step
+
 ## 3. 編排參考 (Orchestration Reference)
 
 本 Agent 的編排行為（流程路由、品質門禁、交接單格式）已從本文件抽離，改由結構化定義檔驅動：

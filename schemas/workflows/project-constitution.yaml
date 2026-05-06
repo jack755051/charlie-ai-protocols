@@ -106,6 +106,7 @@ steps:
       - 已列出 allowed_agents、stop_conditions 與 artifact 保存策略
       - 已輸出 Markdown 與 JSON 兩種 constitution 形態
       - "JSON 必須包覆於 <<<CONSTITUTION_JSON_BEGIN>>> 與 <<<CONSTITUTION_JSON_END>>> 之間（**唯一合法格式**）；artifact 內若另外存在 ```json 標記的 fenced code block 僅供示例用途，validator 在偵測到多個 ```json 區塊時會 halt"
+      - "整份 stdout **只能出現一對** <<<CONSTITUTION_JSON_BEGIN>>>/<<<CONSTITUTION_JSON_END>>> fence。任何章節（含 `## 任務理解` / `## 執行重點` / `## 產出內容` / `## 交接摘要` 等固定標題章節）內**不得重複出現**這兩個標記。若已在某章節（建議 `## 產出內容`）寫完 fence pair，後續章節若需提及 JSON 內容，請改用自由文字描述（例如：「JSON 已包含 schema_version、constraints、stop_conditions、binding_policy」），**嚴禁**再次以 fence 包覆 JSON 重貼一遍。一次到位，不要因為發現自己應該使用 4 個固定標題就重寫整份回答；validator 偵測到 >1 對 fence 時會以 exit 41 halt（schema_validation_failed），無 AI fallback。"
     on_fail: halt
     fallback:
       when: []
