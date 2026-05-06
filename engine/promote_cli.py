@@ -31,6 +31,15 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from engine.promote_apply import (  # noqa: E402
+    ACTION_APPLIED_FORCE_WITH_BACKUP,
+    ACTION_APPLIED_FRESH,
+    ACTION_APPLIED_IDENTICAL_SKIP,
+    ACTION_HALTED_CONFLICT,
+    ACTION_HALTED_TYPE_MISMATCH,
+    ApplyResult,
+    apply_promote,
+)
 from engine.promote_resolver import (  # noqa: E402
     CONFLICT_DIFF,
     CONFLICT_IDENTICAL,
@@ -147,6 +156,154 @@ def _print_inspect_text(artifact_id: str, resolved: ResolvedPromote) -> None:
         )
 
 
+def cmd_project_constitution(
+    task_id: str,
+    *,
+    apply: bool,
+    force: bool,
+    output_json: bool,
+    project_root: Optional[str],
+    cap_home: Optional[str],
+    project_id: Optional[str],
+) -> None:
+    """Implement ``cap promote project-constitution <task_id>`` (P10 #4).
+
+    Default ``--dry-run`` (no flag needed; ``apply=False``). ``--apply``
+    enables the write path; ``--force`` enables overwrite-with-backup
+    on diff conflict. Always validates the written target against
+    ``schemas/project-constitution.schema.yaml`` (policy §6.1) and
+    rolls back on validation failure.
+    """
+    resolved = resolve_promote(
+        task_id,
+        project_root=project_root,
+        cap_home=cap_home,
+        project_id=project_id,
+    )
+    if resolved is None or resolved.candidate.get("artifact_type") != "project_constitution":
+        if output_json:
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": "promote_artifact_not_found",
+                        "artifact_type": "project_constitution",
+                        "task_id": task_id,
+                        "message": (
+                            "no project_constitution snapshot matches this task_id; "
+                            "make sure a task constitution snapshot exists at "
+                            "<cap_home>/projects/<id>/constitutions/<task_id>/"
+                        ),
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        else:
+            print(
+                f"# Promote project-constitution: {task_id}\n"
+                f"\n"
+                f"  No project_constitution snapshot matches '{task_id}'.\n"
+                f"  Looked under <cap_home>/projects/<id>/constitutions/<task_id>/.",
+                file=sys.stdout,
+            )
+        sys.exit(1)
+
+    result = apply_promote(
+        resolved,
+        expected_artifact_type="project_constitution",
+        dry_run=not apply,
+        force=force,
+        artifact_id=task_id,
+    )
+
+    _emit_apply_result(task_id, result, output_json=output_json)
+
+
+def _emit_apply_result(artifact_id: str, result: ApplyResult, *, output_json: bool) -> None:
+    """Print the ``ApplyResult`` and exit with the right code.
+
+    Exit code mapping:
+
+    * ``ok=True`` (action starts with ``applied_`` / ``dry_run_``) → 0
+    * Otherwise (``halted_*`` / ``validation_failed_*`` / type
+      mismatch) → 1
+
+    The JSON shape always includes ``ok`` and the action enum so
+    consumers can branch deterministically without parsing free text.
+    """
+    if output_json:
+        payload = {
+            "ok": result.ok,
+            "action": result.action,
+            "artifact_id": result.artifact_id,
+            "artifact_type": result.artifact_type,
+            "source_path": result.source_path,
+            "target_path": result.target_path,
+            "target_existed_before": result.target_existed_before,
+            "backup_path": result.backup_path,
+            "validation": result.validation,
+            "error": result.error,
+            "detail": result.detail,
+        }
+        if result.extra:
+            payload["extra"] = dict(result.extra)
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(_render_apply_text(artifact_id, result))
+
+    if not result.ok:
+        sys.exit(1)
+
+
+def _render_apply_text(artifact_id: str, result: ApplyResult) -> str:
+    """Render ``ApplyResult`` as the policy §7 text view.
+
+    Sections: Header / Source / Target / Backup (when applicable) /
+    Validation. Action enum prints verbatim so JSON contract and text
+    contract use the same vocabulary.
+    """
+    lines = [
+        f"# Promote Apply: {artifact_id}",
+        "",
+        "# Header",
+        f"  artifact_type:        {result.artifact_type or '-'}",
+        f"  action:               {result.action}",
+        f"  ok:                   {str(result.ok).lower()}",
+    ]
+    if result.error:
+        lines.append(f"  error:                {result.error}")
+    if result.detail:
+        lines.append(f"  detail:               {result.detail}")
+
+    lines.extend([
+        "",
+        "# Source",
+        f"  source_path:          {result.source_path or '-'}",
+        "",
+        "# Target",
+        f"  target_path:          {result.target_path or '-'}",
+        f"  target_existed:       {str(result.target_existed_before).lower()}",
+    ])
+    if result.backup_path:
+        lines.extend([
+            "",
+            "# Backup",
+            f"  backup_path:          {result.backup_path}",
+        ])
+    if result.validation is not None:
+        lines.extend([
+            "",
+            "# Validation",
+            f"  ok:                   {str(result.validation.get('ok', False)).lower()}",
+        ])
+        errors = result.validation.get("errors") or []
+        if errors:
+            lines.append("  errors:")
+            for err in errors:
+                lines.append(f"    - {err}")
+    return "\n".join(lines)
+
+
 def main(argv: Optional[list[str]] = None) -> None:
     parser = argparse.ArgumentParser(prog="cap-promote-cli")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -178,10 +335,43 @@ def main(argv: Optional[list[str]] = None) -> None:
         help="Override the auto-resolved project_id (mainly for tests).",
     )
 
+    p = sub.add_parser(
+        "project-constitution",
+        help=(
+            "Promote a task constitution snapshot to "
+            "<project_root>/.cap/constitution.yaml (P10 #4)."
+        ),
+    )
+    p.add_argument("task_id")
+    p.add_argument(
+        "--apply",
+        action="store_true",
+        help="Actually write the target. Without this flag the command is dry-run.",
+    )
+    p.add_argument(
+        "--force",
+        action="store_true",
+        help="When the target exists and differs from source, back up to <target>.bak.<ISO> and overwrite. Without --force, diff conflict halts.",
+    )
+    p.add_argument("--json", dest="output_json", action="store_true")
+    p.add_argument("--project-root", dest="project_root", default=None)
+    p.add_argument("--cap-home", dest="cap_home", default=None)
+    p.add_argument("--project-id", dest="project_id", default=None)
+
     args = parser.parse_args(argv)
     if args.cmd == "inspect":
         cmd_inspect(
             args.artifact_id,
+            output_json=args.output_json,
+            project_root=args.project_root,
+            cap_home=args.cap_home,
+            project_id=args.project_id,
+        )
+    elif args.cmd == "project-constitution":
+        cmd_project_constitution(
+            args.task_id,
+            apply=args.apply,
+            force=args.force,
             output_json=args.output_json,
             project_root=args.project_root,
             cap_home=args.cap_home,

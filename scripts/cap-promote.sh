@@ -122,6 +122,11 @@ case "${1:-}" in
     # Python CLI; argparse handles positional + flag mixing.
     "${PYTHON_BIN}" "${PROMOTE_CLI_PY}" inspect "$@"
     ;;
+  project-constitution)
+    shift
+    [ "$#" -ge 1 ] || usage
+    "${PYTHON_BIN}" "${PROMOTE_CLI_PY}" project-constitution "$@"
+    ;;
   list)
     [ "$#" -le 2 ] || usage
     list_files "${2:-all}"
