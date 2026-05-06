@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import yaml
@@ -95,6 +96,14 @@ class RuntimeBinder:
     DEFAULT_REGISTRY_PATH = ".cap.skills.yaml"
     LEGACY_AGENT_REGISTRY_PATH_NAMESPACED = ".cap/agents.json"
     LEGACY_AGENT_REGISTRY_PATH = ".cap.agents.json"
+    # P9 #3 layered skill registry inputs. Each layer can supply skills
+    # via either a flat registry file (LAYER_REGISTRY_FILENAMES) or a
+    # per-skill dir under LAYER_PER_SKILL_DIR_NAME. Per-skill files may
+    # be either a single skill dict (with ``skill_id`` at top level) or
+    # a multi-skill envelope (with a ``skills`` list); both shapes are
+    # accepted so the user picks whichever fits their layout.
+    LAYER_REGISTRY_FILENAMES = ("skills.yaml", "skills.yml", "skills.json")
+    LAYER_PER_SKILL_DIR_NAME = "skills"
     DEFAULT_BINDING_MODE = "strict"
     DEFAULT_MISSING_POLICY = "halt"
     GENERIC_FALLBACK_PREFIX = "generic-"
@@ -105,23 +114,94 @@ class RuntimeBinder:
         "constitution_persistence",
     }
 
-    def __init__(self, base_dir: Path | None = None):
+    def __init__(
+        self,
+        base_dir: Path | None = None,
+        *,
+        project_root: Path | None = None,
+        cap_home: Path | None = None,
+    ):
+        explicit_base_dir = base_dir is not None
         self.base_dir = Path(base_dir) if base_dir else Path(__file__).resolve().parents[1]
-        self.loader = WorkflowLoader(self.base_dir)
+
+        # P9 #3 — same layer root precedence as WorkflowLoader (P9 #2):
+        # explicit kwarg > env (CAP_PROJECT_ROOT / CAP_HOME) > if an
+        # explicit base_dir was provided, treat that as the whole
+        # universe (project_root / cap_home both default to base_dir
+        # so existing test harnesses that only stub base_dir keep
+        # observing a single-file world); otherwise fall back to cwd
+        # / ~/.cap. Resolved to absolute paths so layer-membership
+        # checks (Path.samefile / Path.relative_to) work without
+        # surprises on symlink-laden sandboxes.
+        if project_root is not None:
+            self.project_root = Path(project_root).expanduser().resolve()
+        elif os.environ.get("CAP_PROJECT_ROOT"):
+            self.project_root = Path(os.environ["CAP_PROJECT_ROOT"]).expanduser().resolve()
+        elif explicit_base_dir:
+            self.project_root = self.base_dir.resolve()
+        else:
+            self.project_root = Path.cwd().resolve()
+
+        if cap_home is not None:
+            self.cap_home = Path(cap_home).expanduser().resolve()
+        elif os.environ.get("CAP_HOME"):
+            self.cap_home = Path(os.environ["CAP_HOME"]).expanduser().resolve()
+        elif explicit_base_dir:
+            self.cap_home = self.base_dir.resolve()
+        else:
+            self.cap_home = (Path.home() / ".cap").resolve()
+
+        # WorkflowLoader (P9 #2) shares the same layer roots so a
+        # binding pipeline driven by RuntimeBinder gets coherent
+        # workflow + skill resolution.
+        self.loader = WorkflowLoader(
+            self.base_dir,
+            project_root=self.project_root,
+            cap_home=self.cap_home,
+        )
         self.project_context_loader = ProjectContextLoader(self.base_dir)
 
     def load_skill_registry(self, registry_ref: str | None = None) -> dict:
+        """Load the skill registry.
+
+        Two paths:
+
+        * **Explicit ``registry_ref``** — single-file load, no merge.
+          Behaviour preserved for callers that point at a specific
+          file (e.g., test harnesses, ad-hoc audits).
+        * **No ref (default)** — P9 #3 layered merge. Loads
+          ``builtin`` (``<base_dir>/.cap/skills.yaml`` with legacy
+          ``.cap.skills.yaml`` fallback), ``shared``
+          (``<cap_home>/shared/skills.yaml`` plus per-skill
+          ``shared/skills/*.{yaml,yml,json}``), and ``project``
+          (``<project_root>/.cap/skills.yaml`` plus per-skill
+          ``.cap/skills/*.{yaml,yml,json}``); merges the three with
+          priority ``project > shared > builtin``.
+
+        ``project_root == base_dir`` (cap-protocols itself) collapses
+        the project layer into builtin to avoid double-loading the
+        same physical file (memo §3, ``Path.samefile`` rule).
+
+        When all three layers come up empty, falls through to the
+        existing legacy-agent-registry adapter so behaviour is
+        identical to pre-P9 #3 for projects that never adopted the
+        ``.cap/skills.yaml`` shape.
+        """
         if registry_ref:
             registry_path = Path(registry_ref)
             if not registry_path.is_absolute():
                 registry_path = self.base_dir / registry_path
-        else:
-            # P0c batch 2.5 dual-path: namespaced new path wins; legacy flat-
-            # file is only consulted if the new path is absent.
-            namespaced = self.base_dir / self.DEFAULT_REGISTRY_PATH_NAMESPACED
-            legacy = self.base_dir / self.DEFAULT_REGISTRY_PATH
-            registry_path = namespaced if namespaced.is_file() else legacy
+            return self._load_single_registry(registry_path)
 
+        return self._load_layered_skill_registry()
+
+    def _load_single_registry(self, registry_path: Path) -> dict:
+        """Single-file registry load (preserves the pre-P9 #3 behaviour).
+
+        Used by the explicit ``registry_ref`` path so callers that
+        point at one file get the same contract they always had —
+        no merge, no source tagging beyond ``_source_path``.
+        """
         if not registry_path.exists():
             return self._load_legacy_registry_adapter(registry_path)
 
@@ -131,13 +211,246 @@ class RuntimeBinder:
         else:
             data = yaml.safe_load(raw)
 
-        if "agents" in data and "skills" not in data:
+        if isinstance(data, dict) and "agents" in data and "skills" not in data:
             return self._adapt_legacy_registry(data, registry_path)
+
+        if not isinstance(data, dict):
+            data = {}
 
         data["_source_path"] = str(registry_path)
         data["_missing"] = False
         data["_adapter_from_legacy"] = False
         return data
+
+    def _load_layered_skill_registry(self) -> dict:
+        """Load and merge the three layers (project / shared / builtin).
+
+        Per memo §5: skills merged by ``skill_id`` with first-seen
+        winning; ``binding_defaults`` deep-merged with project keys
+        winning; ``default_provider`` / ``schema_version`` taken from
+        the highest-priority layer that emits them.
+        """
+        builtin_dir = self.base_dir / ".cap"
+        shared_dir = self.cap_home / "shared"
+        project_dir = self.project_root / ".cap"
+
+        # Self-mode detection: when project_root == base_dir, the
+        # project layer's <project_root>/.cap/skills.yaml IS the
+        # same physical file as builtin's <base_dir>/.cap/skills.yaml.
+        # Skip the project layer to avoid double-loading the same
+        # registry (per memo §3 Path.samefile rule). samefile raises
+        # if either path doesn't exist; treat raise as "not same".
+        project_is_builtin = False
+        try:
+            if project_dir.exists() and builtin_dir.exists():
+                project_is_builtin = project_dir.samefile(builtin_dir)
+        except OSError:
+            project_is_builtin = False
+
+        builtin_layer = self._resolve_layer_registry("builtin", builtin_dir)
+        shared_layer = self._resolve_layer_registry("shared", shared_dir)
+        project_layer = (
+            None
+            if project_is_builtin
+            else self._resolve_layer_registry("project", project_dir)
+        )
+
+        layers_in_priority = [
+            layer for layer in (project_layer, shared_layer, builtin_layer)
+            if layer is not None
+        ]
+
+        # All three layers empty → preserve the legacy fallback adapter
+        # path (covers projects without any .cap/skills.yaml form).
+        if not layers_in_priority:
+            return self._load_legacy_registry_adapter(
+                self.base_dir / self.DEFAULT_REGISTRY_PATH_NAMESPACED
+            )
+
+        return self._merge_skill_layers(layers_in_priority)
+
+    def _resolve_layer_registry(self, layer_name: str, layer_dir: Path) -> dict | None:
+        """Read one layer's skill data. Returns ``None`` when nothing found.
+
+        Each layer can supply skills via either form:
+
+        * Flat registry file at ``<layer_dir>/skills.{yaml,yml,json}``.
+          Standard envelope with ``skills[]`` / ``binding_defaults`` /
+          ``default_provider`` / ``schema_version``. Legacy
+          ``agents.json``-shaped files are auto-adapted.
+        * Per-skill directory at ``<layer_dir>/skills/`` containing
+          ``*.{yaml,yml,json}``. Each file is either a single skill
+          dict (top-level ``skill_id``) or a multi-skill envelope.
+
+        For the ``builtin`` layer specifically, also consults the
+        legacy flat file at ``<base_dir>/.cap.skills.yaml`` when
+        nothing is found under ``.cap/`` so projects that never
+        migrated to the namespaced layout keep working.
+
+        Each accumulated skill is tagged with ``_source_layer`` and
+        ``_source_path`` so the merge can record provenance.
+        """
+        flat_file: Path | None = None
+        if layer_dir.is_dir():
+            for filename in self.LAYER_REGISTRY_FILENAMES:
+                candidate = layer_dir / filename
+                if candidate.is_file():
+                    flat_file = candidate
+                    break
+
+        per_skill_files: list[Path] = []
+        per_skill_dir = layer_dir / self.LAYER_PER_SKILL_DIR_NAME
+        if per_skill_dir.is_dir():
+            for path in sorted(per_skill_dir.iterdir()):
+                if path.is_file() and path.suffix in {".yaml", ".yml", ".json"}:
+                    per_skill_files.append(path)
+
+        # builtin-only legacy fallback at base_dir/.cap.skills.yaml.
+        if (
+            layer_name == "builtin"
+            and flat_file is None
+            and not per_skill_files
+        ):
+            legacy_flat = self.base_dir / self.DEFAULT_REGISTRY_PATH
+            if legacy_flat.is_file():
+                flat_file = legacy_flat
+
+        if flat_file is None and not per_skill_files:
+            return None
+
+        skills_acc: list[dict] = []
+        binding_defaults: dict = {}
+        default_provider: str | None = None
+        schema_version: int | None = None
+        source_paths: list[str] = []
+
+        if flat_file is not None:
+            data = self._read_yaml_or_json(flat_file)
+            if isinstance(data, dict):
+                source_paths.append(str(flat_file))
+                if "agents" in data and "skills" not in data:
+                    data = self._adapt_legacy_registry(data, flat_file)
+                schema_version = data.get("schema_version", schema_version)
+                default_provider = data.get("default_provider", default_provider)
+                binding_defaults = dict(data.get("binding_defaults", {}) or {})
+                for skill in data.get("skills", []) or []:
+                    if isinstance(skill, dict):
+                        sk = dict(skill)
+                        sk["_source_layer"] = layer_name
+                        sk["_source_path"] = str(flat_file)
+                        skills_acc.append(sk)
+
+        for path in per_skill_files:
+            data = self._read_yaml_or_json(path)
+            if not isinstance(data, dict):
+                continue
+            source_paths.append(str(path))
+            if "skill_id" in data and "skills" not in data:
+                # Single-skill file shape.
+                sk = dict(data)
+                sk["_source_layer"] = layer_name
+                sk["_source_path"] = str(path)
+                skills_acc.append(sk)
+            else:
+                # Multi-skill envelope shape; pull skills[] only — flat
+                # file already owns binding_defaults / default_provider
+                # / schema_version aggregation.
+                for skill in data.get("skills", []) or []:
+                    if isinstance(skill, dict):
+                        sk = dict(skill)
+                        sk["_source_layer"] = layer_name
+                        sk["_source_path"] = str(path)
+                        skills_acc.append(sk)
+
+        if not skills_acc and not source_paths:
+            return None
+
+        return {
+            "layer": layer_name,
+            "source_paths": source_paths,
+            "skills": skills_acc,
+            "binding_defaults": binding_defaults,
+            "default_provider": default_provider,
+            "schema_version": schema_version,
+        }
+
+    def _merge_skill_layers(self, layers: list[dict]) -> dict:
+        """Merge layers in priority order (highest first).
+
+        * ``skills``: dedupe by ``skill_id``; first-seen wins. Skills
+          retain their per-entry ``_source_layer`` / ``_source_path``
+          tags so a future binding-report consumer (P9 #4) can trace
+          provenance.
+        * ``binding_defaults``: deep merge; project keys beat shared
+          beat builtin at every nesting level.
+        * ``default_provider`` / ``schema_version``: first-seen non-None.
+        """
+        merged_skills_by_id: dict[str, dict] = {}
+        skills_in_order: list[dict] = []
+        merged_defaults: dict = {}
+        default_provider: str | None = None
+        schema_version: int | None = None
+        source_paths: list[str] = []
+
+        for layer in layers:
+            for skill in layer["skills"]:
+                sid = skill.get("skill_id")
+                if not sid or sid in merged_skills_by_id:
+                    continue
+                merged_skills_by_id[sid] = skill
+                skills_in_order.append(skill)
+            merged_defaults = self._deep_merge(merged_defaults, layer["binding_defaults"])
+            if default_provider is None and layer.get("default_provider"):
+                default_provider = layer["default_provider"]
+            if schema_version is None and layer.get("schema_version") is not None:
+                schema_version = layer["schema_version"]
+            source_paths.extend(layer["source_paths"])
+
+        if not merged_defaults:
+            merged_defaults = {
+                "binding_mode": self.DEFAULT_BINDING_MODE,
+                "missing_policy": self.DEFAULT_MISSING_POLICY,
+            }
+
+        return {
+            "schema_version": schema_version if schema_version is not None else 1,
+            "default_provider": default_provider or "builtin",
+            "binding_defaults": merged_defaults,
+            "skills": skills_in_order,
+            "_source_path": source_paths[0] if source_paths else "",
+            "_source_paths": source_paths,
+            "_missing": False,
+            "_adapter_from_legacy": False,
+        }
+
+    @staticmethod
+    def _read_yaml_or_json(path: Path):
+        raw = path.read_text(encoding="utf-8")
+        try:
+            if path.suffix == ".json":
+                return json.loads(raw)
+            return yaml.safe_load(raw)
+        except (json.JSONDecodeError, yaml.YAMLError):
+            return None
+
+    @staticmethod
+    def _deep_merge(higher: dict, lower: dict) -> dict:
+        """Recursive dict merge. Keys from ``higher`` win at every level.
+
+        Non-dict values from ``higher`` always replace ``lower``'s
+        value at the same key (including replacing a dict with a
+        scalar or vice versa — the higher-priority layer is the
+        authority on shape too). Lists are NOT element-wise merged;
+        ``higher``'s list replaces ``lower``'s entirely so a project
+        layer can simply override a builtin list without surprises.
+        """
+        out = dict(lower)
+        for key, value in higher.items():
+            if isinstance(value, dict) and isinstance(out.get(key), dict):
+                out[key] = RuntimeBinder._deep_merge(value, out[key])
+            else:
+                out[key] = value
+        return out
 
     def bind_capabilities(
         self,

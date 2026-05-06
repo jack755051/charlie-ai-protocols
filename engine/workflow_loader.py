@@ -28,6 +28,7 @@ class WorkflowLoader:
         project_root: Path | None = None,
         cap_home: Path | None = None,
     ):
+        explicit_base_dir = base_dir is not None
         self.base_dir = Path(base_dir) if base_dir else Path(__file__).resolve().parents[1]
         self.workflows_dir = self.base_dir / "schemas" / "workflows"
         self.capabilities_path = self.base_dir / "schemas" / "capabilities.yaml"
@@ -40,14 +41,19 @@ class WorkflowLoader:
         self.agents_path = namespaced_agents if namespaced_agents.is_file() else legacy_agents
 
         # P9 #2 layered resolver roots. Precedence per design memo §9.2 Q1:
-        # explicit kwarg > env (CAP_PROJECT_ROOT / CAP_HOME) > cwd / home
-        # fallback. Resolved to absolute paths so layer-membership checks
-        # (`Path.relative_to`) work without surprises on symlink-laden
-        # sandboxes used by the focused test suite.
+        # explicit kwarg > env (CAP_PROJECT_ROOT / CAP_HOME) > if an
+        # explicit ``base_dir`` was passed, default project_root /
+        # cap_home to base_dir as well (preserves the "base_dir is the
+        # whole universe" contract that pre-P9 callers relied on);
+        # otherwise fall through to cwd / ~/.cap. Resolved to absolute
+        # paths so layer-membership checks (`Path.relative_to`) work
+        # without surprises on symlink-laden sandboxes.
         if project_root is not None:
             self.project_root = Path(project_root).expanduser().resolve()
         elif os.environ.get("CAP_PROJECT_ROOT"):
             self.project_root = Path(os.environ["CAP_PROJECT_ROOT"]).expanduser().resolve()
+        elif explicit_base_dir:
+            self.project_root = self.base_dir.resolve()
         else:
             self.project_root = Path.cwd().resolve()
 
@@ -55,6 +61,8 @@ class WorkflowLoader:
             self.cap_home = Path(cap_home).expanduser().resolve()
         elif os.environ.get("CAP_HOME"):
             self.cap_home = Path(os.environ["CAP_HOME"]).expanduser().resolve()
+        elif explicit_base_dir:
+            self.cap_home = self.base_dir.resolve()
         else:
             self.cap_home = (Path.home() / ".cap").resolve()
 
