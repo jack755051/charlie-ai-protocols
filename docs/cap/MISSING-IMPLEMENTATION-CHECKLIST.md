@@ -517,29 +517,63 @@
 
 ## P10：Detached Runtime and Promote / Publish
 
+> v1 範圍以 **promote surface（#1-#8）** 為主；detached runtime（background run + status polling）與 publish workflow 列為 deferred items，保留 section 末段以便日後接續，不阻塞 promote 收斂。
+
+- [x] **P10 #1**：定義 runtime artifact promote 規則（policy SSOT）
+  - 交付物：`policies/runtime-promote.md`
+  - 驗收：哪些 runtime artifact 可 promote、哪些只留 archive、target path、overwrite / backup / validation / rollback 規則全部釘下；其他 P10 #2-#8 子項都以本文件為唯一參考
+  - 進度：done。`policies/runtime-promote.md` v1.0 共 11 段，鎖定：(§2) 兩類 promotable artifact (`project_constitution` / `compiled_workflow`)，run-only artifact 與 binding report 不在預設 promotable 清單；(§3) target path 規則 — constitution 唯一寫 `<project_root>/.cap/constitution.yaml` namespaced（不寫 legacy），workflow 唯一寫 `<project_root>/.cap/workflows/<workflow_id>.yaml`，partial override 禁令對齊 P9 §4.3；(§4) dry-run-first 預設、四種 overwrite 狀態（不存在 / byte-equal skip / conflict halt / `--force` + 自動 backup），backup 必須寫 `<target>.bak.<ISO>` 不自動清；(§5) Promote Candidate Producer 契約 — 新模組 `engine/promote_candidate_producer.py:produce_candidates(...)` 由 P7 `result_report_builder` 結尾調用、emit 嚴格 schema-aligned candidate dict、`final_state != completed` 不 emit、找不到 source on disk 靜默不 emit；(§6) post-apply validation — schema 失敗必須 rollback，rollback 失敗印 `rollback_failed` warning 停在現場；(§7) CLI surface — `cap promote inspect <id>` / `cap promote project-constitution <task_id>` / `cap promote workflow <workflow_id>`，flags `--dry-run` (default) / `--apply` / `--force` / `--smoke` / `--json` / `--cap-home`；(§9) anti-patterns（不 promote run-only、不靜默 overwrite、不跳過 validation、不 chained promote）。**邊界**：純 markdown，無 runtime 改動；後續 #2-#8 commit 都 cross-reference 本文件對應段落。
+
+- [ ] **P10 #2**：promote candidate producer
+  - 交付物：`engine/promote_candidate_producer.py:produce_candidates(...)`
+  - 驗收：`workflow-result.json.promote_candidates[]` 不再永遠 `[]`；每 candidate 含 `source_path` / `target_path` / `artifact_type` / `reason` / 選配 `validation_schema` / `source_layer` / `source_revision`，`final_state != completed` 不 emit
+  - 對齊 `policies/runtime-promote.md` §5
+
+- [ ] **P10 #3**：`cap promote inspect <artifact_id>`
+  - 交付物：CLI subcommand
+  - 驗收：顯示 artifact 是否可 promote、source / target / 風險、會覆寫什麼、需要哪些 validation；支援 `--json`
+  - 對齊 `policies/runtime-promote.md` §7.1
+
+- [ ] **P10 #4**：`cap promote project-constitution <task_id>` 收斂
+  - 交付物：typed CLI subcommand 收斂既有 P2 promote 能力
+  - 驗收：對齊 `.cap/constitution.yaml` 新路徑、保留 legacy fallback / backup
+  - 對齊 `policies/runtime-promote.md` §3.1 / §7.2
+
+- [ ] **P10 #5**：`cap promote workflow <workflow_id>`
+  - 交付物：typed CLI subcommand
+  - 驗收：將 runtime compiled workflow promote 為 `<project_root>/.cap/workflows/<workflow_id>.yaml`，必須跑 schema validation；partial override 禁令與 P9 對齊
+  - 對齊 `policies/runtime-promote.md` §3.2 / §7.3
+
+- [ ] **P10 #6**：post-apply validation
+  - 交付物：promote 後 validate hook
+  - 驗收：promoted artifact 重跑 schema validate，必要時跑 compile / bind smoke；失敗時 rollback，repo SSOT 不被破壞
+  - 對齊 `policies/runtime-promote.md` §6
+
+- [ ] **P10 #7**：promote docs + examples
+  - 交付物：使用者面向文件
+  - 驗收：promote lifecycle、`inspect → promote → validate` 流程、project constitution / workflow 範例、runtime archive vs repo SSOT 邊界說明
+  - 對齊 `policies/runtime-promote.md` §8 / §10
+
+- [ ] **P10 #8**：tests
+  - 交付物：focused test suites
+  - 驗收：promote candidate producer / inspect CLI / project-constitution promote regression / workflow promote / validation failure rollback 全覆蓋
+
+### Deferred to a later cycle (out of v1 promote scope)
+
 - [ ] 實作 detached / background workflow run
   - 交付物：background run mode
   - 驗收：run 可脫離 foreground 並持續寫入 status
+  - 現況：deferred；P10 v1 聚焦 promote surface，detached runtime 等真實非同步 use case 出現再開。
 
 - [ ] 實作 run status polling
   - 交付物：CLI command 或 status endpoint
   - 驗收：可查 detached run 狀態與最近 log
-
-- [ ] 實作 promote candidate selection
-  - 交付物：candidate selector
-  - 驗收：只允許 validated artifact 進 promote 流程
-
-- [ ] 實作 promote dry-run
-  - 交付物：dry-run diff
-  - 驗收：可預覽會寫回 repo 的檔案
-
-- [ ] 實作 promote apply
-  - 交付物：apply command
-  - 驗收：寫回 repo 前保留 audit trail
+  - 現況：deferred；與 detached run 綁定，同上時程。
 
 - [ ] 實作 publish workflow
   - 交付物：publish command 或 workflow
   - 驗收：可把 validated workflow / skill / schema 發布到指定 registry 或 shared source
+  - 現況：deferred；publish (cross-repo) vs promote (run → repo) 是不同問題，等 promote surface 穩定 + shared layer producer 範本到位後再開。
 
 ## 建議執行順序
 
