@@ -79,6 +79,40 @@ properties:
     items:
       type: object
 
+  workflow_source:
+    type: [object, "null"]
+    description: |
+      Source layer + absolute path of the workflow that drove this
+      binding (P9 #4; see docs/cap/P9-SOURCE-RESOLVER-DESIGN.md §6.1).
+      Threaded through from WorkflowLoader._resolve_workflow_path's
+      (path, source_layer) tuple. Null only for synthesized / inline
+      semantic plans without a backing file (test harnesses, fixture
+      replay).
+    properties:
+      source_layer:
+        type: string
+        enum: [project, shared, builtin, explicit]
+        description: |
+          Layer the workflow file resolved to. ``explicit`` covers
+          absolute paths the user supplied that fall outside the three
+          configured layer roots; P9 #5 enforcement still gates these.
+      source_path:
+        type: string
+        description: Absolute filesystem path of the resolved workflow file.
+
+  effective_allowed_roots:
+    type: array
+    description: |
+      Snapshot of effective ``allowed_source_roots`` for this binding
+      after merging runtime-injected implicit project / builtin
+      defaults (design memo §3.1) with constitution-declared roots.
+      P9 #4 emits ``[]`` as a placeholder; P9 #5 populates the real
+      effective set (and uses it for the workflow / skill source
+      enforcement gates). An empty array therefore reads as either
+      "enforcement disabled" or "P9 #5 not yet computed it"; consumers
+      should not treat empty as authoritative until both phases ship.
+    items: {type: string}
+
   summary:
     type: object
     required:
@@ -182,3 +216,26 @@ properties:
           description: Optional list of candidate skill ids the binder considered before selection. Empty when no candidates were enumerated (blocked / shell branches).
           items:
             type: string
+        skill_source:
+          type: [object, "null"]
+          description: |
+            Source layer + absolute path of the selected skill (P9 #4;
+            see docs/cap/P9-SOURCE-RESOLVER-DESIGN.md §6.1). Null when
+            no skill was selected (resolution_status in
+            {required_unresolved, optional_unresolved, blocked_by_constitution}).
+            ``source_layer="fallback"`` with ``source_path=null`` marks
+            synthetic selections — namely ``selected_skill_id="builtin-shell"``
+            (shell executor) and skills synthesised by the legacy
+            agents.json adapter; both have no real registry file the
+            consumer can navigate to.
+          properties:
+            source_layer:
+              type: string
+              enum: [project, shared, builtin, explicit, fallback]
+              description: |
+                Layer the selected skill came from after the P9 #3
+                three-layer merge. ``fallback`` covers builtin-shell
+                and legacy-adapter selections.
+            source_path:
+              type: [string, "null"]
+              description: Absolute path of the skill registry file the skill was loaded from; null for builtin-shell / legacy-adapter selections.

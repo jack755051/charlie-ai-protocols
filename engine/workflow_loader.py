@@ -353,6 +353,12 @@ class WorkflowLoader:
             "name": workflow["name"],
             "summary": workflow["summary"],
             "source_path": workflow["_source_path"],
+            # P9 #2 → P9 #4: thread the resolved workflow source layer
+            # through the semantic plan so RuntimeBinder can record it
+            # in the binding report's workflow_source field. Falls back
+            # to None for synthesized / inline workflows that never
+            # passed through _resolve_workflow_path.
+            "source_layer": workflow.get("_source_layer"),
             "governance": workflow.get("governance", {}),
             "contract_missing_steps": contract_missing_steps,
             "phases": phases,

@@ -424,6 +424,31 @@ class RuntimeBinder:
         }
 
     @staticmethod
+    def _skill_source_metadata(skill: dict | None, *, fallback_when_missing: bool = False) -> dict | None:
+        """Extract P9 #4 skill_source metadata from a registry skill dict.
+
+        Skills accumulated by ``_resolve_layer_registry`` carry
+        ``_source_layer`` / ``_source_path`` internal tags (P9 #3); this
+        helper projects them into the binding-report shape. Skills
+        synthesised by the legacy ``agents.json`` adapter or by the
+        ``builtin-shell`` branch lack those tags — when
+        ``fallback_when_missing`` is true, return a sentinel
+        ``{"source_layer": "fallback", "source_path": null}`` so the
+        binding report still records *that the selection had no
+        navigable registry file*; when false, return ``None`` (used for
+        unresolved / blocked branches that have no skill at all).
+        """
+        if skill is None:
+            if fallback_when_missing:
+                return {"source_layer": "fallback", "source_path": None}
+            return None
+        layer = skill.get("_source_layer")
+        path = skill.get("_source_path")
+        if layer:
+            return {"source_layer": layer, "source_path": path}
+        return {"source_layer": "fallback", "source_path": None}
+
+    @staticmethod
     def _read_yaml_or_json(path: Path):
         raw = path.read_text(encoding="utf-8")
         try:
@@ -530,6 +555,8 @@ class RuntimeBinder:
                         "missing_policy": missing_policy,
                         "reason": reason,
                         "candidate_skill_ids": [],
+                        # P9 #4 — bootstrap-blocked branch never picked a skill.
+                        "skill_source": None,
                     }
                 )
                 continue
@@ -565,6 +592,8 @@ class RuntimeBinder:
                             "missing_policy": missing_policy,
                             "reason": reason,
                             "candidate_skill_ids": [],
+                            # P9 #4 — capability-blocked branch never picked a skill.
+                            "skill_source": None,
                         }
                     )
                     continue
@@ -594,6 +623,11 @@ class RuntimeBinder:
                         "missing_policy": missing_policy,
                         "reason": reason,
                         "candidate_skill_ids": [],
+                        # P9 #4 — synthetic builtin-shell selection has
+                        # no real registry file to point at.
+                        "skill_source": self._skill_source_metadata(
+                            None, fallback_when_missing=True
+                        ),
                     }
                 )
                 continue
@@ -608,6 +642,11 @@ class RuntimeBinder:
             selected = candidates[0] if candidates else None
             fallback = self._find_fallback(registry, capability) if binding_mode == "fallback_allowed" else None
 
+            # P9 #4 — track which registry skill ended up selected so
+            # the binding report can record skill_source. None means
+            # no skill was picked at all (unresolved branch).
+            chosen_skill: dict | None = None
+
             if selected and self._has_execution_metadata(selected):
                 resolution_status = "resolved"
                 reason = "found compatible skill"
@@ -617,6 +656,7 @@ class RuntimeBinder:
                 selected_agent_alias = selected.get("agent_alias")
                 selected_prompt_file = selected.get("prompt_file")
                 selected_cli = selected.get("cli")
+                chosen_skill = selected
             elif fallback and self._has_execution_metadata(fallback):
                 resolution_status = "fallback_available"
                 reason = "no direct skill; generic fallback available"
@@ -626,6 +666,7 @@ class RuntimeBinder:
                 selected_agent_alias = fallback.get("agent_alias")
                 selected_prompt_file = fallback.get("prompt_file")
                 selected_cli = fallback.get("cli")
+                chosen_skill = fallback
             elif selected or fallback:
                 broken = selected or fallback
                 resolution_status = "incompatible"
@@ -639,6 +680,7 @@ class RuntimeBinder:
                 selected_agent_alias = broken.get("agent_alias")
                 selected_prompt_file = broken.get("prompt_file")
                 selected_cli = broken.get("cli")
+                chosen_skill = broken
             else:
                 if optional:
                     resolution_status = "optional_unresolved"
@@ -669,6 +711,12 @@ class RuntimeBinder:
                     "missing_policy": missing_policy,
                     "reason": reason,
                     "candidate_skill_ids": [candidate["skill_id"] for candidate in candidates],
+                    # P9 #4 — derived from the chosen skill's P9 #3
+                    # _source_layer / _source_path internal tags;
+                    # None when no skill was selected (unresolved
+                    # branches), "fallback" sentinel when the skill
+                    # exists but lacks layer tags (legacy adapter).
+                    "skill_source": self._skill_source_metadata(chosen_skill),
                 }
             )
 
@@ -677,6 +725,21 @@ class RuntimeBinder:
             fallback_steps=fallback_steps,
             unresolved_optional_steps=unresolved_optional_steps,
         )
+
+        # P9 #4 — top-level workflow_source from semantic_plan's
+        # source_layer / source_path tags (threaded by P9 #2 through
+        # build_semantic_plan_from_workflow). Null when the semantic
+        # plan was synthesized inline without a backing file.
+        workflow_source_path = semantic_plan.get("source_path")
+        workflow_source_layer = semantic_plan.get("source_layer")
+        workflow_source: dict | None
+        if workflow_source_path and workflow_source_layer:
+            workflow_source = {
+                "source_layer": workflow_source_layer,
+                "source_path": workflow_source_path,
+            }
+        else:
+            workflow_source = None
 
         return {
             "schema_version": 1,
@@ -688,6 +751,12 @@ class RuntimeBinder:
             "registry_missing": registry.get("_missing", False),
             "adapter_from_legacy": registry.get("_adapter_from_legacy", False),
             "contract_missing_steps": semantic_plan["contract_missing_steps"],
+            "workflow_source": workflow_source,
+            # P9 #4 placeholder; P9 #5 will populate the real effective
+            # set after computing implicit project/builtin defaults
+            # ∪ constitution.allowed_source_roots. Empty array reads as
+            # "enforcement disabled or not yet computed".
+            "effective_allowed_roots": [],
             "summary": {
                 "total_steps": len(semantic_plan["steps"]),
                 "resolved_steps": resolved_steps,
