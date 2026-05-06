@@ -9,16 +9,40 @@ PATH_HELPER="${SCRIPT_DIR}/cap-paths.sh"
 usage() {
   cat <<'EOF' >&2
 Usage:
+  bash scripts/cap-promote.sh inspect <artifact_id> [--json] [--project-root P] [--cap-home C] [--project-id ID]
   bash scripts/cap-promote.sh list [drafts|reports|all]
   bash scripts/cap-promote.sh <local_rel_path> <repo_rel_path>
 
+Subcommands (typed promote surface, P10):
+  inspect    read-only inspect of a promote candidate (P10 #3); never writes.
+
+Generic / legacy escape hatch (kept for backward compat per policy §7.4):
+  list       enumerate runtime drafts/reports
+  <src> <dst>  raw copy from <project_store>/<src> to <repo>/<dst>; no
+               validation or backup. Prefer the typed cap promote
+               project-constitution / cap promote workflow subcommands
+               once they ship (P10 #4 / #5).
+
 Examples:
+  bash scripts/cap-promote.sh inspect task-alpha
+  bash scripts/cap-promote.sh inspect wf-id --json
   bash scripts/cap-promote.sh list
   bash scripts/cap-promote.sh reports/audit-log.md docs/reports/audit-log.md
   bash scripts/cap-promote.sh drafts/readme-draft.md docs/readme/README-draft.md
 EOF
   exit 1
 }
+
+resolve_python() {
+  if [ -x "${CAP_ROOT}/.venv/bin/python" ]; then
+    printf '%s\n' "${CAP_ROOT}/.venv/bin/python"
+  else
+    printf '%s\n' "python3"
+  fi
+}
+
+PYTHON_BIN="$(resolve_python)"
+PROMOTE_CLI_PY="${CAP_ROOT}/engine/promote_cli.py"
 
 list_files() {
   local scope="${1:-all}"
@@ -91,6 +115,13 @@ promote_file() {
 }
 
 case "${1:-}" in
+  inspect)
+    shift
+    [ "$#" -ge 1 ] || usage
+    # Forward all remaining args (artifact_id + optional flags) to the
+    # Python CLI; argparse handles positional + flag mixing.
+    "${PYTHON_BIN}" "${PROMOTE_CLI_PY}" inspect "$@"
+    ;;
   list)
     [ "$#" -le 2 ] || usage
     list_files "${2:-all}"

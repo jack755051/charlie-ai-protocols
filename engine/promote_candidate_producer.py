@@ -98,21 +98,28 @@ def produce_candidates(
     return candidates
 
 
-def _detect_constitution_candidate(
-    run_result: dict,
+def detect_constitution_candidate_for_task(
+    task_id: Optional[str],
+    *,
     project_storage: Path,
     project_root: Path,
+    source_layer: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
-    """Return a project_constitution candidate or ``None``.
+    """Build a project_constitution candidate dict for ``task_id`` or ``None``.
 
-    Per policy §5.3: emitted when ``run_result.task_id`` is non-null
-    and ``<cap_home>/projects/<project_id>/constitutions/<task_id>/
-    constitution.{yaml,yml,json}`` exists on disk. The constitution
-    file is the runtime snapshot the supervisor wrote at task setup;
-    promoting it copies that snapshot into the repo as the new
-    project SSOT.
+    Public API used by both ``produce_candidates`` (P10 #2.2 producer
+    path) and ``promote_resolver.resolve_promote`` (P10 #3 inspect
+    path). Pure read-only path-existence check; no file content is
+    parsed. ``None`` is returned when:
+
+    * ``task_id`` is empty / falsy.
+    * ``<project_storage>/constitutions/<task_id>/`` does not exist.
+    * No ``constitution.{yaml,yml,json}`` is present in that dir.
+
+    ``source_layer`` is informational; pass through whatever P9
+    layer marker the caller has (often ``None`` for runtime
+    artifacts that did not flow through the layered resolver).
     """
-    task_id = run_result.get("task_id")
     if not task_id:
         return None
 
@@ -144,32 +151,41 @@ def _detect_constitution_candidate(
             "and ready to promote to the project SSOT"
         ),
         "validation_schema": "schemas/project-constitution.schema.yaml",
-        "source_layer": run_result.get("source_layer"),
+        "source_layer": source_layer,
         "source_revision": task_id,
     }
 
 
-def _detect_compiled_workflow_candidate(
-    run_result: dict,
+def detect_compiled_workflow_candidate_for(
+    workflow_id: Optional[str],
+    final_state: Optional[str],
+    *,
     project_storage: Path,
     project_root: Path,
+    source_layer: Optional[str] = None,
+    require_completed: bool = True,
 ) -> Optional[dict[str, Any]]:
-    """Return a compiled_workflow candidate or ``None``.
+    """Build a compiled_workflow candidate dict for ``workflow_id`` or ``None``.
 
-    Per policy §5.3: emitted only when ``final_state == "completed"``
-    AND ``<cap_home>/projects/<project_id>/compiled-workflows/
-    <workflow_id>/`` contains at least one ``.json`` / ``.yaml`` /
-    ``.yml`` snapshot. The most-recent file (by mtime, with filename
-    as tiebreaker) is chosen so a workflow that has been recompiled
-    multiple times during one task surfaces only its latest snapshot.
+    Public API used by both ``produce_candidates`` (P10 #2.2 producer
+    path, ``require_completed=True``) and ``promote_resolver.resolve_promote``
+    (P10 #3 inspect path, may pass ``require_completed=False`` so
+    ``cap promote inspect`` can still describe the on-disk snapshot
+    when the user is investigating). Pure read-only path-existence
+    check; the ``final_state`` gate fires when ``require_completed``
+    is true so callers that need the policy §5.3 safety check (no
+    failed-run promotes) opt in explicitly.
 
-    Failed / blocked / cancelled runs are intentionally skipped:
-    promoting the compiled workflow under which an execution failed
-    would freeze a known-bad artifact into the repo.
+    ``None`` is returned when:
+
+    * ``workflow_id`` is empty / falsy.
+    * ``require_completed`` and ``final_state != "completed"``.
+    * ``<project_storage>/compiled-workflows/<workflow_id>/`` does
+      not exist or contains no ``.json`` / ``.yaml`` / ``.yml`` files.
     """
-    workflow_id = run_result.get("workflow_id")
-    final_state = run_result.get("final_state")
-    if not workflow_id or final_state != "completed":
+    if not workflow_id:
+        return None
+    if require_completed and final_state != "completed":
         return None
 
     cw_dir = project_storage / "compiled-workflows" / workflow_id
@@ -193,18 +209,60 @@ def _detect_compiled_workflow_candidate(
 
     target_path = project_root / ".cap" / "workflows" / f"{workflow_id}.yaml"
 
+    if require_completed:
+        reason = (
+            f"workflow '{workflow_id}' completed without failures; "
+            "compiled workflow snapshot is ready to promote to project SSOT"
+        )
+    else:
+        reason = (
+            f"compiled workflow snapshot exists for '{workflow_id}' "
+            f"(final_state={final_state or 'unknown'}); promote is gated by "
+            "policy §5.3 — failed / blocked / cancelled runs cannot be promoted"
+        )
+
     return {
         "source_path": str(latest.resolve()),
         "target_path": str(target_path.resolve()),
         "artifact_type": "compiled_workflow",
-        "reason": (
-            f"workflow '{workflow_id}' completed without failures; "
-            "compiled workflow snapshot is ready to promote to project SSOT"
-        ),
+        "reason": reason,
         "validation_schema": "schemas/compiled-workflow.schema.yaml",
-        "source_layer": run_result.get("source_layer"),
+        "source_layer": source_layer,
         "source_revision": latest.stem,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Backward-compat thin wrappers for the producer (run_result-shaped input).
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _detect_constitution_candidate(
+    run_result: dict,
+    project_storage: Path,
+    project_root: Path,
+) -> Optional[dict[str, Any]]:
+    return detect_constitution_candidate_for_task(
+        run_result.get("task_id"),
+        project_storage=project_storage,
+        project_root=project_root,
+        source_layer=run_result.get("source_layer"),
+    )
+
+
+def _detect_compiled_workflow_candidate(
+    run_result: dict,
+    project_storage: Path,
+    project_root: Path,
+) -> Optional[dict[str, Any]]:
+    return detect_compiled_workflow_candidate_for(
+        run_result.get("workflow_id"),
+        run_result.get("final_state"),
+        project_storage=project_storage,
+        project_root=project_root,
+        source_layer=run_result.get("source_layer"),
+        require_completed=True,
+    )
 
 
 def _resolve_cap_home(cap_home: Optional[Path | str]) -> Path:
