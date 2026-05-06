@@ -992,7 +992,11 @@ def cmd_compile_json(cap_root: str, request: str, registry_ref: str | None = Non
     sys.path.insert(0, str(base_dir))
     from engine.binding_report_validator import BindingReportSchemaError  # noqa: E402
     from engine.compiled_workflow_validator import CompiledWorkflowSchemaError  # noqa: E402
-    from engine.runtime_binder import BindingPolicyError, WorkflowSourcePolicyError  # noqa: E402
+    from engine.runtime_binder import (  # noqa: E402
+        BindingPolicyError,
+        SkillSourcePolicyError,
+        WorkflowSourcePolicyError,
+    )
     from engine.task_scoped_compiler import TaskScopedWorkflowCompiler  # noqa: E402
 
     compiler = TaskScopedWorkflowCompiler(base_dir=base_dir)
@@ -1043,6 +1047,19 @@ def cmd_compile_json(cap_root: str, request: str, registry_ref: str | None = Non
                 {
                     "ok": False,
                     "error": "workflow_source_policy_error",
+                    "stage": exc.stage,
+                    "errors": exc.errors,
+                },
+                ensure_ascii=False,
+            )
+        )
+        sys.exit(1)
+    except SkillSourcePolicyError as exc:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": "skill_source_policy_error",
                     "stage": exc.stage,
                     "errors": exc.errors,
                 },

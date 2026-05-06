@@ -32,21 +32,46 @@ class BindingPolicyError(Exception):
         self.errors = list(errors)
 
 
-class WorkflowSourcePolicyError(Exception):
-    """Raised when a workflow's source path is outside the constitution's allowed roots.
+class SourcePolicyError(Exception):
+    """Common base for source-policy halts (workflow / skill).
 
-    Replaces the bare ``ValueError`` previously raised by
-    ``RuntimeBinder._assert_workflow_source_allowed`` so the CLI can
-    surface a deterministic JSON error class instead of a raw
-    traceback. The actual policy decision (which roots are allowed,
-    whether enforcement is on) is unchanged; this is purely an
-    error-class promotion plus CLI-level handling.
+    P9 #5 introduced this base so callers (engine + CLI) can ``except
+    SourcePolicyError`` once and route either ``WorkflowSourcePolicyError``
+    or ``SkillSourcePolicyError`` through the same JSON-error
+    surface. Subclasses preserve the existing ``stage`` / ``errors``
+    keyword constructor contract.
     """
 
     def __init__(self, message: str, *, stage: str, errors: list[str]) -> None:
         super().__init__(message)
         self.stage = stage
         self.errors = list(errors)
+
+
+class WorkflowSourcePolicyError(SourcePolicyError):
+    """Raised when a workflow's source path is outside the effective allowed roots.
+
+    Replaces the bare ``ValueError`` previously raised by
+    ``RuntimeBinder._assert_workflow_source_allowed`` so the CLI can
+    surface a deterministic JSON error class instead of a raw
+    traceback. P9 #5 promoted the parent class to ``SourcePolicyError``
+    without changing the ``__init__`` contract; existing
+    ``except WorkflowSourcePolicyError`` callers keep working.
+    """
+
+    pass
+
+
+class SkillSourcePolicyError(SourcePolicyError):
+    """Raised when a step's selected skill source path is outside the effective allowed roots.
+
+    Per design memo §7.4 the skill-side gate halts the entire binding
+    rather than degrading to a fallback, because a violation indicates
+    the project constitution's source isolation has been broken; logging
+    a fallback would hide the breach in the binding report.
+    """
+
+    pass
 
 
 def ensure_binding_status_executable(
@@ -510,6 +535,13 @@ class RuntimeBinder:
         allowed_capabilities = set(constitution_binding_policy.get("allowed_capabilities", []) or [])
         bootstrap_mode = bool(project_context.get("_bootstrap", False))
         bootstrap_workflow = semantic_plan.get("workflow_id") == self.BOOTSTRAP_WORKFLOW_ID
+        # P9 #5 — compute the effective allowed roots once (implicit
+        # project + builtin defaults union user-declared) so both the
+        # workflow gate (here) and the per-step skill gate (inside the
+        # for loop) consult the same set, and the binding report's
+        # effective_allowed_roots field reflects the actual policy
+        # snapshot used during this bind.
+        effective_allowed_roots = self._compute_effective_allowed_roots(project_context)
         self._assert_workflow_source_allowed(semantic_plan.get("source_path"), project_context)
 
         step_reports: list[dict] = []
@@ -539,6 +571,15 @@ class RuntimeBinder:
                     unresolved_optional_steps += 1
                 else:
                     unresolved_required_steps += 1
+                # P9 #5 — bootstrap-blocked branch picks no skill;
+                # gate is a structural no-op but kept here so the
+                # invariant "skill gate fires for every step" holds
+                # uniformly across all four append sites.
+                self._assert_skill_source_allowed(
+                    None,
+                    step_id=step["step_id"],
+                    effective_allowed_roots=effective_allowed_roots,
+                )
                 step_reports.append(
                     {
                         "step_id": step["step_id"],
@@ -576,6 +617,13 @@ class RuntimeBinder:
                         unresolved_optional_steps += 1
                     else:
                         unresolved_required_steps += 1
+                    # P9 #5 — capability-blocked branch picks no skill;
+                    # uniform gate call (structural no-op).
+                    self._assert_skill_source_allowed(
+                        None,
+                        step_id=step["step_id"],
+                        effective_allowed_roots=effective_allowed_roots,
+                    )
                     step_reports.append(
                         {
                             "step_id": step["step_id"],
@@ -607,6 +655,20 @@ class RuntimeBinder:
                 selected_agent_alias = "shell"
                 selected_prompt_file = None
                 selected_cli = None
+                # P9 #4 / #5 — synthetic builtin-shell selection has no
+                # real registry file to enforce; the gate call is a
+                # structural no-op (skill_source.source_path is None
+                # so _assert_skill_source_allowed returns immediately)
+                # but kept here for the uniform "every step gets gated"
+                # invariant.
+                shell_skill_source = self._skill_source_metadata(
+                    None, fallback_when_missing=True
+                )
+                self._assert_skill_source_allowed(
+                    shell_skill_source,
+                    step_id=step["step_id"],
+                    effective_allowed_roots=effective_allowed_roots,
+                )
                 step_reports.append(
                     {
                         "step_id": step["step_id"],
@@ -623,11 +685,7 @@ class RuntimeBinder:
                         "missing_policy": missing_policy,
                         "reason": reason,
                         "candidate_skill_ids": [],
-                        # P9 #4 — synthetic builtin-shell selection has
-                        # no real registry file to point at.
-                        "skill_source": self._skill_source_metadata(
-                            None, fallback_when_missing=True
-                        ),
+                        "skill_source": shell_skill_source,
                     }
                 )
                 continue
@@ -695,6 +753,21 @@ class RuntimeBinder:
                 selected_prompt_file = None
                 selected_cli = None
 
+            # P9 #4 — derived from the chosen skill's P9 #3
+            # _source_layer / _source_path internal tags; None when
+            # no skill was selected (unresolved branches), "fallback"
+            # sentinel when the skill exists but lacks layer tags
+            # (legacy adapter).
+            skill_source = self._skill_source_metadata(chosen_skill)
+            # P9 #5 — gate the chosen skill against effective allowed
+            # roots before writing the step report. Raises
+            # SkillSourcePolicyError on violation; halts the entire
+            # binding rather than degrading (memo §7.4).
+            self._assert_skill_source_allowed(
+                skill_source,
+                step_id=step["step_id"],
+                effective_allowed_roots=effective_allowed_roots,
+            )
             step_reports.append(
                 {
                     "step_id": step["step_id"],
@@ -711,12 +784,7 @@ class RuntimeBinder:
                     "missing_policy": missing_policy,
                     "reason": reason,
                     "candidate_skill_ids": [candidate["skill_id"] for candidate in candidates],
-                    # P9 #4 — derived from the chosen skill's P9 #3
-                    # _source_layer / _source_path internal tags;
-                    # None when no skill was selected (unresolved
-                    # branches), "fallback" sentinel when the skill
-                    # exists but lacks layer tags (legacy adapter).
-                    "skill_source": self._skill_source_metadata(chosen_skill),
+                    "skill_source": skill_source,
                 }
             )
 
@@ -752,11 +820,11 @@ class RuntimeBinder:
             "adapter_from_legacy": registry.get("_adapter_from_legacy", False),
             "contract_missing_steps": semantic_plan["contract_missing_steps"],
             "workflow_source": workflow_source,
-            # P9 #4 placeholder; P9 #5 will populate the real effective
-            # set after computing implicit project/builtin defaults
-            # ∪ constitution.allowed_source_roots. Empty array reads as
-            # "enforcement disabled or not yet computed".
-            "effective_allowed_roots": [],
+            # P9 #5: snapshot of the effective allowed_source_roots set
+            # actually consulted during this bind (implicit project +
+            # builtin defaults union user-declared, deduped). Empty
+            # list reads as "enforcement disabled".
+            "effective_allowed_roots": effective_allowed_roots,
             "summary": {
                 "total_steps": len(semantic_plan["steps"]),
                 "resolved_steps": resolved_steps,
@@ -1090,37 +1158,184 @@ class RuntimeBinder:
         return "ready"
 
     def _assert_workflow_source_allowed(self, source_path: str | None, project_context: dict) -> None:
+        """Halt binding when ``source_path`` is outside effective allowed roots.
+
+        P9 #5 upgraded this hook to consult the **effective** set
+        (implicit project + builtin defaults union user-declared
+        ``constitution.workflow_policy.allowed_source_roots``) computed
+        by :meth:`_compute_effective_allowed_roots`, so the gate stays
+        correct after P9 #2 layered resolution started routing some
+        workflows through ``<project_root>/.cap/workflows/`` and
+        ``<cap_root>/schemas/workflows/`` which a pre-P9 user-declared
+        list would not include.
+        """
         if not source_path or source_path.startswith("<"):
             return
 
-        workflow_policy = project_context.get("workflow_policy", {}) or {}
-        if not workflow_policy.get("enforce_allowed_source_roots", False):
+        effective_roots = self._compute_effective_allowed_roots(project_context)
+        if not effective_roots:
             return
 
-        allowed_roots = workflow_policy.get("allowed_source_roots", []) or []
-        if not allowed_roots:
+        if self._path_is_under_any_root(source_path, effective_roots):
             return
-
-        source = Path(source_path)
-        if not source.is_absolute():
-            source = self.base_dir / source
-        source = source.resolve()
-
-        for root_ref in allowed_roots:
-            root_path = Path(root_ref)
-            if not root_path.is_absolute():
-                root_path = self.base_dir / root_path
-            root_path = root_path.resolve()
-            if source == root_path or root_path in source.parents:
-                return
 
         raise WorkflowSourcePolicyError(
             f"workflow 來源不符合 project constitution 限制: {source_path}",
             stage="workflow_source_policy",
             errors=[
-                f"source_path '{source_path}' is not under any of the configured allowed_source_roots: {list(allowed_roots)}"
+                f"source_path '{source_path}' is not under any of the effective allowed_source_roots: {list(effective_roots)}"
             ],
         )
+
+    def _assert_skill_source_allowed(
+        self,
+        skill_source: dict | None,
+        *,
+        step_id: str,
+        effective_allowed_roots: list[str],
+    ) -> None:
+        """Halt binding when a step's selected skill source is outside effective allowed roots.
+
+        Per design memo §7.3 / §7.4 fires after the binder picks a
+        skill for ``step_id`` (i.e. after ``_skill_source_metadata``
+        returns the report-shaped dict, before ``step_reports.append``).
+        Skips when:
+
+        * ``effective_allowed_roots`` is empty — enforcement disabled.
+        * ``skill_source`` is ``None`` — no skill was selected
+          (resolution_status in {required_unresolved, optional_unresolved,
+          blocked_by_constitution}); nothing to enforce.
+        * ``skill_source.source_path`` is ``None`` — synthetic
+          builtin-shell or legacy-adapter selection; ``source_layer``
+          is ``"fallback"`` and there is no real registry file path
+          to gate. Memo §7.5: fallback / synthetic selections cannot
+          violate source policy because they have no source.
+
+        Otherwise the chosen skill's ``source_path`` is checked the
+        same way as the workflow gate; mismatch raises
+        :class:`SkillSourcePolicyError` and halts the binding (memo
+        §7.4: governance redline beats availability — never degrade
+        to fallback to hide the breach).
+        """
+        if not effective_allowed_roots:
+            return
+        if skill_source is None:
+            return
+        source_path = skill_source.get("source_path") if isinstance(skill_source, dict) else None
+        if not source_path:
+            return
+
+        if self._path_is_under_any_root(source_path, effective_allowed_roots):
+            return
+
+        raise SkillSourcePolicyError(
+            f"skill 來源不符合 project constitution 限制: step_id={step_id} source_path={source_path}",
+            stage="skill_source_policy",
+            errors=[
+                f"step '{step_id}' selected a skill from '{source_path}' which is not under any of the effective allowed_source_roots: {list(effective_allowed_roots)}"
+            ],
+        )
+
+    def _compute_effective_allowed_roots(self, project_context: dict) -> list[str]:
+        """Compute the effective set of allowed source roots for enforcement.
+
+        Returns an empty list when ``enforce_allowed_source_roots`` is
+        ``False`` — both source-policy hooks treat empty as "enforcement
+        disabled" and skip. Otherwise the result is, in order:
+
+        1. User-declared ``constitution.workflow_policy.allowed_source_roots``.
+        2. Implicit project layer (design memo §3.1.2): the
+           ``<project_root>/.cap/{workflows,skills,skills.json}``
+           directories — auto-allowed so a project that flips
+           ``enforce_allowed_source_roots`` on doesn't accidentally
+           block its own ``.cap/`` registry files.
+        3. Implicit builtin layer: the
+           ``<cap_root>/schemas/workflows`` plus
+           ``<cap_root>/.cap/{skills,skills.json}`` paths.
+
+        Shared layer is intentionally **not** in implicit defaults; if
+        a user wants the shared registry honored they have to declare
+        ``<cap_home>/shared/...`` explicitly in
+        ``allowed_source_roots`` (memo §3.1).
+
+        All paths are returned as absolute strings (``Path.resolve()``);
+        de-duplicated while preserving priority order so the binding
+        report's ``effective_allowed_roots`` field reads cleanly.
+        """
+        workflow_policy = project_context.get("workflow_policy", {}) or {}
+        if not workflow_policy.get("enforce_allowed_source_roots", False):
+            return []
+
+        candidates: list[str] = []
+
+        # User-declared first so they read top of the binding report's
+        # effective_allowed_roots snapshot.
+        for raw in workflow_policy.get("allowed_source_roots", []) or []:
+            if not raw:
+                continue
+            try:
+                resolved = Path(raw).expanduser().resolve()
+            except (OSError, ValueError):
+                continue
+            candidates.append(str(resolved))
+
+        # Implicit project + builtin layer paths. Memo §3.1.2 lists
+        # ``.cap/skills.json`` literally; in practice the canonical
+        # skill registry is ``.cap/skills.yaml`` (per
+        # DEFAULT_REGISTRY_PATH_NAMESPACED), so we cover all three
+        # extensions plus the per-skill subdir for both layers, and
+        # the legacy flat-file at ``<base_dir>/.cap.skills.{yaml,yml,
+        # json}`` so unmigrated projects don't get blocked by their
+        # own builtin registry.
+        skill_filenames = ("skills", "skills.yaml", "skills.yml", "skills.json")
+
+        for sub in ("workflows",) + tuple(f"{name}" for name in skill_filenames):
+            candidates.append(str((self.project_root / ".cap" / sub).resolve()))
+
+        candidates.append(str((self.base_dir / "schemas" / "workflows").resolve()))
+        for sub in skill_filenames:
+            candidates.append(str((self.base_dir / ".cap" / sub).resolve()))
+
+        # Legacy flat-file fallbacks (P0c batch 2.5 dual-path).
+        for legacy in (".cap.skills.yaml", ".cap.skills.yml", ".cap.skills.json"):
+            candidates.append(str((self.base_dir / legacy).resolve()))
+
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for path in candidates:
+            if path in seen:
+                continue
+            seen.add(path)
+            ordered.append(path)
+        return ordered
+
+    def _path_is_under_any_root(self, source_path: str, allowed_roots: list[str]) -> bool:
+        """Return True when ``source_path`` is at or under one of the allowed roots.
+
+        Handles relative ``source_path`` (resolved relative to
+        ``self.base_dir``), symlink-laden paths (``Path.resolve()``),
+        and exact-match equality (a ``source_path`` that *is* a listed
+        root counts as inside it).
+        """
+        source = Path(source_path)
+        if not source.is_absolute():
+            source = self.base_dir / source
+        try:
+            source = source.resolve()
+        except (OSError, ValueError):
+            return False
+
+        for root_ref in allowed_roots:
+            root_path = Path(root_ref)
+            if not root_path.is_absolute():
+                root_path = self.base_dir / root_path
+            try:
+                root_path = root_path.resolve()
+            except (OSError, ValueError):
+                continue
+            if source == root_path or root_path in source.parents:
+                return True
+        return False
 
     @staticmethod
     def _has_execution_metadata(skill: dict) -> bool:
