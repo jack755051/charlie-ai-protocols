@@ -58,24 +58,18 @@ resolve_workflow_ref() {
       ;;
   esac
 
+  # Absolute / cwd-relative path short-circuit: no layered resolver needed.
   if [ -f "${raw_ref}" ]; then
     printf '%s\n' "${raw_ref}"
     return 0
   fi
 
-  if [[ "${raw_ref}" != *.yaml && "${raw_ref}" != *.yml && "${raw_ref}" != *.json ]]; then
-    if [ -f "${WORKFLOWS_DIR}/${raw_ref}.yaml" ]; then
-      printf '%s\n' "${WORKFLOWS_DIR}/${raw_ref}.yaml"
-      return 0
-    fi
-  fi
-
-  if [ -f "${WORKFLOWS_DIR}/${raw_ref}" ]; then
-    printf '%s\n' "${WORKFLOWS_DIR}/${raw_ref}"
-    return 0
-  fi
-
-  "${PYTHON_BIN}" "${CLI_PY}" resolve-ref "${WORKFLOWS_DIR}" "${raw_ref}"
+  # P9 #2: delegate layered resolution (project → shared → builtin) to
+  # workflow_cli.py. The previous bash fast-path that scanned
+  # ${WORKFLOWS_DIR}/${raw_ref}{,.yaml,.yml,.json} was removed because
+  # the builtin fast-path would steal project layer overrides — the
+  # exact bug docs/cap/P9-SOURCE-RESOLVER-DESIGN.md §4.5 calls out.
+  "${PYTHON_BIN}" "${CLI_PY}" resolve-ref "${raw_ref}"
   return $?
 }
 

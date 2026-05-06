@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any
@@ -9,7 +10,24 @@ import yaml
 
 
 class WorkflowLoader:
-    def __init__(self, base_dir: Path | None = None):
+    """Load workflow YAML / JSON files with layered source resolution.
+
+    P9 #2 introduces a three-layer resolver (``project`` → ``shared`` →
+    ``builtin``) so a project-local ``<project_root>/.cap/workflows/``
+    file can override or extend the builtin ``<cap_root>/schemas/workflows/``
+    set. The ``shared`` layer at ``<cap_home>/shared/workflows/`` is
+    always searched but is **not** included in the default
+    ``allowed_source_roots`` set (see
+    ``docs/cap/P9-SOURCE-RESOLVER-DESIGN.md`` §3.1 / §4.1 / §4.2).
+    """
+
+    def __init__(
+        self,
+        base_dir: Path | None = None,
+        *,
+        project_root: Path | None = None,
+        cap_home: Path | None = None,
+    ):
         self.base_dir = Path(base_dir) if base_dir else Path(__file__).resolve().parents[1]
         self.workflows_dir = self.base_dir / "schemas" / "workflows"
         self.capabilities_path = self.base_dir / "schemas" / "capabilities.yaml"
@@ -21,17 +39,31 @@ class WorkflowLoader:
         legacy_agents = self.base_dir / ".cap.agents.json"
         self.agents_path = namespaced_agents if namespaced_agents.is_file() else legacy_agents
 
-    def load_workflow(self, workflow_ref):
-        workflow_path = Path(workflow_ref)
-        if not workflow_path.is_absolute():
-            workflow_path = self.base_dir / workflow_ref
+        # P9 #2 layered resolver roots. Precedence per design memo §9.2 Q1:
+        # explicit kwarg > env (CAP_PROJECT_ROOT / CAP_HOME) > cwd / home
+        # fallback. Resolved to absolute paths so layer-membership checks
+        # (`Path.relative_to`) work without surprises on symlink-laden
+        # sandboxes used by the focused test suite.
+        if project_root is not None:
+            self.project_root = Path(project_root).expanduser().resolve()
+        elif os.environ.get("CAP_PROJECT_ROOT"):
+            self.project_root = Path(os.environ["CAP_PROJECT_ROOT"]).expanduser().resolve()
+        else:
+            self.project_root = Path.cwd().resolve()
 
-        if not workflow_path.exists():
-            candidate = self.workflows_dir / workflow_ref
-            if candidate.exists():
-                workflow_path = candidate
-            else:
-                raise FileNotFoundError(f"找不到 workflow: {workflow_ref}")
+        if cap_home is not None:
+            self.cap_home = Path(cap_home).expanduser().resolve()
+        elif os.environ.get("CAP_HOME"):
+            self.cap_home = Path(os.environ["CAP_HOME"]).expanduser().resolve()
+        else:
+            self.cap_home = (Path.home() / ".cap").resolve()
+
+        self.project_workflows_dir = self.project_root / ".cap" / "workflows"
+        self.shared_workflows_dir = self.cap_home / "shared" / "workflows"
+        self.builtin_workflows_dir = self.base_dir / "schemas" / "workflows"
+
+    def load_workflow(self, workflow_ref):
+        workflow_path, source_layer = self._resolve_workflow_path(workflow_ref)
 
         if workflow_path.suffix not in {".yaml", ".yml", ".json"}:
             raise ValueError(f"不支援的 workflow 格式: {workflow_path.suffix}")
@@ -42,9 +74,99 @@ class WorkflowLoader:
         else:
             data = yaml.safe_load(raw)
 
-        return self.normalize_workflow_data(data, workflow_path)
+        return self.normalize_workflow_data(data, workflow_path, source_layer=source_layer)
 
-    def normalize_workflow_data(self, workflow: dict, workflow_path: str | Path = "<inline>") -> dict:
+    def _resolve_workflow_path(self, workflow_ref) -> tuple[Path, str]:
+        """Resolve ``workflow_ref`` to (absolute path, source_layer).
+
+        Per ``docs/cap/P9-SOURCE-RESOLVER-DESIGN.md`` §4.1 / §4.2:
+
+        1. Absolute path → must exist; ``source_layer`` inferred from path
+           position (``project`` / ``shared`` / ``builtin`` / ``explicit``).
+        2. Relative path that exists under ``base_dir`` → load directly,
+           ``source_layer`` inferred the same way.
+        3. Otherwise treat as workflow id / file stem and scan
+           ``project`` → ``shared`` → ``builtin`` in priority order.
+           First filename match (with ``.yaml`` / ``.yml`` / ``.json``
+           suffix variants) wins.
+
+        Raises ``FileNotFoundError`` listing every directory searched
+        when no layer has a match.
+        """
+        workflow_path = Path(workflow_ref)
+
+        # Path 1: absolute path
+        if workflow_path.is_absolute():
+            if workflow_path.exists():
+                resolved = workflow_path.resolve()
+                return (resolved, self._infer_source_layer(resolved))
+            raise FileNotFoundError(f"找不到 workflow: {workflow_ref}")
+
+        # Path 2: relative path that exists under base_dir (preserves
+        # existing caller behaviour where ``schemas/workflows/foo.yaml``
+        # or similar relative paths are passed in).
+        candidate = (self.base_dir / workflow_ref).resolve()
+        if candidate.is_file():
+            return (candidate, self._infer_source_layer(candidate))
+
+        # Path 3: layered ref/id search.
+        suffixes = ["", ".yaml", ".yml", ".json"]
+        searched: list[str] = []
+        for layer_name, layer_dir in (
+            ("project", self.project_workflows_dir),
+            ("shared", self.shared_workflows_dir),
+            ("builtin", self.builtin_workflows_dir),
+        ):
+            searched.append(str(layer_dir))
+            for suffix in suffixes:
+                hit = layer_dir / f"{workflow_ref}{suffix}"
+                if hit.is_file():
+                    resolved = hit.resolve()
+                    # Re-infer rather than trusting the loop's layer_name:
+                    # if two layer dirs ever share a physical path (e.g.,
+                    # symlinks), _infer_source_layer's priority order
+                    # (project > shared > builtin) keeps the report
+                    # meaningful.
+                    return (resolved, self._infer_source_layer(resolved))
+
+        raise FileNotFoundError(
+            f"找不到 workflow: {workflow_ref} (searched: {', '.join(searched)})"
+        )
+
+    def _infer_source_layer(self, path: Path) -> str:
+        """Map an absolute resolved path to its source_layer enum value.
+
+        Per design memo §4.2 the priority is project > shared > builtin;
+        anything outside the three configured roots is tagged
+        ``explicit`` so P9 #5 enforcement can still gate user-supplied
+        absolute paths against ``effective_allowed_roots``.
+        """
+        abs_path = path.resolve()
+
+        def _under(root: Path) -> bool:
+            try:
+                abs_path.relative_to(root.resolve())
+                return True
+            except ValueError:
+                return False
+            except OSError:
+                return False
+
+        if _under(self.project_workflows_dir):
+            return "project"
+        if _under(self.shared_workflows_dir):
+            return "shared"
+        if _under(self.builtin_workflows_dir):
+            return "builtin"
+        return "explicit"
+
+    def normalize_workflow_data(
+        self,
+        workflow: dict,
+        workflow_path: str | Path = "<inline>",
+        *,
+        source_layer: str | None = None,
+    ) -> dict:
         """Normalize a raw workflow dict into the canonical compiled-workflow shape.
 
         Backward-compatible step aliases:
@@ -53,6 +175,12 @@ class WorkflowLoader:
           existing ``needs`` always wins so producers that already speak
           the canonical name are untouched). The legacy ``depends_on``
           field is preserved on the step for callers that still read it.
+
+        ``source_layer`` (P9 #2) is recorded on the normalized dict as
+        ``_source_layer`` when the caller (typically ``load_workflow``)
+        knows which layer the file came from. ``None`` is treated as
+        "unknown" — kept null so downstream consumers can tell apart
+        "loader didn't tag it" from "explicitly outside any layer".
 
         Intentionally does **not** fill in defaults for required
         compiled-workflow schema fields (``schema_version`` / ``version`` /
@@ -65,6 +193,7 @@ class WorkflowLoader:
         self._validate_workflow(workflow, workflow_path)
         normalized = dict(workflow)
         normalized["_source_path"] = workflow_path
+        normalized["_source_layer"] = source_layer
 
         if isinstance(normalized.get("steps"), list):
             normalized["steps"] = [

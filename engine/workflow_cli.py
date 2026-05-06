@@ -106,23 +106,94 @@ def _load_json_arg(raw: str) -> dict:
 # Subcommand: resolve-ref
 # ---------------------------------------------------------------------------
 
-def cmd_resolve_ref(workflows_dir: str, raw_ref: str) -> None:
-    """Resolve a workflow reference to an absolute file path."""
+def cmd_resolve_ref(raw_ref: str, workflows_dir: str | None = None) -> None:
+    """Resolve a workflow reference to an absolute file path.
+
+    P9 #2 makes Python the single source of truth for layered workflow
+    resolution. Callers pass ``raw_ref`` only; the legacy
+    ``--workflows-dir`` flag is kept as a deprecated alias that scopes
+    the scan to a single directory (mainly for test harnesses still
+    coupled to the old contract). When the deprecated flag is absent,
+    the resolver scans ``project`` → ``shared`` → ``builtin`` layers
+    via :class:`WorkflowLoader` and matches by:
+
+      (a) filename + suffix variants (``raw_ref`` / ``raw_ref.yaml`` /
+          ``raw_ref.yml`` / ``raw_ref.json``);
+      (b) ``workflow_id`` field, ``short_id`` (``wf_<sha1[:8]>``), file
+          stem, or full filename — preserving the prior semantics so
+          ``cap workflow run <workflow_id>`` keeps working.
+
+    First match wins, project beats shared beats builtin. Exits 1 when
+    no layer has a match.
+    """
     legacy_aliases = {
         "version-control-private": "version-control",
         "version-control-quick": "version-control",
         "version-control-company": "version-control",
     }
     raw_ref = legacy_aliases.get(raw_ref, raw_ref)
-    wdir = Path(workflows_dir)
-    for path in sorted(wdir.iterdir()):
-        if not path.is_file() or path.suffix not in {".yaml", ".yml", ".json"}:
-            continue
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.suffix in {".yaml", ".yml"} else {}
-        workflow_id = data.get("workflow_id", path.stem)
-        short_id = "wf_" + hashlib.sha1(workflow_id.encode("utf-8")).hexdigest()[:8]
-        if raw_ref in {workflow_id, short_id, path.stem, path.name}:
-            print(path)
+
+    if workflows_dir:
+        # Deprecated single-layer mode: kept for one tag so external
+        # harnesses still expecting the old ``resolve-ref <wdir> <ref>``
+        # contract have a transition window. New code should rely on
+        # the layered path.
+        print(
+            "warning: --workflows-dir is deprecated; layered resolver is now "
+            "Python-side and ignores this flag in future tags",
+            file=sys.stderr,
+        )
+        layers: list[tuple[str, Path]] = [("explicit", Path(workflows_dir))]
+    else:
+        # workflow_cli.py is run as a script, so engine/ is on sys.path
+        # but the repo root is not. Insert it once so the absolute
+        # ``engine.workflow_loader`` import resolves (mirrors the P7
+        # _try_build_result pattern).
+        cap_root = Path(__file__).resolve().parent.parent
+        if str(cap_root) not in sys.path:
+            sys.path.insert(0, str(cap_root))
+        from engine.workflow_loader import WorkflowLoader  # noqa: E402
+
+        loader = WorkflowLoader()
+        layers = [
+            ("project", loader.project_workflows_dir),
+            ("shared", loader.shared_workflows_dir),
+            ("builtin", loader.builtin_workflows_dir),
+        ]
+
+    suffixes = ["", ".yaml", ".yml", ".json"]
+
+    def _scan_layer(layer_dir: Path) -> Path | None:
+        if not layer_dir.is_dir():
+            return None
+        # (a) filename + suffix variants
+        for suffix in suffixes:
+            hit = layer_dir / f"{raw_ref}{suffix}"
+            if hit.is_file():
+                return hit
+        # (b) workflow_id / short_id / stem / full name
+        for path in sorted(layer_dir.iterdir()):
+            if not path.is_file() or path.suffix not in {".yaml", ".yml", ".json"}:
+                continue
+            try:
+                if path.suffix in {".yaml", ".yml"}:
+                    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+                else:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+            except (yaml.YAMLError, json.JSONDecodeError, OSError):
+                data = {}
+            if not isinstance(data, dict):
+                data = {}
+            workflow_id = data.get("workflow_id", path.stem)
+            short_id = "wf_" + hashlib.sha1(workflow_id.encode("utf-8")).hexdigest()[:8]
+            if raw_ref in {workflow_id, short_id, path.stem, path.name}:
+                return path
+        return None
+
+    for _layer_name, layer_dir in layers:
+        hit = _scan_layer(layer_dir)
+        if hit is not None:
+            print(hit)
             sys.exit(0)
     sys.exit(1)
 
@@ -1618,8 +1689,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # resolve-ref
     p = sub.add_parser("resolve-ref", help="Resolve a workflow reference to a file path")
-    p.add_argument("workflows_dir")
     p.add_argument("raw_ref")
+    p.add_argument(
+        "--workflows-dir",
+        dest="workflows_dir",
+        default=None,
+        help="(deprecated) scope the scan to a single directory; the layered resolver is now Python-side and ignores this flag in future tags.",
+    )
 
     # resolve-mode
     p = sub.add_parser("resolve-mode", help="Resolve execution mode for version-control family")
@@ -1810,7 +1886,7 @@ def main() -> None:
 
     match args.subcommand:
         case "resolve-ref":
-            cmd_resolve_ref(args.workflows_dir, args.raw_ref)
+            cmd_resolve_ref(args.raw_ref, workflows_dir=args.workflows_dir)
         case "resolve-mode":
             cmd_resolve_mode(
                 args.cap_root,
