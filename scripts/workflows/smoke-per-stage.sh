@@ -253,6 +253,8 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-promote-candidate-producer.sh" "pro
 run_fixture "${REPO_ROOT}/tests/scripts/test-cap-promote-inspect.sh" "cap promote inspect (P10 #3)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-cap-promote-project-constitution.sh" "cap promote project-constitution apply / backup / validation / rollback (P10 #4 + #6)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-cap-promote-workflow.sh" "cap promote workflow apply / backup / validation / rollback (P10 #5 + #6)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-skill-registry-resolver.sh" "skill registry layered resolver (P9 #3)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-skill-registry-override.sh" "skill registry override contract (A0 #2: disabled / replaces)"
 
 echo ""
 echo "----------------------------------------------------------------"

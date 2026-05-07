@@ -57,6 +57,37 @@ fields:
       priority:
         type: integer
 
+      # ── Override 契約（v0.22.0+ A0 #2） ──
+      # 詳細語意 SSOT：policies/agent-skills-baseline.md §4
+      disabled:
+        type: boolean
+        required: false
+        description: |
+          Tombstone mask. When set to true on a higher-priority layer
+          (project / shared) entry that shares its skill_id with a
+          lower-layer entry, the skill_id is hidden from
+          _find_candidates / _find_fallback selection. Lower-layer
+          entries with the same skill_id cannot be picked either —
+          the mask wins. Diagnostics / binding report still surface
+          the masked entry so audit can trace the decision.
+          Mutually exclusive with `replaces` on the same entry; if
+          both are set, `disabled` wins (entry is masked, no
+          replacement applies).
+      replaces:
+        type: string
+        required: false
+        description: |
+          Replacement target skill_id. When set, the runtime treats
+          the named target skill as masked (mask_reason="replaced_by=<self>")
+          so it cannot be picked as a candidate. The replacement
+          skill itself is selected normally. If the replacement omits
+          `provided_capabilities` (missing key or empty list), it
+          inherits the target's capabilities verbatim; if the
+          replacement specifies its own `provided_capabilities`, no
+          inheritance happens (replacement wins). Multiple skills
+          declaring `replaces` against the same target raise
+          OverrideContractError.
+
       # ── Capability 綁定 ──
       compatible_workflow_versions:
         type: integer[]

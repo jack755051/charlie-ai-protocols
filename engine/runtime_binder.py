@@ -74,6 +74,22 @@ class SkillSourcePolicyError(SourcePolicyError):
     pass
 
 
+class OverrideContractError(Exception):
+    """Raised when a skill registry's override contract is internally inconsistent.
+
+    Surface for the v0.22.0+ ``disabled`` / ``replaces`` post-merge
+    contract (see ``policies/agent-skills-baseline.md`` §4). Currently
+    fires for the ``multiple skills replace the same target`` case;
+    other cases (``disabled`` + ``replaces`` on same entry,
+    non-existent ``replaces`` target) are tolerated with a documented
+    fallback rather than halting.
+    """
+
+    def __init__(self, message: str, *, errors: list[str]) -> None:
+        super().__init__(message)
+        self.errors = list(errors)
+
+
 def ensure_binding_status_executable(
     binding: dict, *, stage: str = "post_bind_policy"
 ) -> None:
@@ -225,7 +241,10 @@ class RuntimeBinder:
 
         Used by the explicit ``registry_ref`` path so callers that
         point at one file get the same contract they always had —
-        no merge, no source tagging beyond ``_source_path``.
+        no merge, no source tagging beyond ``_source_path``. The
+        v0.22.0+ override contract (``disabled`` / ``replaces``) is
+        still applied so a single-file registry exercising the
+        contract behaves the same way as a layered merge.
         """
         if not registry_path.exists():
             return self._load_legacy_registry_adapter(registry_path)
@@ -245,7 +264,7 @@ class RuntimeBinder:
         data["_source_path"] = str(registry_path)
         data["_missing"] = False
         data["_adapter_from_legacy"] = False
-        return data
+        return self._apply_override_contract(data)
 
     def _load_layered_skill_registry(self) -> dict:
         """Load and merge the three layers (project / shared / builtin).
@@ -409,6 +428,15 @@ class RuntimeBinder:
         * ``binding_defaults``: deep merge; project keys beat shared
           beat builtin at every nesting level.
         * ``default_provider`` / ``schema_version``: first-seen non-None.
+
+        v0.22.0+ override-contract polish: when the first-seen entry
+        for a ``skill_id`` is a ``disabled: true`` tombstone with no
+        ``provided_capabilities`` of its own, the merge copies the
+        capability list from the next lower-layer entry that has the
+        same id. The tombstone still wins (it's masked), but the audit
+        hint at ``_collect_masked_hint`` can now name which capabilities
+        the project intentionally hid. Tagged with
+        ``_capabilities_inherited_from_underlying`` for traceability.
         """
         merged_skills_by_id: dict[str, dict] = {}
         skills_in_order: list[dict] = []
@@ -420,7 +448,24 @@ class RuntimeBinder:
         for layer in layers:
             for skill in layer["skills"]:
                 sid = skill.get("skill_id")
-                if not sid or sid in merged_skills_by_id:
+                if not sid:
+                    continue
+                if sid in merged_skills_by_id:
+                    # Underlying layer for the same skill_id. If the
+                    # winning tombstone is missing capability info,
+                    # inherit from this lower-layer entry so audit can
+                    # explain what got masked.
+                    existing = merged_skills_by_id[sid]
+                    if (
+                        existing.get("disabled") is True
+                        and not existing.get("provided_capabilities")
+                    ):
+                        underlying_caps = list(
+                            skill.get("provided_capabilities") or []
+                        )
+                        if underlying_caps:
+                            existing["provided_capabilities"] = underlying_caps
+                            existing["_capabilities_inherited_from_underlying"] = True
                     continue
                 merged_skills_by_id[sid] = skill
                 skills_in_order.append(skill)
@@ -437,7 +482,7 @@ class RuntimeBinder:
                 "missing_policy": self.DEFAULT_MISSING_POLICY,
             }
 
-        return {
+        merged = {
             "schema_version": schema_version if schema_version is not None else 1,
             "default_provider": default_provider or "builtin",
             "binding_defaults": merged_defaults,
@@ -447,6 +492,112 @@ class RuntimeBinder:
             "_missing": False,
             "_adapter_from_legacy": False,
         }
+        return self._apply_override_contract(merged)
+
+    def _apply_override_contract(self, registry: dict) -> dict:
+        """Apply v0.22.0+ ``disabled`` / ``replaces`` override contract.
+
+        Spec SSOT: ``policies/agent-skills-baseline.md`` §4. Three
+        passes over the merged ``skills`` list, all in-place:
+
+        1. Detect ``replaces`` conflicts. If two or more skills target
+           the same ``replaces`` value, raise :class:`OverrideContractError`.
+           ``disabled: true`` entries are excluded from this check
+           (they cannot replace anything; see Pass 2).
+        2. Mark masked entries.
+
+           * ``disabled: true`` → mask self with ``_mask_reason="disabled"``.
+             ``disabled`` wins over ``replaces`` on the same entry; if
+             both are set the entry is treated as disabled and does
+             not produce a replacement effect.
+           * ``replaces: <target>`` → mask the target entry (when present
+             in the merged registry) with
+             ``_mask_reason=f"replaced_by={self.skill_id}"``.
+
+           ``replaces`` against a target absent from the merged registry
+           is tolerated (warn-but-accept) so marketplace-style skills
+           that haven't been installed yet don't halt binding.
+        3. Capability inheritance. For each non-masked replacement
+           skill whose own ``provided_capabilities`` is missing or empty,
+           inherit the target skill's ``provided_capabilities`` verbatim
+           (target lookup uses the merged registry — even if the target
+           is now masked, its capability list is still readable).
+           Replacements with their own capability list keep it (no merge).
+
+        ``_masked`` / ``_mask_reason`` / ``_capabilities_inherited_from``
+        are internal ``_*``-prefixed fields, so they don't surface in
+        ``binding-report.schema.yaml`` ``steps[*]`` validation.
+        Consumer-facing audit reads them via the binding report's
+        ``reason`` text and the merged registry snapshot.
+        """
+        skills = registry.get("skills", []) or []
+
+        # skill_id → entry index for fast lookup. Skills without
+        # skill_id are skipped (the schema requires it but the loader
+        # is permissive; they pass through as-is and never get masked).
+        skill_by_id: dict[str, dict] = {
+            s.get("skill_id"): s for s in skills if s.get("skill_id")
+        }
+
+        # ── Pass 1: detect duplicate `replaces` targets ──
+        replace_targets: dict[str, list[str]] = {}
+        for skill in skills:
+            sid = skill.get("skill_id")
+            if not sid or skill.get("disabled") is True:
+                continue
+            target = skill.get("replaces")
+            if target:
+                replace_targets.setdefault(target, []).append(sid)
+        conflicts = {
+            target: ids for target, ids in replace_targets.items() if len(ids) > 1
+        }
+        if conflicts:
+            errors = [
+                f"skill_id '{target}' is replaced by multiple skills: "
+                + ", ".join(sorted(ids))
+                for target, ids in sorted(conflicts.items())
+            ]
+            raise OverrideContractError(
+                "skill registry has multiple replacement candidates for the same skill_id",
+                errors=errors,
+            )
+
+        # ── Pass 2: mark masked entries ──
+        for skill in skills:
+            sid = skill.get("skill_id")
+            if not sid:
+                continue
+            if skill.get("disabled") is True:
+                skill["_masked"] = True
+                skill["_mask_reason"] = "disabled"
+                continue
+            target = skill.get("replaces")
+            if target:
+                target_skill = skill_by_id.get(target)
+                if target_skill is not None:
+                    target_skill["_masked"] = True
+                    target_skill["_mask_reason"] = f"replaced_by={sid}"
+                # else: target absent → tolerate (marketplace not installed)
+
+        # ── Pass 3: capability inheritance ──
+        for skill in skills:
+            target = skill.get("replaces")
+            if not target:
+                continue
+            if skill.get("_masked"):
+                # disabled wins over replaces; no inheritance for self-masked.
+                continue
+            own = skill.get("provided_capabilities")
+            if own:
+                continue
+            target_skill = skill_by_id.get(target)
+            if target_skill is None:
+                continue
+            inherited = list(target_skill.get("provided_capabilities") or [])
+            skill["provided_capabilities"] = inherited
+            skill["_capabilities_inherited_from"] = target
+
+        return registry
 
     @staticmethod
     def _skill_source_metadata(skill: dict | None, *, fallback_when_missing: bool = False) -> dict | None:
@@ -746,7 +897,11 @@ class RuntimeBinder:
                 else:
                     resolution_status = "required_unresolved"
                     unresolved_required_steps += 1
-                reason = "no compatible skill found in registry"
+                masked_hint = self._collect_masked_hint(registry, capability)
+                if masked_hint:
+                    reason = f"no compatible skill found in registry; {masked_hint}"
+                else:
+                    reason = "no compatible skill found in registry"
                 selected_skill_id = None
                 selected_provider = None
                 selected_agent_alias = None
@@ -1356,6 +1511,10 @@ class RuntimeBinder:
     ) -> list[dict]:
         candidates = []
         for skill in registry.get("skills", []):
+            # v0.22.0+ override contract: masked entries (disabled or
+            # replaces-target) cannot be selected. See _apply_override_contract.
+            if skill.get("_masked"):
+                continue
             if not skill.get("enabled", True):
                 continue
             if capability not in skill.get("provided_capabilities", []):
@@ -1379,6 +1538,11 @@ class RuntimeBinder:
     def _find_fallback(self, registry: dict, capability: str) -> dict | None:
         capability_family = self._infer_fallback_role(capability)
         for skill in registry.get("skills", []):
+            # v0.22.0+ override contract: masked entries cannot become
+            # fallback either, so a project-level disabled/replaces
+            # mask isn't silently bypassed by fallback resolution.
+            if skill.get("_masked"):
+                continue
             if not skill.get("enabled", True):
                 continue
             if capability_family in skill.get("fallback_roles", []):
@@ -1386,6 +1550,39 @@ class RuntimeBinder:
             if skill.get("skill_id", "").startswith(self.GENERIC_FALLBACK_PREFIX) and capability_family in skill.get("skill_id", ""):
                 return skill
         return None
+
+    @staticmethod
+    def _collect_masked_hint(registry: dict, capability: str) -> str | None:
+        """Return a human-readable hint when masked skills could have served this capability.
+
+        v0.22.0+ override-contract audit aid (see
+        ``docs/cap/P9-SOURCE-RESOLVER-DESIGN.md`` §11.1). Scans the
+        merged registry for masked entries (``_masked=True``) whose
+        ``provided_capabilities`` lists the requested capability, and
+        formats their ids + mask reasons. Returns ``None`` when no
+        masked entry would have qualified — preserves the existing
+        unresolved reason text.
+
+        Tombstones missing their own ``provided_capabilities`` are
+        covered because ``_merge_skill_layers`` inherits the underlying
+        layer's capability list onto the tombstone before this scan
+        runs.
+        """
+        masked_hits: list[str] = []
+        for skill in registry.get("skills", []):
+            if not skill.get("_masked"):
+                continue
+            if capability not in (skill.get("provided_capabilities") or []):
+                continue
+            sid = skill.get("skill_id") or "<unknown>"
+            reason = skill.get("_mask_reason", "masked")
+            masked_hits.append(f"'{sid}' ({reason})")
+        if not masked_hits:
+            return None
+        return (
+            "target skill_id(s) for this capability are masked: "
+            + ", ".join(masked_hits)
+        )
 
     @staticmethod
     def _infer_fallback_role(capability: str) -> str:
