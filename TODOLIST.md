@@ -1,6 +1,6 @@
 # CAP Platform TODO List
 
-更新日期：2026-05-07（v0.22 P0-P10 全段完成；A0 Agent-Skills Baseline Policy 與 H1 Replay Contract 全段於 main 落地，收斂見 [`docs/cap/A0-CLOSEOUT.md`](docs/cap/A0-CLOSEOUT.md) 與 [`docs/cap/H1-CLOSEOUT.md`](docs/cap/H1-CLOSEOUT.md)。下一 batch 為 H2 project skill drift — 待 H1 dogfood 後再開。Phase 12 / 13 / 14 仍 deferred。）
+更新日期：2026-05-07（v0.22 P0-P10 + A0 Agent-Skills Baseline + H1 Replay Contract + H2 Project Skill Drift 全段於 main 落地，收斂見 [`docs/cap/A0-CLOSEOUT.md`](docs/cap/A0-CLOSEOUT.md) / [`docs/cap/H1-CLOSEOUT.md`](docs/cap/H1-CLOSEOUT.md) / [`docs/cap/H2-CLOSEOUT.md`](docs/cap/H2-CLOSEOUT.md)。下一 batch 為 H3 workflow / capability / constitution drift — 待 H2 dogfood 後再開。Phase 12 / 13 / 14 仍 deferred。）
 
 ## 目標
 
@@ -367,6 +367,19 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 - [x] **H1 #5** — policy SSOT、user guide、closeout doc、TODOLIST 章節（本 commit）
 
 > H1 deferred：project layer skill drift、workflow YAML drift、capability / constitution drift、full replay execution，分別交由 H2 / H3 / H4+。完整 deferred 列表在 H1 closeout doc §5。
+
+### H2：Project Skill Drift / Deterministic Input Snapshot v1（已完成）
+
+> 完整收斂見 [`docs/cap/H2-CLOSEOUT.md`](docs/cap/H2-CLOSEOUT.md)。H2 把 H1 預留的 `project_skill_diff` reserved-null forward contract 升為 dual-axis drift detection；`cap replay verify` 同時看 builtin baseline 與 project layer skill state，verdict 取最嚴重的非中立軸。
+
+- [x] **H2 #1** — design memo（`docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md`，commit `e64cf74`）
+- [x] **H2 #2** — project skills snapshot module + CLI（`engine/project_skills_snapshot.py` + 21-assertion test，commit `3a82dc4`）
+- [x] **H2 #3** — schema 升 `project_skill_diff` 為 object body（`schemas/replay-verdict.schema.yaml` + 6 fixture cases，commit `cde71c4`）
+- [x] **H2 #4** — runtime hooks + dual-axis verifier + binding_summary（`engine/binding_summary.py`、`runtime_binder.py` propagate skill_source、verifier dual-axis、`cap-workflow-exec.sh` triple attach、`cap-replay.sh` per-axis output，commit `f8a0ec9`）
+- [x] **H2 #5** — dual-axis aggregation tests（17-assertion focused test 覆蓋 4 個聚合場景，commit `f0a2d93`）
+- [x] **H2 #6** — policy SSOT v1.1、user guide §8、closeout doc、TODOLIST 章節（本 commit）
+
+> H2 deferred：workflow YAML drift、capability / constitution drift、shared layer drift、`--strict-unverifiable` flag、effective merged spec snapshot、real replay execution，分別交由 H3 / H4+。完整 deferred 列表在 H2 closeout doc §5。
 
 ## 優先順序
 

@@ -1,21 +1,22 @@
-# CAP Replay Contract Policy (v1)
+# CAP Replay Contract Policy (v1.1)
 
-> 本文件定義 `cap replay` 的行為邊界、verdict 語意與 consumer 義務。
+> 本文件定義 `cap replay` 的行為邊界、verdict 語意與 consumer 義務。v1.1 (H2) 把 v1 (H1) reserved-null 的 `project_skill_diff` 升為 dual-axis 結構化 drift detection；schema_version 仍為 1（widening）。
 > SSOT：`policies/replay-contract.md`（本檔）。
 > Schema：[`schemas/replay-verdict.schema.yaml`](../schemas/replay-verdict.schema.yaml)。
-> Design rationale：[`docs/cap/REPLAY-CONTRACT-DESIGN.md`](../docs/cap/REPLAY-CONTRACT-DESIGN.md)。
+> Design rationale：[`docs/cap/REPLAY-CONTRACT-DESIGN.md`](../docs/cap/REPLAY-CONTRACT-DESIGN.md) (H1)、[`docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md`](../docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md) (H2)。
 > User guide：[`docs/cap/REPLAY-USER-GUIDE.md`](../docs/cap/REPLAY-USER-GUIDE.md)。
 
 ## 1. 範圍與定位
 
-CAP Replay Contract v1（H1）只回答一個問題：**「給定一個歷史 `run_id`，該 run 對應的 builtin agent-skills baseline 與當前 baseline 的差異是否影響 replay 資格？」**
+CAP Replay Contract v1.1 回答一個問題：**「給定一個歷史 `run_id`，該 run 對應的 (a) builtin agent-skills baseline 與 (b) project layer skill state 跟當前狀態的差異是否影響 replay 資格？」**
 
 本契約**不**涵蓋：
 
 - 真正重跑 workflow（full replay execution）— 留給 H4+。
-- Project layer `.cap/skills.yaml` 的 drift 判斷 — 留給 H2。
-- Workflow YAML drift / capability schema drift / constitution drift — 留給 H2 / H3。
+- Workflow YAML drift / capability schema drift / constitution drift — 留給 H3。
+- Shared layer skill drift — 留給 H3。
 - 跨 run 聚合（一次驗證多個 run）— 後續批次。
+- Effective merged spec snapshot（合併過 disabled / replaces 後的最終 skill）— 後續更深層批次。
 
 ## 2. Verdict 5-state Enum（normative）
 
@@ -27,9 +28,9 @@ CAP Replay Contract v1（H1）只回答一個問題：**「給定一個歷史 `r
 | `unverifiable` | stored envelope 沒有 `agent_skills_baseline`（pre-A0 #4 run） | 無法判斷；consumer 自行決定保守處置（預設仍 pass） |
 | `not_found` | run_id 對應的 run dir 或 `agent-sessions.json` 缺失 | 該 run 已被 prune 或 run_id 錯誤；不可 replay |
 
-## 3. Drift 偵測範圍（v1）
+## 3. Drift 偵測範圍（v1.1, dual-axis）
 
-### 3.1 主動判斷（影響 verdict）
+### 3.1 Builtin axis — 主動判斷（影響 verdict）
 
 | 來源 | 偵測方式 |
 |---|---|
@@ -37,7 +38,15 @@ CAP Replay Contract v1（H1）只回答一個問題：**「給定一個歷史 `r
 | 該 run 使用的 prompt_files 的 per-file hash | per-file hash 比對 |
 | 該 run 使用的 prompt_files 在 current baseline 是否仍存在 | dict key 存在性檢查 |
 
-### 3.2 Soft signal（記錄但不影響 verdict）
+### 3.2 Project axis — 主動判斷（H2，影響 verdict）
+
+| 來源 | 偵測方式 |
+|---|---|
+| `<project_root>/.cap/skills.yaml` 整體 dir_hash | aggregate hash 比對（涵蓋 flat + per-skill subdir） |
+| 該 run 使用的 project layer skill_id 的 per-skill canonical-JSON hash | binding_summary 過濾 source_layer=project，再對每個 skill_id 比對 hash |
+| 該 run 使用的 project skill_id 在當前 registry 是否仍存在 | dict key 存在性檢查 |
+
+### 3.3 Soft signal（記錄但不影響 verdict）
 
 | 來源 | 為什麼不直接降 verdict |
 |---|---|
@@ -45,11 +54,28 @@ CAP Replay Contract v1（H1）只回答一個問題：**「給定一個歷史 `r
 | `git_commit` 變動 | 同上，可能只是 release commit |
 | `git_dirty` 切換 | 不可靠的訊號（暫存檔可能不影響 prompt） |
 
-### 3.3 Reserved-null forward contract
+### 3.4 Verdict 雙軸聚合（normative）
 
-| 欄位 | v1 行為 | 後續 batch |
-|---|---|---|
-| `drift_details.project_skill_diff` | 永遠為 `null` | H2 將以 object 填值 |
+每個軸獨立輸出 axis verdict（`replayable` / `drifted_compatible` / `drifted_incompatible` / `unverifiable_axis`）。Top-level verdict 取**最嚴重的非中立軸**：
+
+- 兩軸都 `replayable` → top-level `replayable`
+- 一軸 `replayable` + 一軸 `drifted_compatible` → top-level `drifted_compatible`
+- 任一軸 `drifted_incompatible` → top-level `drifted_incompatible`
+- 任一軸 `unverifiable_axis` 中立，不影響另一軸的 verdict
+- 兩軸都 `unverifiable_axis` → top-level `unverifiable`
+
+### 3.5 Project axis was_recorded 規則（H2）
+
+`drift_details.project_skill_diff.was_recorded`：
+
+- `true`：envelope 同時帶 `project_skill_baseline` AND `binding_summary`（H2 cap-workflow-exec.sh 完整 attach 過）→ 完整 per-skill drift detection。
+- `false`：envelope 缺至少一個 → 退化處理：
+  - 缺 `binding_summary` 但有 `project_skill_baseline`：dir_hash 不一致 → axis 限制在 `drifted_compatible`（無法 prove `drifted_incompatible`）。
+  - 缺 `project_skill_baseline`：axis verdict = `unverifiable_axis`。
+
+### 3.6 `project_skill_diff` null 嚴格條件
+
+僅當 envelope 連 `agent_skills_baseline` 都沒（pre-A0 #4 run、top-level verdict = `unverifiable`）時，`project_skill_diff` 才為 `null`。任何有 builtin baseline 的 run，project_skill_diff 都是 object body（含 was_recorded=false 中立場景）。
 
 ## 4. CLI 介面契約
 
@@ -86,9 +112,21 @@ CAP Replay Contract v1（H1）只回答一個問題：**「給定一個歷史 `r
 - **內容**：與 `agent-sessions.json` envelope 的 `agent_skills_baseline` 欄位 byte-for-byte 一致。
 - **角色**：cache / convenience copy。envelope 是 SSOT，mirror 是投影；衝突時以 envelope 為準。
 - **Idempotent**：同上。
-- **Subdir 結構**：`snapshots/` 為 H2 / H3 預留 `project-skills.yaml.json` / `workflows/<id>.yaml.json` / `capabilities.yaml.json` / `constitution.yaml.json`。
 
-### 5.3 不允許
+### 5.3 `<run_dir>/snapshots/project-skills.json`（H2 #4）
+
+- **唯一寫入者**：`cap replay verify`。
+- **內容**：envelope `project_skill_baseline` 的 byte-for-byte mirror（含 `skills_by_id` per-skill hash map）。
+- **角色**：與 §5.2 對稱，外部工具不必 parse sessions ledger 即可看 project layer 觀察狀態。
+
+### 5.4 `<run_dir>/snapshots/binding-summary.json`（H2 #4）
+
+- **唯一寫入者**：`cap replay verify`。
+- **內容**：envelope `binding_summary` 的 mirror（per-step `step_id` / `selected_skill_id` / `skill_source`）。
+- **角色**：審計 / 外部 tool 不必透過 plan / binding-report 即可知道該 run 用過哪些 skill_id 與 source_layer。
+- **Subdir 結構保留 H3 預留**：`snapshots/workflows/<id>.yaml.json` / `capabilities.yaml.json` / `constitution.yaml.json`。
+
+### 5.5 不允許
 
 - ❌ Consumer 直接編輯 `replay-verdict.json` 或 `snapshots/agent-skills.json`。
 - ❌ 用 `replay-verdict.json` 取代 `agent-sessions.json` 作為 baseline 來源（envelope 是 SSOT）。
@@ -122,6 +160,6 @@ H1 直接消費 A0 #4 寫入的 envelope baseline；不重新計算「該 run �
 
 ## 9. 後續契約展開（Forward Look）
 
-- **H2**：`drift_details.project_skill_diff` 由 reserved-null 升為 object；新增 `snapshots/project-skills.yaml.json` 與 `snapshots/workflows/<id>.yaml.json`；可能新增 `--strict-unverifiable` 旗標。
-- **H3**：capability schema / constitution drift 加入 verdict 計算。
+- **H2 ✓ 已完成**：`drift_details.project_skill_diff` 由 reserved-null 升為 object；新增 `snapshots/project-skills.json` 與 `snapshots/binding-summary.json`；雙軸聚合 normative。
+- **H3**：workflow YAML drift / capability schema drift / constitution drift / shared layer skill drift 加入 verdict 計算；可能新增 `--strict-unverifiable` 旗標。
 - **H4+**：full replay execution（真重跑）；可能引入 `cap replay run <run_id>` 與 pinned baseline 模式。

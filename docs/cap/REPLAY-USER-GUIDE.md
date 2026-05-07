@@ -115,11 +115,76 @@ A0 #4 之前的 run 沒在 `agent-sessions.json` 寫 `agent_skills_baseline` 欄
 
 如果你想升級舊 run 的 verdict 能力，唯一辦法是重跑該 workflow（讓 `cap-workflow-exec.sh` 自動寫 baseline）。
 
-## 8. 為什麼修改 `<project_root>/.cap/skills.yaml` 不影響 verdict？
+## 8. Project layer skill drift 偵測（H2，v0.22.0+）
 
-H1 v1 **只**判 builtin `agent-skills/` drift。Project layer skill 變動（mask / replace / 新加 skill）會影響 binding 結果，但 v1 verifier 不主動偵測。`drift_details.project_skill_diff` 是 reserved-null forward contract，H2 才會填值。
+H2 把 H1 的 reserved-null `project_skill_diff` 升為 dual-axis：每個 run 同時看 builtin baseline 與 project layer (`<project_root>/.cap/skills.yaml` + `.cap/skills/*`) 是否漂移。
 
-要追 project layer drift，等 H2 落地。
+```bash
+$ cap replay verify run_xxx
+cap replay: drifted_incompatible — /Users/.../run_xxx
+  reason: project_skills_changed=my-frontend-react18
+  builtin: replayable
+  project: drifted_incompatible (1 changed, 0 removed, 0 masked)
+  verdict file:    /Users/.../run_xxx/replay-verdict.json
+  snapshot mirror: /Users/.../run_xxx/snapshots/agent-skills.json
+                   /Users/.../run_xxx/snapshots/project-skills.json
+                   /Users/.../run_xxx/snapshots/binding-summary.json
+```
+
+verdict envelope 的 `drift_details.project_skill_diff` 帶完整 axis 細節：
+
+```bash
+$ cat run_xxx/replay-verdict.json | jq '.drift_details.project_skill_diff'
+{
+  "was_recorded": true,
+  "axis_verdict": "drifted_incompatible",
+  "project_dir_present_observed": true,
+  "project_dir_present_current": true,
+  "dir_hash_observed": "sha256:abc",
+  "dir_hash_current": "sha256:def",
+  "skills_used": ["my-frontend-react18", "my-qa-extended"],
+  "skills_changed": ["my-frontend-react18"],
+  "skills_removed": [],
+  "skills_added_masked": [],
+  "reason": "skills_changed=my-frontend-react18"
+}
+```
+
+### Verdict 雙軸聚合
+
+兩軸同時看，top-level verdict 取最嚴重者：
+- 兩軸 replayable → top-level replayable
+- 一軸 compatible → top-level compatible
+- 任一軸 incompatible → top-level incompatible
+- 單軸 unverifiable_axis 中立，不影響另一軸的 verdict
+- 兩軸都 unverifiable_axis → top-level unverifiable
+
+### 三種 was_recorded 狀態
+
+H2 verifier 對 project axis 有三種精度：
+
+1. **`was_recorded=true`**：envelope 帶完整 `project_skill_baseline` + `binding_summary`（H2 cap-workflow-exec.sh 自動 attach）→ per-skill 精準 drift。
+2. **`was_recorded=false`，`axis_verdict in {replayable, drifted_compatible}`**：envelope 只有 `project_skill_baseline` 沒 `binding_summary` → 只能粗略判 dir_hash drift，**不會**升 incompatible。
+3. **`was_recorded=false`，`axis_verdict=unverifiable_axis`**：連 `project_skill_baseline` 都沒（pre-H2 run 或 project layer 不存在）→ project axis 中立。
+
+### Pre-H2 run 怎麼補
+
+如果你想對 H2 之前的 run 啟用 project axis verdict：
+
+```bash
+# 補 project_skill_baseline 到 envelope
+python3 engine/project_skills_snapshot.py attach <run_dir>/agent-sessions.json
+
+# 重 verify（注意：缺 binding_summary 仍只有 coarse drift，binding_summary 無法 retrofit）
+cap replay verify <run_id>
+```
+
+### H2 不做的部分
+
+- Workflow YAML drift（該 run 用過的 workflow 檔被改）— H3 接手。
+- Capability schema / constitution drift — H3。
+- Shared layer skill (`<cap_home>/shared/skills.yaml`) drift — H3。
+- Effective merged spec snapshot（合併過 disabled / replaces 後）— 後續更深層批次。
 
 ## 9. 為什麼 verdict file 會被覆寫？
 
