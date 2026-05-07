@@ -6,6 +6,24 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.23.0-harness.3] - 2026-05-07
+
+> Pre-release — second iteration on `cap update` terminal rendering. Same-version重裝情境也能呈現完整 stat box。
+
+### Changed
+
+- `cap update` 完成畫面整合 (`scripts/cap-release.sh:print_update_summary`)：版本資訊從外層 `Hooray! CAP has been updated to <prev> > <new>` 文字行搬入 stat box，與 Agents / Strategies / Workflows 並列為 `Version` 列；box 頂邊嵌入 `Charlie's AI Protocols` 品牌標識，外層 `Updating Charlie's AI Protocols` 標題刪除以避免重複；`Hooray!` 行簡化為情緒收尾。
+- Stat box 改為**動態寬度**：以最長內容列（含長 detached SHA）為基準自動撐寬，不裁切 prev_ref。
+- 配色擴充：stat label 改為 cyan、box 標題與 Hooray 行改為 magenta+bold、change-summary 分組標題（Features / Bug fixes / Documentation / Other changes）改為 blue+bold；yellow 外框與 dim/bold/green 的 prev>curr 語意保留。
+- 多字節 box-drawing 修正：`repeat_char` 從 `tr`-based 改為純 bash loop，避免 `tr` 以 byte 為單位處理 UTF-8 三字節字元（如 `═`）時產生亂碼。
+
+### Notes
+
+- Plain-text fallback 行為不變：非 TTY 或 <8 色終端會自然退化為純文字。
+- 無 schema / validator / CLI surface / workflow contract 異動。
+
+---
+
 ## [v0.23.0-harness.2] - 2026-05-07
 
 > Pre-release — UX-only refinement of `cap update` terminal rendering.
