@@ -1,6 +1,6 @@
 # CAP Platform TODO List
 
-更新日期：2026-05-06（v0.22 P0-P10 全段完成；總體收斂見 [`docs/cap/PLATFORM-CLOSEOUT-v0.22.md`](docs/cap/PLATFORM-CLOSEOUT-v0.22.md)；下一 closeout tag 為 `v0.22.0-rc16`。Phase 12 / 13 / 14 仍 deferred — 等使用者真實 dogfood 反饋再開。）
+更新日期：2026-05-07（v0.22 P0-P10 全段完成；A0 Agent-Skills Baseline Policy 五子項全段於 main 落地，收斂見 [`docs/cap/A0-CLOSEOUT.md`](docs/cap/A0-CLOSEOUT.md)。下一 batch 為 H1 Replay Contract — pending scope confirmation。Phase 12 / 13 / 14 仍 deferred — 等使用者真實 dogfood 反饋再開。）
 
 ## 目標
 
@@ -343,6 +343,18 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 - [ ] promote tests
 - [ ] background run tests
 - [ ] failure / blocked / skipped case tests
+
+### A0：Agent-Skills Baseline Policy（已完成）
+
+> 完整收斂見 [`docs/cap/A0-CLOSEOUT.md`](docs/cap/A0-CLOSEOUT.md)。A0 不是 phase，是把「使用者怎麼客製化 builtin agent-skills」收斂為三層治理契約的補丁批次，於 v0.22.0 GA 後 main 分支落地。
+
+- [x] **A0 #1** — 官方 agent-skill baseline policy（`policies/agent-skills-baseline.md`，commit `6ec0c26`）
+- [x] **A0 #2** — runtime override 契約：`disabled` tombstone + `replaces` 替代（`schemas/skill-registry.schema.yaml` + `engine/runtime_binder.py:_apply_override_contract`，commit `f590d95`）
+- [x] **A0 #3** — binding provenance audit checklist（`docs/cap/P9-SOURCE-RESOLVER-DESIGN.md` §11，commit `6ec0c26`）
+- [x] **A0 #4** — baseline checksum / version snapshot（`engine/agent_skills_snapshot.py` + `cap-workflow-exec.sh` 鉤點，commit `4d52bae`）
+- [x] **A0 #5** — docs / migration note（`docs/cap/AGENT-SKILLS-CUSTOMIZATION.md`，commit `6ec0c26`）
+
+> A0 deferred：per-run 獨立 snapshot 檔、baseline drift verdict、`cap replay` CLI 由 **H1 Replay Contract** 接手。完整 deferred 列表在 closeout doc §4。
 
 ## 優先順序
 
