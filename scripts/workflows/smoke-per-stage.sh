@@ -260,6 +260,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-replay-verdict-schema.sh" "replay-v
 run_fixture "${REPO_ROOT}/tests/scripts/test-replay-verifier.sh" "replay verifier engine + CLI (H1 #3)"
 run_fixture "${REPO_ROOT}/tests/e2e/test-cap-replay-verify.sh" "cap replay verify shell wrapper e2e (H1 #4)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-project-skills-snapshot.sh" "project skills snapshot module (H2 #2)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-replay-verifier-dual-axis.sh" "replay verifier dual-axis aggregation (H2 #5)"
 
 echo ""
 echo "----------------------------------------------------------------"
