@@ -6,6 +6,40 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.23.0-harness.2] - 2026-05-07
+
+> Pre-release — UX-only refinement of `cap update` terminal rendering.
+
+### Changed
+
+- `cap update` 完成畫面改寫（`scripts/cap-release.sh:print_update_summary`）：依 prev..new commit subject 自動分組為 Features / Bug fixes / Documentation / Other changes，並新增 RPG 風格 stat box 顯示 Agents / Strategies / Workflows 的 `prev > curr` 數量對比；TTY 偵測支援 ≥8 色時上色，否則降級為純文字。無 schema / validator / CLI surface 異動。
+
+---
+
+## [v0.23.0-harness.1] - 2026-05-07
+
+> Pre-release — Replay Contract H1–H4 與 Agent Skills Baseline (A0) 的封裝點：把「能否安全重播一次舊 run」從口頭承諾變成可機械驗證的 5-axis drift verdict。
+
+### Added
+
+- **`cap replay verify <run_id>` 端到端可重播驗證**（`engine/replay_verifier.py` + `scripts/cap-replay.sh`）：產生 `replayable / drifted_compatible / drifted_incompatible / unverifiable / not_found` 五種判決，對齊 `schemas/replay-verdict.schema.yaml` 與 `policies/replay-contract.md` v1.3。
+- **5-axis drift aggregation** — H1（單軸 agent-skills baseline）→ H2（加入 project skill registry drift，`engine/project_skills_snapshot.py`）→ H3（擴至 5 軸：constitution / capability schema / workflow yaml whole-file snapshot，`engine/{constitution,capability_schema,workflow_yaml}_snapshot.py` + `engine/binding_summary.py`）。verdict 從 boolean 升級為「skill_id × override_kind × content_hash」結構化比對。
+- **`--strict-unverifiable` opt-in flag**（H4）：把 unverifiable 結果視為失敗，配合 `source_layer` 解析修正以避免誤判。
+- **Agent Skills Baseline 政策（A0）** — `policies/agent-skills-baseline.md` 定義 builtin baseline 與 project override 邊界；`schemas/skill-registry.schema.yaml` 新增 `disabled` tombstone 與 `replaces` override 欄位，由 `engine/runtime_binder.py` 在每個 run 紀錄 checksum 作為 replay 比對輸入。
+- 使用者文件 `docs/cap/REPLAY-USER-GUIDE.md` 與設計備忘 `docs/cap/REPLAY-CONTRACT-DESIGN.md`。
+
+### Changed
+
+- `engine/runtime_binder.py` 在每個 run 鏡射 baseline checksum 與 5-axis input snapshots 到 run dir，使 verdict 計算可離線重放。
+- `schemas/{agent-session,workflow-result,skill-registry}.schema.yaml` 擴充欄位以容納 baseline checksum 與 replay verdict 銜接點。
+
+### Notes
+
+- Harness pre-GA 觀察期；H5/H6/H7 仍進行中（觀察日誌 commit `4a26f47`），尚未進入 v0.23.0 GA。
+- 本條 entry 為 governance debt 回填：v0.23.0-harness.1 原打 tag 時未同步 CHANGELOG，於 v0.23.0-harness.2 release 前一併補入以解除 release-check missing-entry。
+
+---
+
 ## [v0.22.0] - 2026-05-06
 
 > v0.22.0 GA — promote `v0.22.0-rc18` to the canonical v0.22.0 release. v0.22 is the **Platform Closeout** major: P0-P10 platform-level capabilities all reach steady state across rc1-rc18. The full capability map, before/after diff, dogfood 7-step verification chain, deferred governance debt, and rc1-rc18 對照表 live in `docs/cap/PLATFORM-CLOSEOUT-v0.22.md`. GA = pure promotion of rc18; no commits between rc18 and this tag.
