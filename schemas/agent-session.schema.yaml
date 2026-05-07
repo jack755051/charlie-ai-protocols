@@ -2,6 +2,38 @@ schema_version: 1
 title: CAP Agent Session Schema
 description: 一次性 agent worker session 的 runtime state contract，供 Claude / Codex / 其他 provider adapter 共用。
 
+# Envelope-level fields (informally documented; not validated by this schema)
+# ----------------------------------------------------------------------------
+# The on-disk ledger file (``agent-sessions.json``) wraps a list of session
+# entries inside an envelope:
+#
+#   {
+#     "version": 1,
+#     "run_id": "...",
+#     "workflow_id": "...",
+#     "workflow_name": "...",
+#     "agent_skills_baseline": { ... },   # A0 #4, v0.22.0+
+#     "sessions": [<session entries matching this schema>]
+#   }
+#
+# ``agent_skills_baseline`` is attached once per run by
+# ``scripts/cap-workflow-exec.sh`` (via ``engine/agent_skills_snapshot.py``)
+# right after the ledger is created. Shape:
+#
+#   {
+#     "cap_version": str | null,           # repo.manifest.yaml cap_version
+#     "git_commit": str | null,            # HEAD SHA of cap-protocols
+#     "git_dirty": bool,                   # working tree dirty flag
+#     "computed_at": "YYYY-MM-DDTHH:MM:SSZ",
+#     "dir_hash": "sha256:<hex>",          # aggregate of all *.md files
+#     "prompt_files": {<relpath>: "sha256:<hex>"},  # per-file hashes
+#     "baseline_root": "<abs path>"
+#   }
+#
+# Spec SSOT: ``policies/agent-skills-baseline.md`` §7.
+# Compact projection for ``workflow-result.json`` lives at
+# ``schemas/workflow-result.schema.yaml`` ``agent_skills_baseline`` field.
+
 required:
   - session_id
   - run_id

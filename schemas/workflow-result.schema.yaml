@@ -273,6 +273,41 @@ properties:
         route_back_to:
           type: [string, "null"]
 
+  agent_skills_baseline:
+    type: [object, "null"]
+    description: |
+      A0 #4 compact projection (v0.22.0+) of the builtin agent-skills/
+      baseline observed when the run started. Producer copies these
+      fields from ``agent-sessions.json`` envelope's full
+      ``agent_skills_baseline`` object via ``engine/agent_skills_snapshot.py:
+      compute_summary``; consumers compare ``cap_version`` /
+      ``git_commit`` / ``dir_hash`` to decide whether a stored result
+      is still replayable against the current builtin baseline.
+      Per-file hashes intentionally live only in the source ledger to
+      keep this projection compact. Null when the run pre-dates A0 #4
+      or when baseline computation failed (sandbox without git,
+      missing manifest); replay tooling treats null as "unknown
+      baseline, cannot verify".
+    properties:
+      cap_version:
+        type: [string, "null"]
+        description: cap_version field from repo.manifest.yaml at run-start.
+      git_commit:
+        type: [string, "null"]
+        description: HEAD SHA of the cap-protocols repo when the run started; null outside git.
+      git_dirty:
+        type: boolean
+        description: True when the working tree had uncommitted changes at run-start.
+      dir_hash:
+        type: string
+        description: SHA-256 (sha256:<hex>) aggregate of every *.md file under agent-skills/, sorted by relative path.
+      file_count:
+        type: integer
+        description: Count of *.md files hashed.
+      baseline_root:
+        type: string
+        description: Absolute path of the agent-skills directory the snapshot was computed against.
+
   promote_candidates:
     type: array
     description: |

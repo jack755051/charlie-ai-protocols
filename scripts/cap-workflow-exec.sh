@@ -956,6 +956,23 @@ write_file_or_fail "${AGENT_SESSIONS_JSON}" "$(cat <<EOF
 EOF
 )" || exit 1
 
+# A0 #4: stamp the new agent-sessions ledger with the builtin
+# agent-skills baseline (cap_version + git_commit + dir_hash + per-file
+# hashes) so replay / diff can later identify which baseline this run
+# observed. Idempotent — re-runs that hit an already-stamped envelope
+# are a no-op. Best-effort: a failure (e.g., git unavailable, sandbox
+# without manifest) is logged to workflow.log but does not halt the
+# run, matching the rest of the snapshot-attach contract that runs
+# without baseline are still executable. SSOT:
+# policies/agent-skills-baseline.md §7.
+SNAPSHOT_PY="${CAP_ROOT}/engine/agent_skills_snapshot.py"
+if [ -f "${SNAPSHOT_PY}" ]; then
+  if ! "${PYTHON_BIN}" "${SNAPSHOT_PY}" attach "${AGENT_SESSIONS_JSON}" \
+      >> "${WORKFLOW_LOG}" 2>&1; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')][workflow][warn] failed to attach agent_skills_baseline to ${AGENT_SESSIONS_JSON}; continuing without baseline" >> "${WORKFLOW_LOG}"
+  fi
+fi
+
 echo "  Output dir: ${WORKFLOW_OUTPUT_DIR}"
 
 # Flatten phases into step lines:
