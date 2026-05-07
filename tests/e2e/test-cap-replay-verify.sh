@@ -253,6 +253,65 @@ assert_eq "case7: --no-write exit code 0" "0" "${RC7}"
   pass_count=$((pass_count + 1))
 }
 
+# ── Case 8: --project-id flag for bootstrap / cross-project runs ────
+
+echo ""
+echo "Case 8: --project-id <id> globs under a different project's reports"
+ALT_PROJECT_ID="alt-project-bootstrap"
+ALT_RUN_DIR="${CAP_HOME_DIR}/projects/${ALT_PROJECT_ID}/reports/workflows/${WORKFLOW_ID}/run_alt_xxx"
+mkdir -p "${ALT_RUN_DIR}"
+cat > "${ALT_RUN_DIR}/agent-sessions.json" <<EOF
+{
+  "version": 1,
+  "run_id": "run_alt_xxx",
+  "workflow_id": "${WORKFLOW_ID}",
+  "workflow_name": "alt",
+  "agent_skills_baseline": ${SNAPSHOT_BASELINE},
+  "sessions": ${SESSIONS_JSON}
+}
+EOF
+
+# Without --project-id: cwd resolves to "replay-test", run_alt_xxx not found there.
+set +e
+OUT8A="$(run_replay verify run_alt_xxx 2>&1)"
+RC8A=$?
+set -e
+assert_eq "case8a: without --project-id → not_found exit 2" "2" "${RC8A}"
+assert_contains "case8a: error names default project's report dir" \
+  "replay-test" "${OUT8A}"
+
+# With --project-id: glob under the alt project's report dir → resolved.
+set +e
+OUT8B="$(run_replay verify run_alt_xxx --project-id "${ALT_PROJECT_ID}" 2>&1)"
+RC8B=$?
+set -e
+assert_eq "case8b: --project-id resolves bootstrap-project run → exit 0" \
+  "0" "${RC8B}"
+assert_contains "case8b: stdout shows replayable verdict" \
+  "cap replay: replayable" "${OUT8B}"
+
+# --project-id with absolute path → flag is ignored (path is unambiguous).
+set +e
+OUT8C="$(run_replay verify "${ALT_RUN_DIR}" --project-id wrong-id 2>&1)"
+RC8C=$?
+set -e
+assert_eq "case8c: absolute path overrides --project-id (still resolves)" \
+  "0" "${RC8C}"
+
+# --project-id missing value → usage error.
+set +e
+OUT8D="$(run_replay verify run_xxx --project-id 2>&1)"
+RC8D=$?
+set -e
+case "${RC8D}" in
+  1)
+    echo "  PASS: case8d: --project-id without value exits 1"
+    pass_count=$((pass_count + 1)) ;;
+  *)
+    echo "  FAIL: case8d: expected exit 1, got ${RC8D}"
+    fail_count=$((fail_count + 1)) ;;
+esac
+
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"
 [ "${fail_count}" -eq 0 ]

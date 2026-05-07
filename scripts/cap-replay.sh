@@ -22,19 +22,26 @@ VERIFIER_PY="${CAP_ROOT}/engine/replay_verifier.py"
 usage() {
   cat <<'EOF' >&2
 Usage:
-  cap replay verify <run_id_or_run_dir> [--json] [--no-write]
+  cap replay verify <run_id_or_run_dir> [--json] [--no-write] [--project-id <id>]
 
 Examples:
   cap replay verify run_20260507120304_aabbccdd
   cap replay verify ~/.cap/projects/<id>/reports/workflows/<wf>/run_xxx/
   cap replay verify run_xxx --json
+  cap replay verify run_xxx --project-id project-constitution-bootstrap
 
 Behaviour:
   * Looks up <run_id> under the active project's workflow_report_dir
     (<workflow_report_dir>/*/<run_id>) when the argument is not a
     filesystem path.
+  * --project-id <id>: glob under <CAP_HOME>/projects/<id>/reports/
+    workflows/ instead of the cwd-resolved project. Useful for
+    bootstrap-mode runs (project-constitution writes to
+    project-constitution-bootstrap regardless of cwd) or for
+    inspecting runs in another project from outside its repo.
   * Writes <run_dir>/replay-verdict.json and <run_dir>/snapshots/
-    agent-skills.json by default; pass --no-write to print only.
+    {agent-skills,project-skills,binding-summary}.json by default;
+    pass --no-write to print only.
   * Exit codes: 0 (replayable / drifted_compatible / unverifiable),
     4 (drifted_incompatible), 2 (not_found), 1 (internal error).
 EOF
@@ -51,11 +58,17 @@ resolve_python() {
 
 PYTHON_BIN="$(resolve_python)"
 
-# resolve_run_dir <arg> → prints absolute run_dir to stdout, exits 2 on miss.
+# resolve_run_dir <arg> [<project_id_override>] → prints absolute
+# run_dir to stdout, exits 2 on miss. When project_id_override is
+# non-empty, glob under <CAP_HOME>/projects/<override>/reports/
+# workflows/ instead of the cwd-resolved project (H2.5 #1: bootstrap /
+# cross-project run support).
 resolve_run_dir() {
   local arg="$1"
+  local project_override="${2:-}"
 
-  # Already a path (absolute or contains /) → use as-is.
+  # Already a path (absolute or contains /) → use as-is, ignoring
+  # project_id override (an explicit path is unambiguous).
   case "${arg}" in
     /*|*"/"*)
       if [ -d "${arg}" ]; then
@@ -70,9 +83,17 @@ resolve_run_dir() {
 
   # Treat as run_id → glob under workflow_report_dir.
   local report_dir
-  if ! report_dir="$(bash "${PATH_HELPER}" get workflow_report_dir 2>/dev/null)"; then
-    printf 'cap replay: failed to resolve workflow_report_dir; ensure cap project context is set.\n' >&2
-    return 1
+  if [ -n "${project_override}" ]; then
+    # Build path directly from CAP_HOME + project_id override; do not
+    # consult cap-paths.sh since the override may name a project that
+    # the current cwd does not host (e.g., bootstrap projects).
+    local cap_home_resolved="${CAP_HOME:-${HOME}/.cap}"
+    report_dir="${cap_home_resolved}/projects/${project_override}/reports/workflows"
+  else
+    if ! report_dir="$(bash "${PATH_HELPER}" get workflow_report_dir 2>/dev/null)"; then
+      printf 'cap replay: failed to resolve workflow_report_dir; ensure cap project context is set or pass --project-id.\n' >&2
+      return 1
+    fi
   fi
   if [ -z "${report_dir}" ] || [ ! -d "${report_dir}" ]; then
     printf 'cap replay: workflow_report_dir does not exist: %s\n' "${report_dir}" >&2
@@ -124,22 +145,27 @@ shift
 
 JSON_MODE=0
 WRITE_MODE=1
+PROJECT_ID_OVERRIDE=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --json) JSON_MODE=1 ;;
-    --no-write) WRITE_MODE=0 ;;
+    --json) JSON_MODE=1; shift ;;
+    --no-write) WRITE_MODE=0; shift ;;
+    --project-id)
+      [ $# -ge 2 ] || { printf 'cap replay: --project-id requires a value\n' >&2; usage; }
+      PROJECT_ID_OVERRIDE="$2"
+      shift 2
+      ;;
     *)
       printf 'cap replay: unknown flag: %s\n' "$1" >&2
       usage
       ;;
   esac
-  shift
 done
 
 # ── Resolve run_dir ─────────────────────────────────────────────────
 
 set +e
-RUN_DIR="$(resolve_run_dir "${RAW_ARG}")"
+RUN_DIR="$(resolve_run_dir "${RAW_ARG}" "${PROJECT_ID_OVERRIDE}")"
 RESOLVE_RC=$?
 set -e
 if [ "${RESOLVE_RC}" -ne 0 ]; then
@@ -206,10 +232,17 @@ try:
         sr = psd.get('skills_removed') or []
         sm = psd.get('skills_added_masked') or []
         su = psd.get('skills_used') or []
+        was_recorded = psd.get('was_recorded', False)
         if ax == 'drifted_incompatible':
             print('  project: drifted_incompatible (' + str(len(sc)) + ' changed, ' + str(len(sr)) + ' removed, ' + str(len(sm)) + ' masked)')
         elif ax == 'drifted_compatible':
-            print('  project: drifted_compatible (dir_hash differs, ' + str(len(su)) + ' skills used unaffected)')
+            # H2.5 #2: when was_recorded=false skills_used is [] not because
+            # zero skills were affected but because binding_summary was
+            # missing — distinguish the two cases textually.
+            if was_recorded:
+                print('  project: drifted_compatible (dir_hash differs, ' + str(len(su)) + ' skills used unaffected)')
+            else:
+                print('  project: drifted_compatible (dir_hash differs, skills_used unknown — binding_summary missing)')
         elif ax == 'replayable':
             print('  project: replayable')
         elif ax == 'unverifiable_axis':
