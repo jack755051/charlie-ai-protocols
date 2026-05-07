@@ -328,6 +328,271 @@ print(json.loads(sys.stdin.read())['drift_details']['project_skill_diff'])")"
 assert_eq "case8b: project_skill_diff stays None when baseline_observed=null" \
   "None" "${P8B_DIFF}"
 
+# ── H3 #3 multi-axis cases ──────────────────────────────────────────
+
+echo ""
+echo "── H3 #3 multi-axis cases ──"
+
+# Helper: verify_run with H3 baselines explicitly stamped on envelope.
+verify_h3() {
+  local run_dir="$1"
+  local b_obs="$2" b_cur="$3"
+  local p_obs="$4" p_cur="$5"
+  local bsum="$6"
+  local wf_obs="$7" wf_path_arg="$8"
+  local const_obs="$9" const_cur_dir="${10}"
+  local cap_obs="${11}" cap_cur_root="${12}"
+  local sess="${13}"
+
+  PYTHONPATH="${REPO_ROOT}" "${PYTHON_BIN}" - "${run_dir}" \
+    "${b_obs}" "${b_cur}" "${p_obs}" "${p_cur}" "${bsum}" \
+    "${wf_obs}" "${wf_path_arg}" "${const_obs}" "${const_cur_dir}" \
+    "${cap_obs}" "${cap_cur_root}" "${sess}" <<'PY'
+import json
+import sys
+from pathlib import Path
+from datetime import datetime, timezone
+
+from engine import replay_verifier as rv
+
+(
+    run_dir, b_obs, b_cur, p_obs, p_cur, bsum,
+    wf_obs, wf_path_arg, const_obs, const_cur_dir,
+    cap_obs, cap_cur_root, sess
+) = sys.argv[1:14]
+run_dir = Path(run_dir)
+b_obs = json.loads(b_obs) if b_obs else None
+b_cur = json.loads(b_cur)
+p_obs = json.loads(p_obs) if p_obs else None
+p_cur = json.loads(p_cur)
+bsum = json.loads(bsum) if bsum else None
+wf_obs = json.loads(wf_obs) if wf_obs else None
+const_obs = json.loads(const_obs) if const_obs else None
+cap_obs = json.loads(cap_obs) if cap_obs else None
+sess = json.loads(sess)
+
+run_dir.mkdir(parents=True, exist_ok=True)
+envelope = {
+    "version": 1,
+    "run_id": run_dir.name,
+    "workflow_id": "h3-test",
+    "workflow_name": "h3",
+    "sessions": sess,
+}
+if b_obs is not None:
+    envelope["agent_skills_baseline"] = b_obs
+if p_obs is not None:
+    envelope["project_skill_baseline"] = p_obs
+if bsum is not None:
+    envelope["binding_summary"] = bsum
+if wf_obs is not None:
+    envelope["workflow_yaml_baseline"] = wf_obs
+if const_obs is not None:
+    envelope["constitution_baseline"] = const_obs
+if cap_obs is not None:
+    envelope["capability_schema_baseline"] = cap_obs
+
+(run_dir / "agent-sessions.json").write_text(
+    json.dumps(envelope, ensure_ascii=False, indent=2),
+    encoding="utf-8",
+)
+
+verdict = rv.verify_run(
+    run_dir,
+    current_snapshot=b_cur,
+    project_skills_current=p_cur,
+    project_root=Path(const_cur_dir) if const_cur_dir else None,
+    verified_at=datetime(2026, 5, 7, 5, 0, 0, tzinfo=timezone.utc),
+)
+
+# Override capability_schema axis manually for tests using cap_cur_root
+# since verify_run reads cap_root via env / __file__ default. Simulate
+# by replacing the axis result with one computed against a sandbox path.
+if cap_cur_root:
+    from engine import capability_schema_snapshot as css
+    cur = css.compute_snapshot(cap_root=Path(cap_cur_root))
+    # Re-run only the capability_schema axis with sandboxed current
+    # snapshot. Other axes already finished above.
+    rebuilt = rv._compute_capability_schema_axis(envelope, cap_root=Path(cap_cur_root))
+    verdict["drift_details"]["capability_schema_diff"] = rebuilt
+    # Re-aggregate top-level verdict using the rebuilt axis.
+    builtin_axis = (
+        rv.VERDICT_DRIFTED_INCOMPATIBLE if (verdict["drift_details"].get("prompt_files_changed") or verdict["drift_details"].get("prompt_files_removed"))
+        else rv.VERDICT_DRIFTED_COMPATIBLE if not verdict["drift_details"].get("dir_hash_match")
+        else rv.VERDICT_REPLAYABLE
+    )
+    verdict["verdict"] = rv._aggregate_axes(
+        builtin_axis,
+        verdict["drift_details"]["project_skill_diff"]["axis_verdict"] if verdict["drift_details"].get("project_skill_diff") else "unverifiable_axis",
+        verdict["drift_details"]["workflow_yaml_diff"]["axis_verdict"] if verdict["drift_details"].get("workflow_yaml_diff") else "unverifiable_axis",
+        verdict["drift_details"]["constitution_diff"]["axis_verdict"] if verdict["drift_details"].get("constitution_diff") else "unverifiable_axis",
+        rebuilt["axis_verdict"],
+    )
+
+print(json.dumps(verdict, ensure_ascii=False, indent=2))
+PY
+}
+
+# Common builders (reusing case-1 baselines).
+SAND_H3="${SANDBOX}/h3"
+mkdir -p "${SAND_H3}"
+WF_FIXTURE="${SAND_H3}/sample-wf.yaml"
+echo "workflow_id: x" > "${WF_FIXTURE}"
+WF_HASH="sha256:$(python3 -c "
+import hashlib, sys
+print(hashlib.sha256(open('${WF_FIXTURE}','rb').read()).hexdigest())
+")"
+
+WF_OBS_OK="$(cat <<EOF
+{"schema_version":1,"workflow_id":"x","workflow_path":"${WF_FIXTURE}","source_layer":"builtin","workflow_present":true,"content_hash":"${WF_HASH}","computed_at":"2026-05-06T00:00:00Z"}
+EOF
+)"
+
+# Sandbox project_root with constitution.
+PROJ_DIR="${SAND_H3}/proj"
+mkdir -p "${PROJ_DIR}/.cap"
+echo "project_id: x" > "${PROJ_DIR}/.cap/constitution.yaml"
+CONST_HASH="sha256:$(python3 -c "
+import hashlib
+print(hashlib.sha256(open('${PROJ_DIR}/.cap/constitution.yaml','rb').read()).hexdigest())
+")"
+
+CONST_OBS_OK="$(cat <<EOF
+{"schema_version":1,"constitution_path":"${PROJ_DIR}/.cap/constitution.yaml","constitution_present":true,"content_hash":"${CONST_HASH}","computed_at":"2026-05-06T00:00:00Z"}
+EOF
+)"
+
+# Sandbox cap_root with capability schema.
+CAP_DIR="${SAND_H3}/cap_root"
+mkdir -p "${CAP_DIR}/schemas"
+echo "schema_version: 1" > "${CAP_DIR}/schemas/capabilities.yaml"
+CAP_HASH="sha256:$(python3 -c "
+import hashlib
+print(hashlib.sha256(open('${CAP_DIR}/schemas/capabilities.yaml','rb').read()).hexdigest())
+")"
+
+CAP_OBS_OK="$(cat <<EOF
+{"schema_version":1,"schema_path":"${CAP_DIR}/schemas/capabilities.yaml","schema_present":true,"content_hash":"${CAP_HASH}","computed_at":"2026-05-06T00:00:00Z"}
+EOF
+)"
+
+# ── Case 9: all H3 axes replayable when stamps match current ───────
+
+echo ""
+echo "Case 9: H3 all axes replayable (stamps match current state)"
+RUN9="${SANDBOX}/run_h3_009"
+ENV9="$(verify_h3 "${RUN9}" "${B_OBS_OK}" "${B_CUR_SAME}" "" "${P_CUR_SAME}" "" \
+  "${WF_OBS_OK}" "" "${CONST_OBS_OK}" "${PROJ_DIR}" "${CAP_OBS_OK}" "${CAP_DIR}" "${SESSIONS_FE}")"
+V9="$(printf '%s' "${ENV9}" | "${PYTHON_BIN}" -c "import json,sys;print(json.loads(sys.stdin.read())['verdict'])")"
+W9="$(printf '%s' "${ENV9}" | "${PYTHON_BIN}" -c "
+import json,sys
+d=json.loads(sys.stdin.read())['drift_details']['workflow_yaml_diff']
+print(d['axis_verdict'])")"
+C9="$(printf '%s' "${ENV9}" | "${PYTHON_BIN}" -c "
+import json,sys
+d=json.loads(sys.stdin.read())['drift_details']['constitution_diff']
+print(d['axis_verdict'])")"
+S9="$(printf '%s' "${ENV9}" | "${PYTHON_BIN}" -c "
+import json,sys
+d=json.loads(sys.stdin.read())['drift_details']['capability_schema_diff']
+print(d['axis_verdict'])")"
+assert_eq "case9: top-level=replayable" "replayable" "${V9}"
+assert_eq "case9: workflow_yaml axis=replayable" "replayable" "${W9}"
+assert_eq "case9: constitution axis=replayable" "replayable" "${C9}"
+assert_eq "case9: capability_schema axis=replayable" "replayable" "${S9}"
+
+# ── Case 10: workflow yaml drift → drifted_compatible ──────────────
+
+echo ""
+echo "Case 10: workflow YAML edited → workflow axis drifted_compatible"
+echo "# edited content" >> "${WF_FIXTURE}"
+RUN10="${SANDBOX}/run_h3_010"
+ENV10="$(verify_h3 "${RUN10}" "${B_OBS_OK}" "${B_CUR_SAME}" "" "${P_CUR_SAME}" "" \
+  "${WF_OBS_OK}" "" "${CONST_OBS_OK}" "${PROJ_DIR}" "${CAP_OBS_OK}" "${CAP_DIR}" "${SESSIONS_FE}")"
+V10="$(printf '%s' "${ENV10}" | "${PYTHON_BIN}" -c "import json,sys;print(json.loads(sys.stdin.read())['verdict'])")"
+W10="$(printf '%s' "${ENV10}" | "${PYTHON_BIN}" -c "
+import json,sys
+d=json.loads(sys.stdin.read())['drift_details']['workflow_yaml_diff']
+print(d['axis_verdict'])")"
+assert_eq "case10: top-level=drifted_compatible" "drifted_compatible" "${V10}"
+assert_eq "case10: workflow axis=drifted_compatible" "drifted_compatible" "${W10}"
+
+# Restore for next case
+echo "workflow_id: x" > "${WF_FIXTURE}"
+
+# ── Case 11: constitution drift → drifted_compatible ───────────────
+
+echo ""
+echo "Case 11: constitution edited → constitution axis drifted_compatible"
+echo "# edited" >> "${PROJ_DIR}/.cap/constitution.yaml"
+RUN11="${SANDBOX}/run_h3_011"
+ENV11="$(verify_h3 "${RUN11}" "${B_OBS_OK}" "${B_CUR_SAME}" "" "${P_CUR_SAME}" "" \
+  "${WF_OBS_OK}" "" "${CONST_OBS_OK}" "${PROJ_DIR}" "${CAP_OBS_OK}" "${CAP_DIR}" "${SESSIONS_FE}")"
+V11="$(printf '%s' "${ENV11}" | "${PYTHON_BIN}" -c "import json,sys;print(json.loads(sys.stdin.read())['verdict'])")"
+C11="$(printf '%s' "${ENV11}" | "${PYTHON_BIN}" -c "
+import json,sys
+d=json.loads(sys.stdin.read())['drift_details']['constitution_diff']
+print(d['axis_verdict'])")"
+assert_eq "case11: top-level=drifted_compatible" "drifted_compatible" "${V11}"
+assert_eq "case11: constitution axis=drifted_compatible" "drifted_compatible" "${C11}"
+
+echo "project_id: x" > "${PROJ_DIR}/.cap/constitution.yaml"
+
+# ── Case 12: H3 axes never emit drifted_incompatible ──────────────
+
+echo ""
+echo "Case 12: H3 axes are precision-limited to compatible only"
+# Verify case 10 + 11 axis_verdicts above were never drifted_incompatible.
+# This case directly checks the contract.
+echo "completely different content" > "${WF_FIXTURE}"
+RUN12="${SANDBOX}/run_h3_012"
+ENV12="$(verify_h3 "${RUN12}" "${B_OBS_OK}" "${B_CUR_SAME}" "" "${P_CUR_SAME}" "" \
+  "${WF_OBS_OK}" "" "${CONST_OBS_OK}" "${PROJ_DIR}" "${CAP_OBS_OK}" "${CAP_DIR}" "${SESSIONS_FE}")"
+W12="$(printf '%s' "${ENV12}" | "${PYTHON_BIN}" -c "
+import json,sys
+d=json.loads(sys.stdin.read())['drift_details']['workflow_yaml_diff']
+print(d['axis_verdict'])")"
+case "${W12}" in
+  drifted_incompatible)
+    echo "  FAIL: case12: H3 axis emitted incompatible (precision contract violated)"
+    fail_count=$((fail_count + 1)) ;;
+  drifted_compatible)
+    echo "  PASS: case12: H3 workflow axis caps at drifted_compatible (precision contract honoured)"
+    pass_count=$((pass_count + 1)) ;;
+  *)
+    echo "  FAIL: case12: unexpected verdict ${W12}"
+    fail_count=$((fail_count + 1)) ;;
+esac
+
+# Restore
+echo "workflow_id: x" > "${WF_FIXTURE}"
+
+# ── Case 13: pre-H3 envelope (no H3 baselines) → H3 axes neutral ────
+
+echo ""
+echo "Case 13: pre-H3 envelope → H3 axes all unverifiable_axis (neutral)"
+RUN13="${SANDBOX}/run_h3_013"
+ENV13="$(verify_h3 "${RUN13}" "${B_OBS_OK}" "${B_CUR_SAME}" "" "${P_CUR_SAME}" "" \
+  "" "" "" "" "" "" "${SESSIONS_FE}")"
+V13="$(printf '%s' "${ENV13}" | "${PYTHON_BIN}" -c "import json,sys;print(json.loads(sys.stdin.read())['verdict'])")"
+W13="$(printf '%s' "${ENV13}" | "${PYTHON_BIN}" -c "
+import json,sys
+d=json.loads(sys.stdin.read())['drift_details']['workflow_yaml_diff']
+print(d['axis_verdict'])")"
+C13="$(printf '%s' "${ENV13}" | "${PYTHON_BIN}" -c "
+import json,sys
+d=json.loads(sys.stdin.read())['drift_details']['constitution_diff']
+print(d['axis_verdict'])")"
+S13="$(printf '%s' "${ENV13}" | "${PYTHON_BIN}" -c "
+import json,sys
+d=json.loads(sys.stdin.read())['drift_details']['capability_schema_diff']
+print(d['axis_verdict'])")"
+assert_eq "case13: top-level=replayable (H3 axes neutral, builtin replayable wins)" \
+  "replayable" "${V13}"
+assert_eq "case13: workflow axis=unverifiable_axis" "unverifiable_axis" "${W13}"
+assert_eq "case13: constitution axis=unverifiable_axis" "unverifiable_axis" "${C13}"
+assert_eq "case13: capability_schema axis=unverifiable_axis" "unverifiable_axis" "${S13}"
+
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"
 [ "${fail_count}" -eq 0 ]

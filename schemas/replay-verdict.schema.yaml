@@ -168,6 +168,107 @@ properties:
         description: |
           Whether git_commit strings match between observed and current.
           Soft signal only; mismatch alone does NOT downgrade verdict.
+      workflow_yaml_diff:
+        type: [object, "null"]
+        description: |
+          H3 #3 widening — workflow YAML axis drift detail. Whole-file
+          hash only (Cost-Aware minimal scope per
+          docs/cap/H3-DRIFT-EXPANSION-DESIGN.md §5.1); per-step
+          precision deferred to H4+. Behaviour:
+
+          * ``null`` (legacy / pre-H3 envelopes): the run lacks
+            workflow_yaml_baseline. Treated as
+            ``axis_verdict=unverifiable_axis`` for aggregation.
+          * **object body** (H3 attach landed): structured axis
+            verdict. ``axis_verdict`` may be ``replayable``
+            (content_hash match), ``drifted_compatible`` (hash
+            differs / file missing — caller must self-inspect),
+            or ``unverifiable_axis`` (rare; workflow_path missing
+            from baseline). Drifted_incompatible is NEVER emitted
+            for this axis (whole-file hash precision limit).
+        properties:
+          was_recorded:
+            type: boolean
+          axis_verdict:
+            type: string
+            enum: [replayable, drifted_compatible, drifted_incompatible, unverifiable_axis]
+          workflow_id:
+            type: [string, "null"]
+          workflow_path:
+            type: [string, "null"]
+          source_layer:
+            type: [string, "null"]
+          workflow_present_observed:
+            type: [boolean, "null"]
+          workflow_present_current:
+            type: boolean
+          content_hash_observed:
+            type: [string, "null"]
+          content_hash_current:
+            type: [string, "null"]
+          reason:
+            type: [string, "null"]
+
+      constitution_diff:
+        type: [object, "null"]
+        description: |
+          H3 #3 widening — constitution drift detail. Whole-file hash
+          only (per-block hash deferred to H4+ per design memo §5.2).
+          Same axis_verdict behaviour as workflow_yaml_diff:
+          drifted_incompatible is never emitted for this axis.
+
+          Note: constitution_present_observed/_current distinguishes
+          "no constitution file at run time" (bootstrap pre-creation)
+          from "constitution removed between run and verify".
+        properties:
+          was_recorded:
+            type: boolean
+          axis_verdict:
+            type: string
+            enum: [replayable, drifted_compatible, drifted_incompatible, unverifiable_axis]
+          constitution_path:
+            type: [string, "null"]
+          constitution_present_observed:
+            type: [boolean, "null"]
+          constitution_present_current:
+            type: boolean
+          content_hash_observed:
+            type: [string, "null"]
+          content_hash_current:
+            type: [string, "null"]
+          reason:
+            type: [string, "null"]
+
+      capability_schema_diff:
+        type: [object, "null"]
+        description: |
+          H3 #3 widening — capability schema drift detail. Whole-file
+          hash only (per-capability hash deferred to H4+ per design
+          memo §5.3). Same axis_verdict behaviour as
+          workflow_yaml_diff and constitution_diff.
+
+          Drift on this axis surfaces "schemas/capabilities.yaml has
+          changed since the run"; caller must read the schema diff
+          to know whether their workflow is affected.
+        properties:
+          was_recorded:
+            type: boolean
+          axis_verdict:
+            type: string
+            enum: [replayable, drifted_compatible, drifted_incompatible, unverifiable_axis]
+          schema_path:
+            type: [string, "null"]
+          schema_present_observed:
+            type: [boolean, "null"]
+          schema_present_current:
+            type: boolean
+          content_hash_observed:
+            type: [string, "null"]
+          content_hash_current:
+            type: [string, "null"]
+          reason:
+            type: [string, "null"]
+
       project_skill_diff:
         type: [object, "null"]
         description: |

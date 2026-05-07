@@ -651,6 +651,206 @@ EOF
 )")"
 assert_eq "N8 invalid axis_verdict rejected" "1" "$(validate_fixture "${N8}")"
 
+# ── Positive 10: H3 #3 workflow_yaml_diff body present ─────────────
+
+echo ""
+echo "Positive 10: workflow_yaml_diff body (H3 #3 widening)"
+P10="$(write_fixture pos10 "$(cat <<'EOF'
+{
+  "schema_version": 1,
+  "run_id": "run_h3_aaa",
+  "verified_at": "2026-05-07T05:00:00Z",
+  "verdict": "drifted_compatible",
+  "reason": "workflow_yaml content_hash differs",
+  "baseline_observed": {
+    "cap_version": "v0.22.0",
+    "git_commit": "abc",
+    "git_dirty": false,
+    "dir_hash": "sha256:bb",
+    "file_count": 35
+  },
+  "baseline_current": {
+    "cap_version": "v0.22.0",
+    "git_commit": "abc",
+    "git_dirty": false,
+    "dir_hash": "sha256:bb",
+    "file_count": 35
+  },
+  "drift_details": {
+    "prompt_files_used": ["01-supervisor-agent.md"],
+    "prompt_files_changed": [],
+    "prompt_files_removed": [],
+    "dir_hash_match": true,
+    "cap_version_match": true,
+    "git_commit_match": true,
+    "workflow_yaml_diff": {
+      "was_recorded": true,
+      "axis_verdict": "drifted_compatible",
+      "workflow_id": "project-spec-pipeline",
+      "workflow_path": "/abs/wf.yaml",
+      "source_layer": "builtin",
+      "workflow_present_observed": true,
+      "workflow_present_current": true,
+      "content_hash_observed": "sha256:wf1",
+      "content_hash_current": "sha256:wf2",
+      "reason": "workflow YAML content_hash differs"
+    },
+    "constitution_diff": null,
+    "capability_schema_diff": null,
+    "project_skill_diff": null
+  }
+}
+EOF
+)")"
+assert_eq "P10 workflow_yaml_diff body validates" "0" "$(validate_fixture "${P10}")"
+
+# ── Positive 11: constitution_diff body present ────────────────────
+
+echo ""
+echo "Positive 11: constitution_diff body (H3 #3)"
+P11="$(write_fixture pos11 "$(cat <<'EOF'
+{
+  "schema_version": 1,
+  "run_id": "run_h3_bbb",
+  "verified_at": "2026-05-07T05:01:00Z",
+  "verdict": "drifted_compatible",
+  "reason": "constitution content_hash differs",
+  "baseline_observed": {"cap_version":"v0.22.0","git_commit":"abc","git_dirty":false,"dir_hash":"sha256:bb","file_count":35},
+  "baseline_current": {"cap_version":"v0.22.0","git_commit":"abc","git_dirty":false,"dir_hash":"sha256:bb","file_count":35},
+  "drift_details": {
+    "prompt_files_used": [],
+    "prompt_files_changed": [],
+    "prompt_files_removed": [],
+    "dir_hash_match": true,
+    "cap_version_match": true,
+    "git_commit_match": true,
+    "workflow_yaml_diff": null,
+    "constitution_diff": {
+      "was_recorded": true,
+      "axis_verdict": "drifted_compatible",
+      "constitution_path": "/abs/.cap/constitution.yaml",
+      "constitution_present_observed": true,
+      "constitution_present_current": true,
+      "content_hash_observed": "sha256:c1",
+      "content_hash_current": "sha256:c2",
+      "reason": "constitution content_hash differs"
+    },
+    "capability_schema_diff": null,
+    "project_skill_diff": null
+  }
+}
+EOF
+)")"
+assert_eq "P11 constitution_diff body validates" "0" "$(validate_fixture "${P11}")"
+
+# ── Positive 12: capability_schema_diff body present ───────────────
+
+echo ""
+echo "Positive 12: capability_schema_diff body (H3 #3)"
+P12="$(write_fixture pos12 "$(cat <<'EOF'
+{
+  "schema_version": 1,
+  "run_id": "run_h3_ccc",
+  "verified_at": "2026-05-07T05:02:00Z",
+  "verdict": "drifted_compatible",
+  "reason": "capability_schema content_hash differs",
+  "baseline_observed": {"cap_version":"v0.22.0","git_commit":"abc","git_dirty":false,"dir_hash":"sha256:bb","file_count":35},
+  "baseline_current": {"cap_version":"v0.22.0","git_commit":"abc","git_dirty":false,"dir_hash":"sha256:bb","file_count":35},
+  "drift_details": {
+    "prompt_files_used": [],
+    "prompt_files_changed": [],
+    "prompt_files_removed": [],
+    "dir_hash_match": true,
+    "cap_version_match": true,
+    "git_commit_match": true,
+    "workflow_yaml_diff": null,
+    "constitution_diff": null,
+    "capability_schema_diff": {
+      "was_recorded": true,
+      "axis_verdict": "drifted_compatible",
+      "schema_path": "/abs/schemas/capabilities.yaml",
+      "schema_present_observed": true,
+      "schema_present_current": true,
+      "content_hash_observed": "sha256:cs1",
+      "content_hash_current": "sha256:cs2",
+      "reason": "capability schema content_hash differs"
+    },
+    "project_skill_diff": null
+  }
+}
+EOF
+)")"
+assert_eq "P12 capability_schema_diff body validates" "0" "$(validate_fixture "${P12}")"
+
+# ── Positive 13: legacy null on all three new H3 axes accepted ─────
+
+echo ""
+echo "Positive 13: legacy null on all three H3 axes (pre-H3 envelope)"
+P13="$(write_fixture pos13 "$(cat <<'EOF'
+{
+  "schema_version": 1,
+  "run_id": "run_h2_legacy",
+  "verified_at": "2026-05-07T05:03:00Z",
+  "verdict": "replayable",
+  "reason": "ok",
+  "baseline_observed": {"cap_version":"v0.22.0","git_commit":"abc","git_dirty":false,"dir_hash":"sha256:bb","file_count":35},
+  "baseline_current": {"cap_version":"v0.22.0","git_commit":"abc","git_dirty":false,"dir_hash":"sha256:bb","file_count":35},
+  "drift_details": {
+    "prompt_files_used": [],
+    "prompt_files_changed": [],
+    "prompt_files_removed": [],
+    "dir_hash_match": true,
+    "cap_version_match": true,
+    "git_commit_match": true,
+    "workflow_yaml_diff": null,
+    "constitution_diff": null,
+    "capability_schema_diff": null,
+    "project_skill_diff": null
+  }
+}
+EOF
+)")"
+assert_eq "P13 legacy null on H3 axes validates" "0" "$(validate_fixture "${P13}")"
+
+# ── Negative 10: H3 axis invalid axis_verdict enum ─────────────────
+
+echo ""
+echo "Negative 10: workflow_yaml_diff invalid axis_verdict enum"
+N10="$(write_fixture neg10 "$(cat <<'EOF'
+{
+  "schema_version": 1,
+  "run_id": "run_x",
+  "verified_at": "2026-05-07T05:04:00Z",
+  "verdict": "replayable",
+  "baseline_observed": null,
+  "baseline_current": null,
+  "drift_details": {
+    "prompt_files_used": [],
+    "prompt_files_changed": [],
+    "prompt_files_removed": [],
+    "dir_hash_match": true,
+    "cap_version_match": true,
+    "git_commit_match": true,
+    "workflow_yaml_diff": {
+      "was_recorded": true,
+      "axis_verdict": "totally_made_up",
+      "workflow_id": null,
+      "workflow_path": null,
+      "source_layer": null,
+      "workflow_present_observed": true,
+      "workflow_present_current": true,
+      "content_hash_observed": "sha256:a",
+      "content_hash_current": "sha256:a"
+    },
+    "constitution_diff": null,
+    "capability_schema_diff": null,
+    "project_skill_diff": null
+  }
+}
+EOF
+)")"
+assert_eq "N10 invalid workflow_yaml axis_verdict rejected" "1" "$(validate_fixture "${N10}")"
+
 # ── Negative 9: skills_changed contains non-string ─────────────────
 
 echo ""

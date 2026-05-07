@@ -40,10 +40,28 @@ try:
     from .project_skills_snapshot import (
         compute_snapshot as project_compute_snapshot,
     )
+    from .workflow_yaml_snapshot import (
+        compute_snapshot as workflow_yaml_compute_snapshot,
+    )
+    from .constitution_snapshot import (
+        compute_snapshot as constitution_compute_snapshot,
+    )
+    from .capability_schema_snapshot import (
+        compute_snapshot as capability_schema_compute_snapshot,
+    )
 except ImportError:  # pragma: no cover
     from agent_skills_snapshot import compute_snapshot, compute_summary  # type: ignore[no-redef]
     from project_skills_snapshot import (  # type: ignore[no-redef]
         compute_snapshot as project_compute_snapshot,
+    )
+    from workflow_yaml_snapshot import (  # type: ignore[no-redef]
+        compute_snapshot as workflow_yaml_compute_snapshot,
+    )
+    from constitution_snapshot import (  # type: ignore[no-redef]
+        compute_snapshot as constitution_compute_snapshot,
+    )
+    from capability_schema_snapshot import (  # type: ignore[no-redef]
+        compute_snapshot as capability_schema_compute_snapshot,
     )
 
 
@@ -174,12 +192,35 @@ def verify_run(
         project_skills_current = project_compute_snapshot(project_root=project_root)
     project_axis = _compute_project_axis(envelope, project_skills_current)
 
-    # ── verdict aggregation ──
-    verdict = _aggregate_axes(builtin_axis_verdict, project_axis["axis_verdict"])
-    reason = _compose_reason(verdict, builtin_drift, project_axis)
+    # ── H3 #3 three new whole-file axes ──
+    workflow_yaml_axis = _compute_workflow_yaml_axis(envelope)
+    constitution_axis = _compute_constitution_axis(
+        envelope, project_root=project_root
+    )
+    capability_schema_axis = _compute_capability_schema_axis(envelope)
+
+    # ── verdict aggregation (5 axes, worst non-neutral) ──
+    verdict = _aggregate_axes(
+        builtin_axis_verdict,
+        project_axis["axis_verdict"],
+        workflow_yaml_axis["axis_verdict"],
+        constitution_axis["axis_verdict"],
+        capability_schema_axis["axis_verdict"],
+    )
+    reason = _compose_reason(
+        verdict,
+        builtin_drift,
+        project_axis,
+        workflow_yaml_axis=workflow_yaml_axis,
+        constitution_axis=constitution_axis,
+        capability_schema_axis=capability_schema_axis,
+    )
 
     drift_details = {
         **builtin_drift,
+        "workflow_yaml_diff": workflow_yaml_axis,
+        "constitution_diff": constitution_axis,
+        "capability_schema_diff": capability_schema_axis,
         "project_skill_diff": project_axis,
     }
 
@@ -380,28 +421,214 @@ _AXIS_SEVERITY = {
 _AXIS_SEVERITY_INV = {v: k for k, v in _AXIS_SEVERITY.items()}
 
 
-def _aggregate_axes(builtin_axis: str, project_axis: str) -> str:
-    """Worst-non-neutral aggregation across builtin × project axes.
+def _aggregate_axes(*axis_verdicts: str) -> str:
+    """Worst-non-neutral aggregation across N axes (H3 #3 widened from 2).
 
     ``unverifiable_axis`` is treated as neutral (omitted from the worst
     selection). When every axis is neutral, the top-level verdict is
-    ``unverifiable``.
+    ``unverifiable``. Variadic so H3 can pass 5 axes (builtin / project /
+    workflow_yaml / constitution / capability_schema) without changing
+    callers from the H2 dual-axis era; existing two-arg call sites in
+    tests still work because Python accepts 2 positional args as varargs.
     """
-    builtin_score = _AXIS_SEVERITY.get(builtin_axis)
-    project_score = _AXIS_SEVERITY.get(project_axis)
-    candidates = [s for s in (builtin_score, project_score) if s is not None]
+    candidates = [
+        _AXIS_SEVERITY[v] for v in axis_verdicts if v in _AXIS_SEVERITY
+    ]
     if not candidates:
         return VERDICT_UNVERIFIABLE
     return _AXIS_SEVERITY_INV[max(candidates)]
 
 
+def _compute_workflow_yaml_axis(envelope: dict) -> dict:
+    """Return drift_details.workflow_yaml_diff body (H3 #3).
+
+    Whole-file hash only per design memo §5.1. Output shape conforms to
+    schemas/replay-verdict.schema.yaml workflow_yaml_diff. Three branches:
+
+    * No baseline → ``axis_verdict=unverifiable_axis``,
+      ``was_recorded=False``.
+    * Baseline + workflow file still resolvable + hash matches →
+      ``replayable``.
+    * Baseline + (file missing OR hash differs) →
+      ``drifted_compatible``. Drifted_incompatible is NEVER emitted
+      for this axis (precision limit).
+    """
+    observed = envelope.get("workflow_yaml_baseline") or None
+    if observed is None:
+        return {
+            "was_recorded": False,
+            "axis_verdict": "unverifiable_axis",
+            "workflow_id": None,
+            "workflow_path": None,
+            "source_layer": None,
+            "workflow_present_observed": None,
+            "workflow_present_current": False,
+            "content_hash_observed": None,
+            "content_hash_current": None,
+            "reason": "workflow_yaml_baseline absent on envelope",
+        }
+
+    workflow_path_str = observed.get("workflow_path")
+    workflow_present_observed = bool(observed.get("workflow_present"))
+    content_hash_observed = observed.get("content_hash")
+
+    if workflow_path_str:
+        current = workflow_yaml_compute_snapshot(
+            workflow_path=Path(workflow_path_str),
+            workflow_id=observed.get("workflow_id"),
+            source_layer=observed.get("source_layer"),
+        )
+    else:
+        current = {"workflow_present": False, "content_hash": None}
+
+    workflow_present_current = bool(current.get("workflow_present"))
+    content_hash_current = current.get("content_hash")
+
+    if (
+        workflow_present_observed
+        and workflow_present_current
+        and content_hash_observed
+        and content_hash_observed == content_hash_current
+    ):
+        axis_verdict = "replayable"
+        reason = "workflow YAML content_hash matches current"
+    elif not workflow_present_current and workflow_present_observed:
+        axis_verdict = "drifted_compatible"
+        reason = "workflow YAML missing at expected path"
+    else:
+        axis_verdict = "drifted_compatible"
+        reason = "workflow YAML content_hash differs"
+
+    return {
+        "was_recorded": True,
+        "axis_verdict": axis_verdict,
+        "workflow_id": observed.get("workflow_id"),
+        "workflow_path": workflow_path_str,
+        "source_layer": observed.get("source_layer"),
+        "workflow_present_observed": workflow_present_observed,
+        "workflow_present_current": workflow_present_current,
+        "content_hash_observed": content_hash_observed,
+        "content_hash_current": content_hash_current,
+        "reason": reason,
+    }
+
+
+def _compute_constitution_axis(
+    envelope: dict, *, project_root: Path | None = None
+) -> dict:
+    """Return drift_details.constitution_diff body (H3 #3, whole-file hash)."""
+    observed = envelope.get("constitution_baseline") or None
+    current = constitution_compute_snapshot(project_root=project_root)
+    constitution_present_current = bool(current.get("constitution_present"))
+    content_hash_current = current.get("content_hash")
+    constitution_path_current = current.get("constitution_path")
+
+    if observed is None:
+        return {
+            "was_recorded": False,
+            "axis_verdict": "unverifiable_axis",
+            "constitution_path": constitution_path_current,
+            "constitution_present_observed": None,
+            "constitution_present_current": constitution_present_current,
+            "content_hash_observed": None,
+            "content_hash_current": content_hash_current,
+            "reason": "constitution_baseline absent on envelope",
+        }
+
+    constitution_present_observed = bool(observed.get("constitution_present"))
+    content_hash_observed = observed.get("content_hash")
+
+    if (
+        constitution_present_observed == constitution_present_current
+        and content_hash_observed == content_hash_current
+    ):
+        axis_verdict = "replayable"
+        reason = "constitution content_hash matches current"
+    else:
+        axis_verdict = "drifted_compatible"
+        if constitution_present_observed and not constitution_present_current:
+            reason = "constitution removed since the run"
+        elif not constitution_present_observed and constitution_present_current:
+            reason = "constitution added since the run"
+        else:
+            reason = "constitution content_hash differs"
+
+    return {
+        "was_recorded": True,
+        "axis_verdict": axis_verdict,
+        "constitution_path": observed.get("constitution_path") or constitution_path_current,
+        "constitution_present_observed": constitution_present_observed,
+        "constitution_present_current": constitution_present_current,
+        "content_hash_observed": content_hash_observed,
+        "content_hash_current": content_hash_current,
+        "reason": reason,
+    }
+
+
+def _compute_capability_schema_axis(
+    envelope: dict, *, cap_root: Path | None = None
+) -> dict:
+    """Return drift_details.capability_schema_diff body (H3 #3, whole-file hash)."""
+    observed = envelope.get("capability_schema_baseline") or None
+    current = capability_schema_compute_snapshot(cap_root=cap_root)
+    schema_present_current = bool(current.get("schema_present"))
+    content_hash_current = current.get("content_hash")
+    schema_path_current = current.get("schema_path")
+
+    if observed is None:
+        return {
+            "was_recorded": False,
+            "axis_verdict": "unverifiable_axis",
+            "schema_path": schema_path_current,
+            "schema_present_observed": None,
+            "schema_present_current": schema_present_current,
+            "content_hash_observed": None,
+            "content_hash_current": content_hash_current,
+            "reason": "capability_schema_baseline absent on envelope",
+        }
+
+    schema_present_observed = bool(observed.get("schema_present"))
+    content_hash_observed = observed.get("content_hash")
+
+    if (
+        schema_present_observed == schema_present_current
+        and content_hash_observed == content_hash_current
+    ):
+        axis_verdict = "replayable"
+        reason = "capability schema content_hash matches current"
+    else:
+        axis_verdict = "drifted_compatible"
+        reason = "capability schema content_hash differs"
+
+    return {
+        "was_recorded": True,
+        "axis_verdict": axis_verdict,
+        "schema_path": observed.get("schema_path") or schema_path_current,
+        "schema_present_observed": schema_present_observed,
+        "schema_present_current": schema_present_current,
+        "content_hash_observed": content_hash_observed,
+        "content_hash_current": content_hash_current,
+        "reason": reason,
+    }
+
+
 def _compose_reason(
-    verdict: str, builtin_drift: dict, project_axis: dict
+    verdict: str,
+    builtin_drift: dict,
+    project_axis: dict,
+    *,
+    workflow_yaml_axis: dict | None = None,
+    constitution_axis: dict | None = None,
+    capability_schema_axis: dict | None = None,
 ) -> str:
     """Build the top-level human-readable reason string.
 
     Mentions the dominant axis(es) so the caller can read why the
     aggregate verdict landed where it did. Keeps single-line format.
+    H3 #3: extended to mention the three new whole-file axes. Each
+    H3 axis can only contribute "drifted_compatible" reason text
+    (whole-file hash precision limit); incompatible reasons stay
+    sourced from builtin / project axes only.
     """
     if verdict == VERDICT_REPLAYABLE:
         return "stored baseline matches current baseline byte-for-byte"
@@ -423,6 +650,23 @@ def _compose_reason(
         parts.append("project_skills_removed=" + ", ".join(pr))
     if pm:
         parts.append("project_skills_masked=" + ", ".join(pm))
+
+    # H3 axes — whole-file hash, surface compatible drift only.
+    if (
+        workflow_yaml_axis
+        and workflow_yaml_axis.get("axis_verdict") == VERDICT_DRIFTED_COMPATIBLE
+    ):
+        parts.append("workflow_yaml content_hash differs")
+    if (
+        constitution_axis
+        and constitution_axis.get("axis_verdict") == VERDICT_DRIFTED_COMPATIBLE
+    ):
+        parts.append("constitution content_hash differs")
+    if (
+        capability_schema_axis
+        and capability_schema_axis.get("axis_verdict") == VERDICT_DRIFTED_COMPATIBLE
+    ):
+        parts.append("capability_schema content_hash differs")
 
     if not parts:
         # drifted_compatible without specific file pinpoints (e.g.,
