@@ -495,25 +495,72 @@ count_workflows() {
 print_update_summary() {
   local prev_ref="$1"
   local new_ref="$2"
+  local prev_agents="${3:-}"
+  local prev_strategies="${4:-}"
+  local prev_workflows="${5:-}"
 
   local agents strategies workflows
   agents="$(count_agents)"
   strategies="$(count_strategies)"
   workflows="$(count_workflows)"
 
-  echo "Updating Charlie's AI Protocols"
-  echo "${new_ref}"
+  # Color setup: only paint if stdout is a TTY and terminal supports >=8 colors.
+  local bold="" dim="" reset="" yellow="" cyan="" green=""
+  if [ -t 1 ] && [ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]; then
+    bold="$(tput bold 2>/dev/null || echo '')"
+    dim="$(tput dim 2>/dev/null || echo '')"
+    reset="$(tput sgr0 2>/dev/null || echo '')"
+    yellow="$(tput setaf 3 2>/dev/null || echo '')"
+    cyan="$(tput setaf 6 2>/dev/null || echo '')"
+    green="$(tput setaf 2 2>/dev/null || echo '')"
+  fi
+
+  local rule="════════════════════════════════════════════════"
+
+  # Stat box internal layout: ║[4sp][label %-12s][1sp][metric 9ch][8sp]║ = 34 chars inner
+  # Metric raw form is `%3s > %-3s` (e.g. " 17 > 17 "), 9 chars, supports up to 3-digit counts.
+  build_stat_line() {
+    local label="$1" prev="$2" curr="$3"
+    if [ -z "${prev}" ] || [ "${prev}" = "${curr}" ]; then
+      prev="${curr}"
+    fi
+    printf '  %s║%s    %-12s %s%3s%s > %s%-3s%s        %s║%s\n' \
+      "${yellow}" "${reset}" "${label}" \
+      "${dim}" "${prev}" "${reset}" \
+      "${bold}${green}" "${curr}" "${reset}" \
+      "${yellow}" "${reset}"
+  }
+
+  echo ""
+  printf '%s%s%s\n' "${yellow}" "${rule}" "${reset}"
+  echo ""
+  printf '%s  Updating Charlie'\''s AI Protocols%s\n' "${bold}" "${reset}"
+  echo ""
   print_visual_change_summary "${prev_ref}" "${new_ref}"
-  echo "You can see the changelog at docs/cap/RELEASE-NOTES.md"
+  printf '  %sChangelog:%s docs/cap/RELEASE-NOTES.md\n' "${dim}" "${reset}"
+  echo ""
   print_cap_logo
   echo ""
-  echo "Hooray! CAP has been updated!"
+  printf '  %sHooray! CAP has been updated to %s%s%s > %s%s%s\n' \
+    "${bold}${green}" \
+    "${reset}${dim}" "${prev_ref}" "${reset}" \
+    "${bold}${cyan}" "${new_ref}" "${reset}"
   echo ""
-  printf "  %-14s %s\n" "Agents:" "${agents}"
-  printf "  %-14s %s\n" "Strategies:" "${strategies}"
-  printf "  %-14s %s\n" "Workflows:" "${workflows}"
   echo ""
-  echo "  Run 'source ~/.zshrc' or open a new terminal to apply."
+  # ── Stat box (RPG-style; top/bottom inner padding for "level-up" feel) ──
+  printf '  %s╔══════════════════════════════════╗%s\n' "${yellow}" "${reset}"
+  printf '  %s║                                  ║%s\n' "${yellow}" "${reset}"
+  build_stat_line "Agents"     "${prev_agents}"     "${agents}"
+  build_stat_line "Strategies" "${prev_strategies}" "${strategies}"
+  build_stat_line "Workflows"  "${prev_workflows}"  "${workflows}"
+  printf '  %s║                                  ║%s\n' "${yellow}" "${reset}"
+  printf '  %s╚══════════════════════════════════╝%s\n' "${yellow}" "${reset}"
+  echo ""
+  echo ""
+  printf '  %sRun '\''source ~/.zshrc'\'' or open a new terminal to apply.%s\n' "${dim}" "${reset}"
+  echo ""
+  printf '%s%s%s\n' "${yellow}" "${rule}" "${reset}"
+  echo ""
 }
 
 case "${1:-}" in
@@ -533,10 +580,14 @@ case "${1:-}" in
     [ "$#" -le 2 ] || usage
     ensure_git_repo
     prev_ref="$(run_git describe --tags --exact-match 2>/dev/null || run_git rev-parse --short HEAD)"
+    prev_agents="$(count_agents)"
+    prev_strategies="$(count_strategies)"
+    prev_workflows="$(count_workflows)"
     prepare_target "${2:-latest}" >/dev/null
     new_ref="$(run_git describe --tags --exact-match 2>/dev/null || run_git rev-parse --short HEAD)"
     perform_install >/dev/null 2>&1
-    print_update_summary "${prev_ref}" "${new_ref}"
+    print_update_summary "${prev_ref}" "${new_ref}" \
+      "${prev_agents}" "${prev_strategies}" "${prev_workflows}"
     ;;
   rollback)
     # Hidden alias — delegates to update for backward compatibility
