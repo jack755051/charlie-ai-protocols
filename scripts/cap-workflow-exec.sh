@@ -1008,6 +1008,51 @@ if [ -f "${BINDING_SUMMARY_PY}" ]; then
   fi
 fi
 
+# H3 #4: attach three whole-file-hash baselines for the new replay
+# verifier axes (workflow YAML / constitution / capability schema).
+# Each follows the same best-effort contract as the H1+H2 attaches:
+# failure logs a warn line and never halts the run. Per design memo
+# §5 the attaches are intentionally minimal — single SHA-256 each —
+# so combined runtime overhead stays well under 100ms.
+WF_YAML_SNAPSHOT_PY="${CAP_ROOT}/engine/workflow_yaml_snapshot.py"
+if [ -f "${WF_YAML_SNAPSHOT_PY}" ]; then
+  # Resolve the workflow source path from PLAN_JSON. The plan carries
+  # source_path under the top level; fall back gracefully when missing.
+  WF_SOURCE_PATH="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c "
+import json, sys
+try:
+    print(json.loads(sys.stdin.read()).get('source_path', '') or '')
+except Exception:
+    print('')
+")"
+  if [ -n "${WF_SOURCE_PATH}" ] && [ -f "${WF_SOURCE_PATH}" ]; then
+    if ! "${PYTHON_BIN}" "${WF_YAML_SNAPSHOT_PY}" attach "${AGENT_SESSIONS_JSON}" \
+        --workflow-path "${WF_SOURCE_PATH}" \
+        --workflow-id "${WORKFLOW_ID}" \
+        >> "${WORKFLOW_LOG}" 2>&1; then
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')][workflow][warn] failed to attach workflow_yaml_baseline to ${AGENT_SESSIONS_JSON}; continuing without workflow yaml baseline" >> "${WORKFLOW_LOG}"
+    fi
+  else
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')][workflow][warn] workflow source_path empty or missing; skipping workflow_yaml_baseline attach" >> "${WORKFLOW_LOG}"
+  fi
+fi
+
+CONSTITUTION_SNAPSHOT_PY="${CAP_ROOT}/engine/constitution_snapshot.py"
+if [ -f "${CONSTITUTION_SNAPSHOT_PY}" ]; then
+  if ! CAP_PROJECT_ROOT="${PROJECT_ROOT}" "${PYTHON_BIN}" "${CONSTITUTION_SNAPSHOT_PY}" attach "${AGENT_SESSIONS_JSON}" \
+      >> "${WORKFLOW_LOG}" 2>&1; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')][workflow][warn] failed to attach constitution_baseline to ${AGENT_SESSIONS_JSON}; continuing without constitution baseline" >> "${WORKFLOW_LOG}"
+  fi
+fi
+
+CAP_SCHEMA_SNAPSHOT_PY="${CAP_ROOT}/engine/capability_schema_snapshot.py"
+if [ -f "${CAP_SCHEMA_SNAPSHOT_PY}" ]; then
+  if ! "${PYTHON_BIN}" "${CAP_SCHEMA_SNAPSHOT_PY}" attach "${AGENT_SESSIONS_JSON}" \
+      >> "${WORKFLOW_LOG}" 2>&1; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')][workflow][warn] failed to attach capability_schema_baseline to ${AGENT_SESSIONS_JSON}; continuing without capability schema baseline" >> "${WORKFLOW_LOG}"
+  fi
+fi
+
 echo "  Output dir: ${WORKFLOW_OUTPUT_DIR}"
 
 # Flatten phases into step lines:

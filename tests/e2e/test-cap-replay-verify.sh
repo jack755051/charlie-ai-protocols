@@ -312,6 +312,161 @@ case "${RC8D}" in
     fail_count=$((fail_count + 1)) ;;
 esac
 
+# ── Case 9: H3 multi-axis full attach + verify pipeline ─────────────
+#
+# Uses a dedicated nested sandbox so it does not see state mutations
+# from cases 3/5 (which edit AGENT_SKILLS_DIR/04-frontend-agent.md
+# in place). Isolated nested sandbox keeps the assertion focused on
+# the H3 attach + verdict path only.
+
+echo ""
+echo "Case 9: H3 attach pipeline writes all 6 mirrors + 5-axis verdict"
+
+H3_NESTED="${SANDBOX}/h3_nested"
+H3_PROJECT_ROOT="${H3_NESTED}/proj"
+H3_CAP_HOME="${H3_NESTED}/cap_home"
+H3_AGENT_SKILLS="${H3_NESTED}/agent-skills"
+H3_CAP_ROOT="${H3_NESTED}/cap_root"
+H3_WORKFLOW_REPORT_DIR="${H3_CAP_HOME}/projects/h3-test/reports/workflows"
+H3_WORKFLOW_ID="h3-wf"
+H3_RUN_ID="run_h3_e2e_aaaa"
+H3_RUN_DIR="${H3_WORKFLOW_REPORT_DIR}/${H3_WORKFLOW_ID}/${H3_RUN_ID}"
+
+mkdir -p "${H3_PROJECT_ROOT}" "${H3_CAP_HOME}" "${H3_AGENT_SKILLS}" \
+  "${H3_CAP_ROOT}/schemas" "${H3_RUN_DIR}" "${H3_PROJECT_ROOT}/.cap"
+echo "project_id: h3-test" > "${H3_PROJECT_ROOT}/.cap.project.yaml"
+echo "project_id: h3-test" > "${H3_PROJECT_ROOT}/.cap/constitution.yaml"
+echo "schema_version: 1" > "${H3_CAP_ROOT}/schemas/capabilities.yaml"
+
+# Project skills.yaml carries the my-skill entry the binding_summary
+# below references; without it the project axis would report
+# skills_removed and force drifted_incompatible.
+cat > "${H3_PROJECT_ROOT}/.cap/skills.yaml" <<'EOF'
+schema_version: 1
+skills:
+  - skill_id: my-skill
+    agent_alias: dummy
+    provider: builtin
+    enabled: true
+    priority: 100
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities: [dummy_cap]
+    fallback_roles: [implementer]
+    prompt_file: agent-skills/dummy.md
+    cli: claude
+EOF
+
+# Pristine, isolated agent-skills/ files for this case only.
+cat > "${H3_AGENT_SKILLS}/01-supervisor-agent.md" <<'EOF'
+# Supervisor h3 prompt
+EOF
+cat > "${H3_AGENT_SKILLS}/04-frontend-agent.md" <<'EOF'
+# Frontend h3 prompt
+EOF
+
+H3_WORKFLOW_FILE="${H3_NESTED}/workflow.yaml"
+echo "workflow_id: h3-wf" > "${H3_WORKFLOW_FILE}"
+
+H3_BASELINE="$(CAP_AGENT_SKILLS_DIR="${H3_AGENT_SKILLS}" CAP_ROOT="${H3_CAP_ROOT}" \
+  "${PYTHON_BIN}" "${SNAPSHOT_PY}" snapshot)"
+
+H3_SESSIONS_JSON='[{"session_id":"s1","prompt_file":"agent-skills/04-frontend-agent.md"}]'
+cat > "${H3_RUN_DIR}/agent-sessions.json" <<EOF
+{
+  "version": 1,
+  "run_id": "${H3_RUN_ID}",
+  "workflow_id": "${H3_WORKFLOW_ID}",
+  "workflow_name": "h3",
+  "agent_skills_baseline": ${H3_BASELINE},
+  "sessions": ${H3_SESSIONS_JSON}
+}
+EOF
+
+H3_PLAN_TMP="${H3_NESTED}/plan.json"
+cat > "${H3_PLAN_TMP}" <<EOF
+{
+  "workflow_id": "${H3_WORKFLOW_ID}",
+  "phases": [
+    {"phase": 1, "steps": [{"step_id":"s1","skill_id":"my-skill","skill_source":{"source_layer":"project","source_path":"${H3_PROJECT_ROOT}/.cap/skills.yaml"}}]}
+  ],
+  "standby_steps": []
+}
+EOF
+
+CAP_PROJECT_ROOT="${H3_PROJECT_ROOT}" "${PYTHON_BIN}" \
+  "${REPO_ROOT}/engine/project_skills_snapshot.py" attach "${H3_RUN_DIR}/agent-sessions.json" >/dev/null
+"${PYTHON_BIN}" "${REPO_ROOT}/engine/binding_summary.py" attach "${H3_RUN_DIR}/agent-sessions.json" \
+  --plan-path "${H3_PLAN_TMP}" >/dev/null
+"${PYTHON_BIN}" "${REPO_ROOT}/engine/workflow_yaml_snapshot.py" attach "${H3_RUN_DIR}/agent-sessions.json" \
+  --workflow-path "${H3_WORKFLOW_FILE}" --workflow-id "${H3_WORKFLOW_ID}" --source-layer explicit >/dev/null
+CAP_PROJECT_ROOT="${H3_PROJECT_ROOT}" "${PYTHON_BIN}" \
+  "${REPO_ROOT}/engine/constitution_snapshot.py" attach "${H3_RUN_DIR}/agent-sessions.json" >/dev/null
+CAP_ROOT="${H3_CAP_ROOT}" "${PYTHON_BIN}" \
+  "${REPO_ROOT}/engine/capability_schema_snapshot.py" attach "${H3_RUN_DIR}/agent-sessions.json" >/dev/null
+
+ATTACHED="$("${PYTHON_BIN}" -c "
+import json
+e = json.load(open('${H3_RUN_DIR}/agent-sessions.json'))
+print('|'.join(str(bool(e.get(k))) for k in [
+    'agent_skills_baseline','project_skill_baseline','binding_summary',
+    'workflow_yaml_baseline','constitution_baseline','capability_schema_baseline'
+]))")"
+assert_eq "case9: all six envelope fields attached" \
+  "True|True|True|True|True|True" "${ATTACHED}"
+
+set +e
+H3_OUT="$(CAP_HOME="${H3_CAP_HOME}" \
+  CAP_AGENT_SKILLS_DIR="${H3_AGENT_SKILLS}" \
+  CAP_PROJECT_ROOT="${H3_PROJECT_ROOT}" CAP_ROOT="${H3_CAP_ROOT}" \
+  bash -c "cd '${H3_PROJECT_ROOT}' && bash '${CAP_REPLAY_SH}' verify ${H3_RUN_ID}" 2>&1)"
+H3_RC=$?
+set -e
+assert_eq "case9: cap replay verify exits 0 (all axes match)" "0" "${H3_RC}"
+
+for MIRROR in agent-skills.json project-skills.json binding-summary.json \
+              workflow-yaml.json constitution.json capability-schema.json; do
+  if [ -f "${H3_RUN_DIR}/snapshots/${MIRROR}" ]; then
+    echo "  PASS: case9: snapshots/${MIRROR} written"
+    pass_count=$((pass_count + 1))
+  else
+    echo "  FAIL: case9: snapshots/${MIRROR} missing"
+    fail_count=$((fail_count + 1))
+  fi
+done
+
+H3_VERDICT="$("${PYTHON_BIN}" -c "
+import json
+d = json.load(open('${H3_RUN_DIR}/replay-verdict.json'))
+dd = d['drift_details']
+print('|'.join([
+    d['verdict'],
+    str(bool(dd.get('workflow_yaml_diff'))),
+    str(bool(dd.get('constitution_diff'))),
+    str(bool(dd.get('capability_schema_diff'))),
+]))
+")"
+assert_eq "case9: verdict + 3 H3 axis bodies populated" \
+  "replayable|True|True|True" "${H3_VERDICT}"
+
+# Edit workflow yaml to force workflow axis drift; expect
+# top-level drifted_compatible.
+echo "# drift sim" >> "${H3_WORKFLOW_FILE}"
+set +e
+H3_DRIFT_RC=$(CAP_HOME="${H3_CAP_HOME}" \
+  CAP_AGENT_SKILLS_DIR="${H3_AGENT_SKILLS}" \
+  CAP_PROJECT_ROOT="${H3_PROJECT_ROOT}" CAP_ROOT="${H3_CAP_ROOT}" \
+  bash -c "cd '${H3_PROJECT_ROOT}' && bash '${CAP_REPLAY_SH}' verify ${H3_RUN_ID}" >/dev/null 2>&1; echo $?)
+set -e
+assert_eq "case9: workflow drift → exit 0 (drifted_compatible never blocks)" \
+  "0" "${H3_DRIFT_RC}"
+DRIFT_VERDICT="$("${PYTHON_BIN}" -c "
+import json
+d = json.load(open('${H3_RUN_DIR}/replay-verdict.json'))
+print(d['verdict'] + '|' + d['drift_details']['workflow_yaml_diff']['axis_verdict'])
+")"
+assert_eq "case9: drifted_compatible top-level + workflow axis" \
+  "drifted_compatible|drifted_compatible" "${DRIFT_VERDICT}"
+
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"
 [ "${fail_count}" -eq 0 ]

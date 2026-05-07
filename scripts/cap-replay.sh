@@ -14,10 +14,16 @@
 
 set -euo pipefail
 
+# H3 #4 fix: use a local SCRIPT_REPO variable for the path to the
+# cap-protocols repo where this wrapper lives, so we don't clobber the
+# env CAP_ROOT (which downstream snapshot helpers like
+# capability_schema_snapshot.py honour to locate the project's
+# cap_root). Previously this script overwrote CAP_ROOT, masking the
+# caller's value before forking python.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CAP_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+SCRIPT_REPO="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PATH_HELPER="${SCRIPT_DIR}/cap-paths.sh"
-VERIFIER_PY="${CAP_ROOT}/engine/replay_verifier.py"
+VERIFIER_PY="${SCRIPT_REPO}/engine/replay_verifier.py"
 
 usage() {
   cat <<'EOF' >&2
@@ -49,8 +55,8 @@ EOF
 }
 
 resolve_python() {
-  if [ -x "${CAP_ROOT}/.venv/bin/python" ]; then
-    printf '%s\n' "${CAP_ROOT}/.venv/bin/python"
+  if [ -x "${SCRIPT_REPO}/.venv/bin/python" ]; then
+    printf '%s\n' "${SCRIPT_REPO}/.venv/bin/python"
   else
     printf '%s\n' "python3"
   fi
@@ -247,6 +253,24 @@ try:
             print('  project: replayable')
         elif ax == 'unverifiable_axis':
             print('  project: unverifiable (no project_skill_baseline recorded)')
+    # H3 #4: three new whole-file-hash axes (workflow_yaml /
+    # constitution / capability_schema). Per design memo §6, each
+    # axis can only emit replayable / drifted_compatible /
+    # unverifiable_axis (drifted_incompatible is precision-blocked
+    # for whole-file hash).
+    for axis_name, key in (('workflow', 'workflow_yaml_diff'),
+                           ('constitution', 'constitution_diff'),
+                           ('capability_schema', 'capability_schema_diff')):
+        body = drift.get(key)
+        if not body:
+            continue
+        ax = body.get('axis_verdict', '')
+        if ax == 'drifted_compatible':
+            print('  ' + axis_name + ': drifted_compatible (content_hash differs)')
+        elif ax == 'replayable':
+            print('  ' + axis_name + ': replayable')
+        elif ax == 'unverifiable_axis':
+            print('  ' + axis_name + ': unverifiable (no baseline recorded)')
 except Exception:
     pass
 ")"
@@ -254,15 +278,18 @@ except Exception:
 
 if [ "${WRITE_MODE}" -eq 1 ] && [ "${VERDICT}" != "not_found" ]; then
   printf '  verdict file: %s/replay-verdict.json\n' "${RUN_DIR}"
-  if [ -f "${RUN_DIR}/snapshots/agent-skills.json" ]; then
-    printf '  snapshot mirror: %s/snapshots/agent-skills.json\n' "${RUN_DIR}"
-  fi
-  if [ -f "${RUN_DIR}/snapshots/project-skills.json" ]; then
-    printf '                   %s/snapshots/project-skills.json\n' "${RUN_DIR}"
-  fi
-  if [ -f "${RUN_DIR}/snapshots/binding-summary.json" ]; then
-    printf '                   %s/snapshots/binding-summary.json\n' "${RUN_DIR}"
-  fi
+  first_mirror=1
+  for mirror in agent-skills.json project-skills.json binding-summary.json \
+                workflow-yaml.json constitution.json capability-schema.json; do
+    if [ -f "${RUN_DIR}/snapshots/${mirror}" ]; then
+      if [ "${first_mirror}" -eq 1 ]; then
+        printf '  snapshot mirror: %s/snapshots/%s\n' "${RUN_DIR}" "${mirror}"
+        first_mirror=0
+      else
+        printf '                   %s/snapshots/%s\n' "${RUN_DIR}" "${mirror}"
+      fi
+    fi
+  done
 fi
 
 exit "${VERIFY_RC}"

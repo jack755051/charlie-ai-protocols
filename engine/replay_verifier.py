@@ -745,6 +745,21 @@ def write_binding_summary_mirror(run_dir: Path, summary: dict | None) -> Path | 
     return _write_mirror(run_dir, summary, "binding-summary.json")
 
 
+def write_workflow_yaml_mirror(run_dir: Path, baseline: dict | None) -> Path | None:
+    """Mirror envelope's ``workflow_yaml_baseline`` (H3 #4)."""
+    return _write_mirror(run_dir, baseline, "workflow-yaml.json")
+
+
+def write_constitution_mirror(run_dir: Path, baseline: dict | None) -> Path | None:
+    """Mirror envelope's ``constitution_baseline`` (H3 #4)."""
+    return _write_mirror(run_dir, baseline, "constitution.json")
+
+
+def write_capability_schema_mirror(run_dir: Path, baseline: dict | None) -> Path | None:
+    """Mirror envelope's ``capability_schema_baseline`` (H3 #4)."""
+    return _write_mirror(run_dir, baseline, "capability-schema.json")
+
+
 def _write_mirror(run_dir: Path, payload: dict | None, filename: str) -> Path | None:
     if not payload:
         return None
@@ -873,6 +888,18 @@ def _cli(argv: list[str]) -> int:
                 write_binding_summary_mirror(
                     args.run_dir,
                     sessions_envelope.get("binding_summary"),
+                )
+                write_workflow_yaml_mirror(
+                    args.run_dir,
+                    sessions_envelope.get("workflow_yaml_baseline"),
+                )
+                write_constitution_mirror(
+                    args.run_dir,
+                    sessions_envelope.get("constitution_baseline"),
+                )
+                write_capability_schema_mirror(
+                    args.run_dir,
+                    sessions_envelope.get("capability_schema_baseline"),
                 )
         print(json.dumps(envelope, ensure_ascii=False, indent=2))
         return verdict_to_exit_code(envelope["verdict"])
