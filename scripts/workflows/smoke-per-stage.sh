@@ -259,6 +259,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-agent-skills-snapshot.sh" "agent-sk
 run_fixture "${REPO_ROOT}/tests/scripts/test-replay-verdict-schema.sh" "replay-verdict schema gate (H1 #2)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-replay-verifier.sh" "replay verifier engine + CLI (H1 #3)"
 run_fixture "${REPO_ROOT}/tests/e2e/test-cap-replay-verify.sh" "cap replay verify shell wrapper e2e (H1 #4)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-project-skills-snapshot.sh" "project skills snapshot module (H2 #2)"
 
 echo ""
 echo "----------------------------------------------------------------"
