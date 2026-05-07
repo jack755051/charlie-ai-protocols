@@ -467,6 +467,134 @@ print(d['verdict'] + '|' + d['drift_details']['workflow_yaml_diff']['axis_verdic
 assert_eq "case9: drifted_compatible top-level + workflow axis" \
   "drifted_compatible|drifted_compatible" "${DRIFT_VERDICT}"
 
+# ── Case 10: --strict-unverifiable opt-in escalation (H4 #2) ────────
+
+echo ""
+echo "Case 10: --strict-unverifiable escalates top-level unverifiable to exit 4"
+
+# Build a pre-A0 #4-style run envelope (no agent_skills_baseline).
+H4_RUN_ID="run_h4_strict_aaaa"
+H4_RUN_DIR="${WORKFLOW_REPORT_DIR}/${WORKFLOW_ID}/${H4_RUN_ID}"
+mkdir -p "${H4_RUN_DIR}"
+cat > "${H4_RUN_DIR}/agent-sessions.json" <<EOF
+{
+  "version": 1,
+  "run_id": "${H4_RUN_ID}",
+  "workflow_id": "${WORKFLOW_ID}",
+  "workflow_name": "h4-strict",
+  "sessions": []
+}
+EOF
+
+# Without strict flag → top-level=unverifiable, exit 0 (existing).
+set +e
+H4_OUT_LAX="$(run_replay verify "${H4_RUN_ID}" 2>&1)"
+H4_RC_LAX=$?
+set -e
+assert_eq "case10a: without --strict-unverifiable → exit 0 (legacy soft signal)" \
+  "0" "${H4_RC_LAX}"
+assert_contains "case10a: stdout still shows unverifiable verdict" \
+  "cap replay: unverifiable" "${H4_OUT_LAX}"
+
+# With strict flag → exit 4.
+set +e
+H4_OUT_STRICT="$(run_replay verify "${H4_RUN_ID}" --strict-unverifiable 2>&1)"
+H4_RC_STRICT=$?
+set -e
+assert_eq "case10b: --strict-unverifiable → exit 4 (escalated)" \
+  "4" "${H4_RC_STRICT}"
+assert_contains "case10b: stdout marks the escalation" \
+  "strict-unverifiable: escalating exit code to 4" "${H4_OUT_STRICT}"
+
+# Strict flag should NOT escalate when verdict is replayable.
+set +e
+H4_OUT_REPLAY="$(run_replay verify "${RUN_ID}" --strict-unverifiable 2>&1)"
+H4_RC_REPLAY=$?
+set -e
+assert_eq "case10c: replayable + strict flag → exit 0 (unaffected)" \
+  "0" "${H4_RC_REPLAY}"
+
+# --strict-unverifiable + --json: escalation must apply before JSON
+# branch so machine consumers see the elevated exit code too.
+set +e
+H4_JSON_OUT="$(run_replay verify "${H4_RUN_ID}" --json --strict-unverifiable 2>&1)"
+H4_JSON_RC=$?
+set -e
+assert_eq "case10d: --json + --strict-unverifiable → exit 4" \
+  "4" "${H4_JSON_RC}"
+H4_JSON_VERDICT="$(printf '%s' "${H4_JSON_OUT}" | "${PYTHON_BIN}" -c "
+import json, sys
+try:
+    print(json.loads(sys.stdin.read())['verdict'])
+except Exception:
+    print('parse-failed')
+")"
+assert_eq "case10d: --json output verdict is unverifiable (envelope unchanged)" \
+  "unverifiable" "${H4_JSON_VERDICT}"
+
+# ── Case 11: source_layer extraction from plan_json (H4 #2) ─────────
+
+echo ""
+echo "Case 11: workflow_yaml_snapshot.attach extracts --source-layer from plan binding"
+
+# Direct unit-style check that the snapshot CLI accepts and records
+# --source-layer. The cap-workflow-exec.sh wrapper change extracts
+# binding.workflow_source.source_layer from PLAN_JSON and threads it
+# in; here we exercise the receiving end of the contract.
+H4_WF_FIXTURE="${SANDBOX}/h4-source-layer.yaml"
+echo "workflow_id: src-layer-test" > "${H4_WF_FIXTURE}"
+
+H4_LEDGER="${SANDBOX}/h4-source-layer-ledger.json"
+cat > "${H4_LEDGER}" <<'EOF'
+{"version":1,"run_id":"r","workflow_id":"x","workflow_name":"x","sessions":[]}
+EOF
+
+"${PYTHON_BIN}" "${REPO_ROOT}/engine/workflow_yaml_snapshot.py" attach "${H4_LEDGER}" \
+  --workflow-path "${H4_WF_FIXTURE}" \
+  --workflow-id src-layer-test \
+  --source-layer project >/dev/null
+
+H4_SOURCE_LAYER="$("${PYTHON_BIN}" -c "
+import json
+print(json.load(open('${H4_LEDGER}'))['workflow_yaml_baseline']['source_layer'])
+")"
+assert_eq "case11: source-layer 'project' recorded on baseline" \
+  "project" "${H4_SOURCE_LAYER}"
+
+# Simulate the cap-workflow-exec.sh extraction logic against a fake
+# plan_json with binding.workflow_source.source_layer populated.
+H4_PLAN_TMP="${SANDBOX}/h4-plan.json"
+cat > "${H4_PLAN_TMP}" <<EOF
+{
+  "workflow_id": "x",
+  "source_path": "${H4_WF_FIXTURE}",
+  "binding": {
+    "workflow_source": {
+      "source_layer": "shared",
+      "source_path": "${H4_WF_FIXTURE}"
+    }
+  }
+}
+EOF
+
+H4_EXTRACTED="$("${PYTHON_BIN}" -c "
+import json
+plan = json.load(open('${H4_PLAN_TMP}'))
+src_path = plan.get('source_path', '') or ''
+binding = plan.get('binding', {}) or {}
+ws = binding.get('workflow_source') or {}
+src_layer = ws.get('source_layer', '') or ''
+print(f'{src_path}|{src_layer}')
+")"
+case "${H4_EXTRACTED}" in
+  *"|shared")
+    echo "  PASS: case11: bash-equivalent extraction reads source_layer=shared from binding"
+    pass_count=$((pass_count + 1)) ;;
+  *)
+    echo "  FAIL: case11: extraction produced ${H4_EXTRACTED}"
+    fail_count=$((fail_count + 1)) ;;
+esac
+
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"
 [ "${fail_count}" -eq 0 ]

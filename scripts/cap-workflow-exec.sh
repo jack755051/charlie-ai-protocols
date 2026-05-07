@@ -1016,19 +1016,34 @@ fi
 # so combined runtime overhead stays well under 100ms.
 WF_YAML_SNAPSHOT_PY="${CAP_ROOT}/engine/workflow_yaml_snapshot.py"
 if [ -f "${WF_YAML_SNAPSHOT_PY}" ]; then
-  # Resolve the workflow source path from PLAN_JSON. The plan carries
-  # source_path under the top level; fall back gracefully when missing.
-  WF_SOURCE_PATH="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c "
+  # H4 #2: extract both workflow source path AND source_layer from
+  # PLAN_JSON (binding.workflow_source.source_layer is populated by
+  # P9 #4 layered resolver and threaded through bind_semantic_plan).
+  # Without this fix the attached workflow_yaml_baseline records
+  # source_layer=None even when the layered resolver knows the
+  # answer — see H3 dogfood report and H4 design memo §5.
+  WF_PLAN_META="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c "
 import json, sys
 try:
-    print(json.loads(sys.stdin.read()).get('source_path', '') or '')
+    plan = json.loads(sys.stdin.read())
+    src_path = plan.get('source_path', '') or ''
+    binding = plan.get('binding', {}) or {}
+    ws = binding.get('workflow_source') or {}
+    src_layer = ws.get('source_layer', '') or ''
+    print(f'{src_path}|{src_layer}')
 except Exception:
-    print('')
+    print('|')
 ")"
+  WF_SOURCE_PATH="${WF_PLAN_META%|*}"
+  WF_SOURCE_LAYER="${WF_PLAN_META#*|}"
   if [ -n "${WF_SOURCE_PATH}" ] && [ -f "${WF_SOURCE_PATH}" ]; then
-    if ! "${PYTHON_BIN}" "${WF_YAML_SNAPSHOT_PY}" attach "${AGENT_SESSIONS_JSON}" \
-        --workflow-path "${WF_SOURCE_PATH}" \
-        --workflow-id "${WORKFLOW_ID}" \
+    WF_ATTACH_ARGS=(attach "${AGENT_SESSIONS_JSON}"
+      --workflow-path "${WF_SOURCE_PATH}"
+      --workflow-id "${WORKFLOW_ID}")
+    if [ -n "${WF_SOURCE_LAYER}" ]; then
+      WF_ATTACH_ARGS+=(--source-layer "${WF_SOURCE_LAYER}")
+    fi
+    if ! "${PYTHON_BIN}" "${WF_YAML_SNAPSHOT_PY}" "${WF_ATTACH_ARGS[@]}" \
         >> "${WORKFLOW_LOG}" 2>&1; then
       echo "[$(date '+%Y-%m-%d %H:%M:%S')][workflow][warn] failed to attach workflow_yaml_baseline to ${AGENT_SESSIONS_JSON}; continuing without workflow yaml baseline" >> "${WORKFLOW_LOG}"
     fi

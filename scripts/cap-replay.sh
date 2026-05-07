@@ -28,13 +28,14 @@ VERIFIER_PY="${SCRIPT_REPO}/engine/replay_verifier.py"
 usage() {
   cat <<'EOF' >&2
 Usage:
-  cap replay verify <run_id_or_run_dir> [--json] [--no-write] [--project-id <id>]
+  cap replay verify <run_id_or_run_dir> [--json] [--no-write] [--project-id <id>] [--strict-unverifiable]
 
 Examples:
   cap replay verify run_20260507120304_aabbccdd
   cap replay verify ~/.cap/projects/<id>/reports/workflows/<wf>/run_xxx/
   cap replay verify run_xxx --json
   cap replay verify run_xxx --project-id project-constitution-bootstrap
+  cap replay verify run_xxx --strict-unverifiable
 
 Behaviour:
   * Looks up <run_id> under the active project's workflow_report_dir
@@ -45,11 +46,17 @@ Behaviour:
     bootstrap-mode runs (project-constitution writes to
     project-constitution-bootstrap regardless of cwd) or for
     inspecting runs in another project from outside its repo.
+  * --strict-unverifiable: opt-in (H4 minimal). When the top-level
+    verdict is `unverifiable`, escalate exit code from 0 to 4 so CI
+    treats unverifiable runs as block-worthy. Default OFF preserves
+    H1+H2+H3 behaviour where unverifiable is a soft signal.
   * Writes <run_dir>/replay-verdict.json and <run_dir>/snapshots/
-    {agent-skills,project-skills,binding-summary}.json by default;
-    pass --no-write to print only.
+    {agent-skills,project-skills,binding-summary,workflow-yaml,
+    constitution,capability-schema}.json by default; pass --no-write
+    to print only.
   * Exit codes: 0 (replayable / drifted_compatible / unverifiable),
-    4 (drifted_incompatible), 2 (not_found), 1 (internal error).
+    4 (drifted_incompatible; with --strict-unverifiable, also
+    unverifiable), 2 (not_found), 1 (internal error).
 EOF
   exit 1
 }
@@ -152,10 +159,12 @@ shift
 JSON_MODE=0
 WRITE_MODE=1
 PROJECT_ID_OVERRIDE=""
+STRICT_UNVERIFIABLE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --json) JSON_MODE=1; shift ;;
     --no-write) WRITE_MODE=0; shift ;;
+    --strict-unverifiable) STRICT_UNVERIFIABLE=1; shift ;;
     --project-id)
       [ $# -ge 2 ] || { printf 'cap replay: --project-id requires a value\n' >&2; usage; }
       PROJECT_ID_OVERRIDE="$2"
@@ -190,11 +199,6 @@ VERIFY_OUT="$("${PYTHON_BIN}" "${VERIFIER_PY}" "${VERIFY_ARGS[@]}")"
 VERIFY_RC=$?
 set -e
 
-if [ "${JSON_MODE}" -eq 1 ]; then
-  printf '%s\n' "${VERIFY_OUT}"
-  exit "${VERIFY_RC}"
-fi
-
 # Human-readable summary: pull verdict + reason from the JSON.
 VERDICT="$(printf '%s' "${VERIFY_OUT}" | "${PYTHON_BIN}" -c "
 import json, sys
@@ -203,6 +207,17 @@ try:
 except Exception:
     print('unknown')
 ")"
+
+# H4 #2: apply --strict-unverifiable BEFORE --json branch so JSON
+# consumers also see the escalated exit code.
+if [ "${STRICT_UNVERIFIABLE}" -eq 1 ] && [ "${VERDICT}" = "unverifiable" ]; then
+  VERIFY_RC=4
+fi
+
+if [ "${JSON_MODE}" -eq 1 ]; then
+  printf '%s\n' "${VERIFY_OUT}"
+  exit "${VERIFY_RC}"
+fi
 REASON="$(printf '%s' "${VERIFY_OUT}" | "${PYTHON_BIN}" -c "
 import json, sys
 try:
@@ -290,6 +305,13 @@ if [ "${WRITE_MODE}" -eq 1 ] && [ "${VERDICT}" != "not_found" ]; then
       fi
     fi
   done
+fi
+
+# H4 #2: --strict-unverifiable already applied above (before the
+# --json branch). Add a one-line trail so the human-readable
+# output mentions the escalation when it fires.
+if [ "${STRICT_UNVERIFIABLE}" -eq 1 ] && [ "${VERDICT}" = "unverifiable" ]; then
+  printf '  strict-unverifiable: escalating exit code to 4\n'
 fi
 
 exit "${VERIFY_RC}"
