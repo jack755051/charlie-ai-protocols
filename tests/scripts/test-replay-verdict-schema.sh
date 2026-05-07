@@ -426,6 +426,268 @@ EOF
 )")"
 assert_eq "N7 scalar project_skill_diff rejected" "1" "$(validate_fixture "${N7}")"
 
+# ── H2 #3: project_skill_diff body widened from reserved-null ───────
+
+# ── Positive 6: project_skill_diff full body (H2 happy path) ────────
+
+echo ""
+echo "Positive 6: project_skill_diff body present (H2 was_recorded=true happy)"
+P6="$(write_fixture pos6 "$(cat <<'EOF'
+{
+  "schema_version": 1,
+  "run_id": "run_h2_aaaa",
+  "verified_at": "2026-05-07T02:00:00Z",
+  "verdict": "replayable",
+  "reason": "both axes replayable",
+  "baseline_observed": {
+    "cap_version": "v0.22.0",
+    "git_commit": "abc1234",
+    "git_dirty": false,
+    "dir_hash": "sha256:bb",
+    "file_count": 35
+  },
+  "baseline_current": {
+    "cap_version": "v0.22.0",
+    "git_commit": "abc1234",
+    "git_dirty": false,
+    "dir_hash": "sha256:bb",
+    "file_count": 35
+  },
+  "drift_details": {
+    "prompt_files_used": ["01-supervisor-agent.md"],
+    "prompt_files_changed": [],
+    "prompt_files_removed": [],
+    "dir_hash_match": true,
+    "cap_version_match": true,
+    "git_commit_match": true,
+    "project_skill_diff": {
+      "was_recorded": true,
+      "axis_verdict": "replayable",
+      "project_dir_present_observed": true,
+      "project_dir_present_current": true,
+      "dir_hash_observed": "sha256:pp",
+      "dir_hash_current": "sha256:pp",
+      "skills_used": ["my-frontend-react18"],
+      "skills_changed": [],
+      "skills_removed": [],
+      "skills_added_masked": [],
+      "reason": null
+    }
+  }
+}
+EOF
+)")"
+assert_eq "P6 H2 full project_skill_diff body validates" "0" "$(validate_fixture "${P6}")"
+
+# ── Positive 7: project_skill_diff with was_recorded=false neutral ──
+
+echo ""
+echo "Positive 7: project_skill_diff with was_recorded=false (neutral axis)"
+P7="$(write_fixture pos7 "$(cat <<'EOF'
+{
+  "schema_version": 1,
+  "run_id": "run_h2_bbbb",
+  "verified_at": "2026-05-07T02:01:00Z",
+  "verdict": "replayable",
+  "reason": "builtin replayable; project axis neutral",
+  "baseline_observed": {
+    "cap_version": "v0.22.0",
+    "git_commit": "abc1234",
+    "git_dirty": false,
+    "dir_hash": "sha256:bb",
+    "file_count": 35
+  },
+  "baseline_current": {
+    "cap_version": "v0.22.0",
+    "git_commit": "abc1234",
+    "git_dirty": false,
+    "dir_hash": "sha256:bb",
+    "file_count": 35
+  },
+  "drift_details": {
+    "prompt_files_used": [],
+    "prompt_files_changed": [],
+    "prompt_files_removed": [],
+    "dir_hash_match": true,
+    "cap_version_match": true,
+    "git_commit_match": true,
+    "project_skill_diff": {
+      "was_recorded": false,
+      "axis_verdict": "unverifiable_axis",
+      "project_dir_present_observed": null,
+      "project_dir_present_current": false,
+      "dir_hash_observed": null,
+      "dir_hash_current": null,
+      "skills_used": [],
+      "skills_changed": [],
+      "skills_removed": [],
+      "skills_added_masked": [],
+      "reason": "project_skill_baseline absent on envelope"
+    }
+  }
+}
+EOF
+)")"
+assert_eq "P7 unverifiable_axis neutral body validates" "0" "$(validate_fixture "${P7}")"
+
+# ── Positive 8: drifted_incompatible with project skills_changed ────
+
+echo ""
+echo "Positive 8: drifted_incompatible from project axis (skills_changed populated)"
+P8="$(write_fixture pos8 "$(cat <<'EOF'
+{
+  "schema_version": 1,
+  "run_id": "run_h2_cccc",
+  "verified_at": "2026-05-07T02:02:00Z",
+  "verdict": "drifted_incompatible",
+  "reason": "project_skills_changed=my-frontend-react18",
+  "baseline_observed": {
+    "cap_version": "v0.22.0",
+    "git_commit": "abc1234",
+    "git_dirty": false,
+    "dir_hash": "sha256:bb",
+    "file_count": 35
+  },
+  "baseline_current": {
+    "cap_version": "v0.22.0",
+    "git_commit": "abc1234",
+    "git_dirty": false,
+    "dir_hash": "sha256:bb",
+    "file_count": 35
+  },
+  "drift_details": {
+    "prompt_files_used": ["01-supervisor-agent.md"],
+    "prompt_files_changed": [],
+    "prompt_files_removed": [],
+    "dir_hash_match": true,
+    "cap_version_match": true,
+    "git_commit_match": true,
+    "project_skill_diff": {
+      "was_recorded": true,
+      "axis_verdict": "drifted_incompatible",
+      "project_dir_present_observed": true,
+      "project_dir_present_current": true,
+      "dir_hash_observed": "sha256:pp1",
+      "dir_hash_current": "sha256:pp2",
+      "skills_used": ["my-frontend-react18"],
+      "skills_changed": ["my-frontend-react18"],
+      "skills_removed": [],
+      "skills_added_masked": [],
+      "reason": null
+    }
+  }
+}
+EOF
+)")"
+assert_eq "P8 project axis drifted_incompatible validates" "0" "$(validate_fixture "${P8}")"
+
+# ── Positive 9: project_skill_diff null still accepted (legacy) ────
+
+echo ""
+echo "Positive 9: project_skill_diff null still accepted (pre-A0 #4 envelopes)"
+P9="$(write_fixture pos9 "$(cat <<'EOF'
+{
+  "schema_version": 1,
+  "run_id": "run_legacy",
+  "verified_at": "2026-05-07T02:03:00Z",
+  "verdict": "unverifiable",
+  "reason": "pre-A0 #4 envelope with no agent_skills_baseline",
+  "baseline_observed": null,
+  "baseline_current": {
+    "cap_version": "v0.22.0",
+    "git_commit": "abc1234",
+    "git_dirty": false,
+    "dir_hash": "sha256:bb",
+    "file_count": 35
+  },
+  "drift_details": {
+    "prompt_files_used": [],
+    "prompt_files_changed": [],
+    "prompt_files_removed": [],
+    "dir_hash_match": false,
+    "cap_version_match": false,
+    "git_commit_match": false,
+    "project_skill_diff": null
+  }
+}
+EOF
+)")"
+assert_eq "P9 legacy null project_skill_diff validates" "0" "$(validate_fixture "${P9}")"
+
+# ── Negative 8: invalid axis_verdict enum ───────────────────────────
+
+echo ""
+echo "Negative 8: project_skill_diff.axis_verdict invalid enum"
+N8="$(write_fixture neg8 "$(cat <<'EOF'
+{
+  "schema_version": 1,
+  "run_id": "run_x",
+  "verified_at": "2026-05-07T02:04:00Z",
+  "verdict": "replayable",
+  "baseline_observed": null,
+  "baseline_current": null,
+  "drift_details": {
+    "prompt_files_used": [],
+    "prompt_files_changed": [],
+    "prompt_files_removed": [],
+    "dir_hash_match": true,
+    "cap_version_match": true,
+    "git_commit_match": true,
+    "project_skill_diff": {
+      "was_recorded": true,
+      "axis_verdict": "maybe_drifted",
+      "project_dir_present_observed": true,
+      "project_dir_present_current": true,
+      "dir_hash_observed": "sha256:p",
+      "dir_hash_current": "sha256:p",
+      "skills_used": [],
+      "skills_changed": [],
+      "skills_removed": [],
+      "skills_added_masked": []
+    }
+  }
+}
+EOF
+)")"
+assert_eq "N8 invalid axis_verdict rejected" "1" "$(validate_fixture "${N8}")"
+
+# ── Negative 9: skills_changed contains non-string ─────────────────
+
+echo ""
+echo "Negative 9: skills_changed has non-string entry"
+N9="$(write_fixture neg9 "$(cat <<'EOF'
+{
+  "schema_version": 1,
+  "run_id": "run_x",
+  "verified_at": "2026-05-07T02:05:00Z",
+  "verdict": "replayable",
+  "baseline_observed": null,
+  "baseline_current": null,
+  "drift_details": {
+    "prompt_files_used": [],
+    "prompt_files_changed": [],
+    "prompt_files_removed": [],
+    "dir_hash_match": true,
+    "cap_version_match": true,
+    "git_commit_match": true,
+    "project_skill_diff": {
+      "was_recorded": true,
+      "axis_verdict": "replayable",
+      "project_dir_present_observed": true,
+      "project_dir_present_current": true,
+      "dir_hash_observed": "sha256:p",
+      "dir_hash_current": "sha256:p",
+      "skills_used": [],
+      "skills_changed": [123],
+      "skills_removed": [],
+      "skills_added_masked": []
+    }
+  }
+}
+EOF
+)")"
+assert_eq "N9 non-string skills_changed rejected" "1" "$(validate_fixture "${N9}")"
+
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"
 [ "${fail_count}" -eq 0 ]

@@ -171,9 +171,98 @@ properties:
       project_skill_diff:
         type: [object, "null"]
         description: |
-          H1 v1 RESERVED-NULL FORWARD CONTRACT. H1 verifier always emits
-          null here; H2 will populate with project layer skill drift detail
-          (whether <project_root>/.cap/skills.yaml content changed and
-          whether the change affects the run's masked / replaced skills).
-          Consumers may rely on the field's presence at the schema level
-          but MUST treat null as "not yet implemented", not "no drift".
+          Project layer skill drift detail. Two shapes per
+          ``docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md`` §5:
+
+          * ``null`` (legacy / pre-A0 #4 runs): the run has no
+            ``agent_skills_baseline`` either, so verifier cannot
+            establish either axis. Treated as "H1 contract not yet
+            applicable" — distinct from a populated body with
+            ``axis_verdict=unverifiable_axis``.
+          * **object body** (H2 widening, schema_version still 1):
+            structured per-axis drift. Always populated when
+            ``baseline_observed`` is non-null. Fields:
+
+            ``was_recorded``: bool — true when envelope had a
+            ``project_skill_baseline`` recorded at run-time AND a
+            ``binding_summary`` was attached, allowing precise
+            skills_used selection. False for envelopes that lack
+            either piece (verifier emits a neutral, observation-only
+            body — see ``axis_verdict=unverifiable_axis``).
+
+            ``axis_verdict``: enum (``replayable`` / ``drifted_compatible``
+            / ``drifted_incompatible`` / ``unverifiable_axis``).
+            ``unverifiable_axis`` does NOT downgrade the top-level
+            verdict to ``unverifiable``; the worst-axis aggregator
+            falls back to the other axis instead. Top-level
+            ``unverifiable`` only fires when every axis is
+            ``unverifiable_axis``.
+
+            ``project_dir_present_observed`` / ``project_dir_present_current``:
+            bool / null — whether ``<project_root>/.cap/`` existed
+            at original run-time vs verification time. Distinguishes
+            "no project layer ever" from "project layer was deleted".
+
+            ``dir_hash_observed`` / ``dir_hash_current``: aggregate
+            hashes from project_skills_snapshot. Both null when
+            project_dir_present is false on the corresponding side.
+
+            ``skills_used``: array of skill_ids the run actually used
+            from project layer (derived from
+            ``binding_summary.steps[*].selected_skill_id`` filtered
+            by ``skill_source.source_layer == "project"``). Empty
+            when binding_summary missing.
+
+            ``skills_changed``: subset of skills_used whose per-skill
+            hash differs between observed and current snapshots.
+            Drives ``axis_verdict=drifted_incompatible`` together
+            with ``skills_removed`` / ``skills_added_masked``.
+
+            ``skills_removed``: subset of skills_used absent from
+            current snapshot (project skill was deleted).
+
+            ``skills_added_masked``: subset of skills_used that
+            exist in current but are now masked
+            (``disabled: true`` or replaces-target locked) so
+            cannot be selected. Treated as drifted_incompatible.
+
+            ``reason``: optional human-readable note (single line).
+        properties:
+          was_recorded:
+            type: boolean
+            description: True when envelope carried both project_skill_baseline AND binding_summary; false otherwise (axis goes neutral).
+          axis_verdict:
+            type: string
+            enum: [replayable, drifted_compatible, drifted_incompatible, unverifiable_axis]
+            description: Per-axis verdict. unverifiable_axis is neutral for top-level aggregation.
+          project_dir_present_observed:
+            type: [boolean, "null"]
+            description: Whether <project_root>/.cap/ existed at original run-time. Null when was_recorded=false.
+          project_dir_present_current:
+            type: boolean
+            description: Whether <project_root>/.cap/ exists at verification time.
+          dir_hash_observed:
+            type: [string, "null"]
+            description: Aggregate sha256:<hex> from observed project skills snapshot. Null when project_dir_present_observed is false or was_recorded=false.
+          dir_hash_current:
+            type: [string, "null"]
+            description: Aggregate sha256:<hex> from current project skills snapshot. Null when project_dir_present_current is false.
+          skills_used:
+            type: array
+            items: {type: string}
+            description: Distinct project layer skill_ids the run actually used.
+          skills_changed:
+            type: array
+            items: {type: string}
+            description: Subset of skills_used whose per-skill canonical-JSON hash differs.
+          skills_removed:
+            type: array
+            items: {type: string}
+            description: Subset of skills_used absent from current snapshot.
+          skills_added_masked:
+            type: array
+            items: {type: string}
+            description: Subset of skills_used masked in current registry (disabled / replaces target).
+          reason:
+            type: [string, "null"]
+            description: Optional human-readable single-line explanation.
