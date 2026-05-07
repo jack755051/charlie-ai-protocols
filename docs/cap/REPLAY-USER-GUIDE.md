@@ -181,10 +181,79 @@ cap replay verify <run_id>
 
 ### H2 不做的部分
 
-- Workflow YAML drift（該 run 用過的 workflow 檔被改）— H3 接手。
-- Capability schema / constitution drift — H3。
-- Shared layer skill (`<cap_home>/shared/skills.yaml`) drift — H3。
+- Workflow YAML drift（該 run 用過的 workflow 檔被改）— ✓ H3 minimal 已加入（whole-file hash）。
+- Capability schema / constitution drift — ✓ H3 minimal 已加入（whole-file hash）。
+- Shared layer skill (`<cap_home>/shared/skills.yaml`) drift — H4+ deferred。
 - Effective merged spec snapshot（合併過 disabled / replaces 後）— 後續更深層批次。
+
+## 9. 5-軸 Multi-axis Drift 偵測（H3 minimal，v0.22.0+）
+
+H3 minimal 在 H2 雙軸基礎上加 3 個 whole-file hash 軸，形成 5 軸完整 drift detection。
+
+```bash
+$ cap replay verify run_xxx
+cap replay: drifted_compatible — /Users/.../run_xxx
+  reason: workflow_yaml content_hash differs
+  builtin: replayable
+  project: replayable
+  workflow: drifted_compatible (content_hash differs)
+  constitution: replayable
+  capability_schema: replayable
+  ...
+```
+
+5 軸狀態 = top-level verdict 取最嚴重非中立軸：
+
+| 軸 | 精度 | 可能的 axis verdict |
+|---|---|---|
+| builtin | per-prompt-file selection | replayable / drifted_compatible / drifted_incompatible / unverifiable_axis |
+| project | per-skill_id selection | replayable / drifted_compatible / drifted_incompatible / unverifiable_axis |
+| **workflow** | whole-file hash only | replayable / drifted_compatible / unverifiable_axis（**不會** drifted_incompatible） |
+| **constitution** | whole-file hash only | replayable / drifted_compatible / unverifiable_axis |
+| **capability_schema** | whole-file hash only | replayable / drifted_compatible / unverifiable_axis |
+
+### H3 三軸的精度限制（重要）
+
+H3 三軸只做 whole-file hash，**不可能輸出 `drifted_incompatible`**。看到 `drifted_compatible` 時表示「該檔案內容變了，但 verifier 無法判斷是否影響該 run 的行為」。Caller 要決定是否進一步檢視。
+
+範例：
+
+```bash
+$ cat run_xxx/replay-verdict.json | jq '.drift_details.workflow_yaml_diff'
+{
+  "was_recorded": true,
+  "axis_verdict": "drifted_compatible",
+  "workflow_id": "project-spec-pipeline",
+  "workflow_path": "/abs/path/to/wf.yaml",
+  "source_layer": "builtin",
+  "workflow_present_observed": true,
+  "workflow_present_current": true,
+  "content_hash_observed": "sha256:abc",
+  "content_hash_current": "sha256:def",
+  "reason": "workflow YAML content_hash differs"
+}
+```
+
+要看實際變動，自己 `git diff` 或 `diff` 兩個 hash 對應的 file。
+
+### H3 mirror 檔列表
+
+每次 `cap replay verify` 寫到 `<run_dir>/snapshots/` 的檔案完整列表：
+
+| Mirror 檔 | 來源 | 內容 |
+|---|---|---|
+| `agent-skills.json` | A0 #4 / H1 | builtin agent-skills baseline 完整 snapshot（含 prompt_files map） |
+| `project-skills.json` | H2 | project layer skill baseline（含 skills_by_id map） |
+| `binding-summary.json` | H2 | per-step binding 摘要（step_id × selected_skill_id × skill_source） |
+| `workflow-yaml.json` | H3 | 該 run 用過的 workflow 檔的 content_hash + path + source_layer |
+| `constitution.json` | H3 | constitution.yaml 的 content_hash + path + present |
+| `capability-schema.json` | H3 | capabilities.yaml 的 content_hash + path + present |
+
+### H3 不做的部分（deferred）
+
+- Per-step / per-capability / per-field 精度 — H4+ 才會解開（會涉及 binding_summary 擴欄位 + 每個 step / capability / block 個別 hash）。
+- Shared layer skill drift — H4+。
+- `--strict-unverifiable` flag — H4+。
 
 ## 9. 為什麼 verdict file 會被覆寫？
 

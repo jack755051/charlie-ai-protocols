@@ -1,6 +1,6 @@
 # CAP Platform TODO List
 
-更新日期：2026-05-07（v0.22 P0-P10 + A0 Agent-Skills Baseline + H1 Replay Contract + H2 Project Skill Drift 全段於 main 落地，收斂見 [`docs/cap/A0-CLOSEOUT.md`](docs/cap/A0-CLOSEOUT.md) / [`docs/cap/H1-CLOSEOUT.md`](docs/cap/H1-CLOSEOUT.md) / [`docs/cap/H2-CLOSEOUT.md`](docs/cap/H2-CLOSEOUT.md)。下一 batch 為 H3 workflow / capability / constitution drift — 待 H2 dogfood 後再開。Phase 12 / 13 / 14 仍 deferred。）
+更新日期：2026-05-07（v0.22 P0-P10 + A0 Agent-Skills Baseline + H1 Replay Contract + H2 Project Skill Drift + H3 Drift Expansion (Cost-Aware Minimal) 全段於 main 落地，收斂見 [`docs/cap/A0-CLOSEOUT.md`](docs/cap/A0-CLOSEOUT.md) / [`docs/cap/H1-CLOSEOUT.md`](docs/cap/H1-CLOSEOUT.md) / [`docs/cap/H2-CLOSEOUT.md`](docs/cap/H2-CLOSEOUT.md) / [`docs/cap/H3-CLOSEOUT.md`](docs/cap/H3-CLOSEOUT.md)。下一 batch 為 H4+（per-axis 精度 / shared layer / real replay execution）— 待 H3 dogfood 後再開。Phase 12 / 13 / 14 仍 deferred。）
 
 ## 目標
 
@@ -380,6 +380,18 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 - [x] **H2 #6** — policy SSOT v1.1、user guide §8、closeout doc、TODOLIST 章節（本 commit）
 
 > H2 deferred：workflow YAML drift、capability / constitution drift、shared layer drift、`--strict-unverifiable` flag、effective merged spec snapshot、real replay execution，分別交由 H3 / H4+。完整 deferred 列表在 H2 closeout doc §5。
+
+### H3：Drift Expansion / Cost-Aware Minimal（已完成）
+
+> 完整收斂見 [`docs/cap/H3-CLOSEOUT.md`](docs/cap/H3-CLOSEOUT.md)。H3 minimal 把 `cap replay verify` 從 H1+H2 雙軸擴成 5 軸：新增 workflow YAML / constitution / capability schema 三軸 whole-file hash drift。Per Cost-Aware lock-down 每軸只做 SHA-256 不做 selection 精度。
+
+- [x] **H3 #1b** — design memo locked (Cost-Aware minimal scope, Q1-Q6=A) (`docs/cap/H3-DRIFT-EXPANSION-DESIGN.md`，commit `66d55fd`)
+- [x] **H3 #2** — 3 個 input snapshot 模組 (`engine/{workflow_yaml,constitution,capability_schema}_snapshot.py` + 21-assertion test，commit `cf7a853`)
+- [x] **H3 #3** — schema widening + verifier 5-axis aggregation（`drift_details` 加 3 個 nullable object 欄位 + 5 fixture cases + 13 multi-axis assertions，commit `55ed7ae`）
+- [x] **H3 #4** — runtime hooks + cap-replay output + e2e（`cap-workflow-exec.sh` 3 attach hooks + `cap-replay.sh` 5-axis output + 11-assertion e2e + bug fix on local `CAP_ROOT`→`SCRIPT_REPO`，commit `15374fe`）
+- [x] **H3 #5** — policy v1.2、user guide §9、closeout doc、TODOLIST 章節（本 commit）
+
+> H3 deferred：per-step / per-capability / per-field 精度、shared layer drift、`--strict-unverifiable` flag、real replay execution，全部交由 H4+。完整 deferred 列表在 H3 closeout doc §5。
 
 ## 優先順序
 

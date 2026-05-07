@@ -1,20 +1,21 @@
-# CAP Replay Contract Policy (v1.1)
+# CAP Replay Contract Policy (v1.2)
 
-> 本文件定義 `cap replay` 的行為邊界、verdict 語意與 consumer 義務。v1.1 (H2) 把 v1 (H1) reserved-null 的 `project_skill_diff` 升為 dual-axis 結構化 drift detection；schema_version 仍為 1（widening）。
+> 本文件定義 `cap replay` 的行為邊界、verdict 語意與 consumer 義務。v1.2 (H3 minimal) 把 v1.1 雙軸擴成 5 軸，新增 workflow YAML / constitution / capability schema 三軸 whole-file hash drift；schema_version 仍為 1（widening）。
 > SSOT：`policies/replay-contract.md`（本檔）。
 > Schema：[`schemas/replay-verdict.schema.yaml`](../schemas/replay-verdict.schema.yaml)。
-> Design rationale：[`docs/cap/REPLAY-CONTRACT-DESIGN.md`](../docs/cap/REPLAY-CONTRACT-DESIGN.md) (H1)、[`docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md`](../docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md) (H2)。
+> Design rationale：[`docs/cap/REPLAY-CONTRACT-DESIGN.md`](../docs/cap/REPLAY-CONTRACT-DESIGN.md) (H1)、[`docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md`](../docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md) (H2)、[`docs/cap/H3-DRIFT-EXPANSION-DESIGN.md`](../docs/cap/H3-DRIFT-EXPANSION-DESIGN.md) (H3)。
 > User guide：[`docs/cap/REPLAY-USER-GUIDE.md`](../docs/cap/REPLAY-USER-GUIDE.md)。
 
 ## 1. 範圍與定位
 
-CAP Replay Contract v1.1 回答一個問題：**「給定一個歷史 `run_id`，該 run 對應的 (a) builtin agent-skills baseline 與 (b) project layer skill state 跟當前狀態的差異是否影響 replay 資格？」**
+CAP Replay Contract v1.2 回答一個問題：**「給定一個歷史 `run_id`，該 run 對應的 5 軸（builtin agent-skills、project layer skill、workflow YAML、constitution、capability schema）跟當前狀態的差異是否影響 replay 資格？」**
 
 本契約**不**涵蓋：
 
 - 真正重跑 workflow（full replay execution）— 留給 H4+。
-- Workflow YAML drift / capability schema drift / constitution drift — 留給 H3。
-- Shared layer skill drift — 留給 H3。
+- Per-step / per-capability / per-field 精度的 H3 drift detection — H3 minimal 只做 whole-file hash，深度 deferred 到 H4+。
+- Shared layer skill drift（`<cap_home>/shared/`）— deferred 到 H4+。
+- `--strict-unverifiable` flag — deferred 到 H4+。
 - 跨 run 聚合（一次驗證多個 run）— 後續批次。
 - Effective merged spec snapshot（合併過 disabled / replaces 後的最終 skill）— 後續更深層批次。
 
@@ -45,6 +46,16 @@ CAP Replay Contract v1.1 回答一個問題：**「給定一個歷史 `run_id`�
 | `<project_root>/.cap/skills.yaml` 整體 dir_hash | aggregate hash 比對（涵蓋 flat + per-skill subdir） |
 | 該 run 使用的 project layer skill_id 的 per-skill canonical-JSON hash | binding_summary 過濾 source_layer=project，再對每個 skill_id 比對 hash |
 | 該 run 使用的 project skill_id 在當前 registry 是否仍存在 | dict key 存在性檢查 |
+
+### 3.2b H3 axes — 主動判斷（whole-file hash, H3 minimal）
+
+每軸只做 whole-file SHA-256 hash；whole-file hash 不可能輸出 `drifted_incompatible`（無 selection 精度），最多只到 `drifted_compatible`。
+
+| 軸 | 來源 | 偵測方式 |
+|---|---|---|
+| Workflow YAML | 該 run 用過的單一 workflow 檔（path 從 plan_json source_path 抽） | content_hash 比對 |
+| Constitution | `<project_root>/.cap/constitution.yaml` | content_hash 比對 |
+| Capability schema | `<cap_root>/schemas/capabilities.yaml` | content_hash 比對 |
 
 ### 3.3 Soft signal（記錄但不影響 verdict）
 
@@ -124,9 +135,15 @@ CAP Replay Contract v1.1 回答一個問題：**「給定一個歷史 `run_id`�
 - **唯一寫入者**：`cap replay verify`。
 - **內容**：envelope `binding_summary` 的 mirror（per-step `step_id` / `selected_skill_id` / `skill_source`）。
 - **角色**：審計 / 外部 tool 不必透過 plan / binding-report 即可知道該 run 用過哪些 skill_id 與 source_layer。
-- **Subdir 結構保留 H3 預留**：`snapshots/workflows/<id>.yaml.json` / `capabilities.yaml.json` / `constitution.yaml.json`。
 
-### 5.5 不允許
+### 5.5 H3 三軸 mirror（H3 #4）
+
+- `<run_dir>/snapshots/workflow-yaml.json` — envelope `workflow_yaml_baseline` 的 mirror（path / source_layer / content_hash）。
+- `<run_dir>/snapshots/constitution.json` — envelope `constitution_baseline` 的 mirror（path / present / content_hash）。
+- `<run_dir>/snapshots/capability-schema.json` — envelope `capability_schema_baseline` 的 mirror（path / present / content_hash）。
+- 三軸 mirror 規則同 §5.2/§5.3：envelope 是 SSOT，mirror 是 byte-for-byte 投影；衝突時以 envelope 為準。
+
+### 5.6 不允許
 
 - ❌ Consumer 直接編輯 `replay-verdict.json` 或 `snapshots/agent-skills.json`。
 - ❌ 用 `replay-verdict.json` 取代 `agent-sessions.json` 作為 baseline 來源（envelope 是 SSOT）。
@@ -161,5 +178,5 @@ H1 直接消費 A0 #4 寫入的 envelope baseline；不重新計算「該 run �
 ## 9. 後續契約展開（Forward Look）
 
 - **H2 ✓ 已完成**：`drift_details.project_skill_diff` 由 reserved-null 升為 object；新增 `snapshots/project-skills.json` 與 `snapshots/binding-summary.json`；雙軸聚合 normative。
-- **H3**：workflow YAML drift / capability schema drift / constitution drift / shared layer skill drift 加入 verdict 計算；可能新增 `--strict-unverifiable` 旗標。
-- **H4+**：full replay execution（真重跑）；可能引入 `cap replay run <run_id>` 與 pinned baseline 模式。
+- **H3 ✓ 已完成（minimal scope）**：3 個新 nullable object 欄位 `workflow_yaml_diff` / `constitution_diff` / `capability_schema_diff` 加入 `drift_details`；新增三 mirror 檔；5 軸聚合 normative；whole-file hash 精度（深度 deferred）。
+- **H4+**：per-step / per-capability / per-field 精度、shared layer drift、`--strict-unverifiable` flag、full replay execution（真重跑）；可能引入 `cap replay run <run_id>` 與 pinned baseline 模式。
