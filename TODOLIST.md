@@ -1,6 +1,6 @@
 # CAP Platform TODO List
 
-更新日期：2026-05-07（v0.22 P0-P10 全段完成；A0 Agent-Skills Baseline Policy 五子項全段於 main 落地，收斂見 [`docs/cap/A0-CLOSEOUT.md`](docs/cap/A0-CLOSEOUT.md)。下一 batch 為 H1 Replay Contract — pending scope confirmation。Phase 12 / 13 / 14 仍 deferred — 等使用者真實 dogfood 反饋再開。）
+更新日期：2026-05-07（v0.22 P0-P10 全段完成；A0 Agent-Skills Baseline Policy 與 H1 Replay Contract 全段於 main 落地，收斂見 [`docs/cap/A0-CLOSEOUT.md`](docs/cap/A0-CLOSEOUT.md) 與 [`docs/cap/H1-CLOSEOUT.md`](docs/cap/H1-CLOSEOUT.md)。下一 batch 為 H2 project skill drift — 待 H1 dogfood 後再開。Phase 12 / 13 / 14 仍 deferred。）
 
 ## 目標
 
@@ -355,6 +355,18 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 - [x] **A0 #5** — docs / migration note（`docs/cap/AGENT-SKILLS-CUSTOMIZATION.md`，commit `6ec0c26`）
 
 > A0 deferred：per-run 獨立 snapshot 檔、baseline drift verdict、`cap replay` CLI 由 **H1 Replay Contract** 接手。完整 deferred 列表在 closeout doc §4。
+
+### H1：Replay Contract（已完成）
+
+> 完整收斂見 [`docs/cap/H1-CLOSEOUT.md`](docs/cap/H1-CLOSEOUT.md)。H1 把 A0 #4 寫進 envelope 的 baseline 變成「可驗證」契約：給定 run_id 回答「能不能 replay」。5-state verdict / per-run snapshot subdir / `cap replay verify` CLI 全段於 main 落地。
+
+- [x] **H1 #1** — design memo（`docs/cap/REPLAY-CONTRACT-DESIGN.md`，commit `3957fad`）
+- [x] **H1 #2** — replay-verdict schema（`schemas/replay-verdict.schema.yaml` + 12-case schema test，commit `bfcd054`）
+- [x] **H1 #3** — verifier engine + CLI（`engine/replay_verifier.py` + 25-assertion test，commit `5c54b39`）
+- [x] **H1 #4** — `cap replay verify` shell wrapper + per-run `<run_dir>/snapshots/agent-skills.json` 與 `<run_dir>/replay-verdict.json` 持久化 + cap-entry 註冊 + 18-assertion e2e（commit `0d7d94f`）
+- [x] **H1 #5** — policy SSOT、user guide、closeout doc、TODOLIST 章節（本 commit）
+
+> H1 deferred：project layer skill drift、workflow YAML drift、capability / constitution drift、full replay execution，分別交由 H2 / H3 / H4+。完整 deferred 列表在 H1 closeout doc §5。
 
 ## 優先順序
 
