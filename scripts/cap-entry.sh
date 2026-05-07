@@ -79,6 +79,11 @@ COMMAND                            DESCRIPTION
 [Artifacts]
   cap promote list                 列出可升級的 drafts / reports
   cap promote <src> <dst>          將本機產物升級到 repo 正式路徑
+
+[Replay]
+  cap replay verify <run_id>       比對舊 run 的 builtin agent-skills baseline 是否仍可重放
+                                    （H1：replayable / drifted_compatible / drifted_incompatible /
+                                     unverifiable / not_found；詳見 docs/cap/REPLAY-CONTRACT-DESIGN.md）
 EOF
   echo ""
   make -C "${CAP_ROOT}" help >/dev/null
@@ -156,6 +161,10 @@ case "${COMMAND}" in
   promote)
     shift || true
     exec bash "${SCRIPT_DIR}/cap-promote.sh" "$@"
+    ;;
+  replay)
+    shift || true
+    exec bash "${SCRIPT_DIR}/cap-replay.sh" "$@"
     ;;
   agent)
     shift
