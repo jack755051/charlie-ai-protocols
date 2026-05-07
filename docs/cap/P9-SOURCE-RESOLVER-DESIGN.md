@@ -297,3 +297,62 @@ Memo 通過後：
 - 實作 P9 #2-#5 依 §8 順序，每個 sub-item 一個 commit；commit message 要 cross-reference 本 memo 對應段落（例如 P9 #2 reference §4.1 / §4.2 / §4.5）。
 - 每個 sub-item 完成後更新 `MISSING-IMPLEMENTATION-CHECKLIST.md` 對應條目從 `[ ]` 到 `[x]`。
 - P9 整段（#1-#5）全綠後再考慮是否 cut `v0.22.0-rc15`。
+
+## 11. Binding Provenance Audit Checklist（A0 #3, post-P9）
+
+> 本節為 A0 系列補上的 audit clarification。P9 #4 已在 schema 與 producer 落地以下欄位；本節彙整給 audit / review 用。
+
+每份 binding report 應同時提供下列四項 provenance 線索；缺一視為 binding pipeline 異常：
+
+| # | 欄位 | 路徑 | 用途 |
+|---|---|---|---|
+| 1 | `selected_skill_id` | `binding.steps[*].selected_skill_id` | 該 step 實際選中哪個 skill；`null` 表示 unresolved / blocked |
+| 2 | `skill_source.source_layer` | `binding.steps[*].skill_source.source_layer` | 來源層（`project` / `shared` / `builtin` / `explicit` / `fallback`）；`fallback` 標示 builtin-shell 或 legacy-adapter 合成 |
+| 3 | `skill_source.source_path` | `binding.steps[*].skill_source.source_path` | 該 skill 的絕對 registry 路徑；`null` 限定於 fallback / 合成情境 |
+| 4 | `resolution_status` + `reason` | `binding.steps[*].resolution_status` / `binding.steps[*].reason` | 涵蓋 `resolved` / `fallback_available` / `required_unresolved` / `optional_unresolved` / `incompatible` / `blocked_by_constitution` 與人類可讀理由 |
+
+額外的頂層 provenance 欄位：
+
+- `workflow_source.source_layer` / `workflow_source.source_path`：本次 binding 用的 workflow 檔的來源層與絕對路徑（P9 #4 §6.1）。
+- `effective_allowed_roots`：本次 binding 實際比對用的 allowed roots（user-declared ∪ implicit project + builtin；P9 #5 §3.1.4）。
+- `registry_source_path`：合併過的 registry 任一具體來源（first source path）。
+- `adapter_from_legacy` / `registry_missing`：標示是否走 legacy `.cap.agents.json` 適配或完全找不到 registry。
+
+### 11.1 V0.22.0+ override 契約對 audit 的影響
+
+A0 #2 引入 `disabled` / `replaces` 後，audit checklist 補：
+
+- 對於被 mask 的 skill_id（不論 `disabled: true` 或被 `replaces` 鎖定），合併後的 registry 會在內部標 `_masked: true` + `_mask_reason`。
+- Binding report **不**直接暴露 `_masked` 條目，但對於原本可能命中的 capability，`steps[*].reason` 應反映 mask 結果（例如 `"target skill_id 'builtin-figma' is masked by project layer"`）。
+- 真正的 audit 用法：跑 `cap workflow bind` 與 `cap workflow plan` 時對照 `effective_allowed_roots` 與 `skill_source.source_layer`，確認 mask / replace 行為符合 `<project_root>/.cap/skills.yaml` 宣告。
+
+### 11.2 跑 audit 的最小命令
+
+```bash
+cap workflow bind <workflow-id> | jq '{
+  workflow_source,
+  effective_allowed_roots,
+  registry_source_path,
+  adapter_from_legacy,
+  registry_missing,
+  steps: [.steps[] | {
+    step_id,
+    capability,
+    resolution_status,
+    selected_skill_id,
+    skill_source,
+    reason
+  }]
+}'
+```
+
+預期：每個 required step 都有 non-null `selected_skill_id` 與對應 `skill_source.source_layer`；`source_layer = project` 的 step 應對應到 `<project_root>/.cap/skills.yaml`；`source_layer = builtin` 的 step 應對應到 `<cap_root>/.cap/skills.yaml`。
+
+### 11.3 與 baseline snapshot 的關係
+
+A0 #4 在 `agent-sessions.json` envelope 加 `agent_skills_baseline`（dir_hash + per-file hash）。Audit 時可同步檢查：
+
+- 該 run 用的 builtin baseline 是否與當前 cap-protocols repo HEAD 一致。
+- 若不一致，binding report 的 `skill_source.source_layer = builtin` step 是否仍能 replay。
+
+詳見 [`policies/agent-skills-baseline.md`](../../policies/agent-skills-baseline.md) §7 與 [`docs/cap/AGENT-SKILLS-CUSTOMIZATION.md`](AGENT-SKILLS-CUSTOMIZATION.md)。

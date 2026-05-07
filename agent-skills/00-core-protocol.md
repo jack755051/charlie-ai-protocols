@@ -21,6 +21,7 @@
 - **路徑以現實為準**：尊重既有歷史與特殊慣例，除非收到明確重構指令，否則保持一致。
 - **禁止破壞性操作**：除非明確徵求同意，絕對禁止執行會遺失資料的操作（如 `git reset --hard`）。
 - **協議來源唯讀 (Protocol Source Read-Only)**：`charlie-ai-protocols` 儲存庫中的所有檔案（包括但不限於 `agent-skills/`、`policies/`、`schemas/`、`engine/`、`CLAUDE.md`）為**唯讀規則來源**。當你透過 `@` 引用載入這些檔案時，**絕對禁止**反向修改、刪除或重新命名這些來源檔案。若認為規則內容需要調整，應向使用者回報建議，由使用者自行決定是否修改。
+  - 自訂 agent-skill 行為時，請走 project / shared layer，不要動 `<cap_root>/agent-skills/`：詳見 [`policies/agent-skills-baseline.md`](../policies/agent-skills-baseline.md) 與 [`docs/cap/AGENT-SKILLS-CUSTOMIZATION.md`](../docs/cap/AGENT-SKILLS-CUSTOMIZATION.md)。
 - **Git 工作流**：所有版本控制操作須遵守 `policies/git-workflow.md`（Conventional Commits、分支策略、PR 規範）。
 
 ## 4. 自我反思迴圈 (Self-Reflection Loop)

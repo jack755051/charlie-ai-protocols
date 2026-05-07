@@ -2,6 +2,8 @@
 
 > 本文件定義 CAP 的現行 agent registry 結構。
 > 自 v1.2 起，`.cap.agents.json` 定位為**正式相容層**；workflow binding 的正式入口改由 `RuntimeBinder` 負責，並優先讀取 `.cap.skills.yaml`，缺席時再轉接 `.cap.agents.json`。
+>
+> 上層原則：`agent-skills/` 為唯讀官方 baseline，由 CAP release 維護；自訂走 project / shared layer。詳見 [`policies/agent-skills-baseline.md`](agent-skills-baseline.md) 與 [`docs/cap/AGENT-SKILLS-CUSTOMIZATION.md`](../docs/cap/AGENT-SKILLS-CUSTOMIZATION.md)。
 
 ## 1. 設計原則
 
