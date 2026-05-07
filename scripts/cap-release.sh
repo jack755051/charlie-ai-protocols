@@ -193,6 +193,14 @@ print_change_section() {
   local range="$3"
   local entries printed
 
+  # Self-contained color resolution (callable from subshell pipelines).
+  local blue="" bold="" reset=""
+  if [ -t 1 ] && [ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]; then
+    blue="$(tput setaf 4 2>/dev/null || echo '')"
+    bold="$(tput bold 2>/dev/null || echo '')"
+    reset="$(tput sgr0 2>/dev/null || echo '')"
+  fi
+
   entries="$(run_git log --reverse --format='%h%x09%s' "${range}" 2>/dev/null || true)"
   if [ -z "${entries}" ]; then
     return
@@ -205,7 +213,7 @@ print_change_section() {
     fi
 
     if [ "${printed}" -eq 0 ]; then
-      printf '\n%s:\n\n' "${title}"
+      printf '\n%s%s:%s\n\n' "${bold}${blue}" "${title}" "${reset}"
       printed=1
     fi
     printf ' - %-7s %s\n' "${hash}" "$(format_change_subject "${subject}")"
@@ -492,6 +500,17 @@ count_workflows() {
   find "${dir}" -maxdepth 1 -name '*.yaml' -o -name '*.yml' 2>/dev/null | wc -l | tr -d ' '
 }
 
+repeat_char() {
+  # Pure-bash repeat — required because `tr` is byte-oriented and corrupts
+  # multi-byte UTF-8 box-drawing chars like `═` (3 bytes in UTF-8).
+  local n="$1" ch="$2" i out=""
+  [ "${n}" -le 0 ] && return
+  for ((i=0; i<n; i++)); do
+    out+="${ch}"
+  done
+  printf '%s' "${out}"
+}
+
 print_update_summary() {
   local prev_ref="$1"
   local new_ref="$2"
@@ -505,6 +524,90 @@ print_update_summary() {
   workflows="$(count_workflows)"
 
   # Color setup: only paint if stdout is a TTY and terminal supports >=8 colors.
+  local bold="" dim="" reset="" yellow="" cyan="" green="" magenta=""
+  if [ -t 1 ] && [ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]; then
+    bold="$(tput bold 2>/dev/null || echo '')"
+    dim="$(tput dim 2>/dev/null || echo '')"
+    reset="$(tput sgr0 2>/dev/null || echo '')"
+    yellow="$(tput setaf 3 2>/dev/null || echo '')"
+    cyan="$(tput setaf 6 2>/dev/null || echo '')"
+    green="$(tput setaf 2 2>/dev/null || echo '')"
+    magenta="$(tput setaf 5 2>/dev/null || echo '')"
+  fi
+
+  # Normalize missing prev counts (first-run / dry-run) so prev > curr renders cleanly.
+  [ -z "${prev_agents}" ] && prev_agents="${agents}"
+  [ -z "${prev_strategies}" ] && prev_strategies="${strategies}"
+  [ -z "${prev_workflows}" ] && prev_workflows="${workflows}"
+  [ -z "${prev_ref}" ] && prev_ref="${new_ref}"
+
+  # Compute plain (color-free) widths to size the box dynamically.
+  # Per-line layout: "    " (4) + label %-12s + " " (1) + prev + " > " (3) + curr
+  local v_plain a_plain s_plain w_plain
+  v_plain="$(printf '    %-12s %s > %s' "Version"    "${prev_ref}"        "${new_ref}")"
+  a_plain="$(printf '    %-12s %s > %s' "Agents"     "${prev_agents}"     "${agents}")"
+  s_plain="$(printf '    %-12s %s > %s' "Strategies" "${prev_strategies}" "${strategies}")"
+  w_plain="$(printf '    %-12s %s > %s' "Workflows"  "${prev_workflows}"  "${workflows}")"
+
+  local title="Charlie's AI Protocols"
+  local title_lead="═══ "
+  local title_tail=" "
+  local title_visible=$((${#title_lead} + ${#title} + ${#title_tail}))
+
+  local content_max=${#v_plain}
+  [ ${#a_plain} -gt ${content_max} ] && content_max=${#a_plain}
+  [ ${#s_plain} -gt ${content_max} ] && content_max=${#s_plain}
+  [ ${#w_plain} -gt ${content_max} ] && content_max=${#w_plain}
+
+  # Inner width (chars between ║ and ║). Right pad >= 4 for breathing room.
+  local inner_w=$((content_max + 4))
+  local title_min=$((title_visible + 4))
+  [ ${title_min} -gt ${inner_w} ] && inner_w=${title_min}
+
+  local empty_line bottom_bar title_pad
+  empty_line="$(repeat_char ${inner_w} ' ')"
+  bottom_bar="$(repeat_char ${inner_w} '═')"
+  local title_pad_len=$((inner_w - title_visible))
+  title_pad="$(repeat_char ${title_pad_len} '═')"
+
+  # Outer rule sized to align with the wider box (inner_w + corners + 2-char left margin).
+  local rule
+  rule="$(repeat_char $((inner_w + 4)) '═')"
+
+  echo ""
+  printf '%s%s%s\n' "${yellow}" "${rule}" "${reset}"
+  print_visual_change_summary "${prev_ref}" "${new_ref}"
+  printf '  %sChangelog:%s docs/cap/RELEASE-NOTES.md\n' "${dim}" "${reset}"
+  echo ""
+  print_cap_logo
+  echo ""
+  echo ""
+  # ── Stat box (title embedded in top rule) ──
+  printf '  %s╔%s%s%s%s%s%s%s%s╗%s\n' \
+    "${yellow}" "${title_lead}" "${reset}" \
+    "${bold}${magenta}" "${title}" "${reset}" \
+    "${yellow}" "${title_tail}" "${title_pad}" \
+    "${reset}"
+  printf '  %s║%s%s%s║%s\n' "${yellow}" "${reset}" "${empty_line}" "${yellow}" "${reset}"
+  build_dynamic_stat_line "Version"    "${prev_ref}"        "${new_ref}"        "${inner_w}"
+  build_dynamic_stat_line "Agents"     "${prev_agents}"     "${agents}"         "${inner_w}"
+  build_dynamic_stat_line "Strategies" "${prev_strategies}" "${strategies}"     "${inner_w}"
+  build_dynamic_stat_line "Workflows"  "${prev_workflows}"  "${workflows}"      "${inner_w}"
+  printf '  %s║%s%s%s║%s\n' "${yellow}" "${reset}" "${empty_line}" "${yellow}" "${reset}"
+  printf '  %s╚%s╝%s\n' "${yellow}" "${bottom_bar}" "${reset}"
+  echo ""
+  printf '  %sHooray! CAP is up to date.%s\n' "${bold}${magenta}" "${reset}"
+  echo ""
+  printf '  %sRun '\''source ~/.zshrc'\'' or open a new terminal to apply.%s\n' "${dim}" "${reset}"
+  echo ""
+  printf '%s%s%s\n' "${yellow}" "${rule}" "${reset}"
+  echo ""
+}
+
+build_dynamic_stat_line() {
+  local label="$1" prev="$2" curr="$3" inner_w="$4"
+
+  # Color (re-resolved here because this is its own callable function).
   local bold="" dim="" reset="" yellow="" cyan="" green=""
   if [ -t 1 ] && [ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]; then
     bold="$(tput bold 2>/dev/null || echo '')"
@@ -515,52 +618,25 @@ print_update_summary() {
     green="$(tput setaf 2 2>/dev/null || echo '')"
   fi
 
-  local rule="════════════════════════════════════════════════"
+  # Visible content (no color codes) — used to compute right padding only.
+  local plain
+  plain="$(printf '    %-12s %s > %s' "${label}" "${prev}" "${curr}")"
+  local pad_len=$((inner_w - ${#plain}))
+  [ ${pad_len} -lt 0 ] && pad_len=0
+  local pad_str
+  pad_str="$(repeat_char ${pad_len} ' ')"
 
-  # Stat box internal layout: ║[4sp][label %-12s][1sp][metric 9ch][8sp]║ = 34 chars inner
-  # Metric raw form is `%3s > %-3s` (e.g. " 17 > 17 "), 9 chars, supports up to 3-digit counts.
-  build_stat_line() {
-    local label="$1" prev="$2" curr="$3"
-    if [ -z "${prev}" ] || [ "${prev}" = "${curr}" ]; then
-      prev="${curr}"
-    fi
-    printf '  %s║%s    %-12s %s%3s%s > %s%-3s%s        %s║%s\n' \
-      "${yellow}" "${reset}" "${label}" \
-      "${dim}" "${prev}" "${reset}" \
-      "${bold}${green}" "${curr}" "${reset}" \
-      "${yellow}" "${reset}"
-  }
+  local label_padded
+  label_padded="$(printf '%-12s' "${label}")"
 
-  echo ""
-  printf '%s%s%s\n' "${yellow}" "${rule}" "${reset}"
-  echo ""
-  printf '%s  Updating Charlie'\''s AI Protocols%s\n' "${bold}" "${reset}"
-  echo ""
-  print_visual_change_summary "${prev_ref}" "${new_ref}"
-  printf '  %sChangelog:%s docs/cap/RELEASE-NOTES.md\n' "${dim}" "${reset}"
-  echo ""
-  print_cap_logo
-  echo ""
-  printf '  %sHooray! CAP has been updated to %s%s%s > %s%s%s\n' \
-    "${bold}${green}" \
-    "${reset}${dim}" "${prev_ref}" "${reset}" \
-    "${bold}${cyan}" "${new_ref}" "${reset}"
-  echo ""
-  echo ""
-  # ── Stat box (RPG-style; top/bottom inner padding for "level-up" feel) ──
-  printf '  %s╔══════════════════════════════════╗%s\n' "${yellow}" "${reset}"
-  printf '  %s║                                  ║%s\n' "${yellow}" "${reset}"
-  build_stat_line "Agents"     "${prev_agents}"     "${agents}"
-  build_stat_line "Strategies" "${prev_strategies}" "${strategies}"
-  build_stat_line "Workflows"  "${prev_workflows}"  "${workflows}"
-  printf '  %s║                                  ║%s\n' "${yellow}" "${reset}"
-  printf '  %s╚══════════════════════════════════╝%s\n' "${yellow}" "${reset}"
-  echo ""
-  echo ""
-  printf '  %sRun '\''source ~/.zshrc'\'' or open a new terminal to apply.%s\n' "${dim}" "${reset}"
-  echo ""
-  printf '%s%s%s\n' "${yellow}" "${rule}" "${reset}"
-  echo ""
+  printf '  %s║%s    %s%s%s %s%s%s %s>%s %s%s%s%s%s║%s\n' \
+    "${yellow}" "${reset}" \
+    "${cyan}" "${label_padded}" "${reset}" \
+    "${dim}" "${prev}" "${reset}" \
+    "${yellow}" "${reset}" \
+    "${bold}${green}" "${curr}" "${reset}" \
+    "${pad_str}" \
+    "${yellow}" "${reset}"
 }
 
 case "${1:-}" in
