@@ -257,6 +257,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-skill-registry-resolver.sh" "skill 
 run_fixture "${REPO_ROOT}/tests/scripts/test-skill-registry-override.sh" "skill registry override contract (A0 #2: disabled / replaces)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-agent-skills-snapshot.sh" "agent-skills baseline snapshot (A0 #4: dir + per-file hash)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-replay-verdict-schema.sh" "replay-verdict schema gate (H1 #2)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-replay-verifier.sh" "replay verifier engine + CLI (H1 #3)"
 
 echo ""
 echo "----------------------------------------------------------------"
