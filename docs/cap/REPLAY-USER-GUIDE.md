@@ -251,9 +251,32 @@ $ cat run_xxx/replay-verdict.json | jq '.drift_details.workflow_yaml_diff'
 
 ### H3 不做的部分（deferred）
 
-- Per-step / per-capability / per-field 精度 — H4+ 才會解開（會涉及 binding_summary 擴欄位 + 每個 step / capability / block 個別 hash）。
-- Shared layer skill drift — H4+。
-- `--strict-unverifiable` flag — H4+。
+- Per-step / per-capability / per-field 精度 — H5+ 才會解開（會涉及 binding_summary 擴欄位 + 每個 step / capability / block 個別 hash）。
+- Shared layer skill drift — H6+。
+- `--strict-unverifiable` flag — ✓ **H4 minimal 已加入**（預設 OFF）。
+
+## 10. `--strict-unverifiable` 嚴格模式（H4，v0.22.0+）
+
+預設 `cap replay verify` 對 top-level `unverifiable` 回 exit 0（pre-A0 #4 的 run 沒有 baseline 是預期狀況，不該 fail CI）。如果你的 pipeline 比較嚴格（compliance / archived-run audit），加旗標把 unverifiable 升 exit 4：
+
+```bash
+$ cap replay verify run_old --strict-unverifiable
+cap replay: unverifiable — /Users/.../run_old
+  reason: agent-sessions.json envelope has no agent_skills_baseline (pre-A0 #4 run)
+  ...
+  strict-unverifiable: escalating exit code to 4
+exit code: 4
+```
+
+`--strict-unverifiable` **只**升 top-level `unverifiable`；單軸 `unverifiable_axis`（例如 H3 envelope 沒 H3 baselines）不會被升級，因為 axis-level neutral 是 H1+H2+H3 既定的 backward compat 規則（避免 envelope 缺新軸時整體 verdict 退化）。
+
+旗標也可與 `--json` 並用 — JSON 輸出仍是同一份 verdict envelope（內容不變），只有 exit code 升。
+
+### 何時用 `--strict-unverifiable`
+
+- ✓ Compliance pipeline 要求每個 run 都必須有完整 baseline 才算合格
+- ✓ Archived-run audit 要把 pre-A0 #4 的舊 run 標為「不可信」
+- ✗ 一般 CI / dev workflow（保留預設 lax 模式比較順手）
 
 ## 9. 為什麼 verdict file 會被覆寫？
 

@@ -1,6 +1,6 @@
 # CAP Platform TODO List
 
-更新日期：2026-05-07（v0.22 P0-P10 + A0 Agent-Skills Baseline + H1 Replay Contract + H2 Project Skill Drift + H3 Drift Expansion (Cost-Aware Minimal) 全段於 main 落地，收斂見 [`docs/cap/A0-CLOSEOUT.md`](docs/cap/A0-CLOSEOUT.md) / [`docs/cap/H1-CLOSEOUT.md`](docs/cap/H1-CLOSEOUT.md) / [`docs/cap/H2-CLOSEOUT.md`](docs/cap/H2-CLOSEOUT.md) / [`docs/cap/H3-CLOSEOUT.md`](docs/cap/H3-CLOSEOUT.md)。下一 batch 為 H4+（per-axis 精度 / shared layer / real replay execution）— 待 H3 dogfood 後再開。Phase 12 / 13 / 14 仍 deferred。）
+更新日期：2026-05-07（v0.22 P0-P10 + A0 Agent-Skills Baseline + H1 Replay Contract + H2 Project Skill Drift + H3 Drift Expansion + H4 Minimal Polish 全段於 main 落地，收斂見 [`docs/cap/A0-CLOSEOUT.md`](docs/cap/A0-CLOSEOUT.md) / [`docs/cap/H1-CLOSEOUT.md`](docs/cap/H1-CLOSEOUT.md) / [`docs/cap/H2-CLOSEOUT.md`](docs/cap/H2-CLOSEOUT.md) / [`docs/cap/H3-CLOSEOUT.md`](docs/cap/H3-CLOSEOUT.md) / [`docs/cap/H4-CLOSEOUT.md`](docs/cap/H4-CLOSEOUT.md)。H5/H6/H7+ 列為 placeholder — 等真實 user pain 觸發。Phase 12 / 13 / 14 仍 deferred。）
 
 ## 目標
 
@@ -392,6 +392,56 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 - [x] **H3 #5** — policy v1.2、user guide §9、closeout doc、TODOLIST 章節（本 commit）
 
 > H3 deferred：per-step / per-capability / per-field 精度、shared layer drift、`--strict-unverifiable` flag、real replay execution，全部交由 H4+。完整 deferred 列表在 H3 closeout doc §5。
+
+### H4：Minimal Polish (Cost-Aware)（已完成）
+
+> 完整收斂見 [`docs/cap/H4-CLOSEOUT.md`](docs/cap/H4-CLOSEOUT.md)。H4 嚴守 minimal scope：只做 source_layer audit fix + `--strict-unverifiable` opt-in flag。Per-axis precision、shared layer drift、real replay execution 全部 deferred 到 H5/H6/H7+ 獨立 batch（避免 H4 變成 19–27 commit 的怪物）。
+
+- [x] **H4 #1** — design memo (DRAFT, scope split + Q1–Q4 = A locked)（`docs/cap/H4-SCOPE-SPLIT-DESIGN.md`，commit `b60ce3d`）
+- [x] **H4 #2** — source_layer fix + `--strict-unverifiable` flag + e2e（`cap-workflow-exec.sh` plan_json 抽 source_layer + `cap-replay.sh` flag + 9 個新 assertions，commit `f157e79`）
+- [x] **H4 #3** — policy v1.3、user guide §10、closeout、TODOLIST + H5/H6/H7 placeholder（本 commit）
+
+> H4 嚴格 deferred：per-axis precision (H5)、shared layer drift (H6)、real replay execution (H7+)，全部 placeholder 列在下方等真實 user pain 才開實作。
+
+### H5：Per-axis Precision（placeholder, gated on user pain）
+
+> **未啟動 — 等使用者真的撞到 whole-file hash 假警報太多時再開 design memo**。預期內容：
+
+- [ ] H5 design memo（doc-only 先行）
+- [ ] workflow per-step canonical-JSON hash + verifier 升 axis 可輸出 `drifted_incompatible`
+- [ ] capability schema per-capability hash
+- [ ] constitution per-block hash（allowed_capabilities / workflow_policy / binding_policy 三 block）
+- [ ] binding_summary 擴 capability 欄位（per-step capability + executor）
+- [ ] tests / docs / closeout
+
+估規模 6–8 commits。
+
+### H6：Shared Layer Drift（placeholder, gated on shared registry 用例）
+
+> **未啟動 — 等使用者真的開始用 `<cap_home>/shared/skills.yaml` 時再開 design memo**。預期內容：
+
+- [ ] H6 design memo（doc-only 先行）
+- [ ] `engine/shared_skills_snapshot.py`（對齊 H2 project_skills_snapshot pattern）
+- [ ] verifier 加第 6 軸（shared_skill_diff）
+- [ ] runtime hooks + mirror 檔
+- [ ] tests / docs / closeout
+
+估規模 2–3 commits。
+
+### H7+：Real Replay Execution（placeholder, gated on reproduce 需求）
+
+> **未啟動 — 真重跑舊 run 是大工程，獨立 batch**。預期內容：
+
+- [ ] H7 design memo（doc-only 先行；scope split 自身可能再切多個 sub-batch）
+- [ ] `cap replay run <run_id>` 入口
+- [ ] Pinned baseline 模式（重跑時凍結 builtin / project layer skill）
+- [ ] Provider spawn 重做 + runtime isolation
+- [ ] Artifact diff renderer
+- [ ] 新 schemas（replay-execution-result 等）
+- [ ] 牽動 P5 AgentSessionRunner / P6 artifact lineage / P10 promote 多個既有模組
+- [ ] tests / docs / closeout
+
+估規模 10–15 commits。**獨立大 batch，工作量約 H1+H2+H3 加總**。
 
 ## 優先順序
 

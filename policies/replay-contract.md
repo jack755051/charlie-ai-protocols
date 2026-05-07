@@ -1,9 +1,9 @@
-# CAP Replay Contract Policy (v1.2)
+# CAP Replay Contract Policy (v1.3)
 
-> 本文件定義 `cap replay` 的行為邊界、verdict 語意與 consumer 義務。v1.2 (H3 minimal) 把 v1.1 雙軸擴成 5 軸，新增 workflow YAML / constitution / capability schema 三軸 whole-file hash drift；schema_version 仍為 1（widening）。
+> 本文件定義 `cap replay` 的行為邊界、verdict 語意與 consumer 義務。v1.3 (H4 minimal) 加 `--strict-unverifiable` opt-in flag 與 `workflow_yaml_baseline.source_layer` audit fix；schema_version 仍為 1。Per-axis precision / shared layer / real replay execution 全部 deferred 到 H5+。
 > SSOT：`policies/replay-contract.md`（本檔）。
 > Schema：[`schemas/replay-verdict.schema.yaml`](../schemas/replay-verdict.schema.yaml)。
-> Design rationale：[`docs/cap/REPLAY-CONTRACT-DESIGN.md`](../docs/cap/REPLAY-CONTRACT-DESIGN.md) (H1)、[`docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md`](../docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md) (H2)、[`docs/cap/H3-DRIFT-EXPANSION-DESIGN.md`](../docs/cap/H3-DRIFT-EXPANSION-DESIGN.md) (H3)。
+> Design rationale：[`docs/cap/REPLAY-CONTRACT-DESIGN.md`](../docs/cap/REPLAY-CONTRACT-DESIGN.md) (H1)、[`docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md`](../docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md) (H2)、[`docs/cap/H3-DRIFT-EXPANSION-DESIGN.md`](../docs/cap/H3-DRIFT-EXPANSION-DESIGN.md) (H3)、[`docs/cap/H4-SCOPE-SPLIT-DESIGN.md`](../docs/cap/H4-SCOPE-SPLIT-DESIGN.md) (H4)。
 > User guide：[`docs/cap/REPLAY-USER-GUIDE.md`](../docs/cap/REPLAY-USER-GUIDE.md)。
 
 ## 1. 範圍與定位
@@ -104,7 +104,7 @@ CAP Replay Contract v1.2 回答一個問題：**「給定一個歷史 `run_id`�
 |---|---|---|
 | `replayable` | 0 | OK |
 | `drifted_compatible` | 0 | warn-but-pass，CI 可進 |
-| `unverifiable` | 0 | 不主動視為失敗（H2 可能加 `--strict-unverifiable` 升為 4） |
+| `unverifiable` | 0（lax）／ 4（`--strict-unverifiable`） | H4 minimal 加 opt-in flag：預設 OFF 沿用 H1+H2+H3 lax 行為；ON 把 unverifiable 升 exit 4，供 compliance 類 CI gate 使用 |
 | `drifted_incompatible` | 4 | block — 對齊 P8 governance gate non-zero pattern |
 | `not_found` | 2 | run 不存在 |
 | internal error | 1 | 其他錯誤 |
@@ -179,4 +179,7 @@ H1 直接消費 A0 #4 寫入的 envelope baseline；不重新計算「該 run �
 
 - **H2 ✓ 已完成**：`drift_details.project_skill_diff` 由 reserved-null 升為 object；新增 `snapshots/project-skills.json` 與 `snapshots/binding-summary.json`；雙軸聚合 normative。
 - **H3 ✓ 已完成（minimal scope）**：3 個新 nullable object 欄位 `workflow_yaml_diff` / `constitution_diff` / `capability_schema_diff` 加入 `drift_details`；新增三 mirror 檔；5 軸聚合 normative；whole-file hash 精度（深度 deferred）。
-- **H4+**：per-step / per-capability / per-field 精度、shared layer drift、`--strict-unverifiable` flag、full replay execution（真重跑）；可能引入 `cap replay run <run_id>` 與 pinned baseline 模式。
+- **H4 ✓ 已完成（minimal polish）**：`--strict-unverifiable` opt-in flag（預設 OFF）+ `workflow_yaml_baseline.source_layer` audit fix；不擴 schema、不開新軸。
+- **H5（提議）**：per-axis precision — workflow per-step hash / capability per-capability hash / constitution per-block hash + binding_summary 擴 capability 欄位；升 H3 三軸可輸出 `drifted_incompatible`。**Gated on user pain**。
+- **H6（提議）**：shared layer skill drift — `<cap_home>/shared/skills.yaml` 軸；對齊 P9 #4 source_layer 設計。**Gated on shared registry 真實用例**。
+- **H7+（提議）**：real replay execution — `cap replay run <run_id>` 真重跑、pinned baseline 模式、artifact diff renderer、新 schemas。**獨立大 batch（10–15 commits）**，gated on reproduce 需求。
