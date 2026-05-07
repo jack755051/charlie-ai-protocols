@@ -261,6 +261,7 @@ run_fixture "${REPO_ROOT}/tests/scripts/test-replay-verifier.sh" "replay verifie
 run_fixture "${REPO_ROOT}/tests/e2e/test-cap-replay-verify.sh" "cap replay verify shell wrapper e2e (H1 #4)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-project-skills-snapshot.sh" "project skills snapshot module (H2 #2)"
 run_fixture "${REPO_ROOT}/tests/scripts/test-replay-verifier-dual-axis.sh" "replay verifier dual-axis aggregation (H2 #5)"
+run_fixture "${REPO_ROOT}/tests/scripts/test-h3-input-snapshots.sh" "H3 input snapshots (workflow_yaml + constitution + capability_schema, H3 #2)"
 
 echo ""
 echo "----------------------------------------------------------------"
