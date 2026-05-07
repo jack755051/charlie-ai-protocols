@@ -37,8 +37,14 @@ from pathlib import Path
 
 try:
     from .agent_skills_snapshot import compute_snapshot, compute_summary
+    from .project_skills_snapshot import (
+        compute_snapshot as project_compute_snapshot,
+    )
 except ImportError:  # pragma: no cover
     from agent_skills_snapshot import compute_snapshot, compute_summary  # type: ignore[no-redef]
+    from project_skills_snapshot import (  # type: ignore[no-redef]
+        compute_snapshot as project_compute_snapshot,
+    )
 
 
 # Exit codes mapped from verdict (CLI-side; pure verify_run does not exit).
@@ -61,29 +67,38 @@ def verify_run(
     *,
     current_snapshot: dict | None = None,
     agent_skills_dir: Path | None = None,
+    project_skills_current: dict | None = None,
+    project_root: Path | None = None,
     verified_at: datetime | None = None,
 ) -> dict:
     """Compute a replay-verdict envelope for ``run_dir``.
 
+    H2 widening: emits a structured ``drift_details.project_skill_diff``
+    object body when ``baseline_observed`` is non-null (per design memo
+    §5). Aggregates top-level verdict from builtin × project axes via
+    worst-non-neutral rule (design memo §4); ``unverifiable_axis`` stays
+    neutral so a single missing axis does not regress the other axis's
+    verdict.
+
     Parameters
     ----------
     run_dir:
-        Filesystem path to the run output directory (the one containing
-        ``agent-sessions.json``).
+        Filesystem path to the run output directory.
     current_snapshot:
-        Pre-computed current baseline snapshot. When ``None``,
-        :func:`compute_snapshot` is invoked. Tests inject this for
-        deterministic behaviour.
+        Pre-computed current builtin snapshot. ``None`` triggers
+        :func:`compute_snapshot`. Tests inject this for determinism.
     agent_skills_dir:
         Forwarded to :func:`compute_snapshot` when ``current_snapshot``
-        is ``None``. Ignored when an explicit snapshot is supplied.
+        is ``None``.
+    project_skills_current:
+        Pre-computed current project layer snapshot (H2). ``None``
+        triggers :func:`project_compute_snapshot`. Tests inject this.
+    project_root:
+        Forwarded to :func:`project_compute_snapshot` when
+        ``project_skills_current`` is ``None``.
     verified_at:
-        Override for ``verified_at`` field; tests use this to keep
-        envelopes byte-for-byte stable. Defaults to ``datetime.now(UTC)``.
-
-    Returns
-    -------
-    dict matching ``schemas/replay-verdict.schema.yaml``.
+        Override for the ``verified_at`` field. Tests use this to keep
+        envelopes byte-stable.
     """
     run_dir = Path(run_dir)
     sessions_path = run_dir / "agent-sessions.json"
@@ -124,14 +139,18 @@ def verify_run(
 
     observed_full = envelope.get("agent_skills_baseline") or None
 
-    # Compute current snapshot regardless of observed presence — caller
-    # may want to see what current looks like even when verdict ends up
-    # unverifiable.
+    # Compute current builtin snapshot regardless — surfaced even on
+    # unverifiable so the consumer sees current state for context.
     if current_snapshot is None:
         current_snapshot = compute_snapshot(agent_skills_dir=agent_skills_dir)
     current_summary = compute_summary(current_snapshot)
 
     # ── unverifiable branch ──
+    # Per design memo §5: when no agent_skills_baseline exists, the H1
+    # contract is not applicable. project_skill_diff stays null
+    # (distinct from the "object with axis_verdict=unverifiable_axis"
+    # case which only fires when baseline_observed is non-null but
+    # project_skill_baseline is missing).
     if not observed_full:
         return _build_envelope(
             run_id=run_id,
@@ -145,11 +164,50 @@ def verify_run(
 
     observed_summary = compute_summary(observed_full)
 
-    # Extract prompt_files actually used by this run.
+    # ── builtin axis ──
+    builtin_axis_verdict, builtin_drift = _compute_builtin_axis(
+        envelope, observed_full, current_snapshot
+    )
+
+    # ── project axis ──
+    if project_skills_current is None:
+        project_skills_current = project_compute_snapshot(project_root=project_root)
+    project_axis = _compute_project_axis(envelope, project_skills_current)
+
+    # ── verdict aggregation ──
+    verdict = _aggregate_axes(builtin_axis_verdict, project_axis["axis_verdict"])
+    reason = _compose_reason(verdict, builtin_drift, project_axis)
+
+    drift_details = {
+        **builtin_drift,
+        "project_skill_diff": project_axis,
+    }
+
+    return _build_envelope(
+        run_id=run_id,
+        verified_iso=verified_iso,
+        verdict=verdict,
+        reason=reason,
+        baseline_observed=observed_summary,
+        baseline_current=current_summary,
+        drift_details=drift_details,
+    )
+
+
+def _compute_builtin_axis(
+    envelope: dict, observed_full: dict, current_snapshot: dict
+) -> tuple[str, dict]:
+    """Return (builtin_axis_verdict, builtin_drift_dict).
+
+    Builtin drift dict is the H1-shape subset of drift_details
+    (prompt_files_* + *_match flags). Axis verdict is one of
+    ``replayable`` / ``drifted_compatible`` / ``drifted_incompatible``.
+    Returns ``replayable`` for the byte-perfect match path so callers
+    can compose it with the project axis without special-casing.
+    """
     sessions = envelope.get("sessions") or []
     prompt_files_used = _extract_prompt_files_used(sessions)
 
-    # Per-file drift detection scoped to prompt_files_used.
     observed_files = observed_full.get("prompt_files") or {}
     current_files = current_snapshot.get("prompt_files") or {}
     prompt_files_changed: list[str] = []
@@ -173,40 +231,212 @@ def verify_run(
         observed_full.get("git_commit") == current_snapshot.get("git_commit")
     )
 
-    drift_details = {
+    drift = {
         "prompt_files_used": prompt_files_used,
         "prompt_files_changed": prompt_files_changed,
         "prompt_files_removed": prompt_files_removed,
         "dir_hash_match": dir_hash_match,
         "cap_version_match": cap_version_match,
         "git_commit_match": git_commit_match,
-        # H1 v1 reserved-null forward contract; H2 will populate.
-        "project_skill_diff": None,
     }
 
-    # ── verdict aggregation ──
     if prompt_files_changed or prompt_files_removed:
-        verdict = VERDICT_DRIFTED_INCOMPATIBLE
-        reason = _format_incompatible_reason(prompt_files_changed, prompt_files_removed)
-    elif not dir_hash_match:
-        verdict = VERDICT_DRIFTED_COMPATIBLE
-        reason = (
-            "dir_hash differs but no prompt_files_used were affected; "
-            "replay should reproduce original behaviour"
-        )
-    else:
-        verdict = VERDICT_REPLAYABLE
-        reason = "stored baseline matches current baseline byte-for-byte"
+        return VERDICT_DRIFTED_INCOMPATIBLE, drift
+    if not dir_hash_match:
+        return VERDICT_DRIFTED_COMPATIBLE, drift
+    return VERDICT_REPLAYABLE, drift
 
-    return _build_envelope(
-        run_id=run_id,
-        verified_iso=verified_iso,
-        verdict=verdict,
-        reason=reason,
-        baseline_observed=observed_summary,
-        baseline_current=current_summary,
-        drift_details=drift_details,
-    )
+
+def _compute_project_axis(envelope: dict, current_snapshot: dict) -> dict:
+    """Return drift_details.project_skill_diff body (H2 #4).
+
+    Output shape conforms to ``schemas/replay-verdict.schema.yaml``
+    ``drift_details.project_skill_diff`` widening. Always emits an
+    object body when called (the null-projection branch is handled
+    by the caller for pre-A0 #4 runs).
+
+    Behaviour matrix (design memo §7.2):
+
+    * ``project_skill_baseline`` + ``binding_summary`` both present →
+      ``was_recorded=True``; full per-skill drift attribution.
+    * ``project_skill_baseline`` only → coarse drift via dir_hash
+      comparison; ``axis_verdict`` is at most ``drifted_compatible``
+      (cannot say ``drifted_incompatible`` without selection data).
+    * Neither present → ``was_recorded=False``;
+      ``axis_verdict=unverifiable_axis``.
+    """
+    observed = envelope.get("project_skill_baseline") or None
+    binding_summary = envelope.get("binding_summary") or None
+
+    current_dir_hash = current_snapshot.get("dir_hash")
+    current_present = bool(current_snapshot.get("project_dir_present"))
+    current_skills_by_id = current_snapshot.get("skills_by_id") or {}
+
+    if observed is None:
+        return {
+            "was_recorded": False,
+            "axis_verdict": "unverifiable_axis",
+            "project_dir_present_observed": None,
+            "project_dir_present_current": current_present,
+            "dir_hash_observed": None,
+            "dir_hash_current": current_dir_hash if current_present else None,
+            "skills_used": [],
+            "skills_changed": [],
+            "skills_removed": [],
+            "skills_added_masked": [],
+            "reason": "project_skill_baseline absent on envelope",
+        }
+
+    observed_dir_hash = observed.get("dir_hash")
+    observed_present = bool(observed.get("project_dir_present"))
+    observed_skills_by_id = observed.get("skills_by_id") or {}
+
+    if binding_summary is None:
+        # Coarse drift only — cannot pinpoint skills_used.
+        if observed_dir_hash == current_dir_hash:
+            axis_verdict = "replayable"
+            reason = "project skill snapshot dir_hash matches current"
+        else:
+            axis_verdict = "drifted_compatible"
+            reason = (
+                "project skill dir_hash differs but binding_summary missing; "
+                "cannot determine whether the run's skills were affected"
+            )
+        return {
+            "was_recorded": False,
+            "axis_verdict": axis_verdict,
+            "project_dir_present_observed": observed_present,
+            "project_dir_present_current": current_present,
+            "dir_hash_observed": observed_dir_hash,
+            "dir_hash_current": current_dir_hash if current_present else None,
+            "skills_used": [],
+            "skills_changed": [],
+            "skills_removed": [],
+            "skills_added_masked": [],
+            "reason": reason,
+        }
+
+    # Full path: was_recorded=True
+    project_steps = [
+        step
+        for step in (binding_summary.get("steps") or [])
+        if isinstance(step, dict)
+        and isinstance(step.get("skill_source"), dict)
+        and step["skill_source"].get("source_layer") == "project"
+        and step.get("selected_skill_id")
+    ]
+    skills_used = sorted({s["selected_skill_id"] for s in project_steps})
+
+    skills_changed: list[str] = []
+    skills_removed: list[str] = []
+    # H2 v1: skills_added_masked stays empty (would require running
+    # _apply_override_contract against current registry to detect new
+    # masks; out of scope per design memo §10 deferred row).
+    skills_added_masked: list[str] = []
+
+    for sid in skills_used:
+        observed_entry = observed_skills_by_id.get(sid)
+        current_entry = current_skills_by_id.get(sid)
+        if current_entry is None:
+            skills_removed.append(sid)
+        elif observed_entry and observed_entry.get("hash") != current_entry.get("hash"):
+            skills_changed.append(sid)
+
+    if skills_changed or skills_removed or skills_added_masked:
+        axis_verdict = "drifted_incompatible"
+        parts: list[str] = []
+        if skills_changed:
+            parts.append("skills_changed=" + ", ".join(skills_changed))
+        if skills_removed:
+            parts.append("skills_removed=" + ", ".join(skills_removed))
+        reason = "; ".join(parts) or "project skill drift detected"
+    elif observed_dir_hash != current_dir_hash:
+        axis_verdict = "drifted_compatible"
+        reason = "project dir_hash differs but skills_used unaffected"
+    else:
+        axis_verdict = "replayable"
+        reason = "project skill snapshot matches current byte-for-byte"
+
+    return {
+        "was_recorded": True,
+        "axis_verdict": axis_verdict,
+        "project_dir_present_observed": observed_present,
+        "project_dir_present_current": current_present,
+        "dir_hash_observed": observed_dir_hash,
+        "dir_hash_current": current_dir_hash,
+        "skills_used": skills_used,
+        "skills_changed": sorted(skills_changed),
+        "skills_removed": sorted(skills_removed),
+        "skills_added_masked": skills_added_masked,
+        "reason": reason,
+    }
+
+
+_AXIS_SEVERITY = {
+    VERDICT_REPLAYABLE: 0,
+    VERDICT_DRIFTED_COMPATIBLE: 1,
+    VERDICT_DRIFTED_INCOMPATIBLE: 2,
+}
+_AXIS_SEVERITY_INV = {v: k for k, v in _AXIS_SEVERITY.items()}
+
+
+def _aggregate_axes(builtin_axis: str, project_axis: str) -> str:
+    """Worst-non-neutral aggregation across builtin × project axes.
+
+    ``unverifiable_axis`` is treated as neutral (omitted from the worst
+    selection). When every axis is neutral, the top-level verdict is
+    ``unverifiable``.
+    """
+    builtin_score = _AXIS_SEVERITY.get(builtin_axis)
+    project_score = _AXIS_SEVERITY.get(project_axis)
+    candidates = [s for s in (builtin_score, project_score) if s is not None]
+    if not candidates:
+        return VERDICT_UNVERIFIABLE
+    return _AXIS_SEVERITY_INV[max(candidates)]
+
+
+def _compose_reason(
+    verdict: str, builtin_drift: dict, project_axis: dict
+) -> str:
+    """Build the top-level human-readable reason string.
+
+    Mentions the dominant axis(es) so the caller can read why the
+    aggregate verdict landed where it did. Keeps single-line format.
+    """
+    if verdict == VERDICT_REPLAYABLE:
+        return "stored baseline matches current baseline byte-for-byte"
+
+    parts: list[str] = []
+    bc = builtin_drift.get("prompt_files_changed") or []
+    br = builtin_drift.get("prompt_files_removed") or []
+    if bc:
+        parts.append("prompt_files_changed=" + ", ".join(bc))
+    if br:
+        parts.append("prompt_files_removed=" + ", ".join(br))
+
+    pc = project_axis.get("skills_changed") or []
+    pr = project_axis.get("skills_removed") or []
+    pm = project_axis.get("skills_added_masked") or []
+    if pc:
+        parts.append("project_skills_changed=" + ", ".join(pc))
+    if pr:
+        parts.append("project_skills_removed=" + ", ".join(pr))
+    if pm:
+        parts.append("project_skills_masked=" + ", ".join(pm))
+
+    if not parts:
+        # drifted_compatible without specific file pinpoints (e.g.,
+        # builtin dir_hash differs but no used files affected).
+        if not builtin_drift.get("dir_hash_match"):
+            parts.append("builtin dir_hash differs but no used files affected")
+        if (
+            project_axis.get("axis_verdict") == VERDICT_DRIFTED_COMPATIBLE
+            and project_axis.get("dir_hash_observed")
+            != project_axis.get("dir_hash_current")
+        ):
+            parts.append("project dir_hash differs but skills_used unaffected")
+
+    return "; ".join(parts) or verdict
 
 
 def write_verdict(run_dir: Path, verdict: dict) -> Path:
@@ -232,9 +462,9 @@ def write_verdict(run_dir: Path, verdict: dict) -> Path:
 
 
 def write_snapshot_mirror(run_dir: Path, observed_baseline: dict | None) -> Path | None:
-    """Mirror the agent-sessions envelope baseline to ``<run_dir>/snapshots/agent-skills.json``.
+    """Mirror the agent-sessions envelope ``agent_skills_baseline`` (H1).
 
-    Per design memo §4.2, the mirror is a convenience copy of the
+    Per H1 design memo §4.2, the mirror is a convenience copy of the
     envelope's ``agent_skills_baseline`` so external tooling can stat
     one small file instead of parsing the whole sessions ledger. The
     envelope remains the SSOT; the mirror is only written when the
@@ -245,21 +475,48 @@ def write_snapshot_mirror(run_dir: Path, observed_baseline: dict | None) -> Path
     bytes, the file is left untouched. Returns the mirror path or
     ``None`` when no baseline existed to mirror.
     """
-    if not observed_baseline:
+    return _write_mirror(run_dir, observed_baseline, "agent-skills.json")
+
+
+def write_project_skill_mirror(run_dir: Path, observed_baseline: dict | None) -> Path | None:
+    """Mirror the envelope's ``project_skill_baseline`` (H2 #4).
+
+    Parallel to :func:`write_snapshot_mirror`: writes
+    ``<run_dir>/snapshots/project-skills.json`` when the envelope had
+    a project layer baseline. Skips when absent (no observed state to
+    mirror; the verifier separately surfaces the current snapshot in
+    ``drift_details.project_skill_diff``).
+    """
+    return _write_mirror(run_dir, observed_baseline, "project-skills.json")
+
+
+def write_binding_summary_mirror(run_dir: Path, summary: dict | None) -> Path | None:
+    """Mirror the envelope's ``binding_summary`` (H2 #4).
+
+    Writes ``<run_dir>/snapshots/binding-summary.json`` so external
+    tooling can read the per-step ``[step_id, selected_skill_id,
+    skill_source]`` projection without parsing the agent-sessions
+    ledger. Skips when summary is missing.
+    """
+    return _write_mirror(run_dir, summary, "binding-summary.json")
+
+
+def _write_mirror(run_dir: Path, payload: dict | None, filename: str) -> Path | None:
+    if not payload:
         return None
     run_dir = Path(run_dir)
     snapshot_dir = run_dir / "snapshots"
     snapshot_dir.mkdir(parents=True, exist_ok=True)
-    mirror_path = snapshot_dir / "agent-skills.json"
+    mirror_path = snapshot_dir / filename
     if mirror_path.is_file():
         try:
             existing = json.loads(mirror_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             existing = None
-        if existing == observed_baseline:
+        if existing == payload:
             return mirror_path
     mirror_path.write_text(
-        json.dumps(observed_baseline, ensure_ascii=False, indent=2),
+        json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     return mirror_path
@@ -331,17 +588,6 @@ def _build_envelope(
     }
 
 
-def _format_incompatible_reason(
-    changed: list[str], removed: list[str]
-) -> str:
-    parts: list[str] = []
-    if changed:
-        parts.append("prompt_files_changed=" + ", ".join(changed))
-    if removed:
-        parts.append("prompt_files_removed=" + ", ".join(removed))
-    return "; ".join(parts) or "incompatible drift detected"
-
-
 def _cli(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="replay_verifier",
@@ -370,31 +616,55 @@ def _cli(argv: list[str]) -> int:
         )
         if args.write:
             write_verdict(args.run_dir, envelope)
-            write_snapshot_mirror(
-                args.run_dir, envelope.get("baseline_observed_full") or _read_observed_full(args.run_dir)
-            )
+            sessions_envelope = _read_sessions_envelope(args.run_dir)
+            if sessions_envelope is not None:
+                write_snapshot_mirror(
+                    args.run_dir,
+                    sessions_envelope.get("agent_skills_baseline"),
+                )
+                write_project_skill_mirror(
+                    args.run_dir,
+                    sessions_envelope.get("project_skill_baseline"),
+                )
+                write_binding_summary_mirror(
+                    args.run_dir,
+                    sessions_envelope.get("binding_summary"),
+                )
         print(json.dumps(envelope, ensure_ascii=False, indent=2))
         return verdict_to_exit_code(envelope["verdict"])
 
     return EXIT_INTERNAL_ERROR
 
 
-def _read_observed_full(run_dir: Path) -> dict | None:
-    """Re-read the full observed baseline (with prompt_files) for snapshot mirroring.
+def _read_sessions_envelope(run_dir: Path) -> dict | None:
+    """Re-read the full agent-sessions envelope so mirror writers see the
+    canonical (observed-side) project_skill_baseline + binding_summary
+    in addition to agent_skills_baseline.
 
-    The envelope returned by :func:`verify_run` only carries the compact
-    ``baseline_observed`` summary (compute_summary projection). The
-    mirror file at ``<run_dir>/snapshots/agent-skills.json`` deliberately
-    holds the full snapshot (including per-file hashes) so downstream
-    tooling has everything in one place; this helper re-reads the
-    sessions ledger to grab it.
+    Mirror files deliberately hold the full snapshot (per-file hashes,
+    skills_by_id maps) rather than the compact projections that
+    ``baseline_observed`` carries; this helper grabs them from the
+    SSOT envelope. Returns ``None`` when the ledger is missing /
+    unreadable so callers can skip mirror creation cleanly.
     """
     sessions_path = run_dir / "agent-sessions.json"
     if not sessions_path.is_file():
         return None
     try:
-        envelope = json.loads(sessions_path.read_text(encoding="utf-8"))
+        return json.loads(sessions_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _read_observed_full(run_dir: Path) -> dict | None:
+    """Backward-compat shim: returns the agent_skills_baseline only.
+
+    Retained because external callers / tests in tests/scripts/ may
+    still import this name. New code should use
+    :func:`_read_sessions_envelope` and pull whichever field it needs.
+    """
+    envelope = _read_sessions_envelope(run_dir)
+    if envelope is None:
         return None
     return envelope.get("agent_skills_baseline") or None
 

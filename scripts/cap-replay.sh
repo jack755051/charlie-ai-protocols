@@ -182,10 +182,53 @@ except Exception:
 printf 'cap replay: %s — %s\n' "${VERDICT}" "${RUN_DIR}"
 [ -n "${REASON}" ] && printf '  reason: %s\n' "${REASON}"
 
+# H2 #4: print per-axis summary lines when both axes have signal so
+# the user can see why the aggregate verdict landed where it did.
+AXES_LINE="$(printf '%s' "${VERIFY_OUT}" | "${PYTHON_BIN}" -c "
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+    drift = d.get('drift_details') or {}
+    psd = drift.get('project_skill_diff') or {}
+    builtin_used = drift.get('prompt_files_used') or []
+    builtin_changed = drift.get('prompt_files_changed') or []
+    builtin_removed = drift.get('prompt_files_removed') or []
+    builtin_match = drift.get('dir_hash_match', False)
+    if builtin_changed or builtin_removed:
+        print('  builtin: drifted_incompatible (' + str(len(builtin_changed)) + ' changed, ' + str(len(builtin_removed)) + ' removed)')
+    elif not builtin_match and d.get('baseline_observed'):
+        print('  builtin: drifted_compatible (dir_hash differs, ' + str(len(builtin_used)) + ' files used unaffected)')
+    elif d.get('baseline_observed'):
+        print('  builtin: replayable')
+    if psd:
+        ax = psd.get('axis_verdict', '')
+        sc = psd.get('skills_changed') or []
+        sr = psd.get('skills_removed') or []
+        sm = psd.get('skills_added_masked') or []
+        su = psd.get('skills_used') or []
+        if ax == 'drifted_incompatible':
+            print('  project: drifted_incompatible (' + str(len(sc)) + ' changed, ' + str(len(sr)) + ' removed, ' + str(len(sm)) + ' masked)')
+        elif ax == 'drifted_compatible':
+            print('  project: drifted_compatible (dir_hash differs, ' + str(len(su)) + ' skills used unaffected)')
+        elif ax == 'replayable':
+            print('  project: replayable')
+        elif ax == 'unverifiable_axis':
+            print('  project: unverifiable (no project_skill_baseline recorded)')
+except Exception:
+    pass
+")"
+[ -n "${AXES_LINE}" ] && printf '%s\n' "${AXES_LINE}"
+
 if [ "${WRITE_MODE}" -eq 1 ] && [ "${VERDICT}" != "not_found" ]; then
   printf '  verdict file: %s/replay-verdict.json\n' "${RUN_DIR}"
   if [ -f "${RUN_DIR}/snapshots/agent-skills.json" ]; then
     printf '  snapshot mirror: %s/snapshots/agent-skills.json\n' "${RUN_DIR}"
+  fi
+  if [ -f "${RUN_DIR}/snapshots/project-skills.json" ]; then
+    printf '                   %s/snapshots/project-skills.json\n' "${RUN_DIR}"
+  fi
+  if [ -f "${RUN_DIR}/snapshots/binding-summary.json" ]; then
+    printf '                   %s/snapshots/binding-summary.json\n' "${RUN_DIR}"
   fi
 fi
 

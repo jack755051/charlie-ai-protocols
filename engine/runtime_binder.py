@@ -1034,6 +1034,10 @@ class RuntimeBinder:
                             "agent_alias": step_binding["selected_agent_alias"],
                             "prompt_file": step_binding["selected_prompt_file"],
                             "cli": step_binding["selected_cli"],
+                            # H2 #4: propagate skill_source so binding_summary
+                            # extractor can identify which skills came from
+                            # project layer without re-running bind_semantic_plan.
+                            "skill_source": step_binding.get("skill_source"),
                             "input_mode": self._resolve_input_mode(step, governance),
                             "output_tier": self._resolve_output_tier(step, governance),
                             "continue_reason": step.get("continue_reason")
@@ -1076,6 +1080,8 @@ class RuntimeBinder:
                     "agent_alias": step_binding["selected_agent_alias"],
                     "prompt_file": step_binding["selected_prompt_file"],
                     "cli": step_binding["selected_cli"],
+                    # H2 #4: propagate skill_source for binding_summary extraction.
+                    "skill_source": step_binding.get("skill_source"),
                     "binding_mode": step_binding["binding_mode"],
                     "missing_policy": step_binding["missing_policy"],
                     "input_mode": self._resolve_input_mode(step, governance),
@@ -1122,6 +1128,8 @@ class RuntimeBinder:
                         "agent_alias": step_binding["selected_agent_alias"],
                         "prompt_file": step_binding["selected_prompt_file"],
                         "cli": step_binding["selected_cli"],
+                        # H2 #4: propagate skill_source for binding_summary.
+                        "skill_source": step_binding.get("skill_source"),
                     }
                 )
 

@@ -973,6 +973,41 @@ if [ -f "${SNAPSHOT_PY}" ]; then
   fi
 fi
 
+# H2 #4: parallel attach for project layer skill snapshot. Captures
+# <project_root>/.cap/skills.yaml + .cap/skills/* hashes so the H2
+# verifier can later compute dual-axis drift (builtin + project).
+# Same best-effort contract as A0 #4 — failure warns but never halts.
+# CAP_PROJECT_ROOT env var lets the snapshot module resolve the same
+# project root cap-paths.sh resolved above. SSOT:
+# docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md §7.1.
+PROJECT_SKILLS_PY="${CAP_ROOT}/engine/project_skills_snapshot.py"
+if [ -f "${PROJECT_SKILLS_PY}" ]; then
+  if ! CAP_PROJECT_ROOT="${PROJECT_ROOT}" "${PYTHON_BIN}" "${PROJECT_SKILLS_PY}" attach "${AGENT_SESSIONS_JSON}" \
+      >> "${WORKFLOW_LOG}" 2>&1; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')][workflow][warn] failed to attach project_skill_baseline to ${AGENT_SESSIONS_JSON}; continuing without project baseline" >> "${WORKFLOW_LOG}"
+  fi
+fi
+
+# H2 #4: derive a compact binding_summary from the bound plan and
+# attach it to the envelope so the verifier can identify which
+# skill_ids the run actually used (and which layer they came from).
+# binding_summary contains step_id / selected_skill_id / skill_source
+# per step — extracted from PLAN_JSON without re-running bind. Same
+# best-effort contract.
+BINDING_SUMMARY_PY="${CAP_ROOT}/engine/binding_summary.py"
+if [ -f "${BINDING_SUMMARY_PY}" ]; then
+  PLAN_TMP="$(mktemp -t cap-plan.XXXXXX 2>/dev/null || mktemp 2>/dev/null)"
+  if [ -n "${PLAN_TMP}" ]; then
+    printf '%s' "${PLAN_JSON}" > "${PLAN_TMP}"
+    if ! "${PYTHON_BIN}" "${BINDING_SUMMARY_PY}" attach "${AGENT_SESSIONS_JSON}" \
+        --plan-path "${PLAN_TMP}" \
+        >> "${WORKFLOW_LOG}" 2>&1; then
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')][workflow][warn] failed to attach binding_summary to ${AGENT_SESSIONS_JSON}; continuing without binding summary" >> "${WORKFLOW_LOG}"
+    fi
+    rm -f "${PLAN_TMP}"
+  fi
+fi
+
 echo "  Output dir: ${WORKFLOW_OUTPUT_DIR}"
 
 # Flatten phases into step lines:
