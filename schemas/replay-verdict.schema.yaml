@@ -1,0 +1,179 @@
+# Replay Verdict Schema (v1)
+#
+# 定義 `cap replay verify <run_id>` / `engine/replay_verifier.py:verify_run`
+# 產出的 verdict envelope。Pure-function comparison: 給定 stored baseline
+# (run dir 內的 agent-sessions.json envelope agent_skills_baseline)
+# 與 current baseline (engine/agent_skills_snapshot.py:compute_snapshot
+# 結果)，產出 5-state verdict + drift detail。
+#
+# Spec SSOT: docs/cap/REPLAY-CONTRACT-DESIGN.md §2 (verdict enum) §3 (drift
+# scope) §7 (schema skeleton).
+#
+# v1 範圍鎖定：H1 verifier 只判 builtin agent-skills/ drift；project layer
+# `.cap/skills.yaml` drift 留 H2/H3。schema 預留 drift_details.project_skill_diff
+# 為 nullable forward contract，H1 producer 永遠寫 null，H2 才會填值。
+#
+# JSON-Schema 風格；可被 step_runtime.py validate-jsonschema 驗證。
+
+schema_version: 1
+title: CAP Replay Verdict Schema
+description: Output of `cap replay verify <run_id>`; pure-function comparison of stored agent_skills_baseline (from agent-sessions.json envelope) against current builtin baseline. Drift scope in v1 is limited to builtin agent-skills/; project / shared layer skill drift and workflow YAML drift are deferred to H2 / H3.
+
+required:
+  - schema_version
+  - run_id
+  - verified_at
+  - verdict
+  - baseline_observed
+  - baseline_current
+  - drift_details
+
+properties:
+  schema_version:
+    type: integer
+    enum: [1]
+    description: Schema version for the replay-verdict envelope. Bump on breaking changes.
+
+  run_id:
+    type: string
+    description: |
+      The run id whose stored baseline was compared. Matches the run
+      directory name under <cap_home>/projects/<project_id>/reports/
+      workflows/<workflow_id>/<run_id>/.
+
+  verified_at:
+    type: string
+    description: ISO-8601 UTC timestamp the verdict was computed (e.g., 2026-05-07T12:34:56Z).
+
+  verdict:
+    type: string
+    enum:
+      - replayable
+      - drifted_compatible
+      - drifted_incompatible
+      - unverifiable
+      - not_found
+    description: |
+      Aggregate verdict (design memo §2):
+        replayable             — stored baseline equals current baseline (dir_hash match + every prompt_files entry aligned).
+        drifted_compatible     — dir_hash differs, but every prompt_file the run actually used (prompt_files_used) still matches; replay still reproduces original behaviour.
+        drifted_incompatible   — at least one prompt_files_used entry has changed or was removed in current baseline; replay would not reproduce original behaviour.
+        unverifiable           — stored envelope lacks agent_skills_baseline (pre-A0 #4 run) or anchors are entirely null; verifier does not guess.
+        not_found              — run_id directory or agent-sessions.json missing; nothing to verify.
+
+  reason:
+    type: string
+    description: |
+      Optional human-readable single-line explanation of the verdict.
+      Producer SHOULD populate this for non-replayable verdicts so users
+      see actionable detail without parsing drift_details.
+
+  baseline_observed:
+    type: [object, "null"]
+    description: |
+      Compact baseline summary read from agent-sessions.json envelope's
+      agent_skills_baseline field at run-time of the original run.
+      Null when the envelope had no baseline (verdict=unverifiable);
+      verifier does not invent values.
+    properties:
+      cap_version:
+        type: [string, "null"]
+        description: cap_version recorded at the original run.
+      git_commit:
+        type: [string, "null"]
+        description: HEAD SHA of cap-protocols at the original run.
+      git_dirty:
+        type: boolean
+        description: Working-tree dirty flag at the original run.
+      dir_hash:
+        type: string
+        description: sha256:<hex> aggregate of all *.md files at the original run.
+      file_count:
+        type: integer
+        description: Count of *.md files hashed at the original run.
+
+  baseline_current:
+    type: [object, "null"]
+    description: |
+      Compact summary of the current builtin baseline at verification
+      time. Null only when verdict=not_found (never computed because
+      the run dir was missing); otherwise always populated even when
+      verdict=unverifiable so callers can still see the current state.
+    properties:
+      cap_version:
+        type: [string, "null"]
+      git_commit:
+        type: [string, "null"]
+      git_dirty:
+        type: boolean
+      dir_hash:
+        type: string
+      file_count:
+        type: integer
+
+  drift_details:
+    type: object
+    description: |
+      Per-axis drift breakdown. Always populated when verdict != not_found.
+      For verdict=unverifiable, prompt_files_* arrays are empty and
+      *_match flags are false; producer still emits the object so
+      consumers can rely on its structural presence.
+    required:
+      - prompt_files_used
+      - prompt_files_changed
+      - prompt_files_removed
+      - dir_hash_match
+      - cap_version_match
+      - git_commit_match
+      - project_skill_diff
+    properties:
+      prompt_files_used:
+        type: array
+        description: |
+          Distinct set of prompt_file paths the run actually used,
+          extracted from agent-sessions.json sessions[].prompt_file
+          (null entries — typically shell-only steps — are filtered out).
+          Paths are normalised relative to agent-skills/ so they match
+          baseline.prompt_files dictionary keys.
+        items:
+          type: string
+      prompt_files_changed:
+        type: array
+        description: |
+          Subset of prompt_files_used whose per-file hash differs
+          between baseline_observed and baseline_current. Drives the
+          drifted_incompatible verdict together with prompt_files_removed.
+        items:
+          type: string
+      prompt_files_removed:
+        type: array
+        description: |
+          Subset of prompt_files_used absent from current baseline's
+          prompt_files dictionary (the file was deleted between the
+          original run and verification). Together with prompt_files_changed,
+          a non-empty list forces verdict=drifted_incompatible.
+        items:
+          type: string
+      dir_hash_match:
+        type: boolean
+        description: Whether baseline_observed.dir_hash equals baseline_current.dir_hash.
+      cap_version_match:
+        type: boolean
+        description: |
+          Whether cap_version strings match between observed and current.
+          Soft signal only; mismatch alone does NOT downgrade verdict
+          (avoid release-tag noise).
+      git_commit_match:
+        type: boolean
+        description: |
+          Whether git_commit strings match between observed and current.
+          Soft signal only; mismatch alone does NOT downgrade verdict.
+      project_skill_diff:
+        type: [object, "null"]
+        description: |
+          H1 v1 RESERVED-NULL FORWARD CONTRACT. H1 verifier always emits
+          null here; H2 will populate with project layer skill drift detail
+          (whether <project_root>/.cap/skills.yaml content changed and
+          whether the change affects the run's masked / replaced skills).
+          Consumers may rely on the field's presence at the schema level
+          but MUST treat null as "not yet implemented", not "no drift".
