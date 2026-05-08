@@ -100,13 +100,23 @@ ensure_status_store() {
   bash "${PATH_HELPER}" ensure >/dev/null
 }
 
+fallback_status_store() {
+  printf '%s\n' "${CAP_ROOT}/workspace/history/workflow-runs.json"
+}
+
 get_status_store() {
   local cache_dir
   local preferred
   local fallback
-  cache_dir="$(bash "${PATH_HELPER}" get cache_dir)"
+  fallback="$(fallback_status_store)"
+
+  if ! cache_dir="$(bash "${PATH_HELPER}" get cache_dir 2>/dev/null)"; then
+    mkdir -p "$(dirname "${fallback}")" >/dev/null 2>&1 || true
+    printf '%s\n' "${fallback}"
+    return
+  fi
+
   preferred="${cache_dir}/workflow-runs.json"
-  fallback="${CAP_ROOT}/workspace/history/workflow-runs.json"
 
   mkdir -p "${cache_dir}" "$(dirname "${fallback}")" >/dev/null 2>&1 || true
 
@@ -210,8 +220,6 @@ workflow_summary_field() {
 
   "${PYTHON_BIN}" "${CLI_PY}" summary-field "${status_file}" "${workflow_id}" "${field}"
 }
-
-ensure_status_store
 
 COMMAND="${1:-}"
 if [ -n "${COMMAND}" ] && [[ "${COMMAND}" != "list" && "${COMMAND}" != "ps" && "${COMMAND}" != "show" && "${COMMAND}" != "inspect" && "${COMMAND}" != "plan" && "${COMMAND}" != "bind" && "${COMMAND}" != "constitution" && "${COMMAND}" != "compile" && "${COMMAND}" != "run-task" && "${COMMAND}" != "run" && "${COMMAND}" != "update-run-status" ]]; then
