@@ -99,6 +99,8 @@ cap project constitution --latest
 
 `cap project *` is repo setup / identity / health. `cap workflow *` executes a workflow inside a CAP-attached repo.
 
+Shortcuts are available for common namespaces: `cap p ...` / `cap proj ...` for `cap project ...`, `cap wf ...` for `cap workflow ...`, and `cap prov ...` for `cap provider ...`.
+
 ## Common Commands
 
 ```bash

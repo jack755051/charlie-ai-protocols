@@ -34,6 +34,12 @@ COMMAND                            DESCRIPTION
 [Provider]
   cap provider doctor [--json]     檢查 claude / codex CLI 是否可用（read-only，不代登入）
 
+[Shortcuts]
+  cap p init/status/doctor         shorthand for cap project init/status/doctor
+  cap proj ...                     shorthand for cap project ...
+  cap wf ...                       shorthand for cap workflow ...
+  cap prov doctor                  shorthand for cap provider doctor
+
 更多維護、診斷與 legacy 指令：
   cap help --advanced
 EOF
@@ -181,11 +187,11 @@ case "${COMMAND}" in
   check-aliases|registry)
     exec "$0" skill "${COMMAND}" "$@"
     ;;
-  workflow)
+  workflow|wf)
     shift || true
     exec bash "${SCRIPT_DIR}/cap-workflow.sh" "$@"
     ;;
-  project)
+  project|p|proj)
     shift || true
     exec bash "${SCRIPT_DIR}/cap-project.sh" "$@"
     ;;
@@ -205,7 +211,7 @@ case "${COMMAND}" in
     shift
     exec bash "${SCRIPT_DIR}/cap-agent.sh" "$@"
     ;;
-  provider)
+  provider|prov)
     shift || true
     exec bash "${SCRIPT_DIR}/cap-provider.sh" "$@"
     ;;

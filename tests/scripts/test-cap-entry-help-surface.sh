@@ -59,6 +59,11 @@ assert_contains "main help keeps workflow run" "cap workflow run <id>" "${main_h
 assert_contains "main help clarifies workflow run scope" "在已接入 CAP 的 repo 內執行 workflow" "${main_help}"
 assert_contains "main help keeps workflow dry-run" "cap workflow run --dry-run" "${main_help}"
 assert_contains "main help clarifies dry-run" "不呼叫 AI" "${main_help}"
+assert_contains "main help shows shortcuts section" "[Shortcuts]" "${main_help}"
+assert_contains "main help shows project short alias" "cap p init/status/doctor" "${main_help}"
+assert_contains "main help shows project long alias" "cap proj ..." "${main_help}"
+assert_contains "main help shows workflow alias" "cap wf ..." "${main_help}"
+assert_contains "main help shows provider alias" "cap prov doctor" "${main_help}"
 
 assert_not_contains "main help hides setup" "cap setup" "${main_help}"
 assert_not_contains "main help hides sync" "cap sync" "${main_help}"
