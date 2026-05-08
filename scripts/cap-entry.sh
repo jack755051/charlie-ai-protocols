@@ -90,6 +90,9 @@ COMMAND                            DESCRIPTION
   cap workflow inspect <run-id>    Show details for one workflow run
   cap workflow logs <run-id>       Print the run's workflow.log (docker-like)
   cap workflow logs -f <run-id>    Follow the run's workflow.log live (tail -f)
+  cap workflow watch <run-id>      Live snapshot of run state (refreshes on tty)
+  cap workflow watch --once <run-id>  Single-shot snapshot (deterministic for CI)
+  cap workflow watch --json <run-id>  JSON snapshot for scripts / dashboards
 
 [Execution]
   cap codex [ARGS...]              Record trace inside CAP projects; fall back to native Codex outside CAP dirs

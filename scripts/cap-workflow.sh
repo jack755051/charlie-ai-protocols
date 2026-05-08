@@ -16,6 +16,7 @@ Usage:
   cap workflow show <id>
   cap workflow inspect <run-id>
   cap workflow logs [-f|--follow] <run-id> [--cap-home PATH]
+  cap workflow watch [--once] [--json] [--interval SEC] [--tail N] <run-id> [--cap-home PATH]
   cap workflow plan <id>
   cap workflow bind <id> [registry]
   cap workflow constitution <request...>
@@ -270,7 +271,7 @@ validate_run_cli_choice() {
 }
 
 COMMAND="${1:-}"
-if [ -n "${COMMAND}" ] && [[ "${COMMAND}" != "list" && "${COMMAND}" != "ps" && "${COMMAND}" != "show" && "${COMMAND}" != "inspect" && "${COMMAND}" != "logs" && "${COMMAND}" != "plan" && "${COMMAND}" != "bind" && "${COMMAND}" != "constitution" && "${COMMAND}" != "compile" && "${COMMAND}" != "run-task" && "${COMMAND}" != "run" && "${COMMAND}" != "update-run-status" ]]; then
+if [ -n "${COMMAND}" ] && [[ "${COMMAND}" != "list" && "${COMMAND}" != "ps" && "${COMMAND}" != "show" && "${COMMAND}" != "inspect" && "${COMMAND}" != "logs" && "${COMMAND}" != "watch" && "${COMMAND}" != "plan" && "${COMMAND}" != "bind" && "${COMMAND}" != "constitution" && "${COMMAND}" != "compile" && "${COMMAND}" != "run-task" && "${COMMAND}" != "run" && "${COMMAND}" != "update-run-status" ]]; then
   # cap workflow <id> "prompt" → run <id> "prompt"
   # cap workflow <id>          → show <id>
   if [ "$#" -ge 2 ]; then
@@ -362,6 +363,53 @@ case "${1:-}" in
     else
       exec cat "${LOGS_PATH}"
     fi
+    ;;
+  watch)
+    # Phase 2 (Workflow Watch): live snapshot of run state. The Python
+    # side owns the loop / clear-screen logic; bash here is just an arg
+    # forwarder so we keep one source of truth for snapshot rendering.
+    shift
+    WATCH_RUN_ID=""
+    WATCH_FORWARD=()
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --once|--json)
+          WATCH_FORWARD+=("$1")
+          shift
+          ;;
+        --interval|--tail|--cap-home)
+          [ -n "${2:-}" ] || { echo "$1 requires a value" >&2; exit 1; }
+          WATCH_FORWARD+=("$1" "$2")
+          shift 2
+          ;;
+        --interval=*|--tail=*|--cap-home=*)
+          WATCH_FORWARD+=("$1")
+          shift
+          ;;
+        --)
+          shift
+          break
+          ;;
+        -*)
+          echo "Unknown watch option: $1" >&2
+          echo "Usage: cap workflow watch [--once] [--json] [--interval SEC] [--tail N] <run-id> [--cap-home PATH]" >&2
+          exit 1
+          ;;
+        *)
+          if [ -n "${WATCH_RUN_ID}" ]; then
+            echo "watch accepts a single run-id; got extra arg: $1" >&2
+            exit 1
+          fi
+          WATCH_RUN_ID="$1"
+          shift
+          ;;
+      esac
+    done
+    if [ -z "${WATCH_RUN_ID}" ]; then
+      echo "Usage: cap workflow watch [--once] [--json] [--interval SEC] [--tail N] <run-id> [--cap-home PATH]" >&2
+      exit 1
+    fi
+    exec "${PYTHON_BIN}" "${CLI_PY}" watch "${WATCH_FORWARD[@]}" "${WATCH_RUN_ID}"
     ;;
   plan)
     [ "$#" -eq 2 ] || usage

@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -910,6 +911,183 @@ def cmd_logs(run_id: str, *, cap_home: str | None = None) -> None:
         sys.exit(1)
 
     print(str(log_path))
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: watch (Phase 2 — Workflow Watch)
+# ---------------------------------------------------------------------------
+
+def _tail_log_lines(log_path: Path, n: int) -> list[str]:
+    """Return the last ``n`` lines from ``log_path``.
+
+    Tolerant of partially written / missing files (returns []) so the
+    watch loop never crashes mid-run while the executor is still
+    appending. Reads the whole file because workflow.log is small (per
+    cap-workflow-exec.sh writes; rarely >1MB) and shelling to ``tail``
+    would lose the cross-platform purity that engine-python.md asks for.
+    """
+    if n <= 0 or not log_path.is_file():
+        return []
+    try:
+        with log_path.open("r", encoding="utf-8", errors="replace") as fh:
+            lines = fh.readlines()
+    except OSError:
+        return []
+    return [line.rstrip("\n") for line in lines[-n:]]
+
+
+def _collect_watch_payload(
+    run_id: str, *, cap_home: str | None, log_tail_lines: int
+) -> dict:
+    """Resolve run_dir, aggregate snapshot, and append last_log_lines.
+
+    Emits engine-python.md compliant Chinese stderr + sys.exit(1) when
+    run_dir is missing so the caller (cmd_watch loop) fails fast on the
+    first miss instead of silently re-rendering empty frames.
+    """
+    cap_home_raw = cap_home or os.environ.get("CAP_HOME") or str(Path.home() / ".cap")
+    cap_home_path = Path(cap_home_raw).expanduser()
+    run_dir = _find_run_dir(cap_home_path, run_id)
+    if run_dir is None:
+        print(f"找不到 run_id: {run_id}", file=sys.stderr)
+        sys.exit(1)
+
+    payload = _try_build_result(run_dir, cap_home_path, status_file=None)
+    if payload is None:
+        # build_workflow_result raised (corrupt SSOT, missing files); we
+        # still want a usable snapshot, so return a minimal stub keyed
+        # off run_id and let the renderer fill placeholders.
+        payload = {"run_id": run_id, "steps": [], "sessions": [], "artifacts": []}
+
+    payload["last_log_lines"] = _tail_log_lines(run_dir / "workflow.log", log_tail_lines)
+    payload["log_tail_window"] = log_tail_lines
+    return payload
+
+
+def _render_watch_text(payload: dict) -> None:
+    """Compact watch view (less verbose than inspect on purpose).
+
+    Sections: Header / Steps / Sessions / Artifacts (count + latest) /
+    Last Log Lines. Mirrors cmd_inspect's '-' / '(none)' placeholders so
+    operators can flip between both surfaces without re-learning glyphs.
+    """
+    print("# Watch")
+    print(f"  workflow_id:   {payload.get('workflow_id', '-')}")
+    if payload.get("workflow_name"):
+        print(f"  workflow_name: {payload['workflow_name']}")
+    print(f"  run_id:        {payload.get('run_id', '-')}")
+    print(f"  project_id:    {payload.get('project_id', '-')}")
+    print(f"  final_state:   {payload.get('final_state', '-')}")
+    fr = payload.get("final_result")
+    print(f"  final_result:  {fr if fr else '-'}")
+    started = payload.get("started_at")
+    finished = payload.get("finished_at")
+    print(f"  started_at:    {started if started else '-'}")
+    print(f"  finished_at:   {finished if finished else '-'}")
+
+    summary = payload.get("summary", {}) or {}
+    if summary:
+        print(
+            f"  totals:        steps={summary.get('total_steps', 0)} "
+            f"completed={summary.get('completed', 0)} "
+            f"failed={summary.get('failed', 0)} "
+            f"skipped={summary.get('skipped', 0)} "
+            f"blocked={summary.get('blocked', 0)}"
+        )
+
+    steps = payload.get("steps") or []
+    print()
+    print("# Steps")
+    if not steps:
+        print("  (none)")
+    else:
+        for step in steps:
+            state = step.get("execution_state", "-")
+            print(f"  - {step.get('step_id', '-')}: {state}")
+
+    sessions = payload.get("sessions") or []
+    print()
+    print("# Sessions")
+    if not sessions:
+        print("  (none)")
+    else:
+        for session in sessions:
+            lifecycle = session.get("lifecycle", "-")
+            session_result = session.get("result", "-")
+            provider = session.get("provider", "-")
+            print(
+                f"  - {session.get('step_id', '-')}: "
+                f"lifecycle={lifecycle} result={session_result} provider={provider}"
+            )
+
+    artifacts = payload.get("artifacts") or []
+    print()
+    print("# Artifacts")
+    print(f"  count: {len(artifacts)}")
+    if artifacts:
+        latest = artifacts[-1]
+        print(f"  latest: {latest.get('name', '-')} -> {latest.get('path', '-')}")
+
+    log_lines = payload.get("last_log_lines") or []
+    window = payload.get("log_tail_window", 0)
+    print()
+    print(f"# Last Log Lines (tail {window})")
+    if not log_lines:
+        print("  (none)")
+    else:
+        for line in log_lines:
+            print(f"  {line}")
+
+
+def cmd_watch(
+    run_id: str,
+    *,
+    cap_home: str | None = None,
+    output_json: bool = False,
+    interval: float = 2.0,
+    once: bool = False,
+    log_tail_lines: int = 10,
+) -> None:
+    """Live snapshot of a workflow run.
+
+    Behaviour matrix:
+      - ``--json``  → always single-shot dump (machine-friendly; loops
+                       across newlines are noisy for jq pipelines).
+      - ``--once``  → single-shot text snapshot.
+      - default     → if stdout is a TTY: ANSI-clear-and-redraw loop
+                       every ``interval`` seconds; if stdout is piped or
+                       redirected, auto-fallback to single-shot so we
+                       don't pollute log files / pagers.
+
+    SIGINT (Ctrl-C) exits the loop cleanly via ``KeyboardInterrupt``;
+    callers see exit code 0 because the loop terminated normally.
+    """
+    if output_json:
+        payload = _collect_watch_payload(
+            run_id, cap_home=cap_home, log_tail_lines=log_tail_lines
+        )
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+
+    is_tty = sys.stdout.isatty()
+    effective_once = once or not is_tty
+
+    try:
+        while True:
+            payload = _collect_watch_payload(
+                run_id, cap_home=cap_home, log_tail_lines=log_tail_lines
+            )
+            if not effective_once and is_tty:
+                # ANSI clear screen + cursor home — skipped on non-tty so
+                # piped output stays grep-friendly.
+                sys.stdout.write("\033[H\033[2J")
+            _render_watch_text(payload)
+            if effective_once:
+                return
+            sys.stdout.flush()
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        return
 
 
 # ---------------------------------------------------------------------------
@@ -1825,6 +2003,42 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Override the CAP home directory used to locate run_dir (default: ~/.cap).",
     )
 
+    # watch (Phase 2)
+    p = sub.add_parser("watch", help="Live snapshot view of a workflow run")
+    p.add_argument("run_id")
+    p.add_argument(
+        "--cap-home",
+        dest="cap_home",
+        default=None,
+        help="Override the CAP home directory used to locate run_dir (default: ~/.cap).",
+    )
+    p.add_argument(
+        "--json",
+        action="store_true",
+        dest="output_json",
+        help="Emit a single JSON snapshot instead of the text view.",
+    )
+    p.add_argument(
+        "--once",
+        action="store_true",
+        dest="once",
+        help="Render a single snapshot and exit (deterministic for tests/CI).",
+    )
+    p.add_argument(
+        "--interval",
+        dest="interval",
+        type=float,
+        default=2.0,
+        help="Refresh interval in seconds (default: 2.0).",
+    )
+    p.add_argument(
+        "--tail",
+        dest="log_tail_lines",
+        type=int,
+        default=10,
+        help="Number of trailing workflow.log lines to show (default: 10).",
+    )
+
     # plan
     p = sub.add_parser("plan", help="Display semantic + bound execution plan")
     p.add_argument("cap_root")
@@ -1988,6 +2202,15 @@ def main() -> None:
             )
         case "logs":
             cmd_logs(args.run_id, cap_home=args.cap_home)
+        case "watch":
+            cmd_watch(
+                args.run_id,
+                cap_home=args.cap_home,
+                output_json=args.output_json,
+                interval=args.interval,
+                once=args.once,
+                log_tail_lines=args.log_tail_lines,
+            )
         case "plan":
             cmd_plan(args.cap_root, args.workflow_ref)
         case "bind":
