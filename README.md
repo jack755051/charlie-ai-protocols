@@ -36,7 +36,7 @@ cap workflow run --strategy auto version-control "版本更新"
 
 ## Status
 
-- **Latest tag**：`v0.24.0` — CLI onboarding + provider readiness GA checkpoint (harness line paused; H5/H6/H7 deferred pending real user pain)
+- **Latest tag**：`v0.24.1` — default `cap help` surface reduced to the first-run path after the v0.24.0 onboarding checkpoint
 - **Phase 進度**：v0.22 GA 達成 **P0–P10 全段 closeout**（platform-level capabilities 跨 rc1–rc18 達 steady state，canonical 收斂見 [docs/cap/PLATFORM-CLOSEOUT-v0.22.md](docs/cap/PLATFORM-CLOSEOUT-v0.22.md)）；v0.23 harness checkpoint 收斂 **A0 agent-skills baseline + H1–H4 replay verifier / project skills snapshot / input snapshots**；v0.24 收斂安裝後 CLI 主路徑、provider doctor / fail-fast、非 project workflow list 與 fixture 穩定性；H5 / H6 / H7 deferred，等真實使用者 dogfood 反饋再開
 - **單一進度來源**：[docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md](docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md)
 - **完整 release 紀錄**：[docs/cap/RELEASE-NOTES.md](docs/cap/RELEASE-NOTES.md)

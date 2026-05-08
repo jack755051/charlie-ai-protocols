@@ -6,6 +6,23 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.24.1] - 2026-05-08
+
+> Patch release — reduce the default `cap help` surface after the v0.24.0 onboarding checkpoint.
+
+### Changed
+
+- `cap help` now shows only the first-run path: help, version, update, skill/workflow discovery, project init/status/doctor, provider doctor, and workflow run/dry-run.
+- Advanced, maintenance, governance, replay, promote, session, and native CLI wrapper entries moved out of the default view and remain discoverable through `cap help --advanced`.
+
+### Verified
+
+- Help surface fixture: `tests/scripts/test-cap-entry-help-surface.sh` — **54 passed / 0 failed**.
+- Unknown-command fixture: `tests/scripts/test-cap-entry-unknown-command.sh` — **9 passed / 0 failed**.
+- Full smoke: `scripts/workflows/smoke-per-stage.sh` — **86 passed / 0 failed / 0 skipped**.
+
+---
+
 ## [v0.24.0] - 2026-05-08
 
 > GA checkpoint — pause the harness line and promote the CAP onboarding / provider readiness improvements into a stable release.
