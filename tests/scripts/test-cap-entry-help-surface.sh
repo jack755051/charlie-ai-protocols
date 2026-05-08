@@ -44,7 +44,7 @@ advanced_help="$("${CAP_ENTRY}" help --advanced)"
 
 assert_contains "main help title" "Start Here" "${main_help}"
 assert_contains "main help advertises advanced" "cap help --advanced" "${main_help}"
-assert_contains "main help keeps version" "cap version" "${main_help}"
+assert_contains "main help keeps version" "cap version | -v | --version" "${main_help}"
 assert_contains "main help keeps update" "cap update" "${main_help}"
 assert_contains "main help keeps skill list" "cap skill list" "${main_help}"
 assert_contains "main help keeps workflow list" "cap workflow list" "${main_help}"

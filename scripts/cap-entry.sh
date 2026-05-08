@@ -15,7 +15,7 @@ COMMAND                            DESCRIPTION
 [Start]
   cap help                         列出常用指令
   cap help --advanced              列出維護、診斷與 legacy 指令
-  cap version                      顯示版本、ref 與最新 release tag
+  cap version | -v | --version     顯示版本、ref 與最新 release tag
   cap update [target]              更新到 latest / main / 指定 tag 或 branch
 
 [Discover]
@@ -157,6 +157,9 @@ case "${COMMAND}" in
   artifact)
     shift || true
     exec bash "${SCRIPT_DIR}/cap-artifact.sh" "$@"
+    ;;
+  -v|--version)
+    exec bash "${SCRIPT_DIR}/cap-release.sh" version
     ;;
   version|update|rollback|release-check)
     exec bash "${SCRIPT_DIR}/cap-release.sh" "$@"
