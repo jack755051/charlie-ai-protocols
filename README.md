@@ -36,8 +36,8 @@ cap workflow run --strategy auto version-control "版本更新"
 
 ## Status
 
-- **Latest tag**：`v0.23.0-harness.1` — H-series harness checkpoint (H1–H4 closed; H5/H6/H7 paused pending real user pain)
-- **Phase 進度**：P0 / P1 / P2 / P3 / P4 / P5 / P6 / P7 已完成（其中 P4 #5 source priority resolver 與 P5 #9 stall handling 為 deferred non-blocking；P7 #5 promote_candidates 為 design-deferred 至 P10）；**P8 已完成**：gate-result validation CLI + watcher / security / qa / logger 四個 checkpoint runner + `gate_runner_common` 共用層 + `consume-gate-result` (fail-route handling) + `rerun-gate` (rerun-failed-gate) + halt-on-risk policy（risk_level=high/critical 強制 halt）共 8 個子項全部落地，contract↔producer↔consumer 三層迴圈完整；P9 / P10 pending
+- **Latest tag**：`v0.23.0-harness.3` — H-series harness checkpoint (A0 + H1–H4 closed; H5/H6/H7 deferred pending real user pain)
+- **Phase 進度**：v0.22 GA 達成 **P0–P10 全段 closeout**（platform-level capabilities 跨 rc1–rc18 達 steady state，canonical 收斂見 [docs/cap/PLATFORM-CLOSEOUT-v0.22.md](docs/cap/PLATFORM-CLOSEOUT-v0.22.md)）；v0.23 harness checkpoint 收斂 **A0 agent-skills baseline + H1–H4 replay verifier / project skills snapshot / input snapshots**；H5 / H6 / H7 deferred，等真實使用者 dogfood 反饋再開
 - **單一進度來源**：[docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md](docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md)
 - **完整 release 紀錄**：[docs/cap/RELEASE-NOTES.md](docs/cap/RELEASE-NOTES.md)
 
