@@ -170,16 +170,31 @@ run_step_codex() {
   local prompt="$1"
   local raw
   local exit_code
+  local last_message_file
   local args=(exec)
   if [ "${CAP_CODEX_SKIP_GIT_REPO_CHECK:-1}" != "0" ]; then
     args+=(--skip-git-repo-check)
   fi
+  # 用 --output-last-message 取單一 assistant 回覆，繞過 Codex CLI 在 stdout
+  # 內出現多輪 turn / `tokens used` banner / 重複輸出（cf. v0.23 dogfood
+  # 2026-05-08：strip_codex_preamble 的 awk pattern `^(assistant|codex)$`
+  # 在同一個 assistant 標題下無法切分後續重複的 fence pair，導致
+  # validate_constitution 偵測到 multiple_explicit_fences 而 halt）。
+  last_message_file="$(mktemp -t cap-codex-last.XXXXXX)"
+  args+=(-o "${last_message_file}")
   set +e
   raw="$(codex "${args[@]}" "${prompt}" 2>&1)"
   exit_code=$?
   set -e
-  # 嘗試剝離 Codex preamble；若失敗（無 assistant 標記），保留原始輸出
-  printf '%s\n' "${raw}" | strip_codex_preamble 2>/dev/null || printf '%s\n' "${raw}"
+  if [ -s "${last_message_file}" ]; then
+    cat "${last_message_file}"
+    rm -f "${last_message_file}"
+  else
+    rm -f "${last_message_file}"
+    # Fallback：若 Codex CLI 不支援或未寫入 last-message file，
+    # 沿用原本的 stdout 剝離策略
+    printf '%s\n' "${raw}" | strip_codex_preamble 2>/dev/null || printf '%s\n' "${raw}"
+  fi
   return "${exit_code}"
 }
 
@@ -345,6 +360,21 @@ structured_sections_for_capability() {
 ## 預期功能清單
 ## 下一步調度建議
 ## 設計交付模式
+EOF
+      ;;
+    project_constitution)
+      cat <<'EOF'
+請使用以下固定章節標題依序輸出，讓 workflow 可以從串流標題推斷段內進度：
+## 任務理解
+## 執行重點
+## 產出內容
+## 交接摘要
+
+Fence 一次到位鐵律（最終指令，覆蓋 prompt 中段的所有其他章節要求；違反會被 validate_constitution exit 41 halt，無 AI fallback）：
+- 整份 stdout 只能出現一對 <<<CONSTITUTION_JSON_BEGIN>>>/<<<CONSTITUTION_JSON_END>>> fence。
+- 動筆前先決定 JSON 寫在 `## 產出內容` 章節內；從 `## 任務理解` 一氣呵成寫到 `## 交接摘要`，中途不要回頭重寫。
+- 嚴禁先以自由敘事 + fence pair 完成回答，再為了補 4 個固定標題格式整份重寫，產生 fence pair #2。
+- 若已寫完 fence pair，後續章節若需提及 JSON 內容，請改用自由文字描述（例如：「JSON 已包含 schema_version、constraints、stop_conditions、binding_policy」），嚴禁再次以 fence 包覆 JSON 重貼一遍。
 EOF
       ;;
     *)
