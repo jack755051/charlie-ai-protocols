@@ -6,6 +6,32 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.24.2] - 2026-05-08
+
+> Patch release — add safe CLI shortcuts for common namespaces and read-only version flags.
+
+### Added
+
+- Namespace shortcuts:
+  - `cap p ...` / `cap proj ...` as shorthand for `cap project ...`
+  - `cap wf ...` as shorthand for `cap workflow ...`
+  - `cap prov ...` as shorthand for `cap provider ...`
+- Global read-only version flags: `cap -v` and `cap --version`, both equivalent to `cap version`.
+- Shortcut regression fixture covering namespace aliases and version flags.
+
+### Changed
+
+- `cap help` now shows the shortcut surface without adding mutating update flags such as `-u`.
+
+### Verified
+
+- Help surface fixture: `tests/scripts/test-cap-entry-help-surface.sh` — **64 passed / 0 failed**.
+- Shortcut fixture: `tests/scripts/test-cap-entry-shortcuts.sh` — **10 passed / 0 failed**.
+- Unknown-command fixture: `tests/scripts/test-cap-entry-unknown-command.sh` — **9 passed / 0 failed**.
+- Full smoke: `scripts/workflows/smoke-per-stage.sh` — **87 passed / 0 failed / 0 skipped**.
+
+---
+
 ## [v0.24.1] - 2026-05-08
 
 > Patch release — reduce the default `cap help` surface after the v0.24.0 onboarding checkpoint.
