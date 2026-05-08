@@ -7,18 +7,18 @@ CAP_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 show_help() {
   cat <<'EOF'
-Charlie's AI Protocols (CAP) - 常用指令
+Charlie's AI Protocols (CAP) - Start Here
 
 COMMAND                            DESCRIPTION
 ─────────────────────────────────  ──────────────────────────────────────────────
 
-[Basics]
+[Start]
   cap help                         列出常用指令
   cap help --advanced              列出維護、診斷與 legacy 指令
   cap version                      顯示版本、ref 與最新 release tag
   cap update [target]              更新到 latest / main / 指定 tag 或 branch
 
-[Skills]
+[Discover]
   cap skill list                   列出所有 Agent Skills
   cap workflow list                列出所有 workflow（靜態清單）
 
@@ -26,33 +26,13 @@ COMMAND                            DESCRIPTION
   cap project init [--project-id ID] [--force]   初始化 .cap.project.yaml 與 CAP storage
   cap project status [--format text|json|yaml]  顯示 project_id / 路徑 / ledger / 最新 run
   cap project doctor [--format text|json|yaml]  以 storage health-check 結果輸出修復建議
-  cap project constitution (--prompt "<需求>" | --from-file PATH | --promote STAMP | --latest)
-                                                   產出 / 匯入 / 將 Project Constitution snapshot 寫回 repo SSOT
 
 [Workflow]
-  cap workflow show <id>           顯示 workflow 摘要
-  cap workflow plan <id>           顯示 semantic plan、phase 與 binding 摘要
-  cap workflow bind <id> [registry]  顯示 skill binding report
   cap workflow run <id> [prompt]   前景執行（預設 CLI: claude）
   cap workflow run --dry-run <id> [prompt]  只顯示執行計畫，不真的執行
-  cap workflow inspect <run-id>    顯示單次 workflow run 詳情
 
 [Provider]
   cap provider doctor [--json]     檢查 claude / codex CLI 是否可用（read-only，不代登入）
-
-[Execution]
-  cap codex [ARGS...]              CAP project 內記錄 trace；非 CAP 目錄退回原生 Codex
-  cap claude [ARGS...]             CAP project 內記錄 trace；非 CAP 目錄退回原生 Claude
-  cap session inspect <session_id> [--json]  查 agent session ledger（read-only）
-  cap session analyze [--top N] [--json]    彙整 token / time 熱點分析（read-only）
-
-[Promote]
-  cap promote inspect <id>         檢查可 promote 的 runtime artifact
-  cap promote project-constitution <task_id>  將 Project Constitution 寫回 repo SSOT
-  cap promote workflow <workflow_id>          將 workflow artifact 寫回 repo SSOT
-
-[Replay]
-  cap replay verify <run_id>       比對舊 run 的 builtin agent-skills baseline 是否仍可重放
 
 更多維護、診斷與 legacy 指令：
   cap help --advanced
@@ -78,6 +58,10 @@ COMMAND                            DESCRIPTION
   cap skill registry               顯示 agent registry
   cap skill check-aliases          驗證 alias 映射是否正確
 
+[Project]
+  cap project constitution (--prompt "<需求>" | --from-file PATH | --promote STAMP | --latest)
+                                                   產出 / 匯入 / 將 Project Constitution snapshot 寫回 repo SSOT
+
 [Task / Compiler]
   cap task constitution "<需求>"     從一句話需求產出 Task Constitution
   cap task plan "<需求>"             (planned) task constitution + capability graph 預覽
@@ -94,6 +78,24 @@ COMMAND                            DESCRIPTION
   cap workflow run --strategy auto <id> [prompt]  自動選擇 fast / governed / strict strategy
   cap workflow run --cli codex <id> [prompt]      指定使用 codex 執行
   cap workflow run --design-package <name> <id> [prompt]  使用 ~/.cap/designs/<name> 設計稿 package
+  cap workflow show <id>           顯示 workflow 摘要
+  cap workflow plan <id>           顯示 semantic plan、phase 與 binding 摘要
+  cap workflow bind <id> [registry]  顯示 skill binding report
+  cap workflow inspect <run-id>    顯示單次 workflow run 詳情
+
+[Execution]
+  cap codex [ARGS...]              CAP project 內記錄 trace；非 CAP 目錄退回原生 Codex
+  cap claude [ARGS...]             CAP project 內記錄 trace；非 CAP 目錄退回原生 Claude
+  cap session inspect <session_id> [--json]  查 agent session ledger（read-only）
+  cap session analyze [--top N] [--json]    彙整 token / time 熱點分析（read-only）
+
+[Promote]
+  cap promote inspect <id>         檢查可 promote 的 runtime artifact
+  cap promote project-constitution <task_id>  將 Project Constitution 寫回 repo SSOT
+  cap promote workflow <workflow_id>          將 workflow artifact 寫回 repo SSOT
+
+[Replay]
+  cap replay verify <run_id>       比對舊 run 的 builtin agent-skills baseline 是否仍可重放
 
 [Supervisor Orchestration]
   cap workflow bind supervisor-orchestration       envelope schema + drift gate
