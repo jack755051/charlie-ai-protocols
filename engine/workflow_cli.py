@@ -877,6 +877,42 @@ def cmd_inspect(
 
 
 # ---------------------------------------------------------------------------
+# Subcommand: logs (Phase 1 — Run Log Follow)
+# ---------------------------------------------------------------------------
+
+def cmd_logs(run_id: str, *, cap_home: str | None = None) -> None:
+    """Resolve a run's workflow.log path and print it to stdout.
+
+    Phase 1 keeps logic minimal: this command only does path resolution.
+    The shell dispatcher in cap-workflow.sh consumes the printed path
+    and runs ``cat`` / ``tail -f`` itself, so follow semantics stay in
+    POSIX shell tooling instead of a Python event loop.
+
+    Resolution mirrors ``cmd_inspect``: explicit ``--cap-home`` beats the
+    ``CAP_HOME`` env var, which beats the default ``~/.cap``. ``_find_run_dir``
+    globs ``<cap_home>/projects/*/reports/workflows/*/<run_id>``.
+
+    Errors (繁中, follow engine-python.md guideline):
+      - run_dir not found    → exit 1, ``找不到 run_id: <id>`` on stderr
+      - workflow.log missing → exit 1, ``找不到 workflow.log: <path>`` on stderr
+    """
+    cap_home_raw = cap_home or os.environ.get("CAP_HOME") or str(Path.home() / ".cap")
+    cap_home_path = Path(cap_home_raw).expanduser()
+    run_dir = _find_run_dir(cap_home_path, run_id)
+
+    if run_dir is None:
+        print(f"找不到 run_id: {run_id}", file=sys.stderr)
+        sys.exit(1)
+
+    log_path = run_dir / "workflow.log"
+    if not log_path.is_file():
+        print(f"找不到 workflow.log: {log_path}", file=sys.stderr)
+        sys.exit(1)
+
+    print(str(log_path))
+
+
+# ---------------------------------------------------------------------------
 # Subcommand: plan
 # ---------------------------------------------------------------------------
 
@@ -1779,6 +1815,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Override the CAP home directory used to locate run_dir (default: ~/.cap).",
     )
 
+    # logs (Phase 1)
+    p = sub.add_parser("logs", help="Resolve a run's workflow.log path")
+    p.add_argument("run_id")
+    p.add_argument(
+        "--cap-home",
+        dest="cap_home",
+        default=None,
+        help="Override the CAP home directory used to locate run_dir (default: ~/.cap).",
+    )
+
     # plan
     p = sub.add_parser("plan", help="Display semantic + bound execution plan")
     p.add_argument("cap_root")
@@ -1940,6 +1986,8 @@ def main() -> None:
                 output_json=args.output_json,
                 cap_home=args.cap_home,
             )
+        case "logs":
+            cmd_logs(args.run_id, cap_home=args.cap_home)
         case "plan":
             cmd_plan(args.cap_root, args.workflow_ref)
         case "bind":

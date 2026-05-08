@@ -88,6 +88,8 @@ COMMAND                            DESCRIPTION
   cap workflow plan <id>           Show semantic plan, phases, and binding summary
   cap workflow bind <id> [registry]  Show skill binding report
   cap workflow inspect <run-id>    Show details for one workflow run
+  cap workflow logs <run-id>       Print the run's workflow.log (docker-like)
+  cap workflow logs -f <run-id>    Follow the run's workflow.log live (tail -f)
 
 [Execution]
   cap codex [ARGS...]              Record trace inside CAP projects; fall back to native Codex outside CAP dirs

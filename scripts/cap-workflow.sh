@@ -15,6 +15,7 @@ Usage:
   cap workflow ps [--all]
   cap workflow show <id>
   cap workflow inspect <run-id>
+  cap workflow logs [-f|--follow] <run-id> [--cap-home PATH]
   cap workflow plan <id>
   cap workflow bind <id> [registry]
   cap workflow constitution <request...>
@@ -269,7 +270,7 @@ validate_run_cli_choice() {
 }
 
 COMMAND="${1:-}"
-if [ -n "${COMMAND}" ] && [[ "${COMMAND}" != "list" && "${COMMAND}" != "ps" && "${COMMAND}" != "show" && "${COMMAND}" != "inspect" && "${COMMAND}" != "plan" && "${COMMAND}" != "bind" && "${COMMAND}" != "constitution" && "${COMMAND}" != "compile" && "${COMMAND}" != "run-task" && "${COMMAND}" != "run" && "${COMMAND}" != "update-run-status" ]]; then
+if [ -n "${COMMAND}" ] && [[ "${COMMAND}" != "list" && "${COMMAND}" != "ps" && "${COMMAND}" != "show" && "${COMMAND}" != "inspect" && "${COMMAND}" != "logs" && "${COMMAND}" != "plan" && "${COMMAND}" != "bind" && "${COMMAND}" != "constitution" && "${COMMAND}" != "compile" && "${COMMAND}" != "run-task" && "${COMMAND}" != "run" && "${COMMAND}" != "update-run-status" ]]; then
   # cap workflow <id> "prompt" → run <id> "prompt"
   # cap workflow <id>          → show <id>
   if [ "$#" -ge 2 ]; then
@@ -307,6 +308,60 @@ case "${1:-}" in
     # Forward all remaining args (run_id + optional --json / --cap-home);
     # argparse on the Python side does the parsing.
     "${PYTHON_BIN}" "${CLI_PY}" inspect "$(get_status_store)" "$@"
+    ;;
+  logs)
+    # Phase 1 (Run Log Follow): docker-like view of workflow.log.
+    # Bash owns IO (cat / tail -f); the Python side only resolves the
+    # log path so follow semantics stay in POSIX shell tooling.
+    shift
+    LOGS_FOLLOW=0
+    LOGS_RUN_ID=""
+    LOGS_CAP_HOME_ARGS=()
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        -f|--follow)
+          LOGS_FOLLOW=1
+          shift
+          ;;
+        --cap-home)
+          [ -n "${2:-}" ] || { echo "--cap-home requires a path" >&2; exit 1; }
+          LOGS_CAP_HOME_ARGS+=(--cap-home "$2")
+          shift 2
+          ;;
+        --cap-home=*)
+          LOGS_CAP_HOME_ARGS+=(--cap-home "${1#--cap-home=}")
+          shift
+          ;;
+        --)
+          shift
+          break
+          ;;
+        -*)
+          echo "Unknown logs option: $1" >&2
+          echo "Usage: cap workflow logs [-f|--follow] <run-id> [--cap-home PATH]" >&2
+          exit 1
+          ;;
+        *)
+          if [ -n "${LOGS_RUN_ID}" ]; then
+            echo "logs accepts a single run-id; got extra arg: $1" >&2
+            exit 1
+          fi
+          LOGS_RUN_ID="$1"
+          shift
+          ;;
+      esac
+    done
+    if [ -z "${LOGS_RUN_ID}" ]; then
+      echo "Usage: cap workflow logs [-f|--follow] <run-id> [--cap-home PATH]" >&2
+      exit 1
+    fi
+    LOGS_PATH="$("${PYTHON_BIN}" "${CLI_PY}" logs "${LOGS_CAP_HOME_ARGS[@]}" "${LOGS_RUN_ID}")" || exit $?
+    if [ "${LOGS_FOLLOW}" -eq 1 ]; then
+      # -n +1 so the user sees existing log content first, then live tail.
+      exec tail -n +1 -f "${LOGS_PATH}"
+    else
+      exec cat "${LOGS_PATH}"
+    fi
     ;;
   plan)
     [ "$#" -eq 2 ] || usage
