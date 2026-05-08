@@ -37,6 +37,9 @@ COMMAND                            DESCRIPTION
   cap workflow run --dry-run <id> [prompt]  只顯示執行計畫，不真的執行
   cap workflow inspect <run-id>    顯示單次 workflow run 詳情
 
+[Provider]
+  cap provider doctor [--json]     檢查 claude / codex CLI 是否可用（read-only，不代登入）
+
 [Execution]
   cap codex [ARGS...]              CAP project 內記錄 trace；非 CAP 目錄退回原生 Codex
   cap claude [ARGS...]             CAP project 內記錄 trace；非 CAP 目錄退回原生 Claude
@@ -199,6 +202,10 @@ case "${COMMAND}" in
   agent)
     shift
     exec bash "${SCRIPT_DIR}/cap-agent.sh" "$@"
+    ;;
+  provider)
+    shift || true
+    exec bash "${SCRIPT_DIR}/cap-provider.sh" "$@"
     ;;
   *)
     if [ "${COMMAND}" = "paths" ]; then
