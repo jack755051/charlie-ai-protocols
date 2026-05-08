@@ -202,7 +202,7 @@ assert_file_exists "happy: result.md written"            "${OUT_MD1}"
 # Schema-validate the produced JSON via step_runtime.
 schema_out1="$("${PYTHON_BIN}" "${STEP_RUNTIME}" validate-jsonschema "${OUT_JSON1}" "${SCHEMA_PATH}" 2>&1)"
 schema_rc1=$?
-if [ "${schema_rc1}" -eq 0 ] && printf '%s' "${schema_out1}" | grep -q '"ok": true'; then
+if [ "${schema_rc1}" -eq 0 ] && grep -q '"ok": true' <<<"${schema_out1}"; then
   echo "  PASS: happy: workflow-result.json validates against schema"
   pass_count=$((pass_count + 1))
 else

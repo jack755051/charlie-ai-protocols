@@ -109,7 +109,7 @@ assert_schema_ok() {
   local out
   out="$("${PYTHON_BIN}" "${STEP_RUNTIME}" validate-jsonschema "${json_path}" "${SCHEMA_PATH}" 2>&1)"
   local rc=$?
-  if [ "${rc}" -eq 0 ] && printf '%s' "${out}" | grep -q '"ok": true'; then
+  if [ "${rc}" -eq 0 ] && grep -q '"ok": true' <<<"${out}"; then
     echo "  PASS: ${desc}"
     pass_count=$((pass_count + 1))
   else

@@ -32,7 +32,7 @@ assert_contains() {
   local label="$1"
   local needle="$2"
   local haystack="$3"
-  if printf '%s' "${haystack}" | grep -Fq "${needle}"; then
+  if grep -Fq "${needle}" <<<"${haystack}"; then
     pass
   else
     fail "${label}: missing '${needle}'"
@@ -43,7 +43,7 @@ assert_not_contains() {
   local label="$1"
   local needle="$2"
   local haystack="$3"
-  if printf '%s' "${haystack}" | grep -Fq "${needle}"; then
+  if grep -Fq "${needle}" <<<"${haystack}"; then
     fail "${label}: unexpectedly found '${needle}'"
   else
     pass

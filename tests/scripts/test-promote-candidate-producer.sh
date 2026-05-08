@@ -57,7 +57,7 @@ assert_eq() {
 
 assert_contains() {
   local desc="$1" haystack="$2" needle="$3"
-  if printf '%s' "${haystack}" | grep -qF -- "${needle}"; then
+  if grep -qF -- "${needle}" <<<"${haystack}"; then
     echo "  PASS: ${desc}"
     pass_count=$((pass_count + 1))
   else
@@ -232,7 +232,7 @@ PY
 )"
 SCHEMA_OUT="$("${PYTHON_BIN}" "${STEP_RUNTIME}" validate-jsonschema "${SCHEMA_FIXTURE}" "${SCHEMA_PATH}" 2>&1)"
 SCHEMA_RC=$?
-if [ "${SCHEMA_RC}" -eq 0 ] && printf '%s' "${SCHEMA_OUT}" | grep -q '"ok": true'; then
+if [ "${SCHEMA_RC}" -eq 0 ] && grep -q '"ok": true' <<<"${SCHEMA_OUT}"; then
   echo "  PASS: case7: emitted candidates validate against the P10 #2.1 schema contract"
   pass_count=$((pass_count + 1))
 else

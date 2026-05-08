@@ -124,19 +124,19 @@ run_bind() {
   # The canonical positive signal is the literal `binding_status: ready` line
   # in the bind report. We additionally require required_unresolved=0 in the
   # summary to guard against future bind report shapes that drop binding_status.
-  if ! printf '%s' "${out}" | grep -qE "^binding_status: ready[[:space:]]*$"; then
+  if ! grep -qE "^binding_status: ready[[:space:]]*$" <<<"${out}"; then
     report_fail "${workflow_id} binding_status not ready"
-    printf '%s' "${out}" | grep -E "^binding_status:|^summary:" | head -2 | sed 's/^/    /'
+    awk '/^binding_status:|^summary:/ { print; if (++n == 2) exit }' <<<"${out}" | sed 's/^/    /'
     return 1
   fi
-  if ! printf '%s' "${out}" | grep -qE "required_unresolved=0"; then
+  if ! grep -qE "required_unresolved=0" <<<"${out}"; then
     report_fail "${workflow_id} has required_unresolved>0"
-    printf '%s' "${out}" | grep -E "^summary:" | head -1 | sed 's/^/    /'
+    awk '/^summary:/ { print; exit }' <<<"${out}" | sed 's/^/    /'
     return 1
   fi
-  if printf '%s' "${out}" | grep -qE "=> (blocked_by_constitution|required_unresolved|incompatible)"; then
+  if grep -qE "=> (blocked_by_constitution|required_unresolved|incompatible)" <<<"${out}"; then
     report_fail "${workflow_id} has at least one step with blocked status"
-    printf '%s' "${out}" | grep -E "=> (blocked_by_constitution|required_unresolved|incompatible)" | head -5 | sed 's/^/    /'
+    awk '/=> (blocked_by_constitution|required_unresolved|incompatible)/ { print; if (++n == 5) exit }' <<<"${out}" | sed 's/^/    /'
     return 1
   fi
   report_pass "${workflow_id} bind ready (via ${BIND_INVOKER})"
@@ -158,7 +158,7 @@ run_fixture() {
     printf '%s' "${out}" | tail -10 | sed 's/^/    /'
     return 1
   fi
-  if ! printf '%s' "${out}" | grep -qE "[0-9]+ passed, 0 failed"; then
+  if ! grep -qE "[0-9]+ passed, 0 failed" <<<"${out}"; then
     report_fail "${label} did not report all-pass summary"
     printf '%s' "${out}" | tail -3 | sed 's/^/    /'
     return 1

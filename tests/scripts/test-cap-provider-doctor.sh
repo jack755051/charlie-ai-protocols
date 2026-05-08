@@ -22,7 +22,7 @@ assert_contains() {
   local label="$1"
   local needle="$2"
   local haystack="$3"
-  if printf '%s' "${haystack}" | grep -Fq "${needle}"; then
+  if grep -Fq "${needle}" <<<"${haystack}"; then
     pass
   else
     fail "${label}: expected to contain '${needle}'"
@@ -95,7 +95,7 @@ fi
 # ── Case 6: doctor never tries to login (no claude/codex login invocation) ─
 echo "Case 6: doctor body contains no login keyword"
 PROVIDER_BODY="$(cat "${CAP_PROVIDER}")"
-if printf '%s' "${PROVIDER_BODY}" | grep -qE 'claude[[:space:]]+login|codex[[:space:]]+login|--login'; then
+if grep -qE 'claude[[:space:]]+login|codex[[:space:]]+login|--login' <<<"${PROVIDER_BODY}"; then
   fail "cap-provider.sh must not invoke provider login"
 else
   pass

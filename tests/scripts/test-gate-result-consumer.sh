@@ -62,7 +62,7 @@ assert_eq() {
 
 assert_contains() {
   local desc="$1" needle="$2" haystack="$3"
-  if printf '%s' "${haystack}" | grep -qF -- "${needle}"; then
+  if grep -qF -- "${needle}" <<<"${haystack}"; then
     echo "  PASS: ${desc}"; pass_count=$((pass_count + 1))
   else
     echo "  FAIL: ${desc}"
@@ -493,7 +493,7 @@ assert_eq        "rc 0 fail+retry+high"              "0"             "${rc23}"
 assert_contains  "decision=halt"                     "decision=halt" "${out23}"
 # Verify it goes through halt-on-risk path, not the retry_unsupported
 # path — the latter would leave 'overlaps P8 #8' in the reason.
-if printf '%s' "${out23}" | grep -qF -- "decision=retry_unsupported"; then
+if grep -qF -- "decision=retry_unsupported" <<<"${out23}"; then
   echo "  FAIL: high-risk envelope unexpectedly emitted retry_unsupported instead of halt-on-risk"
   fail_count=$((fail_count + 1))
 else
@@ -517,7 +517,7 @@ out24="$(run_consume "${PATH_24}")"
 rc24=$?
 assert_eq        "rc 0 fail+none+high"               "0"             "${rc24}"
 assert_contains  "decision=halt (not defer)"         "decision=halt" "${out24}"
-if printf '%s' "${out24}" | grep -qF -- "decision=defer_to_workflow_yaml"; then
+if grep -qF -- "decision=defer_to_workflow_yaml" <<<"${out24}"; then
   echo "  FAIL: high-risk envelope incorrectly deferred to workflow YAML"
   fail_count=$((fail_count + 1))
 else

@@ -59,7 +59,7 @@ assert_eq() {
 
 assert_contains() {
   local desc="$1" needle="$2" haystack="$3"
-  if printf '%s' "${haystack}" | grep -qF -- "${needle}"; then
+  if grep -qF -- "${needle}" <<<"${haystack}"; then
     report_pass "${desc}"
   else
     report_fail "${desc}" "needle=${needle} | haystack head: $(printf '%s' "${haystack}" | head -3)"

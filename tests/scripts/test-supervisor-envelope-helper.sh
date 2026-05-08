@@ -70,7 +70,7 @@ assert_eq() {
 
 assert_contains() {
   local desc="$1" needle="$2" haystack="$3"
-  if printf '%s' "${haystack}" | grep -qF -- "${needle}"; then
+  if grep -qF -- "${needle}" <<<"${haystack}"; then
     echo "  PASS: ${desc}"; pass_count=$((pass_count + 1))
   else
     echo "  FAIL: ${desc}"
@@ -452,7 +452,7 @@ out23="${result%%|*}"; rest="${result#*|}"; exit23="${rest##*|}"
 assert_eq "case 23 exit 0" "0" "${exit23}"
 assert_contains "case 23 source=default" '"source": "default"' "${out23}"
 # Make sure no stray override accidentally surfaces.
-if printf '%s' "${out23}" | grep -qE '"source":[[:space:]]*"override"'; then
+if grep -qE '"source":[[:space:]]*"override"' <<<"${out23}"; then
   echo "  FAIL: case 23 unexpected override entry"; fail_count=$((fail_count + 1))
 else
   echo "  PASS: case 23 no override entries"; pass_count=$((pass_count + 1))

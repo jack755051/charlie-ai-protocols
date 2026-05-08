@@ -52,7 +52,7 @@ assert_eq() {
 
 assert_contains() {
   local desc="$1" haystack="$2" needle="$3"
-  if printf '%s' "${haystack}" | grep -qF -- "${needle}"; then
+  if grep -qF -- "${needle}" <<<"${haystack}"; then
     echo "  PASS: ${desc}"
     pass_count=$((pass_count + 1))
   else
@@ -65,7 +65,7 @@ assert_contains() {
 
 assert_not_contains() {
   local desc="$1" haystack="$2" needle="$3"
-  if ! printf '%s' "${haystack}" | grep -qF -- "${needle}"; then
+  if ! grep -qF -- "${needle}" <<<"${haystack}"; then
     echo "  PASS: ${desc}"
     pass_count=$((pass_count + 1))
   else

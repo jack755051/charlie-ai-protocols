@@ -33,6 +33,12 @@
 | Skill registry / runtime adapter 設計 | [SKILL-RUNTIME-ARCHITECTURE.md](SKILL-RUNTIME-ARCHITECTURE.md) |
 | Design source ingestion 流程 | [DESIGN-SOURCE-RUNTIME.md](DESIGN-SOURCE-RUNTIME.md) |
 
+## 三之一、政策索引（Policies）
+
+| 主題 | 文件 |
+|---|---|
+| Shell fixture 撰寫與 `pipefail + grep -q` 陷阱 | [policies/test-fixture-authoring.md](../../policies/test-fixture-authoring.md) |
+
 ## 四、品質報告（Provider parity）
 
 歷史 fresh-run 對照報告，作為 release gate baseline 紀錄。一般開發不需讀；做 cross-provider regression 比對時才看。
