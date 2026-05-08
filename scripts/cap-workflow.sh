@@ -221,6 +221,53 @@ workflow_summary_field() {
   "${PYTHON_BIN}" "${CLI_PY}" summary-field "${status_file}" "${workflow_id}" "${field}"
 }
 
+# Layer 3 fail-fast: validate the requested provider CLI before we expand the
+# workflow / build the binding / spawn the runner. Same boundary as
+# ensure_provider_cli in cap-workflow-exec.sh — CAP does not install or login
+# providers, so an unresolvable --cli choice should halt at the entry point
+# rather than surface as a confusing "command not found" deep inside execution.
+validate_run_cli_choice() {
+  local cli="$1"
+  case "${cli}" in
+    claude|codex)
+      if command -v "${cli}" >/dev/null 2>&1; then
+        return 0
+      fi
+      echo "" >&2
+      echo "✗ provider CLI 不在 PATH 上：${cli}" >&2
+      echo "  CAP 不負責安裝或登入 provider；請先安裝後重試。" >&2
+      case "${cli}" in
+        claude)
+          echo "    Claude Code: https://docs.claude.com/claude-code" >&2
+          ;;
+        codex)
+          echo "    Codex CLI:   https://developers.openai.com/codex" >&2
+          ;;
+      esac
+      echo "  也可以執行 'cap provider doctor' 看 provider 狀態。" >&2
+      return 1
+      ;;
+    auto|"")
+      # auto resolution: at least one provider should be reachable; defer the
+      # final pick to runner / binder logic. If neither is found, halt now.
+      if command -v claude >/dev/null 2>&1 || command -v codex >/dev/null 2>&1; then
+        return 0
+      fi
+      echo "" >&2
+      echo "✗ 沒有可用的 provider CLI（claude / codex 都不在 PATH）" >&2
+      echo "  CAP 不代裝 provider；請至少安裝其中一個後再執行。" >&2
+      echo "  執行 'cap provider doctor' 可看完整狀態。" >&2
+      return 1
+      ;;
+    *)
+      echo "" >&2
+      echo "✗ 不支援的 --cli 值：${cli}" >&2
+      echo "  支援值：claude | codex | auto" >&2
+      return 1
+      ;;
+  esac
+}
+
 COMMAND="${1:-}"
 if [ -n "${COMMAND}" ] && [[ "${COMMAND}" != "list" && "${COMMAND}" != "ps" && "${COMMAND}" != "show" && "${COMMAND}" != "inspect" && "${COMMAND}" != "plan" && "${COMMAND}" != "bind" && "${COMMAND}" != "constitution" && "${COMMAND}" != "compile" && "${COMMAND}" != "run-task" && "${COMMAND}" != "run" && "${COMMAND}" != "update-run-status" ]]; then
   # cap workflow <id> "prompt" → run <id> "prompt"
@@ -394,6 +441,8 @@ case "${1:-}" in
       echo "RUN ID: ${RUN_ID}"
       exit 0
     fi
+
+    validate_run_cli_choice "${RUN_CLI}" || exit 1
 
     RUN_ID="$(create_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "executing" "foreground_start" "foreground" "${RUN_CLI}" "${USER_PROMPT}")"
     bash "${SCRIPT_DIR}/trace-log.sh" append "Workflow" "compiled_workflow:${WORKFLOW_ID} run:${RUN_ID} 啟動 (${WORKFLOW_NAME})" "成功" >/dev/null 2>&1 || true
@@ -595,6 +644,8 @@ case "${1:-}" in
       echo "Use foreground: cap workflow run ${WORKFLOW_ID} \"<prompt>\""
       exit 0
     fi
+
+    validate_run_cli_choice "${RUN_CLI}" || exit 1
 
     RUN_ID="$(create_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "executing" "foreground_start" "foreground" "${RUN_CLI}" "${USER_PROMPT}")"
     bash "${SCRIPT_DIR}/trace-log.sh" append "Workflow" "workflow:${WORKFLOW_ID} run:${RUN_ID} 啟動 (${WORKFLOW_NAME})" "成功" >/dev/null 2>&1 || true

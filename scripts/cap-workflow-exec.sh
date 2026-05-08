@@ -143,8 +143,34 @@ check_cli() {
 
 # ── CLI command builder ──
 
+# Layer 3 guard: fail loud if the requested provider CLI is missing on PATH.
+# CAP does not install or login providers (see cap-provider.sh / docs/cap
+# Provider Isolation). When a workflow step asks for an AI executor we either
+# can dispatch to the CLI as-is, or we stop with a message that points the
+# user at the upstream installer — no silent fallback to another provider.
+ensure_provider_cli() {
+  local cli="$1"
+  if command -v "${cli}" >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "" >&2
+  echo "✗ provider CLI 不在 PATH 上：${cli}" >&2
+  echo "  CAP 不負責安裝或登入 provider；請先安裝對應 CLI 後重試。" >&2
+  case "${cli}" in
+    claude)
+      echo "    Claude Code: https://docs.claude.com/claude-code" >&2
+      ;;
+    codex)
+      echo "    Codex CLI:   https://developers.openai.com/codex" >&2
+      ;;
+  esac
+  echo "  也可以執行 'cap provider doctor' 看當前 provider 狀態。" >&2
+  return 1
+}
+
 run_step_claude() {
   local prompt="$1"
+  ensure_provider_cli claude || return 1
   claude -p "${prompt}" 2>&1
 }
 
@@ -172,6 +198,7 @@ run_step_codex() {
   local exit_code
   local last_message_file
   local args=(exec)
+  ensure_provider_cli codex || return 1
   if [ "${CAP_CODEX_SKIP_GIT_REPO_CHECK:-1}" != "0" ]; then
     args+=(--skip-git-repo-check)
   fi
