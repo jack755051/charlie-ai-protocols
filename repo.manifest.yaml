@@ -9,7 +9,7 @@ summary: >
 # project_context_loader.py when writing identity ledgers
 # (~/.cap/projects/<id>/.identity.json). See policies/cap-storage-metadata.md §2.
 # Release workflow MUST bump this in lock-step with git tag and CHANGELOG.md.
-cap_version: v0.23.0-harness.1
+cap_version: v0.24.0
 owner: jack755051
 maintainers:
   - jack755051

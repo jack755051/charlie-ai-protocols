@@ -6,6 +6,36 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.24.0] - 2026-05-08
+
+> GA checkpoint — pause the harness line and promote the CAP onboarding / provider readiness improvements into a stable release.
+
+### Added
+
+- `cap provider doctor` as a read-only provider readiness inspector. It checks Claude / Codex CLI availability without attempting login, launching interactive flows, or consuming tokens.
+- Provider fail-fast guard for `cap workflow run --cli <provider>` so missing `claude` / `codex` binaries halt before workflow execution with actionable guidance.
+- Regression coverage for `cap workflow list` outside a CAP project, unknown command handling, help surface split, provider doctor, and provider fail-fast behavior.
+- `policies/test-fixture-authoring.md` documenting shell fixture guidance for `set -o pipefail`, `grep -q`, and early-close `SIGPIPE` hazards.
+
+### Changed
+
+- `cap help` now shows only the common user path; maintenance, diagnostic, planned, deprecated, and legacy entries moved to `cap help --advanced`.
+- `cap list` now uses the same unknown-command catch as other unsupported commands instead of printing migration suggestions.
+- `cap workflow list` no longer requires a stable project id; static workflow discovery works from `~` or any non-project directory.
+- `repo.manifest.yaml` `cap_version` is now `v0.24.0`.
+
+### Fixed
+
+- Codex multi-turn duplicate-output handling in `cap-workflow-exec.sh` now isolates temporary output and avoids leaking duplicated assistant blocks.
+- Linux fixture mtime checks prefer `stat -c` before macOS `stat -f`.
+- Shell fixtures and smoke harness avoid `printf | grep -q` / `grep | head` patterns that can fail under `set -o pipefail` with exit `141`.
+
+### Verified
+
+- Full smoke: `scripts/workflows/smoke-per-stage.sh` — **86 passed / 0 failed / 0 skipped**.
+
+---
+
 ## [v0.23.0-harness.3] - 2026-05-07
 
 > Pre-release — second iteration on `cap update` terminal rendering. Same-version重裝情境也能呈現完整 stat box。
