@@ -90,6 +90,8 @@
 
 ## P1：Project Storage and Identity
 
+> User-facing wording note：`cap project *` 是 repo setup / identity / health surface，不是「產生專案內容」的 planning surface。Default `cap help` 應以 `Repo Setup` 呈現：`cap project init` 將目前 repo 接入 CAP，`status` / `doctor` 只讀檢查身份與 storage。真正執行任務與產出 artifacts 的入口是 `cap workflow run <id> [prompt]`。
+
 - [x] 支援非 git folder 的 project id 策略
   - 交付物：project id resolver fallback
   - 驗收：無 git repo 時仍能產生穩定 project id
@@ -126,6 +128,8 @@
   - 進度：done in `v0.22.0` (in-progress)；新增 `engine/project_doctor.py`（**read-only by design**，per P1 #7 brief：`--fix` 接受但不自動修復，僅輸出 `fix_notes` guidance，留待後續 iteration）；`REMEDIATIONS` 字典覆蓋全部 12 種 `HealthIssueKind`（每種至少 2 條具體 remediation step，引用真實 CLI 命令如 `cap project init` / `cap-paths.sh ensure`）。Exit code 對齊 storage-health：schema-class→41、collision→53、generic error→1、warning-only→0。新增 `tests/scripts/test-project-doctor.sh` 10 cases / 31 assertions（healthy / missing storage root / missing subdir / missing ledger / malformed→41 / forward-incompat→41 / origin mismatch→53 / legacy v1→0 warning / json round-trip / --fix read-only contract）；wire 進 `smoke-per-stage.sh`：升為 27 step / **27 passed / 0 failed / 0 skipped**。`scripts/cap-entry.sh` 補 `cap project doctor` 進 `[Project]` 區塊；`policies/cap-storage-metadata.md` §6 重構為「6.1 P1 #4 落地 / 6.2 P1 #5/#6/#7 已落地 / 6.3 後續規劃」三段，明示 doctor read-only 鐵則與 `--fix` 後續 iteration 邊界。
 
 ## P2：Project Constitution Runner
+
+> Boundary note：`project-constitution` 是 workflow id，透過 `cap workflow run project-constitution ...` 執行；它在已接入 CAP 的 repo 內產生治理 snapshot / constitution artifacts。它不取代 `cap project init`，也不負責建立 repo identity / ledger。新手流程應是 `cap project init` → `cap workflow run project-constitution ...` → `cap project constitution --latest`。
 
 - [x] 拆清 Project Constitution 與 Task Constitution 語意
   - 交付物：CLI / docs / workflow naming 調整

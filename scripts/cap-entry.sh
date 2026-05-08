@@ -22,14 +22,14 @@ COMMAND                            DESCRIPTION
   cap skill list                   列出所有 Agent Skills
   cap workflow list                列出所有 workflow（靜態清單）
 
-[Project]
-  cap project init [--project-id ID] [--force]   初始化 .cap.project.yaml 與 CAP storage
-  cap project status [--format text|json|yaml]  顯示 project_id / 路徑 / ledger / 最新 run
-  cap project doctor [--format text|json|yaml]  以 storage health-check 結果輸出修復建議
+[Repo Setup]
+  cap project init [--project-id ID] [--force]   將目前 repo 接入 CAP，建立 project_id / storage / ledger
+  cap project status [--format text|json|yaml]  顯示目前 repo 的 CAP 身份與 storage 狀態
+  cap project doctor [--format text|json|yaml]  檢查 CAP project 設定與 storage 健康狀態
 
-[Workflow]
-  cap workflow run <id> [prompt]   前景執行（預設 CLI: claude）
-  cap workflow run --dry-run <id> [prompt]  只顯示執行計畫，不真的執行
+[Run Workflows]
+  cap workflow run <id> [prompt]   在已接入 CAP 的 repo 內執行 workflow（預設 CLI: claude）
+  cap workflow run --dry-run <id> [prompt]  預覽 workflow 執行計畫，不呼叫 AI
 
 [Provider]
   cap provider doctor [--json]     檢查 claude / codex CLI 是否可用（read-only，不代登入）

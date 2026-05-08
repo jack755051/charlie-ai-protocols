@@ -74,10 +74,35 @@ cap setup
 cap sync
 ```
 
+## First Repo Flow
+
+CAP is useful when a repo should keep identity, governance, workflow records, and repeatable AI runs. For a one-off prototype, calling Claude / Codex directly may be faster; for a repo you want to keep evolving, start with CAP setup and then run workflows.
+
+```bash
+# 1. Create or enter the repo you want CAP to manage
+mkdir 2248-game
+cd 2248-game
+git init
+
+# 2. Attach this repo to CAP
+cap project init
+cap project doctor
+
+# 3. Discover and preview workflows
+cap workflow list
+cap workflow run --dry-run project-constitution "這是一個可維護的 2248 puzzle game repo"
+
+# 4. Run the governance workflow when you want repo-level rules and history
+cap workflow run project-constitution "這是一個可維護的 2248 puzzle game repo"
+cap project constitution --latest
+```
+
+`cap project *` is repo setup / identity / health. `cap workflow *` executes a workflow inside a CAP-attached repo.
+
 ## Common Commands
 
 ```bash
-# 平台 / repo state
+# Repo setup / identity / health
 cap version
 cap update latest
 cap release-check --recent 10
@@ -88,7 +113,7 @@ cap project migrate-config --dry-run                # 預覽 .cap.* → .cap/<na
 cap project migrate-config                          # 預設 copy + 保留 legacy
 cap project migrate-config --remove-legacy          # 驗證新路徑後刪除舊 .cap.* 散檔
 
-# Workflow 與 task
+# Workflow execution / planning
 cap workflow list
 cap workflow show version-control
 cap workflow plan version-control
