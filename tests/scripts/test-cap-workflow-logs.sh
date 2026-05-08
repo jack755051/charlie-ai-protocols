@@ -184,6 +184,110 @@ assert_eq "5a. --cap-home wins exit 0" "0" "${rc_5}"
 assert_contains "5b. --cap-home wins routes to sandbox" "${out_5}" "sandbox-A-content"
 
 # ---------------------------------------------------------------------------
+# Phase 3 cases — --step resolution with raw.log/md/handoff.md fallback
+# ---------------------------------------------------------------------------
+
+# Case 6: --step finds <phase>-<step>.md when only .md exists
+echo "Case 6: --step resolves to .md"
+IFS='|' read -r CAP_HOME_6 RUN_DIR_6 <<<"$(stage_run_dir case6)"
+printf 'md-content-only\n' > "${RUN_DIR_6}/2-spec_step.md"
+# workflow.log already staged by stage_run_dir; add nothing else.
+
+set +e
+out_6="$(bash "${CAP_WORKFLOW_SH}" logs --cap-home "${CAP_HOME_6}" run_case6 \
+  --step spec_step 2>&1)"
+rc_6=$?
+set -e
+
+assert_eq "6a. --step .md exit 0" "0" "${rc_6}"
+assert_contains "6b. --step .md content visible" "${out_6}" "md-content-only"
+
+# Case 7: --step prefers raw.log over .md when both exist (legacy run)
+echo "Case 7: --step prefers raw.log over .md"
+IFS='|' read -r CAP_HOME_7 RUN_DIR_7 <<<"$(stage_run_dir case7)"
+printf 'md-newer-content\n' > "${RUN_DIR_7}/3-legacy_step.md"
+printf 'rawlog-priority-content\n' > "${RUN_DIR_7}/3-legacy_step.raw.log"
+
+set +e
+out_7="$(bash "${CAP_WORKFLOW_SH}" logs --cap-home "${CAP_HOME_7}" run_case7 \
+  --step legacy_step 2>&1)"
+rc_7=$?
+set -e
+
+assert_eq "7a. --step raw.log exit 0" "0" "${rc_7}"
+assert_contains "7b. raw.log content wins" "${out_7}" "rawlog-priority-content"
+# Negative: md content not present (raw.log winner)
+if grep -qF "md-newer-content" <<<"${out_7}"; then
+  echo "  FAIL: 7c. raw.log should mask md (md content unexpectedly visible)"
+  fail_count=$((fail_count + 1))
+else
+  echo "  PASS: 7c. md content correctly masked by raw.log"
+  pass_count=$((pass_count + 1))
+fi
+
+# Case 8: --step falls back to handoff.md when neither raw.log nor md exists
+echo "Case 8: --step falls back to handoff.md"
+IFS='|' read -r CAP_HOME_8 RUN_DIR_8 <<<"$(stage_run_dir case8)"
+printf 'handoff-fallback-content\n' > "${RUN_DIR_8}/4-fallback_step.handoff.md"
+
+set +e
+out_8="$(bash "${CAP_WORKFLOW_SH}" logs --cap-home "${CAP_HOME_8}" run_case8 \
+  --step fallback_step 2>&1)"
+rc_8=$?
+set -e
+
+assert_eq "8a. --step handoff fallback exit 0" "0" "${rc_8}"
+assert_contains "8b. handoff content visible as last resort" "${out_8}" "handoff-fallback-content"
+
+# Case 9: --step missing all three suffixes → exit 1 + Chinese stderr
+echo "Case 9: --step missing all three"
+IFS='|' read -r CAP_HOME_9 RUN_DIR_9 <<<"$(stage_run_dir case9)"
+# run_dir mkdir'd; no step files staged so the resolver exhausts the chain.
+
+set +e
+out_9="$(bash "${CAP_WORKFLOW_SH}" logs --cap-home "${CAP_HOME_9}" run_case9 \
+  --step missing_step 2>&1)"
+rc_9=$?
+set -e
+
+assert_eq "9a. --step missing exits 1" "1" "${rc_9}"
+assert_contains "9b. error names step-id (Chinese stderr)" "${out_9}" "找不到 step missing_step"
+assert_contains "9c. error mentions fallback chain" "${out_9}" "raw.log / md / handoff.md"
+
+# Case 10: -f --step follows the resolved step file
+echo "Case 10: -f --step follows step .md"
+IFS='|' read -r CAP_HOME_10 RUN_DIR_10 <<<"$(stage_run_dir case10)"
+STEP_LOG_10="${RUN_DIR_10}/5-follow_step.md"
+printf 'follow-step-initial\n' > "${STEP_LOG_10}"
+
+FOLLOW_OUT_10="${SANDBOX}/follow-step.out"
+(
+  bash "${CAP_WORKFLOW_SH}" logs -f --cap-home "${CAP_HOME_10}" run_case10 \
+    --step follow_step > "${FOLLOW_OUT_10}" 2>&1 &
+  FOLLOW_PID=$!
+  sleep 0.3
+  printf 'follow-step-appended\n' >> "${STEP_LOG_10}"
+  sleep 0.5
+  kill "${FOLLOW_PID}" 2>/dev/null || true
+  wait "${FOLLOW_PID}" 2>/dev/null || true
+) &
+FOLLOW_DRIVER_10=$!
+
+(
+  sleep 3
+  kill "${FOLLOW_DRIVER_10}" 2>/dev/null || true
+) &
+TIMEOUT_PID_10=$!
+
+wait "${FOLLOW_DRIVER_10}" 2>/dev/null || true
+kill "${TIMEOUT_PID_10}" 2>/dev/null || true
+wait "${TIMEOUT_PID_10}" 2>/dev/null || true
+
+follow_out_10_content="$(cat "${FOLLOW_OUT_10}" 2>/dev/null || true)"
+assert_contains "10a. follow shows initial step content" "${follow_out_10_content}" "follow-step-initial"
+assert_contains "10b. follow shows appended step content" "${follow_out_10_content}" "follow-step-appended"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

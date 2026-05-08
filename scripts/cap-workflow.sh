@@ -15,7 +15,7 @@ Usage:
   cap workflow ps [--all]
   cap workflow show <id>
   cap workflow inspect <run-id>
-  cap workflow logs [-f|--follow] <run-id> [--cap-home PATH]
+  cap workflow logs [-f|--follow] <run-id> [--step STEP_ID] [--cap-home PATH]
   cap workflow watch [--once] [--json] [--interval SEC] [--tail N] <run-id> [--cap-home PATH]
   cap workflow plan <id>
   cap workflow bind <id> [registry]
@@ -317,20 +317,20 @@ case "${1:-}" in
     shift
     LOGS_FOLLOW=0
     LOGS_RUN_ID=""
-    LOGS_CAP_HOME_ARGS=()
+    LOGS_FORWARD=()
     while [ "$#" -gt 0 ]; do
       case "$1" in
         -f|--follow)
           LOGS_FOLLOW=1
           shift
           ;;
-        --cap-home)
-          [ -n "${2:-}" ] || { echo "--cap-home requires a path" >&2; exit 1; }
-          LOGS_CAP_HOME_ARGS+=(--cap-home "$2")
+        --cap-home|--step)
+          [ -n "${2:-}" ] || { echo "$1 requires a value" >&2; exit 1; }
+          LOGS_FORWARD+=("$1" "$2")
           shift 2
           ;;
-        --cap-home=*)
-          LOGS_CAP_HOME_ARGS+=(--cap-home "${1#--cap-home=}")
+        --cap-home=*|--step=*)
+          LOGS_FORWARD+=("$1")
           shift
           ;;
         --)
@@ -339,7 +339,7 @@ case "${1:-}" in
           ;;
         -*)
           echo "Unknown logs option: $1" >&2
-          echo "Usage: cap workflow logs [-f|--follow] <run-id> [--cap-home PATH]" >&2
+          echo "Usage: cap workflow logs [-f|--follow] <run-id> [--step STEP_ID] [--cap-home PATH]" >&2
           exit 1
           ;;
         *)
@@ -353,10 +353,10 @@ case "${1:-}" in
       esac
     done
     if [ -z "${LOGS_RUN_ID}" ]; then
-      echo "Usage: cap workflow logs [-f|--follow] <run-id> [--cap-home PATH]" >&2
+      echo "Usage: cap workflow logs [-f|--follow] <run-id> [--step STEP_ID] [--cap-home PATH]" >&2
       exit 1
     fi
-    LOGS_PATH="$("${PYTHON_BIN}" "${CLI_PY}" logs "${LOGS_CAP_HOME_ARGS[@]}" "${LOGS_RUN_ID}")" || exit $?
+    LOGS_PATH="$("${PYTHON_BIN}" "${CLI_PY}" logs "${LOGS_FORWARD[@]}" "${LOGS_RUN_ID}")" || exit $?
     if [ "${LOGS_FOLLOW}" -eq 1 ]; then
       # -n +1 so the user sees existing log content first, then live tail.
       exec tail -n +1 -f "${LOGS_PATH}"

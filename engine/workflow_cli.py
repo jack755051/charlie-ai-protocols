@@ -878,13 +878,56 @@ def cmd_inspect(
 
 
 # ---------------------------------------------------------------------------
-# Subcommand: logs (Phase 1 — Run Log Follow)
+# Subcommand: logs (Phase 1 — Run Log Follow; Phase 3 — Provider Step Logs)
 # ---------------------------------------------------------------------------
 
-def cmd_logs(run_id: str, *, cap_home: str | None = None) -> None:
-    """Resolve a run's workflow.log path and print it to stdout.
+# Phase 3 step-output fallback chain (priority order).
+# Rationale (see RUN-OBSERVABILITY-MEMO.md and the Phase 3 inventory):
+#   1. raw.log — legacy runs only (April 24 era); when present, naming
+#      implies "rawest provider stdout", so honour it.
+#   2. md      — current SSOT for step output; cap-workflow-exec.sh
+#      materializes every step's captured stdout to <phase>-<step>.md.
+#   3. handoff.md — Type D summary; only useful when the step never
+#      reached materialize_step_output (rare failure mode), but better
+#      than reporting "not found" for the operator.
+_STEP_LOG_FALLBACK_SUFFIXES: tuple[str, ...] = ("raw.log", "md", "handoff.md")
 
-    Phase 1 keeps logic minimal: this command only does path resolution.
+
+def _find_step_log_path(run_dir: Path, step_id: str) -> Path | None:
+    """Resolve a step's output file inside ``run_dir``.
+
+    Files are named ``<phase_num>-<step_id>.<suffix>`` (e.g.,
+    ``2-normalize_outline.md``); operators don't know phase numbers, so
+    the resolver globs across phases. When multiple matches exist
+    (rare: same step_id reused across phases), alphabetic first wins —
+    same determinism rule as ``_find_run_dir``.
+
+    Returns the first matching path across the fallback chain, or
+    ``None`` when the step has no recognisable output.
+    """
+    if not run_dir.is_dir():
+        return None
+    for suffix in _STEP_LOG_FALLBACK_SUFFIXES:
+        matches = sorted(run_dir.glob(f"*-{step_id}.{suffix}"))
+        for path in matches:
+            if path.is_file():
+                return path
+    return None
+
+
+def cmd_logs(
+    run_id: str,
+    *,
+    cap_home: str | None = None,
+    step_id: str | None = None,
+) -> None:
+    """Resolve a run's log file and print its absolute path to stdout.
+
+    Two modes:
+      - default (``step_id is None``)  → workflow.log (Phase 1).
+      - ``--step <step-id>`` (Phase 3) → step-scoped log via the
+        raw.log → md → handoff.md fallback chain.
+
     The shell dispatcher in cap-workflow.sh consumes the printed path
     and runs ``cat`` / ``tail -f`` itself, so follow semantics stay in
     POSIX shell tooling instead of a Python event loop.
@@ -893,9 +936,10 @@ def cmd_logs(run_id: str, *, cap_home: str | None = None) -> None:
     ``CAP_HOME`` env var, which beats the default ``~/.cap``. ``_find_run_dir``
     globs ``<cap_home>/projects/*/reports/workflows/*/<run_id>``.
 
-    Errors (繁中, follow engine-python.md guideline):
-      - run_dir not found    → exit 1, ``找不到 run_id: <id>`` on stderr
-      - workflow.log missing → exit 1, ``找不到 workflow.log: <path>`` on stderr
+    Errors (繁中, engine-python.md guideline):
+      - run_dir not found        → exit 1, ``找不到 run_id: <id>``.
+      - workflow.log missing     → exit 1, ``找不到 workflow.log: <path>``.
+      - --step but no match      → exit 1, ``找不到 step <step-id> 的輸出檔...``.
     """
     cap_home_raw = cap_home or os.environ.get("CAP_HOME") or str(Path.home() / ".cap")
     cap_home_path = Path(cap_home_raw).expanduser()
@@ -904,6 +948,18 @@ def cmd_logs(run_id: str, *, cap_home: str | None = None) -> None:
     if run_dir is None:
         print(f"找不到 run_id: {run_id}", file=sys.stderr)
         sys.exit(1)
+
+    if step_id is not None:
+        step_path = _find_step_log_path(run_dir, step_id)
+        if step_path is None:
+            print(
+                f"找不到 step {step_id} 的輸出檔（嘗試過 raw.log / md / handoff.md）: "
+                f"{run_dir}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        print(str(step_path))
+        return
 
     log_path = run_dir / "workflow.log"
     if not log_path.is_file():
@@ -1993,14 +2049,20 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Override the CAP home directory used to locate run_dir (default: ~/.cap).",
     )
 
-    # logs (Phase 1)
-    p = sub.add_parser("logs", help="Resolve a run's workflow.log path")
+    # logs (Phase 1 + Phase 3)
+    p = sub.add_parser("logs", help="Resolve a run or step log path")
     p.add_argument("run_id")
     p.add_argument(
         "--cap-home",
         dest="cap_home",
         default=None,
         help="Override the CAP home directory used to locate run_dir (default: ~/.cap).",
+    )
+    p.add_argument(
+        "--step",
+        dest="step_id",
+        default=None,
+        help="Resolve a step's output (raw.log -> md -> handoff.md) instead of workflow.log.",
     )
 
     # watch (Phase 2)
@@ -2201,7 +2263,7 @@ def main() -> None:
                 cap_home=args.cap_home,
             )
         case "logs":
-            cmd_logs(args.run_id, cap_home=args.cap_home)
+            cmd_logs(args.run_id, cap_home=args.cap_home, step_id=args.step_id)
         case "watch":
             cmd_watch(
                 args.run_id,
