@@ -124,7 +124,7 @@ cat > "${SANDBOX_HOME2}/.claude/CLAUDE.md" <<'EOF'
 EOF
 
 out_uninstall="$(HOME="${SANDBOX_HOME2}" bash "${MAPPER_SH}" --uninstall 2>&1)"
-assert_contains_str "5a. uninstall warns about backup"        "備份"                     "${out_uninstall}"
+assert_contains_str "5a. uninstall warns about backup"        "back it up"               "${out_uninstall}"
 assert_contains_str "5b. uninstall mentions CLAUDE.md path"   "~/.claude/CLAUDE.md"      "${out_uninstall}"
 assert_contains_str "5c. uninstall mentions cp backup hint"   "CLAUDE.md.backup"         "${out_uninstall}"
 assert_contains_str "5d. uninstall final note v0.22.x"        "v0.22.x"                  "${out_uninstall}"

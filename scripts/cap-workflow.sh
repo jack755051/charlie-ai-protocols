@@ -21,9 +21,9 @@ Usage:
   cap workflow compile <request...> [--registry path]
   cap workflow run-task [--dry-run] [--cli codex|claude] [--registry path] <request...>
   cap workflow run [--dry-run] [--cli codex|claude] [--strategy fast|governed|strict|auto] <id> [prompt...]
-  cap workflow <id> "<prompt>"            (run 的簡寫)
+  cap workflow <id> "<prompt>"            (shorthand for run)
 
-Default CLI: claude (可用 --cli codex 覆寫，或設定 CAP_DEFAULT_AGENT_CLI 環境變數)
+Default CLI: claude (override with --cli codex, or set the CAP_DEFAULT_AGENT_CLI environment variable)
 Legacy --mode remains as an alias for --strategy.
 EOF
   exit 1
@@ -234,8 +234,8 @@ validate_run_cli_choice() {
         return 0
       fi
       echo "" >&2
-      echo "✗ provider CLI 不在 PATH 上：${cli}" >&2
-      echo "  CAP 不負責安裝或登入 provider；請先安裝後重試。" >&2
+      echo "✗ provider CLI not on PATH: ${cli}" >&2
+      echo "  CAP does not install or authenticate providers; please install it first and retry." >&2
       case "${cli}" in
         claude)
           echo "    Claude Code: https://docs.claude.com/claude-code" >&2
@@ -244,7 +244,7 @@ validate_run_cli_choice() {
           echo "    Codex CLI:   https://developers.openai.com/codex" >&2
           ;;
       esac
-      echo "  也可以執行 'cap provider doctor' 看 provider 狀態。" >&2
+      echo "  You can also run 'cap provider doctor' to inspect provider status." >&2
       return 1
       ;;
     auto|"")
@@ -254,15 +254,15 @@ validate_run_cli_choice() {
         return 0
       fi
       echo "" >&2
-      echo "✗ 沒有可用的 provider CLI（claude / codex 都不在 PATH）" >&2
-      echo "  CAP 不代裝 provider；請至少安裝其中一個後再執行。" >&2
-      echo "  執行 'cap provider doctor' 可看完整狀態。" >&2
+      echo "✗ No provider CLI available (neither claude nor codex is on PATH)" >&2
+      echo "  CAP does not install providers; please install at least one before running." >&2
+      echo "  Run 'cap provider doctor' to see full status." >&2
       return 1
       ;;
     *)
       echo "" >&2
-      echo "✗ 不支援的 --cli 值：${cli}" >&2
-      echo "  支援值：claude | codex | auto" >&2
+      echo "✗ Unsupported --cli value: ${cli}" >&2
+      echo "  Supported values: claude | codex | auto" >&2
       return 1
       ;;
   esac
@@ -296,7 +296,7 @@ case "${1:-}" in
   show)
     [ "$#" -eq 2 ] || usage
     WORKFLOW_REF="$(resolve_workflow_ref "$2")" || {
-      echo "找不到 workflow：$2" >&2
+      echo "workflow not found: $2" >&2
       exit 1
     }
     "${PYTHON_BIN}" "${CLI_PY}" show "${CAP_ROOT}" "${WORKFLOW_REF}" "$(get_status_store)"
@@ -311,7 +311,7 @@ case "${1:-}" in
   plan)
     [ "$#" -eq 2 ] || usage
     WORKFLOW_REF="$(resolve_workflow_ref "$2")" || {
-      echo "找不到 workflow：$2" >&2
+      echo "workflow not found: $2" >&2
       exit 1
     }
     "${PYTHON_BIN}" "${CLI_PY}" plan "${CAP_ROOT}" "${WORKFLOW_REF}"
@@ -319,7 +319,7 @@ case "${1:-}" in
   bind)
     [ "$#" -ge 2 ] && [ "$#" -le 3 ] || usage
     WORKFLOW_REF="$(resolve_workflow_ref "$2")" || {
-      echo "找不到 workflow：$2" >&2
+      echo "workflow not found: $2" >&2
       exit 1
     }
     REGISTRY_REF="${3:-}"
@@ -492,7 +492,7 @@ case "${1:-}" in
     case "${EXECUTION_STRATEGY}" in
       fast|quick|governed|strict|company|auto) ;;
       *)
-        echo "不支援的 --strategy：${EXECUTION_STRATEGY}。可用值：fast | governed | strict | auto" >&2
+        echo "Unsupported --strategy: ${EXECUTION_STRATEGY}. Accepted values: fast | governed | strict | auto" >&2
         exit 1
         ;;
     esac
@@ -507,7 +507,7 @@ case "${1:-}" in
     fi
 
     WORKFLOW_REF="$(resolve_workflow_ref "${WORKFLOW_ARG}")" || {
-      echo "找不到 workflow：${WORKFLOW_ARG}" >&2
+      echo "workflow not found: ${WORKFLOW_ARG}" >&2
       exit 1
     }
     shift
@@ -535,9 +535,9 @@ case "${1:-}" in
       DESIGN_OUT="$(printf '%s' "${USER_PROMPT}" | "${PYTHON_BIN}" "${CAP_ROOT}/engine/design_prompt.py" "${DESIGN_AUGMENT_ARGS[@]}")" || DESIGN_RC=$?
       case "${DESIGN_RC}" in
         0|10) USER_PROMPT="${DESIGN_OUT}" ;;
-        20) echo "[cap] 設計來源詢問已中止，未執行 workflow。" >&2; exit 20 ;;
-        30) echo "[cap] 設計來源旗標組合錯誤，請參考 cap workflow run 用法說明。" >&2; exit 30 ;;
-        *) echo "[cap] 設計來源處理意外失敗 (rc=${DESIGN_RC})，已沿用原始 prompt。" >&2 ;;
+        20) echo "[cap] design-source prompt aborted; workflow was not executed." >&2; exit 20 ;;
+        30) echo "[cap] invalid design-source flag combination; see 'cap workflow run' usage for details." >&2; exit 30 ;;
+        *) echo "[cap] design-source handling failed unexpectedly (rc=${DESIGN_RC}); keeping the original prompt." >&2 ;;
       esac
     fi
 
@@ -558,7 +558,7 @@ case "${1:-}" in
 
     if [ -z "${USER_PROMPT}" ]; then
       if [ -t 0 ]; then
-        printf '請輸入 workflow 任務說明（直接 Enter 僅顯示 plan）: ' >&2
+        printf 'Enter workflow task description (press Enter to show plan only): ' >&2
         read -r USER_PROMPT || true
       fi
     fi
@@ -618,7 +618,7 @@ case "${1:-}" in
       fi
       "${PYTHON_BIN}" "${CLI_PY}" print-binding-blocked "${BINDING_JSON}" "${BINDING_SNAPSHOT_JSON}"
       echo ""
-      echo "Workflow 已停止，請先建立 Project Constitution，或補齊 skill registry / 調整 binding policy。"
+      echo "Workflow halted. Please establish a Project Constitution first, or fix the skill registry / adjust the binding policy."
       exit 2
     fi
 
@@ -633,7 +633,7 @@ case "${1:-}" in
       fi
       "${PYTHON_BIN}" "${CLI_PY}" print-binding-degraded "${BINDING_JSON}" "${BINDING_SNAPSHOT_JSON}"
       echo ""
-      echo "將以 degraded 模式繼續執行。"
+      echo "Continuing in degraded mode."
     fi
 
     if [ "${DETACH}" -eq 1 ]; then

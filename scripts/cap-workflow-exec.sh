@@ -119,21 +119,21 @@ check_cli() {
     return 0
   fi
   echo "" >&2
-  echo "找不到 ${cli} CLI。workflow 前景執行需要至少一套 AI CLI 工具。" >&2
+  echo "${cli} CLI not found. Foreground workflow execution requires at least one AI CLI." >&2
   echo "" >&2
   case "${cli}" in
     claude)
-      echo "  安裝 Claude Code:" >&2
+      echo "  Install Claude Code:" >&2
       echo "    npm install -g @anthropic-ai/claude-code" >&2
       echo "" >&2
-      echo "  或改用 Codex:" >&2
+      echo "  Or use Codex instead:" >&2
       echo "    cap workflow run --cli codex <workflow> \"<prompt>\"" >&2
       ;;
     codex)
-      echo "  安裝 Codex:" >&2
+      echo "  Install Codex:" >&2
       echo "    npm install -g @openai/codex" >&2
       echo "" >&2
-      echo "  或改用 Claude:" >&2
+      echo "  Or use Claude instead:" >&2
       echo "    cap workflow run --cli claude <workflow> \"<prompt>\"" >&2
       ;;
   esac
@@ -154,8 +154,8 @@ ensure_provider_cli() {
     return 0
   fi
   echo "" >&2
-  echo "✗ provider CLI 不在 PATH 上：${cli}" >&2
-  echo "  CAP 不負責安裝或登入 provider；請先安裝對應 CLI 後重試。" >&2
+  echo "✗ provider CLI not on PATH: ${cli}" >&2
+  echo "  CAP does not install or authenticate providers; please install the matching CLI and retry." >&2
   case "${cli}" in
     claude)
       echo "    Claude Code: https://docs.claude.com/claude-code" >&2
@@ -164,7 +164,7 @@ ensure_provider_cli() {
       echo "    Codex CLI:   https://developers.openai.com/codex" >&2
       ;;
   esac
-  echo "  也可以執行 'cap provider doctor' 看當前 provider 狀態。" >&2
+  echo "  You can also run 'cap provider doctor' to inspect current provider status." >&2
   return 1
 }
 
@@ -232,7 +232,7 @@ run_step() {
     claude) run_step_claude "${prompt}" ;;
     codex)  run_step_codex "${prompt}" ;;
     *)
-      echo "不支援的 CLI：${cli}" >&2
+      echo "Unsupported CLI: ${cli}" >&2
       return 1
       ;;
   esac
@@ -244,18 +244,18 @@ resolve_shell_script_path() {
   case "${script_ref}" in
     scripts/workflows/*.sh) ;;
     *)
-      echo "shell step script 必須位於 scripts/workflows/*.sh：${script_ref}" >&2
+      echo "shell step script must live under scripts/workflows/*.sh: ${script_ref}" >&2
       return 1
       ;;
   esac
 
   local script_path="${CAP_ROOT}/${script_ref}"
   if [ ! -f "${script_path}" ]; then
-    echo "找不到 shell step script：${script_ref}" >&2
+    echo "shell step script not found: ${script_ref}" >&2
     return 1
   fi
   if [ ! -x "${script_path}" ]; then
-    echo "shell step script 不可執行：${script_ref}" >&2
+    echo "shell step script is not executable: ${script_ref}" >&2
     return 1
   fi
 
@@ -512,7 +512,7 @@ ensure_dir_or_fail() {
     return 0
   fi
 
-  printf "${RED}✗ 無法建立 %s：%s${RESET}\n" "${label}" "${dir}" >&2
+  printf "${RED}✗ Failed to create %s: %s${RESET}\n" "${label}" "${dir}" >&2
   return 1
 }
 
@@ -527,7 +527,7 @@ write_file_or_fail() {
     return 0
   fi
 
-  printf "${RED}✗ 無法寫入檔案：%s${RESET}\n" "${path}" >&2
+  printf "${RED}✗ Failed to write file: %s${RESET}\n" "${path}" >&2
   return 1
 }
 
@@ -1248,7 +1248,7 @@ while [ "${step_idx}" -lt "${#STEP_ARRAY[@]}" ]; do
 
   # Guard against malformed preflight state leaking into execution.
   if [ "${resolution_status}" = "required_unresolved" ] || [ "${resolution_status}" = "incompatible" ]; then
-    echo "  ${RED}│ step ${step_id} 無法執行：binding 狀態為 ${resolution_status}${RESET}"
+    echo "  ${RED}│ step ${step_id} cannot run: binding status is ${resolution_status}${RESET}"
     FAILED=$((FAILED + 1))
     register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "unresolved_binding" "" "" ""
     record_blocked_step "${WORKFLOW_LOG}" "${RUN_SUMMARY}" "${phase_num}" "${step_id}" "${capability}" "unresolved_binding" "resolution_status:${resolution_status}"
@@ -1265,7 +1265,7 @@ while [ "${step_idx}" -lt "${#STEP_ARRAY[@]}" ]; do
 
   effective_executor="${executor:-ai}"
   if [ "${effective_executor}" != "ai" ] && [ "${effective_executor}" != "shell" ]; then
-    echo "  ${RED}│ step ${step_id} executor 不支援：${effective_executor}${RESET}"
+    echo "  ${RED}│ step ${step_id} unsupported executor: ${effective_executor}${RESET}"
     FAILED=$((FAILED + 1))
     register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "unsupported_executor" "" "" ""
     record_blocked_step "${WORKFLOW_LOG}" "${RUN_SUMMARY}" "${phase_num}" "${step_id}" "${capability}" "unsupported_executor" "executor:${effective_executor}"
@@ -1273,7 +1273,7 @@ while [ "${step_idx}" -lt "${#STEP_ARRAY[@]}" ]; do
   fi
 
   if { [ "${effective_executor}" = "ai" ] || [ "${fallback_executor}" = "ai" ]; } && { [ -z "${agent_alias}" ] || [ -z "${prompt_file}" ]; }; then
-    echo "  ${RED}│ step ${step_id} 缺少 agent_alias 或 prompt_file，無法執行${RESET}"
+    echo "  ${RED}│ step ${step_id} missing agent_alias or prompt_file; cannot run${RESET}"
     FAILED=$((FAILED + 1))
     register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "unresolved_binding" "" "" ""
     record_blocked_step "${WORKFLOW_LOG}" "${RUN_SUMMARY}" "${phase_num}" "${step_id}" "${capability}" "unresolved_binding" "missing:agent_alias_or_prompt_file"
@@ -1553,7 +1553,7 @@ Release / governed-mode requirements:
 3. CHANGELOG / README 的 release note 必須描述實際變更，不得只寫版本號或泛用 release 句。"
       fi
 
-      printf "  ${YELLOW}│ shell exit %s (%s)，切換 AI fallback${RESET}\n" "${exit_code}" "${SHELL_CONDITION}"
+      printf "  ${YELLOW}│ shell exit %s (%s); falling back to AI${RESET}\n" "${exit_code}" "${SHELL_CONDITION}"
       START_FALLBACK="$(date '+%s')"
       set +e
       run_step "${effective_cli}" "${FALLBACK_PROMPT}" > "${FALLBACK_TMP}" 2>&1
@@ -1581,7 +1581,7 @@ Release / governed-mode requirements:
     step_status "fail" "${step_id}" "${DURATION}"
     FAILED=$((FAILED + 1))
     ERROR_TYPE="write_permission"
-    ERROR_HINT="  executor 無法寫入強制輸出檔：${STEP_OUTPUT_PATH}。請檢查目錄是否存在、owner/group、以及目前使用者是否有寫入權限。"
+    ERROR_HINT="  executor failed to write the required output file: ${STEP_OUTPUT_PATH}. Check that the directory exists and the current user has write permission (owner/group)."
     append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} output:${STEP_OUTPUT_PATH} error:${ERROR_TYPE}" "失敗"
     bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} output:${STEP_OUTPUT_PATH}" "失敗" >/dev/null 2>&1 || true
     printf "%s\n" "${ERROR_HINT}"
@@ -1602,7 +1602,7 @@ Release / governed-mode requirements:
     step_status "fail" "${step_id}" "${DURATION}"
     FAILED=$((FAILED + 1))
     ERROR_TYPE="artifact_reported_failure"
-    ERROR_HINT="  step stdout/artifact 回報 blocked 或 failed 結果，executor 已判定為 hard_fail，避免只產文件卻被標記成功。"
+    ERROR_HINT="  step stdout/artifact reported a blocked or failed result; executor classified this as hard_fail to avoid marking a doc-only run as success."
     bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} capability:${capability} cli:${effective_cli}" "失敗" >/dev/null 2>&1 || true
     STEP_FAILURE_DETAIL="$(extract_step_failure_detail "${STEP_OUTPUT_PATH}")"
     LOG_DETAIL_SUFFIX=""
@@ -1618,11 +1618,11 @@ Release / governed-mode requirements:
     case "${STOP_REASON}" in
       TIMEOUT)
         ERROR_TYPE="timeout"
-        ERROR_HINT="  step 超過硬性執行上限 ${effective_timeout}s，executor 已自動中止。可在 workflow step 設定 timeout_seconds，或用 CAP_WORKFLOW_STEP_TIMEOUT_SECONDS 覆寫預設值。"
+        ERROR_HINT="  step exceeded the hard execution limit of ${effective_timeout}s; executor aborted it automatically. Adjust timeout_seconds in the workflow step, or override the default with CAP_WORKFLOW_STEP_TIMEOUT_SECONDS."
         ;;
       STALL)
         ERROR_TYPE="stall"
-        ERROR_HINT="  step 連續 ${effective_stall}s 沒有新增輸出，且 stall_action=kill，executor 已自動中止。可在 workflow step 設定 stall_seconds/stall_action，或用 CAP_WORKFLOW_STEP_STALL_SECONDS、CAP_WORKFLOW_STALL_ACTION 覆寫預設值。"
+        ERROR_HINT="  step produced no new output for ${effective_stall}s and stall_action=kill; executor aborted it automatically. Adjust stall_seconds/stall_action in the workflow step, or override the defaults with CAP_WORKFLOW_STEP_STALL_SECONDS / CAP_WORKFLOW_STALL_ACTION."
         ;;
     esac
     bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} capability:${capability} cli:${effective_cli}" "失敗" >/dev/null 2>&1 || true
@@ -1648,7 +1648,7 @@ Release / governed-mode requirements:
       step_status "fail" "${step_id}" "${DURATION}"
       FAILED=$((FAILED + 1))
       ERROR_TYPE="output_validation_failed"
-      ERROR_HINT="  step exit 0，但沒有產出可用內容；executor 已判定為 hard_fail，避免下游繼續消耗 token。"
+      ERROR_HINT="  step exit 0 but produced no usable output; executor classified this as hard_fail to stop downstream steps from burning tokens."
       bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} capability:${capability} cli:${effective_cli}" "失敗" >/dev/null 2>&1 || true
       append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s error:${ERROR_TYPE}" "失敗"
       printf "%s\n" "${ERROR_HINT}"
@@ -1677,7 +1677,7 @@ Release / governed-mode requirements:
           step_status "fail" "${step_id}" "${DURATION}"
           FAILED=$((FAILED + 1))
           ERROR_TYPE="output_validation_failed"
-          ERROR_HINT="  step exit 0 但 capability validator 偵測到 required output 結構不符（CAP_ENFORCE_REQUIRED_OUTPUTS=1）；executor 已判定為 hard_fail。"
+          ERROR_HINT="  step exit 0 but the capability validator detected a malformed required output (CAP_ENFORCE_REQUIRED_OUTPUTS=1); executor classified this as hard_fail."
           bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} capability:${capability} cli:${effective_cli} validator:hard_fail" "失敗" >/dev/null 2>&1 || true
           append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s error:${ERROR_TYPE} validator:${VALIDATOR_OUT}" "失敗"
           printf "%s\n" "${ERROR_HINT}"
@@ -1710,40 +1710,40 @@ Release / governed-mode requirements:
       ERROR_TYPE="$(shell_exit_condition "${exit_code}")"
       case "${exit_code}" in
         20|21|40)
-          ERROR_HINT="  shell step 回報 ${ERROR_TYPE}，但 workflow 未允許此條件走 AI fallback，或 fallback 執行後仍失敗。"
+          ERROR_HINT="  shell step reported ${ERROR_TYPE}, but the workflow does not allow AI fallback for this condition, or the fallback also failed."
           ;;
         30)
-          ERROR_HINT="  shell step 因 policy_blocked 停止。只有 workflow 明確允許 policy_blocked fallback 時才會交給 AI。"
+          ERROR_HINT="  shell step stopped with policy_blocked. AI fallback only kicks in when the workflow explicitly allows it."
           ;;
         50)
-          ERROR_HINT="  shell step 偵測到 sensitive_file_risk，executor 已強制 halt，不會交給 AI fallback。"
+          ERROR_HINT="  shell step detected sensitive_file_risk; executor forced a halt and will not fall back to AI."
           ;;
       esac
     # Auth / login errors
     elif echo "${output_lower}" | grep -qE 'not logged in|not authenticated|unauthorized|authentication required|login required|sign in|no api key|invalid.*api.?key|ANTHROPIC_API_KEY|OPENAI_API_KEY'; then
       ERROR_TYPE="auth"
       case "${effective_cli}" in
-        claude) ERROR_HINT="  請先登入：執行 'claude' 啟動互動 session 完成認證。" ;;
-        codex)  ERROR_HINT="  請先設定 API Key：export OPENAI_API_KEY=<your-key>" ;;
+        claude) ERROR_HINT="  Please log in first: run 'claude' to start an interactive session and complete authentication." ;;
+        codex)  ERROR_HINT="  Please configure an API key first: export OPENAI_API_KEY=<your-key>" ;;
       esac
     # Rate limit / quota
     elif echo "${output_lower}" | grep -qE 'rate.?limit|too many requests|429|quota.*exceeded|billing|usage.?limit|credit|overloaded|capacity'; then
       ERROR_TYPE="rate_limit"
-      ERROR_HINT="  API 額度不足或請求過於頻繁。建議：
-    - 稍等幾分鐘後重試
-    - 檢查帳戶用量與額度限制
-    - 若持續發生，考慮升級方案或切換 CLI：cap workflow run --cli codex ..."
+      ERROR_HINT="  API quota exhausted or request throttled. Suggestions:
+    - Wait a few minutes and retry
+    - Check account usage and quota limits
+    - If it persists, upgrade your plan or switch CLI: cap workflow run --cli codex ..."
     # Network errors
     elif echo "${output_lower}" | grep -qE 'network|connection.*refused|timeout|dns|econnreset|enotfound|fetch failed'; then
       ERROR_TYPE="network"
-      ERROR_HINT="  網路連線異常。請確認：
-    - 網路是否正常
-    - 是否需要 proxy 設定
-    - API 服務是否正常（查看 status page）"
+      ERROR_HINT="  Network connectivity issue. Please verify:
+    - Network is working
+    - Proxy settings (if required)
+    - API service status (check the provider status page)"
     # Trusted directory (codex)
     elif echo "${output_lower}" | grep -qE 'trusted directory|skip-git-repo-check'; then
       ERROR_TYPE="trust"
-      ERROR_HINT="  Codex 不信任目前目錄。請先在專案目錄內執行 'codex' 並允許信任。"
+      ERROR_HINT="  Codex does not trust the current directory. Please run 'codex' inside the project directory and grant trust first."
     fi
 
     bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} capability:${capability} cli:${effective_cli}" "失敗" >/dev/null 2>&1 || true

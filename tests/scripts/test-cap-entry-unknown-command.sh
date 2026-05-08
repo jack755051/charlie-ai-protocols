@@ -63,9 +63,9 @@ rc_list="${result_list%%$'\t'*}"
 out_list="${result_list#*$'\t'}"
 
 assert_eq "cap list exits 1" "1" "${rc_list}"
-assert_contains "cap list reports unknown" "未知的 cap 指令: list" "${out_list}"
+assert_contains "cap list reports unknown" "Unknown cap command: list" "${out_list}"
 assert_contains "cap list points to help" "cap help" "${out_list}"
-assert_not_contains "cap list no removed reminder" "cap list 已移除" "${out_list}"
+assert_not_contains "cap list no removed reminder" "cap list has been removed" "${out_list}"
 assert_not_contains "cap list no skill suggestion" "cap skill list" "${out_list}"
 assert_not_contains "cap list no workflow suggestion" "cap workflow list" "${out_list}"
 
@@ -74,7 +74,7 @@ rc_bad="${result_bad%%$'\t'*}"
 out_bad="${result_bad#*$'\t'}"
 
 assert_eq "unknown command exits 1" "1" "${rc_bad}"
-assert_contains "unknown command reports command" "未知的 cap 指令: does-not-exist" "${out_bad}"
+assert_contains "unknown command reports command" "Unknown cap command: does-not-exist" "${out_bad}"
 assert_contains "unknown command points to help" "cap help" "${out_bad}"
 
 echo "Summary: $((checks - failures)) passed, ${failures} failed"

@@ -68,7 +68,7 @@ EOF
         return 0
         ;;
       *)
-        echo "未知的 doctor 選項: ${arg}" >&2
+        echo "Unknown doctor option: ${arg}" >&2
         return 1
         ;;
     esac
@@ -161,8 +161,8 @@ case "${COMMAND}" in
     cmd_doctor "$@"
     ;;
   *)
-    echo "未知的 provider 子指令: ${COMMAND}" >&2
-    echo "可用: cap provider doctor" >&2
+    echo "Unknown provider subcommand: ${COMMAND}" >&2
+    echo "Available: cap provider doctor" >&2
     exit 1
     ;;
 esac

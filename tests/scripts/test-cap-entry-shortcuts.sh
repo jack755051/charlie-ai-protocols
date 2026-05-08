@@ -62,6 +62,8 @@ assert_same_command "cap p init --help equals cap project init --help" project p
 assert_same_command "cap proj init --help equals cap project init --help" project proj init --help
 assert_same_command "cap wf list equals cap workflow list" workflow wf list
 assert_same_command "cap prov doctor --help equals cap provider doctor --help" provider prov doctor --help
+assert_same_command "cap -h equals cap help" help -h
+assert_same_command "cap --help equals cap help" help --help
 assert_same_command "cap -v equals cap version" version -v
 assert_same_command "cap --version equals cap version" version --version
 

@@ -99,7 +99,7 @@ detect_link_mode() {
     auto)
       ;;
     *)
-      echo "❌ 錯誤：未知的 CAP_LINK_MODE='${requested_mode}'，只接受 auto|symlink|copy" >&2
+      echo "❌ Error: unknown CAP_LINK_MODE='${requested_mode}'. Accepted values: auto|symlink|copy" >&2
       exit 1
       ;;
   esac
@@ -136,7 +136,7 @@ materialize_entry() {
 # 移除全域安裝
 # ----------------------------------------------------------
 if [ "${MODE}" = "--uninstall" ]; then
-  echo "🗑  正在移除全域安裝..."
+  echo "🗑  Removing global install..."
 
   # --- Codex：移除 ~/.agents/skills/ 中由本 Repo 產生的項目 ---
   if [ -d "${HOME}/.agents/skills" ]; then
@@ -166,16 +166,16 @@ if [ "${MODE}" = "--uninstall" ]; then
   # 正確清除舊安裝痕跡。**警告**：若使用者在舊 auto-gen 檔上手動加了個人
   # section（如 ## Behavioral Guardrails），同樣會被刪除 — 升級前請先備份。
   if [ -f "${HOME}/.claude/CLAUDE.md" ] && grep -q "charlie-ai-protocols" "${HOME}/.claude/CLAUDE.md" 2>/dev/null; then
-    echo "⚠ 偵測到舊 auto-gen ~/.claude/CLAUDE.md（含 charlie-ai-protocols 標記）"
-    echo "   即將移除。若你曾在此檔手動加過個人 section，請先備份："
+    echo "⚠ Detected legacy auto-generated ~/.claude/CLAUDE.md (carries the charlie-ai-protocols marker)."
+    echo "   It will be removed. If you added personal sections to this file, please back it up first:"
     echo "   cp ~/.claude/CLAUDE.md ~/.claude/CLAUDE.md.backup"
     rm "${HOME}/.claude/CLAUDE.md"
-    echo "   ✓ 已移除舊全域 CLAUDE.md（v0.22.x 後不再自動寫入）"
+    echo "   ✓ Removed the legacy global CLAUDE.md (no longer auto-written since v0.22.x)"
   fi
 
-  echo "✅ 全域安裝已移除（Codex + Claude Code rules）。"
-  echo "ℹ ~/.claude/CLAUDE.md 與 ~/.codex/AGENTS.md 從 v0.22.x 起不再由 mapper.sh 維護"
-  echo "  專案規則改由 repo-local CLAUDE.md / AGENTS.md 載入（進專案目錄才生效）"
+  echo "✅ Global install removed (Codex + Claude Code rules)."
+  echo "ℹ Since v0.22.x, mapper.sh no longer maintains ~/.claude/CLAUDE.md or ~/.codex/AGENTS.md."
+  echo "  Project rules are now loaded from the repo-local CLAUDE.md / AGENTS.md (only inside the project directory)."
   exit 0
 fi
 
@@ -186,11 +186,11 @@ if [ "${MODE}" = "--global" ]; then
   TARGET_DIR="${HOME}/.agents/skills"
   CODEX_DIR="${HOME}/.codex"
   USE_ABSOLUTE=true
-  echo "🌐 全域模式：目標 → ${TARGET_DIR}"
+  echo "🌐 Global mode: target → ${TARGET_DIR}"
 else
   TARGET_DIR="${PROJECT_ROOT}/.agents/skills"
   USE_ABSOLUTE=false
-  echo "📁 本地模式：目標 → ${TARGET_DIR}"
+  echo "📁 Local mode: target → ${TARGET_DIR}"
 fi
 
 # 確保目標目錄存在
@@ -209,9 +209,9 @@ LINK_MODE="$(detect_link_mode "${TARGET_DIR}")"
 prepare_managed_file "${TARGET_DIR}"
 
 if [ "${LINK_MODE}" = "symlink" ]; then
-  echo "🔗 使用 symlink 模式同步 Agent Skills"
+  echo "🔗 Syncing Agent Skills using symlink mode"
 else
-  echo "📄 使用 copy 模式同步 Agent Skills（目前環境不支援 symlink）"
+  echo "📄 Syncing Agent Skills using copy mode (current environment does not support symlinks)"
 fi
 
 # ----------------------------------------------------------
@@ -243,7 +243,7 @@ for src in "${SOURCE_DIR}"/*-agent.md; do
   alias_count=$((alias_count + 1))
 done
 
-echo "✅ 已同步 ${count} 個 agent entry + ${alias_count} 個短名 alias → ${TARGET_DIR}/"
+echo "✅ Synced ${count} agent entries + ${alias_count} short-name aliases → ${TARGET_DIR}/"
 
 # ----------------------------------------------------------
 # 全域模式：同步 agent skill rules 到 ~/.claude/rules/
@@ -284,9 +284,9 @@ if [ "${USE_ABSOLUTE}" = true ]; then
   done
 
   if [ "${RULE_LINK_MODE}" = "symlink" ]; then
-    echo "✅ 已以 symlink 模式同步 ${rule_count} 個 agent 規則 → ~/.claude/rules/"
+    echo "✅ Synced ${rule_count} agent rules via symlink mode → ~/.claude/rules/"
   else
-    echo "✅ 已以 copy 模式同步 ${rule_count} 個 agent 規則 → ~/.claude/rules/"
+    echo "✅ Synced ${rule_count} agent rules via copy mode → ~/.claude/rules/"
   fi
 fi
 
