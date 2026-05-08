@@ -121,11 +121,11 @@ assert_eq "snapshot file content matches" "${PROMPT}" "${WRITTEN}"
 
 # ── Case 4 ──────────────────────────────────────────────────────────────
 echo "Case 4: identical prompt → same path, idempotent (no rewrite)"
-ORIG_MTIME="$(stat -f '%m' "${SNAP_PATH}" 2>/dev/null || stat -c '%Y' "${SNAP_PATH}" 2>/dev/null)"
+ORIG_MTIME="$(stat -c '%Y' "${SNAP_PATH}" 2>/dev/null || stat -f '%m' "${SNAP_PATH}" 2>/dev/null)"
 sleep 1
 META2="$(run_helper "${PROMPT}" "${SANDBOX}")"
 SNAP_PATH2="$(printf '%s' "${META2}" | cut -d'|' -f2)"
-NEW_MTIME="$(stat -f '%m' "${SNAP_PATH2}" 2>/dev/null || stat -c '%Y' "${SNAP_PATH2}" 2>/dev/null)"
+NEW_MTIME="$(stat -c '%Y' "${SNAP_PATH2}" 2>/dev/null || stat -f '%m' "${SNAP_PATH2}" 2>/dev/null)"
 assert_eq "same path on rerun"     "${SNAP_PATH}" "${SNAP_PATH2}"
 assert_eq "mtime unchanged (idempotent)" "${ORIG_MTIME}" "${NEW_MTIME}"
 
