@@ -109,6 +109,83 @@ Exit criteria:
 - No global provider file changed.
 - At least two real runs are observed without prompt conflicts.
 
+### Phase 1 Dogfood Evidence Log
+
+Real runs collected against the shared `shared-karpathy-guidelines`
+entry (priority 90, `kind: skill` since v0.24.8). All runs cite their
+`run_id` so artifacts are traceable from this log.
+
+| # | Run ID | Provider | Workflow | Input shape | Result | Notes |
+|---|---|---|---|---|---|---|
+| 1 | `run_20260510013742_00d4f6e5` | Claude 2.1.137 | karpathy-guardrails-smoke | meta (validate prompt resolution) | ✓ 98s | First real run; guardrail behaved per role; binding contract confirmed end-to-end. |
+| 2 | `run_20260510014158_f3846a3f` | Codex 0.128.0 | karpathy-guardrails-smoke | meta (validate prompt resolution) | ✓ 50s | Codex parity on smoke; same binding outcome as Claude. |
+| 3 | `run_20260510031125_51290ea5` | Claude 2.1.137 | karpathy-guardrails-smoke | meta (with explicit `kind: skill` metadata visible) | ✓ 122s | Claude observed the explicit `kind: skill` and self-declared advisory boundary. Surfaced the inference-rule misreading captured in ROLE-SKILL-REGISTRY-MODEL-MEMO §Phase 2 Risks. |
+| 4 | `run_20260510032244_3b28eddb` | Claude 2.1.137 | karpathy-real-task-dogfood | real Python helper (`engine/workflow_cli.py:_filter_log_since`, 11 lines) | ✓ 114s | First real-task run; 5 grounded observations all citing specific lines / comments; respected "do NOT propose changes" user constraint. |
+| 5 | `run_20260510032846_ea97f727` | Codex 0.128.0 | karpathy-real-task-dogfood | same prompt as #4 (Claude-Codex parity) | ✓ 54s | Codex parity on real-task; **complementary** observation set vs Claude. |
+
+#### Cross-provider parity — same input, different observation profile
+
+A/B between runs #4 (Claude) and #5 (Codex), same prompt and same
+shared skill:
+
+| Observation type | Claude #4 | Codex #5 |
+|---|---|---|
+| TOCTOU comment framing imprecise | ✓ | — |
+| try/except ValueError might be defence-against-impossible-state | ✓ | — |
+| Multi-line log entry: traceback continuation lines silently dropped | ✓ | — |
+| `errors="replace"` swallows decode-failure signal | ✓ | — |
+| **Naive-vs-aware datetime comparison risk** | — | ✓ (primary concern) |
+| **Sub-second cutoff vs second-precision strptime boundary** | — | ✓ |
+| Function scope is clean (positive observation) | ✓ | ✓ |
+| docstring-vs-implementation alignment confirmed | — | ✓ |
+
+Rough characterisation:
+
+- **Claude bias**: framing / wording / contract-alignment / soft concerns.
+- **Codex bias**: type / runtime correctness / hard concerns
+  (the naive-vs-aware datetime issue is a real production-class bug
+  that would actually fire if a caller passed a tz-aware `cutoff`).
+- **Common ground**: both respected the advisory boundary
+  ("do NOT propose changes"), both produced grounded observations
+  citing specific code lines, both included a positive observation
+  on scope cleanliness.
+
+The provider-specific bias is a feature, not a bug — Phase 2 promotion
+should be evaluated against the union of what both providers catch,
+not the intersection. This also informs Phase 4 / 5 attachment work:
+mounting this guardrail on top of role prompts will surface
+provider-dependent observation profiles, which downstream consumers
+should expect.
+
+#### Side observation (not blocking Phase 2)
+
+Both Codex runs (#2, #5) note in stdout that the expected skill
+prompt path (e.g. `agent-skills/skills/karpathy-guidelines.md`) is
+absent in the working directory; both fall back to the prompt
+material delivered through the binding metadata. No prompt conflict
+results, but this confirms that providers do attempt a
+builtin-shaped lookup before honoring the shared-layer prompt
+delivery — useful context for the future Phase 4 prompt-assembly
+design.
+
+### Toward Phase 2 Entry
+
+Provisional evidence count after the runs above:
+
+- ✓ Two-plus real runs without prompt conflict (criterion satisfied).
+- ✓ Cross-provider parity confirmed (Claude + Codex both honor the
+  advisory boundary; behaviour shape is provider-specific but
+  contract is consistent).
+- ⏳ "Reduces avoidable mistakes such as speculative abstractions /
+  unrelated refactors / hidden assumptions / unverified completion
+  claims" — needs more runs against varied inputs (refactor target,
+  test plan, design review, debug task) before Phase 2 can confirm.
+
+Recommendation: collect 1–2 more dogfood runs on different task
+shapes before considering builtin promotion. Suggested next inputs
+in the "scope creep risk" and "hidden assumption" categories so the
+evidence covers more than just code review.
+
 ## Phase 2: Builtin Candidate
 
 Goal: decide whether the shared guardrail should become an official CAP
