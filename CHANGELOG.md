@@ -6,6 +6,43 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.24.9] - 2026-05-10
+
+> Patch release — Karpathy guidelines Phase 2 builtin promote (shared-layer dogfood graduates to CAP baseline strategy + 7 agent references), `cap-workflow.sh` `CAP_HOME` default follow-up from v0.24.8 dogfood findings, real-task dogfood workflow, and 7 runs of cross-provider evidence supporting the promotion.
+
+### Added
+
+- `agent-skills/strategies/karpathy-guidelines.md`: builtin Karpathy LLM-coding guardrails strategy (think before coding / simplicity first / surgical changes / goal-driven execution). Adapted from the v0.24.7 shared-layer dogfood prompt with CAP-aligned section structure: When To Mount, Four Rules with CAP-corresponding discipline notes, Conflict Resolution Order, Boundary, Cross-Strategy Map, Mount References, Historical Track. Conflict resolution order pinned: user instruction > project constitution > role prompt > other strategies > Karpathy.
+- Karpathy strategy references added to 7 candidate agent prompts (`01-supervisor` / `02-techlead` / `04-frontend` / `05-backend` / `07-qa` / `10-troubleshoot` / `90-watcher`), each contextualised to that agent's typical scope-creep vector. `90-watcher` gains an audit-style entry — Karpathy-rule violations now trigger Quality Alerts via the Watcher's strategy audit list. 4 deliberately-excluded agents (`03-ui` / `09-analytics` / `12-figma` / `99-logger`) stay excluded with a fixture test pinning their absence.
+- `tests/scripts/test-karpathy-strategy-builtin.sh` (new, 18 cases): asserts strategy file existence, 7 candidate references present, 4 excluded references absent, all 4 rule headers present, conflict resolution order documented.
+- `schemas/workflows/karpathy-real-task-dogfood.yaml` (added in v0.24.8 development cycle): single-step workflow exercising the Karpathy guardrail on real input. Sister workflow to `karpathy-guardrails-smoke`.
+- `cap-workflow.sh` defaults `CAP_HOME` to `${HOME}/.cap` via the bash `:=` idiom and exports it to subprocesses, so the python binder picks up the shared layer registry without operators having to prefix every `cap workflow` command with `CAP_HOME=$HOME/.cap` (follow-up from v0.24.7 Phase 1 dogfood pain point).
+- `tests/scripts/test-cap-workflow-cap-home-default.sh` (new, 6 cases): pins the `:=` semantics for unset / explicit / empty-string and the negative integration that explicit `CAP_HOME` is preserved.
+- `docs/cap/ROLE-SKILL-REGISTRY-MODEL-MEMO.md`: gains a Phase 2 Risks subsection capturing the inference-rule misreading observed in dogfood run #3 — when registry entries already carry `agent_alias` for selectability reasons, the legacy "agent_alias present → role" inference reads counterintuitively. Mitigation: explicit `kind` always wins; the existing fixture case 4b pins this contract.
+- `docs/cap/KARPATHY-GUIDELINES-INTEGRATION-MEMO.md` Phase 1 Dogfood Evidence Log: 7 real runs across 4 task shapes (smoke / code-review / refactor-proposal / debug) with Claude + Codex cross-provider parity confirmed. Explicit Phase 2 closeout subsection records the promotion, the agent-specific reference rationale, the deliberate non-actions, and the open follow-ups Phase 2 does NOT close.
+- `docs/cap/README.md` index: rows for the Karpathy integration memo, the role/skill registry model memo, and the run observability Phase 5 Later memo (backfilling earlier release indexing gaps).
+
+### Changed
+
+- 7 candidate agent prompts (`01-supervisor` / `02-techlead` / `04-frontend` / `05-backend` / `07-qa` / `10-troubleshoot` / `90-watcher`) gain a methodology-strategy reference to `agent-skills/strategies/karpathy-guidelines.md`. Wording is short (1 bullet per agent) and contextualised; the memo's "concise enough to avoid bloating every task prompt" requirement is honoured.
+- `~/.cap/shared/skills.yaml` Karpathy entry adopted explicit `kind: skill` (user-local change, NOT in repo) during v0.24.8 dogfood. Schema already supports this in v0.24.8.
+
+### Verified
+
+- New: karpathy-strategy-builtin **18 / 18**, cap-home-default **6 / 6**, skill-registry-kind-field **10 / 10** (from v0.24.8 baseline).
+- 7 dogfood real-runs (Claude + Codex) all completed/success, no prompt conflict, all four Phase 2 entry criteria satisfied. Evidence log in `docs/cap/KARPATHY-GUIDELINES-INTEGRATION-MEMO.md`.
+- Existing skill-registry suites unchanged: override **29 / 29**, resolver **22 / 22**.
+- Run-observability + CLI surface stay green: watch **104 / 104**, logs **63 / 63**, inspect **56 / 56**, ps-tip **9 / 9**, help-topics **43 / 43**, help-surface **71 / 71**, shortcuts **12 / 12**, unknown-command **16 / 16**, namespace-unknown **23 / 23**, mapper-global **14 / 14**.
+- Full smoke: `scripts/workflows/smoke-per-stage.sh` — **87 passed / 0 failed / 0 skipped** (parity with v0.24.8 baseline; no regression).
+
+### Boundary
+
+- Phase 2 promotion is **agent-prompt-reference-only**. No `engine/runtime_binder.py` change. No `scripts/cap-workflow-exec.sh` change. No global provider config (`~/.codex/`, `~/.claude/`) touched.
+- Shared-layer registry entry (`~/.cap/shared/skills.yaml` + `~/.cap/shared/skills/karpathy-guidelines.md`) is **preserved**, not removed. The two paths coexist: capability-binding workflows still resolve through shared layer; agent-role workflows now reference the builtin strategy directly.
+- 4 excluded agents stay excluded by intentional design. Future expansion needs concrete per-role dogfood evidence, not a default rollout.
+
+---
+
 ## [v0.24.8] - 2026-05-10
 
 > Patch release — Role / Skill Registry Phase 1 (schema preparation). Adds an optional `kind` discriminator (`role` / `skill`) to the skill-registry schema and the design memo behind it. Schema-only: the runtime does NOT yet branch on `kind`; future runtime work will switch on this enum instead of inferring entry type from `agent_alias` presence.
