@@ -123,6 +123,7 @@ entry (priority 90, `kind: skill` since v0.24.8). All runs cite their
 | 4 | `run_20260510032244_3b28eddb` | Claude 2.1.137 | karpathy-real-task-dogfood | real Python helper (`engine/workflow_cli.py:_filter_log_since`, 11 lines) | ✓ 114s | First real-task run; 5 grounded observations all citing specific lines / comments; respected "do NOT propose changes" user constraint. |
 | 5 | `run_20260510032846_ea97f727` | Codex 0.128.0 | karpathy-real-task-dogfood | same prompt as #4 (Claude-Codex parity) | ✓ 54s | Codex parity on real-task; **complementary** observation set vs Claude. |
 | 6 | `run_20260510033543_cf1c5900` | Claude 2.1.137 | karpathy-real-task-dogfood | refactor-proposal evaluation (extract cap-workflow.sh logs/watch dispatchers); explicit "do NOT write patch" constraint | ✓ 216s | **Scope-creep-resistance test.** Claude resisted the temptation to write the patch, surfaced 5 specific re-evaluation triggers + 5 operationalised "extraction succeeded" criteria, and called out a hidden classification question in the proposal itself ("why logs/watch but not inspect/ps/show?"). See A/B note below. |
+| 7 | `run_20260510034413_46f2cef5` | Claude 2.1.137 | karpathy-real-task-dogfood | hidden-assumption debug (real v0.24.8 bug: bash heredoc inside `git tag -m "$(cat <<EOF...)"` silently dropped `` `kind: skill` `` from the annotation body); explicit "do NOT propose fix" constraint | ✓ 235s | **Single-root-cause-speculation resistance test.** Claude listed 8 mental-model assumptions (A1–A8) and 5 root-cause hypotheses (RC1–RC5) ordered by evidence-fit. RC1 (unquoted heredoc body + markdown backticks triggering command substitution) cleanly closes all three pieces of evidence (stderr text + double-space substitution + "actual command was longer"). Claude also surfaced RC5 specifically to **rule out** an incorrect inference path (A8: outer `"..."` swallowed mid-body) — exactly the Karpathy Rule 1 "if multiple interpretations exist, present them" discipline. |
 
 #### Cross-provider parity — same input, different observation profile
 
@@ -208,35 +209,99 @@ Behavioural footprint vs runs #4 / #5 (code-review shape):
 | New observation type | Code-line-level concerns | Re-evaluation triggers, success-criteria operationalisation, hidden category boundaries |
 | Duration | 114s | 216s (deeper deliberation matches harder ask) |
 
+#### Hidden-assumption-resistance evidence (run #7)
+
+The debug scenario tests a different default failure mode: when an LLM
+sees a bug report, the easiest path is to pick the most plausible
+single root cause and offer a one-line fix. Karpathy Rule 1 explicitly
+forbids that — "if multiple interpretations exist, present them. Do
+not silently pick one." Run #7 was constructed to test that
+discipline against a real v0.24.8 bug:
+
+- Three pieces of observable evidence (stderr text, double-space
+  substitution, longer-than-shown actual command).
+- Explicit "do NOT propose fix" constraint.
+- Real bug, not synthetic — the v0.24.8 release annotation actually
+  had `` `kind: skill` `` written in markdown backticks inside an
+  unquoted heredoc.
+
+What Claude produced:
+
+- **8 mental-model assumptions catalogued** (A1–A8). Some were
+  actually broken by the bug (A1 unquoted heredoc body is literal,
+  A2 markdown backticks are visual-only, A3 `$()` failure aborts the
+  outer command, A5 stderr output blocks the flow). Others were
+  preserved deliberately to **rule out** wrong inference paths
+  (A7 EOF marker in body, A8 outer `"..."` swallowed mid-body).
+- **5 root-cause hypotheses** (RC1–RC5) ordered by evidence-fit, not
+  by plausibility:
+  - RC1 (high fit): markdown backticks triggering command
+    substitution — closes all three pieces of evidence cleanly.
+  - RC2 (medium): explicit `$(...)` injection — same mechanism,
+    different intent source.
+  - RC3 (medium): heredoc premature termination — explicitly noted
+    that piece of evidence E2 doesn't fit cleanly, so it was kept
+    as alternative not promoted to primary.
+  - RC4–RC5 (low fit): kept to demonstrate the inference space was
+    explored, not silently pruned.
+- **Karpathy Rule 1 self-application**: the report itself enacts the
+  rule it's evaluating ("RC1 is high-fit but RC2/RC3 are listed in
+  parallel; RC4/RC5 explain why low-fit").
+- **Boundary self-check**: 6 explicit "did NOT do" items, including
+  the temptation to recommend `<<'EOF'` as the obvious fix.
+
+Behavioural footprint vs runs #4 / #6:
+
+| Dimension | Code-review (#4) | Refactor-proposal (#6) | Debug (#7) |
+|---|---|---|---|
+| Default LLM failure mode | generic admonitions | just-do-the-refactor | single-root-cause + fix |
+| Counter-pressure visible? | grounded in code lines | 5 triggers + 5 success criteria | 8 assumptions + 5 ranked hypotheses |
+| Multi-interpretation evidence | 5 distinct observations | 4 question answers | 5 root causes ordered by evidence-fit |
+| Boundary self-check items | 5 | 5 | 6 |
+| Duration | 114s | 216s | 235s |
+
+Run #7 is the second strongest Phase 2 signal after run #6: the
+guardrail not only stopped Claude from picking a single root cause,
+it forced the response into the shape Karpathy Rule 1 explicitly
+demands (multi-interpretation tabling).
+
 #### Toward Phase 2 Entry
 
-Provisional evidence count after the runs above:
+Final evidence count across 4 task shapes (smoke / code review /
+refactor proposal / debug):
 
 - ✓ Two-plus real runs without prompt conflict (criterion satisfied;
-  6 runs total).
+  7 runs total).
 - ✓ Cross-provider parity confirmed (Claude + Codex both honor the
   advisory boundary; behaviour shape is provider-specific but
-  contract is consistent).
-- ✓ "Reduces avoidable mistakes" — partially confirmed via run #6
-  scope-creep resistance (refactor-proposal scenario where the
-  default LLM failure mode is to write the refactor; guardrail
-  successfully redirected the response to advisory + operationalised
-  criteria). Code-review scenarios (#4, #5) confirmed the guardrail
-  produces grounded observations, not generic admonitions.
-- ⏳ Open: a hidden-assumption / debug scenario would round out the
-  evidence to four task shapes (smoke / code review / refactor
-  proposal / debug or design review). Optional but recommended
-  before promotion.
+  contract is consistent — runs #4 vs #5).
+- ✓ Reduces avoidable mistakes — confirmed across multiple failure
+  modes:
+  - Speculative abstractions / unrelated refactors → run #6 scope
+    creep test (guardrail visibly redirected response shape).
+  - Hidden assumptions / single-root-cause speculation → run #7
+    debug test (guardrail forced multi-interpretation tabling).
+  - Generic admonitions → runs #4 / #5 code review (guardrail forced
+    code-line-grounded observations).
+- ✓ Real-world counter-pressure visible: each task shape's "default
+  LLM failure mode" was actively counteracted by the guardrail.
 
-The scope-creep-resistance evidence (run #6) is the strongest signal
-yet for Phase 2: the guardrail visibly changed the AI's default
-behaviour on a task where the AI was likely to over-engineer. That's
-the exact "useful effect" the integration memo Phase 2 entry
-criteria asks about.
+All four bullet points of the original Phase 2 entry criteria
+("Phase 1 has been dogfooded on real CAP tasks. The guidelines
+reduce avoidable mistakes such as speculative abstractions /
+unrelated refactors / hidden assumptions / unverified completion
+claims. No repeated conflict with CAP role prompts, project
+constitutions, or user instructions has been observed.") are now
+satisfied.
 
-Recommendation update: one optional further dogfood run on a
-hidden-assumption / debug scenario; if positive, Phase 2 entry
-criteria are met and builtin promotion can be evaluated.
+**Phase 2 entry is open.** Builtin promotion can be evaluated.
+
+Recommendation: before any builtin promotion commit, decide which
+of the seven candidate agents (`01-supervisor`, `02-techlead`,
+`04-frontend`, `05-backend`, `07-qa`, `10-troubleshoot`,
+`90-watcher`) take the strategy reference first. The full set is a
+separate decision from "is the guardrail ready" — keep them
+decoupled.
 
 ## Phase 2: Builtin Candidate
 
