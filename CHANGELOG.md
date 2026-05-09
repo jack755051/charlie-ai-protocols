@@ -6,6 +6,53 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.24.10] - 2026-05-10
+
+> Patch release — Karpathy Phase 2 integration-mode evidence consolidation. v0.24.9 promoted the strategy to builtin and added agent-prompt references in 7 candidate agents; v0.24.10 records the first two real-run observations of that integration path and pins the visibility spectrum that production usage should expect.
+
+### Added
+
+- `schemas/workflows/karpathy-integration-smoke-supervisor.yaml`: single-step workflow, capability `prd_generation`. Spawns the `01-supervisor` agent on a feature spec request as the high-visibility end of Phase 2 integration testing. Sister to `karpathy-guardrails-smoke` (binding contract) and `karpathy-real-task-dogfood` (Karpathy-as-role).
+
+### Verified
+
+Phase 2 Integration-Mode Evidence (memo Phase 2 closeout open follow-up #1):
+
+- **Run #8** — `run_20260510040913_bd2a1cb9` (Claude 2.1.137, 74s). Workflow `karpathy-integration-smoke-supervisor`. **High-visibility end**: supervisor's PRD section structure was **explicitly labelled with the four Karpathy rules** — `[Karpathy Rule 1 — 浮現假設]`, `[Rule 2 — 推回投機性 scope]`, `[Rule 3 — 新增項目可逐條追溯]`, `[Rule 4 — 可驗證的成功條件]`. Concrete artefacts: 3 alternative JSON formats surfaced for user choice rather than silently picked (Rule 1), 5 explicit "刻意排除" bullets (Rule 2), traceability table mapping each feature item to a user-prompt phrase (Rule 3), 5 verifiable success criteria + 150-line PR diff cap (Rule 4). Plus surgical scope of dispatch: 4 downstream capabilities recommended, 7 explicitly excluded.
+
+- **Run #9** — `run_20260510041740_cc4b0caf` (Claude 2.1.137, 1568s ≈ 26 min, 6 steps). Workflow `project-code-analysis` (production, not smoke). 4 of 6 steps spawned Karpathy candidate agents: `01-supervisor` (analysis_scope), `02-techlead` (architecture_scan + review_analysis), `10-troubleshoot` (hotspot_diagnostics). **Low-visibility end**: zero explicit `[Karpathy Rule N]` cites across all 4 candidate-agent outputs, but **implicit framing visible in every one** — supervisor's Out-of-Scope table + "現狀夠好不要動" stance + "**非**逐行 review、**非** patch、**非** refactor" exclusions + 5-section deliverable enumeration; techlead's "目的不是 code review、也不是新功能設計" framing; troubleshoot's "**不偽造已讀過上游全文的結論**" Rule-1-pure surface-assumptions discipline.
+
+### Visibility Spectrum (the headline finding from #8 + #9)
+
+Runs #8 and #9 bracket the visibility range of the Phase 2 reference-mounted path:
+
+| Run | Workflow shape | Karpathy framing visibility |
+|---|---|---|
+| #8 (smoke) | single-step, minimal prompt | **explicit** — all 4 rules named in section headers |
+| #9 (production) | 6-step, full repo subsystem analysis | **internalised** — 0 explicit cites, behavioural framing across 4 candidate-agent outputs |
+
+**Both are valid outcomes, not opposite results.** When the agent's task is a small meta-discussion, the agent has spare attention to cite the strategy by name. When the agent's task consumes its full attention (full repo scan, multi-step handoff chain, complex artefact production), the strategy still shapes output but the agent doesn't have surface area to label it. Karpathy becomes ambient discipline rather than visible scaffolding.
+
+**Real failure mode would be**: agent output exhibits **neither** explicit cites **nor** behavioural framing (speculative additions, silent ambiguity, unrelated cleanup, skipped success criteria). Run #9 had **none** of those across 4 candidate-agent step outputs. The reference path works at both ends of the spectrum.
+
+### Changed
+
+- `docs/cap/KARPATHY-GUIDELINES-INTEGRATION-MEMO.md` Phase 2 Integration-Mode Evidence subsection now logs both runs and adds the Visibility Spectrum analysis as a deliberate framing tool for evaluating future Phase 2 evidence.
+- Phase 2 Closeout open follow-up #1 ("real-run validation in builtin mode") is now **CLOSED** by run #8. Open follow-up "other six candidate agents have not yet been integration-tested" is **partially closed** by run #9 — techlead (×2) and troubleshoot now have one observation each; frontend / backend / qa / watcher remain untested but the reference shape is identical and absence-of-failure-mode lowers the bar to "no signal would be a surprise".
+
+### Side observation
+
+**No token-cost concern observed**. The original Phase 2 plan flagged "Keep the guidance concise enough to avoid bloating every task prompt". Run #9 (production, 6 steps, full v0.24.9 agent-skills baseline with every candidate agent prompt carrying the Karpathy reference) completed without timeout, token-budget warning, or context-window strain. The ~1 bullet per agent (≤120 chars each) does not measurably affect runtime cost. The Phase 2 token-cost criterion is empirically satisfied.
+
+### Boundary
+
+- v0.24.10 is **integration-mode evidence consolidation only**. No code change, no skill change, no schema change, no runtime branching. Memo updates + one new smoke workflow + tag.
+- **Codex parity for run #9** is a deliberate next-round follow-up, not part of this release. The role-mounted Phase 1 path already has Codex evidence (run #5); the reference-mounted Phase 2 path has Claude evidence at both visibility ends — Codex parity at the production end can be collected when a real Codex-driven task naturally exercises the path.
+- **Watcher Quality Alert on Karpathy-rule violation** remains the open follow-up from v0.24.9 closeout. That path requires a real violation to fire, not synthetic injection.
+- 6 candidate agents not yet integration-tested (frontend / backend / qa / watcher) stay open as "no signal would be a surprise" rather than "must be tested before promotion is safe".
+
+---
+
 ## [v0.24.9] - 2026-05-10
 
 > Patch release — Karpathy guidelines Phase 2 builtin promote (shared-layer dogfood graduates to CAP baseline strategy + 7 agent references), `cap-workflow.sh` `CAP_HOME` default follow-up from v0.24.8 dogfood findings, real-task dogfood workflow, and 7 runs of cross-provider evidence supporting the promotion.
