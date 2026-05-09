@@ -1,0 +1,65 @@
+workflow_id: karpathy-integration-smoke-supervisor
+version: 1
+name: Karpathy Integration Smoke (Supervisor)
+summary: |
+  Phase 2 post-promote integration-mode evidence collector
+  (KARPATHY-GUIDELINES-INTEGRATION-MEMO §Phase 2 Closeout open
+  follow-up #1). Spawns the 01-supervisor agent on a small PRD
+  generation task and observes whether the v0.24.9 Karpathy
+  strategy reference embedded in the supervisor prompt visibly
+  shapes output behaviour.
+
+  Differs from karpathy-real-task-dogfood:
+  - That workflow used capability=engineering_guardrails, mounting
+    the Karpathy guardrail directly as the role.
+  - This workflow uses capability=prd_generation, mounting the
+    supervisor as the role; Karpathy enters indirectly through the
+    methodology-strategy reference added to 01-supervisor-agent.md
+    in commit 7b611b0.
+
+  Single-step, dogfood-only. Do not extend with downstream
+  consumers.
+owner: supervisor
+triggers:
+  - manual
+  - dogfood
+  - integration-smoke
+
+artifacts:
+  prd_document: |
+    Minimal PRD produced by the supervisor for the requested feature.
+    Phase 2 integration evidence assesses whether Karpathy's four
+    rules visibly shape the PRD's framing — surface assumptions,
+    push back on speculative scope, keep additions surgical, declare
+    verifiable success criteria.
+
+steps:
+  - id: spec_minimal_feature
+    name: Spec a minimal feature (supervisor role)
+    capability: prd_generation
+    outputs:
+      - prd_document
+    done_when:
+      - PRD captures the user requirement clearly.
+      - Karpathy 4 rules visibly influence framing — at least one of
+        Rule 1 (surface assumptions / present multiple interpretations
+        rather than picking silently), Rule 2 (push back on speculative
+        scope), Rule 3 (additions trace cleanly to user request),
+        Rule 4 (PRD declares verifiable success criteria, not
+        "make it work").
+    on_fail: halt
+    notes:
+      - |
+        v0.24.9 added a Karpathy reference under 01-supervisor-agent.md
+        ## 4. 方法論策略. This workflow's success signal is whether
+        the reference visibly affects supervisor output, NOT whether
+        the supervisor produces a perfect PRD.
+      - |
+        Sister workflows: karpathy-guardrails-smoke (binding contract
+        probe) and karpathy-real-task-dogfood (Karpathy role direct
+        mount). This workflow completes the integration-mode evidence
+        leg by exercising the agent-prompt-reference path.
+      - |
+        Provider parity is optional for the first integration run.
+        After Claude evidence is logged, decide whether Codex parity
+        adds enough value to be worth the extra tokens.

@@ -426,14 +426,15 @@ These choices keep the promotion narrow and reversible:
 
 Things this Phase 2 commit does NOT close, intentionally:
 
-- **Real-run validation in builtin mode**. The 7 dogfood runs all
-  predate the strategy reference being in agent prompts. After
-  v0.24.9 ships, the next time `01-supervisor` / `02-techlead` /
-  any of the 7 actually run, that's the first integration-mode
-  evidence. Worth catching the first 1-2 such runs and recording
-  whether the strategy reference visibly affected output (similar
-  to how `tdd-vertical-slice` references shape implementation
-  agents today).
+- ~~**Real-run validation in builtin mode**~~ — **CLOSED by run #8.**
+  See "Phase 2 Integration-Mode Evidence" section below. The first
+  post-promote supervisor run produced a PRD whose section structure
+  was **explicitly labelled** with the four Karpathy rules; the
+  strategy reference visibly shaped the output, not just adjacent
+  to it. One integration run is enough to close this particular
+  follow-up; additional runs across the other six candidate agents
+  are now optional (would only flag a NEW concern if a candidate
+  agent's prompt fails to surface the strategy at all).
 - **Watcher audit reach**. `90-watcher` now lists Karpathy as an
   audit dimension. The first time Watcher reports a Karpathy-rule
   violation as a Quality Alert is itself evidence — log it.
@@ -444,6 +445,81 @@ Things this Phase 2 commit does NOT close, intentionally:
   it works without any runtime change. Phase 4 / 5 only become
   necessary when CAP needs a role to receive multiple advisory
   skills with different attach scopes — not yet a real case.
+
+### Phase 2 Integration-Mode Evidence
+
+Post-promote evidence that the strategy reference embedded in agent
+prompts (commit `7b611b0`, v0.24.9) actually shapes agent output —
+**distinct** from the Phase 1 dogfood log above which exercised
+Karpathy as a directly-mounted role via capability binding. Phase 2
+integration mode is: candidate agent is the role, Karpathy enters
+through the prompt reference.
+
+| # | Run ID | Provider | Workflow | Candidate Agent | Result | Notes |
+|---|---|---|---|---|---|---|
+| 8 | `run_20260510040913_bd2a1cb9` | Claude 2.1.137 | karpathy-integration-smoke-supervisor | 01-supervisor | ✓ 74s | **First integration-mode run after Phase 2 promote.** Supervisor produced a PRD whose section structure is **explicitly labelled with the four Karpathy rules** — `[Karpathy Rule 1 — 浮現假設，不偷偷選擇]`, `[Rule 2 — 推回投機性 scope]`, `[Rule 3 — 新增項目可逐條追溯到使用者需求]`, `[Rule 4 — 可驗證的成功條件]`. See A/B note below. |
+
+#### Why run #8 is the cleanest possible signal
+
+The PRD didn't merely "feel Karpathy-shaped"; the section headers
+literally name the rules. Concrete artefacts inside the run output:
+
+- **Rule 1 → JSON-format ambiguity surfaced as 3 alternatives** (single
+  array / NDJSON / wrapped envelope) with a recommended default but
+  explicit "must be confirmed by user before step 1" rather than
+  silently picking. The user prompt only said "JSON 格式"; the
+  supervisor refused to collapse the ambiguity.
+- **Rule 2 → 5 explicit "刻意排除" bullets** including not adding a
+  generic `--format` flag, not adding time-range filters, not changing
+  default behaviour, not piggy-backing streaming mode, not adding a
+  schema-version governance layer.
+- **Rule 3 → traceability table** mapping every line item in 預期功能清單
+  back to the specific phrase in the user prompt that justified it,
+  with the explicit footnote "任何不在此表中的功能都不該出現在本次實作".
+- **Rule 4 → 5 verifiable success criteria** including a 150-line PR
+  diff cap as a goal-driven boundary; "make it work" was not
+  acceptable.
+
+Plus surgical scope of follow-up dispatch: only 4 capabilities were
+recommended for downstream (techlead structure scan / impl /
+qa golden-output diff / logger CHANGELOG entry). The supervisor
+explicitly **excluded** 7 capabilities (BA / DBA / UI / DevOps /
+Security / SRE / Figma) by name with one-word reasons — the same
+"why-not-this" discipline that the strategy file's Cross-Strategy
+Map asks for.
+
+#### A/B versus Phase 1 dogfood (same Karpathy rules, different mount path)
+
+| Dimension | Phase 1 (#4 Claude) — Karpathy as role | Phase 2 (#8 Claude) — supervisor as role with Karpathy reference |
+|---|---|---|
+| Mount path | capability=engineering_guardrails → karpathy-guidelines as the agent_alias | capability=prd_generation → 01-supervisor as agent_alias; Karpathy enters via methodology-strategy reference |
+| Rule visibility in output | 5 grounded observations each tagged with a rule | Section headers explicitly named after the 4 rules |
+| Output shape | review advisory | minimal PRD with embedded Karpathy framing |
+| Boundary respect | "do NOT propose changes" honoured | supervisor's normal PRD orchestration discipline honoured plus Karpathy framing |
+| Strongest signal | Karpathy-as-role refused to write a refactor patch | supervisor-with-Karpathy-reference refused to silently pick a JSON format |
+
+Both signals point at the same underlying behaviour change: the
+guardrail makes the AI surface optionality where it would otherwise
+collapse into a single answer. Phase 2 integration confirms that
+behaviour change persists when the guardrail is mounted via prompt
+reference rather than as the role itself.
+
+#### What this run does NOT prove
+
+- **Other six candidate agents (techlead / frontend / backend / qa /
+  troubleshoot / watcher) have not yet been integration-tested.**
+  Run #8 evidence is for the supervisor only. None of the others is
+  expected to fail (the reference shape is identical) but neither
+  has been observed in the wild yet.
+- **Cross-provider integration parity (Codex)** has not been
+  collected for run #8. Phase 1 cross-provider evidence (#4 vs #5)
+  showed Claude / Codex bias in the role-mounted path; the
+  reference-mounted path may behave the same or differently. Worth
+  one Codex run if the reference-mounted A/B becomes interesting
+  later.
+- **Watcher Quality Alerts on Karpathy-rule violations** are still
+  the open follow-up #2 from Phase 2 closeout — that path requires
+  an actual violation to fire, not just a clean run like this one.
 
 ## Deferred
 
