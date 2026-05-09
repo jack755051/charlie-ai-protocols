@@ -1,0 +1,35 @@
+workflow_id: karpathy-guardrails-smoke
+version: 1
+name: Karpathy Guardrails Binding Smoke
+summary: |
+  Single-step dogfood workflow used to confirm the RuntimeBinder selects
+  the shared-layer skill `shared-karpathy-guidelines` for the
+  `engineering_guardrails` capability. Has no real execution side
+  effects — runs are expected via `cap workflow run --dry-run` or
+  inspected through `cap workflow bind`. See
+  docs/cap/KARPATHY-GUIDELINES-INTEGRATION-MEMO.md Phase 1 for context.
+owner: supervisor
+triggers:
+  - manual
+  - smoke-test
+
+artifacts:
+  guardrail_advisory: Placeholder advisory output (not consumed downstream)
+
+steps:
+  - id: mount_guardrails
+    name: Mount Karpathy Guardrails (binding probe)
+    capability: engineering_guardrails
+    outputs:
+      - guardrail_advisory
+    done_when:
+      - Shared-layer skill `shared-karpathy-guidelines` is selected
+      - Binding report shows `source_layer: shared` for this step
+    on_fail: halt
+    notes:
+      - Smoke workflow only — exists to validate the shared registry
+        contract end-to-end (capability declared in
+        schemas/capabilities.yaml, skill registered in
+        ~/.cap/shared/skills.yaml, binder picks up the shared layer).
+      - Do not extend with extra steps; if the binding contract
+        regresses, this minimal workflow keeps the failure narrow.

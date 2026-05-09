@@ -127,9 +127,23 @@ binding_policy:
     - technical_logging
     - readme_normalization
     - supervisor_envelope_validation
+    # Karpathy guardrails (Phase 1 dogfood). Provided by
+    # shared-layer skill `shared-karpathy-guidelines`. Advisory only —
+    # see ~/.cap/shared/skills/karpathy-guidelines.md for the explicit
+    # priority order (user > constitution > role > strategy > guardrail).
+    - engineering_guardrails
+    - code_review_guardrails
 
 workflow_policy:
   enforce_allowed_source_roots: true
   allowed_source_roots:
     - schemas/workflows
     - workflows
+    # P9 opt-in: shared-layer skill registry path. Forward-compatible —
+    # current workflow_policy validates workflow YAML paths only, so
+    # these entries are inert today. Listed here per
+    # docs/cap/KARPATHY-GUIDELINES-INTEGRATION-MEMO.md so a future
+    # source-root enforcer that also covers skill registries finds
+    # the shared layer pre-authorised.
+    - /home/jack755051/.cap/shared/skills.yaml
+    - /home/jack755051/.cap/shared/skills

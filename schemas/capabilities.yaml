@@ -580,3 +580,41 @@ capabilities:
     done_when:
       - 已確認交付資訊完整度
       - 已指出缺漏與風險
+
+  # ── Guardrails (Karpathy LLM-coding rules; advisory layer) ──
+  # Provided by shared-layer skill `shared-karpathy-guidelines` (see
+  # ~/.cap/shared/skills.yaml). Distinct from agent role prompts:
+  # role prompts win on conflict; project constitution wins on
+  # conflict; user instruction wins on conflict. Full priority order
+  # in ~/.cap/shared/skills/karpathy-guidelines.md.
+  engineering_guardrails:
+    description: |
+      LLM-coding behavioural guardrails (think before coding / simplicity first /
+      surgical changes / goal-driven execution). Mounted at write/refactor time
+      to surface assumptions, push back on speculative complexity, keep edits
+      surgical, and pin verifiable success criteria. Advisory — does not
+      override role prompts, project constitution, or user instructions.
+    default_agent: shell
+    allowed_agents: [shell, supervisor, techlead, frontend, backend, qa, troubleshoot, watcher]
+    inputs:
+      - task_description
+    outputs:
+      - guardrail_advisory
+    done_when:
+      - Karpathy 4 rules consulted before / during the change
+      - Output traces back to the user's request (no speculative additions)
+
+  code_review_guardrails:
+    description: |
+      Same Karpathy guardrails applied at code-review / audit time — keep
+      suggested changes surgical, surface assumptions, and pin verifiable
+      success criteria for review feedback.
+    default_agent: shell
+    allowed_agents: [shell, watcher, qa, troubleshoot, supervisor, techlead]
+    inputs:
+      - reviewable_artifact
+    outputs:
+      - review_advisory
+    done_when:
+      - Review covers Karpathy 4 rules per artifact
+      - Suggestions are surgical and trace to a concrete user-visible issue
