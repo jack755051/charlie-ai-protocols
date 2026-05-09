@@ -6,6 +6,41 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.24.7] - 2026-05-10
+
+> Patch release — wire the Karpathy guardrails shared-layer skill end-to-end through the RuntimeBinder (Phase 1 dogfood scaffold) and default `CAP_HOME` to `~/.cap` so `cap workflow *` finds the shared layer without manual env prefixing.
+
+### Added
+
+- **Karpathy guardrails Phase 1 dogfood scaffold** — staged integration of the [Andrej Karpathy LLM-coding guidelines](https://x.com/karpathy/status/2015883857489522876) into CAP via the shared layer (does NOT touch builtin `agent-skills/`, does NOT touch global `~/.codex/` or `~/.claude/`).
+  - `docs/cap/KARPATHY-GUIDELINES-INTEGRATION-MEMO.md`: planning memo with Phase 1 (shared layer) and Phase 2 (builtin candidate) entry / exit criteria. Phase 2 is gated on Phase 1 dogfood evidence.
+  - `schemas/capabilities.yaml`: declares two new advisory capabilities `engineering_guardrails` and `code_review_guardrails`. `allowed_agents` is broad (shell + supervisor + techlead + frontend + backend + qa + troubleshoot + watcher) so any role can mount the guardrail when a workflow asks for it.
+  - `schemas/workflows/karpathy-guardrails-smoke.yaml`: single-step smoke workflow that exists only to verify the binder picks the shared skill end-to-end. No real artifacts produced.
+  - `.cap/constitution.yaml` + `.cap.constitution.yaml` (synced): `allowed_capabilities` extended with the two guardrail capabilities; `workflow_policy.allowed_source_roots` extended with `~/.cap/shared/skills.yaml` and `~/.cap/shared/skills` as forward-compat opt-in.
+  - User-local pieces (intentionally NOT committed): `~/.cap/shared/skills/karpathy-guidelines.md` (CAP-style guardrail distilled from upstream `SKILL.md` plus explicit conflict-resolution priority order) and `~/.cap/shared/skills.yaml` (registry entry binding the skill to the two new capabilities).
+
+- **`CAP_HOME` default in cap-workflow.sh** — `: "${CAP_HOME:=${HOME}/.cap}"; export CAP_HOME` near the dispatcher prelude. The python binder sub-process now finds the shared-layer skill registry without operators having to prefix `CAP_HOME=$HOME/.cap` on every `cap workflow` invocation. Bash `:=` semantics preserve explicit user values; an empty string `CAP_HOME=''` falls back to the default same as unset (intentional — any falsy value triggers the default).
+
+- **New test fixture**: `tests/scripts/test-cap-workflow-cap-home-default.sh` (6 cases) covers the `:=` unit semantics for unset / explicit / empty-string, subprocess inheritance via the dispatcher prelude, and a negative integration confirming `:=` doesn't clobber explicit `CAP_HOME`.
+
+### Verified
+
+- Karpathy Phase 1 real-run dogfood: **2 / 2 PASS** with no prompt conflicts.
+  - Claude (2.1.137) — `run_20260510013742_00d4f6e5`, 98s, completed/success.
+  - Codex (0.128.0) — `run_20260510014158_f3846a3f`, 50s, completed/success.
+  - Both providers correctly resolved `prompt_file: skills/karpathy-guidelines.md` to `~/.cap/shared/skills/karpathy-guidelines.md`, mounted the `karpathy-guidelines` role, applied the Karpathy 4 rules (think before / simplicity / surgical / goal-driven), and emitted advisory output without scope creep.
+- New: cap-home-default **6 / 6**.
+- Run-observability + CLI surface fixtures unchanged: watch **104 / 104**, logs **63 / 63**, inspect **56 / 56**, ps-tip **9 / 9**, help-topics **43 / 43**, help-surface **71 / 71**, shortcuts **12 / 12**, unknown-command **16 / 16**, namespace-unknown **23 / 23**, mapper-global **14 / 14**.
+- Full smoke: `scripts/workflows/smoke-per-stage.sh` — **87 passed / 0 failed / 0 skipped** (parity with v0.24.6 baseline; no regression).
+
+### Boundary
+
+- Phase 1 dogfood: shared-layer-only integration. No changes to `agent-skills/`, `cap-workflow-exec.sh`, AI prompts (other than the new shared skill prompt itself), agent role files, `~/.codex/`, or `~/.claude/`.
+- `CAP_HOME` default scope is `cap-workflow.sh` only; generalising to `cap-entry.sh` (which would also help cap-task / cap-replay callees) is deferred until a concrete case demands it.
+- Phase 2 builtin promotion (moving the guardrail to `agent-skills/strategies/`) is gated on dogfood evidence per the integration memo; not part of this release.
+
+---
+
 ## [v0.24.6] - 2026-05-09
 
 > Patch release — Phase 5 read-only filter wave. Three docker / kubectl-style filters bring `cap workflow watch` and `cap workflow logs` closer to filtering ergonomics seen in production observability tools. Pure render / parse layer.
