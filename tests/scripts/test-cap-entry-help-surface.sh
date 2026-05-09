@@ -66,6 +66,17 @@ assert_contains "main help shows project long alias" "cap proj ..." "${main_help
 assert_contains "main help shows workflow alias" "cap wf ..." "${main_help}"
 assert_contains "main help shows provider alias" "cap prov doctor" "${main_help}"
 
+# P3: main help gains an [Observe Runs] block so logs / watch / inspect /
+# ps surface on the first screen, and an explicit footer pointing at the
+# topic-style help pages.
+assert_contains "main help shows observe block"  "[Observe Runs]"             "${main_help}"
+assert_contains "main help shows observe ps"     "cap workflow ps"            "${main_help}"
+assert_contains "main help shows observe logs"   "cap workflow logs <run-id>" "${main_help}"
+assert_contains "main help shows observe watch"  "cap workflow watch <run-id>" "${main_help}"
+assert_contains "main help shows observe inspect" "cap workflow inspect <run-id>" "${main_help}"
+assert_contains "main help advertises topic help workflow" "cap help workflow" "${main_help}"
+assert_contains "main help advertises topic help observe"  "cap help observe"  "${main_help}"
+
 assert_not_contains "main help hides setup" "cap setup" "${main_help}"
 assert_not_contains "main help hides sync" "cap sync" "${main_help}"
 assert_not_contains "main help hides paths" "cap paths" "${main_help}"
@@ -76,7 +87,6 @@ assert_not_contains "main help hides workflow compile" "cap workflow compile" "$
 assert_not_contains "main help hides workflow show" "cap workflow show" "${main_help}"
 assert_not_contains "main help hides workflow plan" "cap workflow plan" "${main_help}"
 assert_not_contains "main help hides workflow bind" "cap workflow bind" "${main_help}"
-assert_not_contains "main help hides workflow inspect" "cap workflow inspect" "${main_help}"
 assert_not_contains "main help hides codex wrapper" "cap codex" "${main_help}"
 assert_not_contains "main help hides claude wrapper" "cap claude" "${main_help}"
 assert_not_contains "main help hides session" "cap session" "${main_help}"

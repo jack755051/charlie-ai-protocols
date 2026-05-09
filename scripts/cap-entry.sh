@@ -31,6 +31,12 @@ COMMAND                            DESCRIPTION
   cap workflow run <id> [prompt]   Run a workflow in a CAP-enabled repo (default CLI: claude)
   cap workflow run --dry-run <id> [prompt]  Preview the workflow execution plan without calling AI
 
+[Observe Runs]
+  cap workflow ps                  List active workflow runs (-a / --all for history)
+  cap workflow logs <run-id>       Print or follow workflow.log (docker-like)
+  cap workflow watch <run-id>      Live state snapshot (refreshes on tty)
+  cap workflow inspect <run-id>    One-shot run details with follow-up hints
+
 [Provider]
   cap provider doctor [--json]     Check claude / codex CLI availability (read-only; no login)
 
@@ -40,8 +46,101 @@ COMMAND                            DESCRIPTION
   cap wf ...                       shorthand for cap workflow ...
   cap prov doctor                  shorthand for cap provider doctor
 
-More maintenance, diagnostic, and legacy commands:
-  cap help --advanced
+Topic-style help:
+  cap help workflow                full cap workflow subcommand index
+  cap help observe                 deep dive into logs / watch / inspect / ps
+  cap help --advanced              maintenance, diagnostics, and legacy commands
+EOF
+}
+
+show_help_workflow() {
+  cat <<'EOF'
+cap workflow — Full subcommand index
+
+USAGE
+  cap workflow <subcommand> [options]
+  cap workflow <id> [prompt]              shorthand for `cap workflow run <id> [prompt]`
+  cap workflow <id>                       shorthand for `cap workflow show <id>` (no prompt)
+
+[Discover]
+  cap workflow list                      List registered workflows (static catalog)
+  cap workflow show <id>                 Print workflow definition + binding summary
+  cap workflow plan <id>                 Show semantic + bound execution plan
+  cap workflow bind <id> [registry]      Run capability binding and print report
+
+[Run]
+  cap workflow run <id> [prompt]         Execute a workflow (default CLI: claude)
+  cap workflow run --dry-run <id> [prompt]      Preview plan without calling AI
+  cap workflow run --strategy auto <id> [prompt]  Auto-select fast / governed / strict
+  cap workflow run --cli codex <id> [prompt]      Force a specific provider CLI
+  cap workflow run --design-package <name> <id>   Inject ~/.cap/designs/<name>
+  cap workflow run-task "<request>"       Compile then execute from a one-line request
+  cap workflow compile "<request>"        Compile-only (no execution)
+
+[Observe]
+  cap workflow ps [--all]                Active runs (--all for history)
+  cap workflow logs <run-id>             Print or follow workflow.log
+  cap workflow watch <run-id>            Live snapshot view
+  cap workflow inspect <run-id>          One-shot run details
+
+[Constitution / Task]
+  cap workflow constitution "<request>"   [DEPRECATED] use cap task constitution
+  cap task constitution "<request>"       Generate a Task Constitution
+
+For deeper observability flags (`-f`, `--tail`, `--step`, `--compact`, `--json`, `--cap-home`),
+run:
+  cap help observe
+  cap workflow logs --help
+  cap workflow watch --help
+
+Architecture / SSOT pointers:
+  docs/cap/ARCHITECTURE.md                runtime module map
+  docs/cap/RUN-OBSERVABILITY-GUIDE.md     observation operations guide
+EOF
+}
+
+show_help_observe() {
+  cat <<'EOF'
+cap workflow observability — read-only views over a CAP run
+
+When to use which surface:
+  - Full line stream (entire workflow.log)         → cap workflow logs <run-id>
+  - Live tail of new log lines                     → cap workflow logs -f <run-id>
+  - Last N log lines (docker habit)                → cap workflow logs --tail N <run-id>
+  - One specific step's provider output            → cap workflow logs <run-id> --step <step-id>
+  - Live state snapshot (auto-refresh on tty)      → cap workflow watch <run-id>
+  - Single-shot snapshot for CI / scripts          → cap workflow watch --once <run-id>
+  - Terse single-screen status (<15 lines)         → cap workflow watch --compact <run-id>
+  - JSON snapshot for dashboards / jq pipelines    → cap workflow watch --json <run-id>
+  - Final run details (six sections)               → cap workflow inspect <run-id>
+  - List active or historical runs                 → cap workflow ps [--all]
+  - Cross-repo / sandbox observation               → any of the above + --cap-home PATH
+
+State glyphs (shared across watch / inspect):
+  ✓ ok        completed / validated / success
+  ●  running   in flight
+  ○  pending   queued / waiting
+  ✗ failed    explicit failure
+  ⊘ skipped
+  ◐ blocked
+  ⊠ cancelled
+  ?  unknown   not recognised (legacy / partial run)
+
+Step-output fallback chain (cap workflow logs --step):
+  1. <run_dir>/*-<step_id>.raw.log       (legacy runs only)
+  2. <run_dir>/*-<step_id>.md            (current SSOT)
+  3. <run_dir>/*-<step_id>.handoff.md    (last-resort: Type D summary)
+
+Boundary:
+  - Pure read-only. No AI calls, no token cost, no run state mutation.
+  - All flags work without provider login.
+
+Per-command --help:
+  cap workflow logs --help
+  cap workflow watch --help
+
+Operations guide:
+  docs/cap/RUN-OBSERVABILITY-GUIDE.md
 EOF
 }
 
@@ -184,9 +283,15 @@ case "${COMMAND}" in
       --advanced|advanced)
         show_advanced_help
         ;;
+      workflow|wf)
+        show_help_workflow
+        ;;
+      observe|observability)
+        show_help_observe
+        ;;
       *)
         echo "Unknown help option: $1" >&2
-        echo "Available: cap help | cap help --advanced" >&2
+        echo "Available: cap help | cap help --advanced | cap help workflow | cap help observe" >&2
         exit 1
         ;;
     esac

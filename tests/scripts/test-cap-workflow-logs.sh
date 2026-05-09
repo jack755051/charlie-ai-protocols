@@ -254,6 +254,29 @@ assert_eq "9a. --step missing exits 1" "1" "${rc_9}"
 assert_contains "9b. error names step-id (Chinese stderr)" "${out_9}" "找不到 step missing_step"
 assert_contains "9c. error mentions fallback chain" "${out_9}" "raw.log / md / handoff.md"
 
+# P3: dispatcher-side --help intercept (covers bash flags Python doesn't see)
+
+echo "Case H1: cap workflow logs --help renders dispatcher-side usage"
+out_h1="$(bash "${CAP_WORKFLOW_SH}" logs --help 2>&1)"
+rc_h1=$?
+
+if [ "${rc_h1}" = "0" ]; then
+  echo "  PASS: H1a. logs --help exits 0"
+  pass_count=$((pass_count + 1))
+else
+  echo "  FAIL: H1a. logs --help exit ${rc_h1}"
+  fail_count=$((fail_count + 1))
+fi
+
+assert_contains "H1b. logs --help title" "${out_h1}" "cap workflow logs"
+assert_contains "H1c. logs --help shows -f/--follow" "${out_h1}" "-f, --follow"
+assert_contains "H1d. logs --help shows --tail (the bash-side flag)" "${out_h1}" "--tail N"
+assert_contains "H1e. logs --help shows --step" "${out_h1}" "--step STEP_ID"
+assert_contains "H1f. logs --help shows --cap-home" "${out_h1}" "--cap-home PATH"
+assert_contains "H1g. logs --help has examples" "${out_h1}" "Examples:"
+assert_contains "H1h. logs --help cross-links watch" "${out_h1}" "cap workflow watch"
+assert_contains "H1i. logs --help cross-links observe topic" "${out_h1}" "cap help observe"
+
 # Phase 4 polish: --tail N (docker-style) ----------------------------------
 
 # Case T1: --tail N prints only the last N lines (no follow)

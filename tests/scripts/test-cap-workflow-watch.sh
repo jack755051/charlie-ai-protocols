@@ -430,6 +430,35 @@ assert_eq "11b. all top-level keys preserved in --json --compact" \
   "workflow_id,run_id,steps,sessions,artifacts,last_log_lines" "${keys_present}"
 
 # ---------------------------------------------------------------------------
+# P3: dispatcher-side --help intercept
+# ---------------------------------------------------------------------------
+
+echo "Case H1: cap workflow watch --help renders dispatcher-side usage"
+out_w_h1="$(bash "${CAP_WORKFLOW_SH}" watch --help 2>&1)"
+rc_w_h1=$?
+
+if [ "${rc_w_h1}" = "0" ]; then
+  echo "  PASS: H1a. watch --help exits 0"
+  pass_count=$((pass_count + 1))
+else
+  echo "  FAIL: H1a. watch --help exit ${rc_w_h1}"
+  fail_count=$((fail_count + 1))
+fi
+
+assert_contains "H1b. watch --help title" "${out_w_h1}" "cap workflow watch"
+assert_contains "H1c. watch --help shows --once" "${out_w_h1}" "--once"
+assert_contains "H1d. watch --help shows --json" "${out_w_h1}" "--json"
+assert_contains "H1e. watch --help shows --compact" "${out_w_h1}" "--compact"
+assert_contains "H1f. watch --help shows --interval" "${out_w_h1}" "--interval SEC"
+assert_contains "H1g. watch --help shows --tail" "${out_w_h1}" "--tail N"
+assert_contains "H1h. watch --help shows --cap-home" "${out_w_h1}" "--cap-home PATH"
+assert_contains "H1i. watch --help has Behaviour matrix" "${out_w_h1}" "Behaviour:"
+assert_contains "H1j. watch --help notes status glyphs" "${out_w_h1}" "status glyphs"
+assert_contains "H1k. watch --help has examples" "${out_w_h1}" "Examples:"
+assert_contains "H1l. watch --help cross-links logs" "${out_w_h1}" "cap workflow logs"
+assert_contains "H1m. watch --help cross-links observe topic" "${out_w_h1}" "cap help observe"
+
+# ---------------------------------------------------------------------------
 # P2 cases — status symbols + dashboard footer for failed / running runs
 # ---------------------------------------------------------------------------
 

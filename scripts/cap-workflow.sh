@@ -331,6 +331,40 @@ case "${1:-}" in
     # Bash owns IO (cat / tail -f); the Python side only resolves the
     # log path so follow semantics stay in POSIX shell tooling.
     shift
+    # P3: dispatcher-side --help so users see ALL flags including the
+    # bash-resolved ones (-f / --tail). Forwarding to Python --help
+    # would print an incomplete list (Python only owns --step / --cap-home).
+    case "${1:-}" in
+      -h|--help)
+        cat <<'LOGS_HELP'
+cap workflow logs — print or follow a run's workflow.log (docker-like)
+
+Usage:
+  cap workflow logs [-f|--follow] [--tail N] <run-id> [--step STEP_ID] [--cap-home PATH]
+
+Flags:
+  -f, --follow             Follow appends live (tail -f). Without this flag, prints once and exits.
+  --tail N                 Print only the last N lines (positive integer required).
+  --step STEP_ID           Show a specific step's output instead of workflow.log.
+                           Resolves via raw.log -> md -> handoff.md fallback.
+  --cap-home PATH          Override CAP_HOME / ~/.cap for cross-repo or sandbox reads.
+
+Examples:
+  cap workflow logs run_xxx                       # entire workflow.log
+  cap workflow logs -f run_xxx                    # follow workflow.log
+  cap workflow logs --tail 50 run_xxx             # last 50 lines
+  cap workflow logs -f --tail 20 run_xxx          # last 20 lines + follow
+  cap workflow logs run_xxx --step draft_constitution
+  cap workflow logs -f run_xxx --step draft_constitution
+
+See also:
+  cap workflow watch <run-id>     live state snapshot
+  cap workflow inspect <run-id>   one-shot run details
+  cap help observe                full observability topic
+LOGS_HELP
+        exit 0
+        ;;
+    esac
     LOGS_FOLLOW=0
     LOGS_TAIL=""
     LOGS_RUN_ID=""
@@ -412,6 +446,49 @@ case "${1:-}" in
     # side owns the loop / clear-screen logic; bash here is just an arg
     # forwarder so we keep one source of truth for snapshot rendering.
     shift
+    # P3: dispatcher-side --help. Python's argparse output is technically
+    # complete here (all flags live on the Python side) but we keep the
+    # intercept symmetric with logs and add usage examples + see-also.
+    case "${1:-}" in
+      -h|--help)
+        cat <<'WATCH_HELP'
+cap workflow watch — live snapshot of a workflow run
+
+Usage:
+  cap workflow watch [--once] [--json] [--compact] [--interval SEC] [--tail N] <run-id> [--cap-home PATH]
+
+Flags:
+  --once                   Render a single snapshot and exit (deterministic; for CI / scripts).
+  --json                   Emit a JSON snapshot. Always single-shot — jq pipelines stay clean.
+                           Full payload regardless of --compact.
+  --compact                Single-screen terse view (<15 lines). Default --tail collapses to 1.
+  --interval SEC           Refresh interval in seconds (default 2.0).
+  --tail N                 Number of trailing workflow.log lines to show
+                           (default: 10 verbose / 1 compact).
+  --cap-home PATH          Override CAP_HOME / ~/.cap for cross-repo or sandbox reads.
+
+Behaviour:
+  - tty default loops with ANSI clear-and-redraw every --interval seconds.
+  - pipe / redirect auto-falls-back to single-shot so output stays grep-friendly.
+  - Ctrl-C exits the loop cleanly (exit 0).
+  - Header / step rows / session rows carry status glyphs (✓/●/○/✗/...).
+  - "Next:" footer suggests the next command based on run state.
+
+Examples:
+  cap workflow watch run_xxx
+  cap workflow watch --once run_xxx
+  cap workflow watch --compact run_xxx
+  cap workflow watch --json run_xxx | jq .summary
+  cap workflow watch --interval 1 --tail 20 run_xxx
+
+See also:
+  cap workflow logs <run-id>      print / follow workflow.log
+  cap workflow inspect <run-id>   one-shot run details
+  cap help observe                full observability topic
+WATCH_HELP
+        exit 0
+        ;;
+    esac
     WATCH_RUN_ID=""
     WATCH_FORWARD=()
     while [ "$#" -gt 0 ]; do

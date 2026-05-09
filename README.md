@@ -168,6 +168,61 @@ cap workflow watch <run-id> --cap-home /path/to/sandbox/.cap
 
 完整使用情境、fallback 規則與 run_dir 佈局見 [docs/cap/RUN-OBSERVABILITY-GUIDE.md](docs/cap/RUN-OBSERVABILITY-GUIDE.md)。
 
+### 常見除錯流程
+
+實際在用 CAP 時，以下三個情境覆蓋 80% 的觀察需求。每個流程都是純 read-only，不會重跑 provider 或增加 token 開銷。
+
+**情境一：Run 失敗了，下一步**
+
+```bash
+# 1. 看 inspect 找最後 final_state / failures（六區塊一次到位）
+cap workflow inspect <run-id>
+
+# 2. inspect 的 # Follow-up Next: 區塊已直接給你下一行命令；
+#    或者根據 failures 區塊裡的 step_id 自己跳
+cap workflow logs <run-id> --step <failed-step>
+
+# 3. 看 session ledger 的 token / time 軌跡
+cap session inspect --run-id <run-id>
+```
+
+**情境二：Run 還在跑，想看進度**
+
+```bash
+# 1. 列出活躍 run（底部 Tip 已直接給你下一行命令）
+cap workflow ps
+
+# 2. live 狀態畫面（tty 預設 2s ANSI 重繪；compact 模式 < 15 行）
+cap workflow watch <run-id>
+cap workflow watch --compact <run-id>
+
+# 3. 想跟著看新 log（類似 docker logs -f）
+cap workflow logs -f <run-id>
+
+# 4. 跟著看單一 step 的 stream
+cap workflow logs -f <run-id> --step <step-id>
+```
+
+**情境三：想看某個 step 的實際 provider output**
+
+```bash
+# step 名不需要記 phase 編號，resolver 自己 glob
+# 解析順序：raw.log → md → handoff.md（legacy raw.log 仍會被優先採用）
+cap workflow logs <run-id> --step <step-id>
+
+# 配合 --tail 只看尾段
+cap workflow logs --tail 50 <run-id> --step <step-id>
+```
+
+需要更深入的 flag 參考可以走：
+
+```bash
+cap help observe                  # observability surface 全貌與情境對照
+cap help workflow                 # cap workflow 全 subcommand 索引
+cap workflow logs --help          # logs dispatcher 完整 flag 與範例
+cap workflow watch --help         # watch dispatcher 完整 flag 與行為矩陣
+```
+
 ### Provider Isolation
 
 CAP **不會**預設包裹（hijack）裸 `claude` / `codex`：
