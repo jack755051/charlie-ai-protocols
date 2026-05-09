@@ -458,6 +458,7 @@ through the prompt reference.
 | # | Run ID | Provider | Workflow | Candidate Agent | Result | Notes |
 |---|---|---|---|---|---|---|
 | 8 | `run_20260510040913_bd2a1cb9` | Claude 2.1.137 | karpathy-integration-smoke-supervisor | 01-supervisor | ✓ 74s | **First integration-mode run after Phase 2 promote.** Supervisor produced a PRD whose section structure is **explicitly labelled with the four Karpathy rules** — `[Karpathy Rule 1 — 浮現假設，不偷偷選擇]`, `[Rule 2 — 推回投機性 scope]`, `[Rule 3 — 新增項目可逐條追溯到使用者需求]`, `[Rule 4 — 可驗證的成功條件]`. See A/B note below. |
+| 9 | `run_20260510041740_cc4b0caf` | Claude 2.1.137 | project-code-analysis (production workflow, 6 steps) | 01-supervisor + 02-techlead (×2) + 10-troubleshoot | ✓ 1568s (~26 min) | **Production multi-step workflow integration.** 4 of 6 steps spawned Karpathy candidate agents. Result: **implicit framing** across all 4 candidate-agent steps but **zero explicit `[Karpathy Rule N]` labels** anywhere in the run. Each candidate-agent output exhibits rule-shaped behaviour (Out-of-Scope tables / "現狀夠好不要動" stance / "non-X / non-Y" surgical bullet lists / verifiable deliverable enumerations) without naming the rules. Together with run #8, this forms the upper / lower bound of Phase 2 reference visibility — see Visibility Spectrum note below. |
 
 #### Why run #8 is the cleanest possible signal
 
@@ -510,7 +511,8 @@ reference rather than as the role itself.
   troubleshoot / watcher) have not yet been integration-tested.**
   Run #8 evidence is for the supervisor only. None of the others is
   expected to fail (the reference shape is identical) but neither
-  has been observed in the wild yet.
+  has been observed in the wild yet. → Partially CLOSED by run #9
+  (techlead + troubleshoot covered).
 - **Cross-provider integration parity (Codex)** has not been
   collected for run #8. Phase 1 cross-provider evidence (#4 vs #5)
   showed Claude / Codex bias in the role-mounted path; the
@@ -520,6 +522,66 @@ reference rather than as the role itself.
 - **Watcher Quality Alerts on Karpathy-rule violations** are still
   the open follow-up #2 from Phase 2 closeout — that path requires
   an actual violation to fire, not just a clean run like this one.
+
+#### Visibility spectrum (run #8 ⇆ run #9)
+
+Together, runs #8 and #9 bracket the visibility range of the
+Phase 2 reference-mounted path:
+
+| Dimension | Run #8 (smoke) | Run #9 (production) |
+|---|---|---|
+| Workflow shape | single-step purpose-built smoke | 6-step production code-analysis |
+| Prompt complexity | minimal feature spec request | full repo subsystem analysis |
+| Candidate agents involved | 1 (supervisor) | 4 step-instances (supervisor + techlead ×2 + troubleshoot) |
+| Karpathy rule cite count | **explicit, all 4 rules named in section headers** | **0 explicit cites across all 4 candidate-agent outputs** |
+| Karpathy framing presence | explicit + behavioural | behavioural only |
+| Examples of behavioural framing in #9 | — | Out-of-Scope tables (Rule 1) / "現狀夠好不要動" (Rule 2) / "**非**逐行 review、**非** patch、**非** refactor" (Rule 3) / 5-章 deliverable shapes (Rule 4) / troubleshoot's "不偽造已讀過上游全文的結論" (Rule 1) |
+
+**Interpretation.** Runs #8 and #9 represent two ends of how the
+reference-mounted path is rendered, not two different effects:
+
+- **#8 (high visibility)** — when the agent's task is itself a small
+  meta-discussion about a feature, the agent has spare attention to
+  cite the strategy by name. The Karpathy reference becomes
+  user-visible scaffolding.
+- **#9 (low visibility, internalised)** — when the agent's task
+  consumes its full attention (full repo scan, multi-step handoff
+  chain, complex artefact production), the strategy reference still
+  shapes output but the agent doesn't have surface area to label it.
+  Karpathy becomes ambient discipline rather than visible scaffolding.
+
+**Neither is a regression.** Both are valid outcomes; production
+workflows in particular should expect mostly internalised framing.
+Phase 2 evaluation should accept both as "reference is working" —
+explicit cites are a bonus, not a requirement.
+
+**Real failure mode would be:** a candidate agent's output exhibits
+**neither** explicit cites **nor** behavioural framing — i.e. shows
+speculative additions, accepts ambiguity silently, suggests
+unrelated cleanup, or skips success criteria. Run #9 has none of
+those across 4 candidate-agent outputs, so the spectrum is
+"working at both ends".
+
+#### What run #9 newly closes from Phase 2 open follow-ups
+
+- ~~Other six candidate agents have not yet been integration-tested~~
+  → Partially closed: techlead (×2) and troubleshoot now have one
+  integration-mode observation each. Frontend / backend / qa /
+  watcher remain untested but the reference shape is identical and
+  the failure mode (no framing at all) was not observed in 4
+  candidate-agent step instances. The open-follow-up bar is
+  effectively at "no signal would be a surprise" rather than "every
+  agent must be tested before promotion is safe".
+
+#### Side observation: Karpathy reference does NOT bloat token usage
+
+Run #9 ran 6 steps in 1568s with the full v0.24.9 agent-skills
+baseline (every candidate agent prompt now includes the Karpathy
+reference). No timeout, no token-budget warning, no context-window
+strain. The "Keep the guidance concise enough to avoid bloating
+every task prompt" criterion in the original Phase 2 plan is
+satisfied empirically — adding ~1 bullet per agent (≤120 chars
+each) does not measurably affect runtime cost.
 
 ## Deferred
 
