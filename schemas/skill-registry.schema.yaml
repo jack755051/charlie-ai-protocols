@@ -35,6 +35,40 @@ fields:
         type: string
         required: false
         description: skill 本身的版本
+      kind:
+        type: string
+        required: false
+        enum: [role, skill]
+        description: |
+          Discriminator for registry entry type. Phase 1 schema-only
+          field — the runtime does NOT yet branch on kind. Future
+          runtime work will switch on this enum instead of inferring
+          entry type from agent_alias presence.
+
+            role  — an executable agent role that consumes capabilities
+                    and drives workflow steps (e.g. supervisor / techlead /
+                    frontend / backend / qa). Pairs with agent_alias +
+                    prompt_file + cli to satisfy
+                    RuntimeBinder._has_execution_metadata.
+            skill — a mountable guardrail / strategy / advisory layer
+                    that augments a role rather than driving steps
+                    itself (e.g. shared-karpathy-guidelines, framework-
+                    specific TDD strategies). May or may not carry
+                    execution metadata; today it does because the
+                    runtime selection path expects it, but Phase 2+
+                    may relax that requirement.
+
+          Backwards-compatible legacy inference (when ``kind`` is
+          missing from a registry entry):
+            agent_alias present → kind = role  (legacy executable role)
+            agent_alias absent  → kind = skill (legacy mountable strategy)
+
+          Real entries today (v0.24.7): all builtin agent-skills are
+          implicit kind=role; the shared-karpathy-guidelines entry in
+          ~/.cap/shared/skills.yaml is implicit kind=skill (advisory
+          guardrail). Either can opt into explicit ``kind`` without
+          changing runtime behaviour — the field is informative now,
+          dispatcher-relevant later.
       agent_alias:
         type: string
       provider:
