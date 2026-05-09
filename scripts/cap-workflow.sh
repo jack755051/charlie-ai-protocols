@@ -8,6 +8,21 @@ WORKFLOWS_DIR="${CAP_ROOT}/schemas/workflows"
 VENV_PYTHON="${CAP_ROOT}/.venv/bin/python"
 PATH_HELPER="${SCRIPT_DIR}/cap-paths.sh"
 
+# Default CAP_HOME so the python sub-process (RuntimeBinder) finds the
+# shared-layer skill registry at ~/.cap/shared/skills.yaml without the
+# user having to export the env var by hand. ``:=`` is the bash
+# idiom for "set only when unset"; explicit user values (including
+# empty-string overrides via ``CAP_HOME=`` ... ``cap workflow ...``)
+# are preserved. ``export`` so the sub-shell sees it; the surrounding
+# user shell already runs in its own process so there's no caller
+# pollution. RuntimeBinder.__init__ resolves cap_home with this exact
+# precedence: explicit kwarg > CAP_HOME env > base_dir fallback
+# (engine/runtime_binder.py:186-192) — defaulting the env var here
+# is the smallest fix that keeps shared-layer lookups working out of
+# the box for cap workflow / cap workflow-exec / cap-task callees.
+: "${CAP_HOME:=${HOME}/.cap}"
+export CAP_HOME
+
 usage() {
   cat <<'EOF' >&2
 Usage:
