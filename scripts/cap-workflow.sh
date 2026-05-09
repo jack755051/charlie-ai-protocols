@@ -15,7 +15,7 @@ Usage:
   cap workflow ps [--all]
   cap workflow show <id>
   cap workflow inspect <run-id>
-  cap workflow logs [-f|--follow] <run-id> [--step STEP_ID] [--cap-home PATH]
+  cap workflow logs [-f|--follow] [--tail N] <run-id> [--step STEP_ID] [--cap-home PATH]
   cap workflow watch [--once] [--json] [--compact] [--interval SEC] [--tail N] <run-id> [--cap-home PATH]
   cap workflow plan <id>
   cap workflow bind <id> [registry]
@@ -100,6 +100,22 @@ resolve_run_execution_mode() {
 
 ensure_status_store() {
   bash "${PATH_HELPER}" ensure >/dev/null
+}
+
+# Print a unified "workflow not found" message that doubles as a hint
+# when the user's input is actually a typo of a subcommand. The shorthand
+# fallback (`cap workflow <id>` -> show <id> / run <id>) means typos
+# like `cap workflow updae` get routed through resolve_workflow_ref and
+# would otherwise just say "workflow not found: updae" without telling
+# the user that updae isn't a subcommand either. Both surfaces share
+# this helper so future subcommand additions only need a single edit.
+workflow_not_found() {
+  local arg="$1"
+  echo "workflow not found: ${arg}" >&2
+  echo "" >&2
+  echo "Hint: '${arg}' is neither a registered workflow id nor a known subcommand." >&2
+  echo "Available subcommands: list | ps | show | inspect | logs | watch | run | plan | bind | constitution | compile | run-task" >&2
+  echo "Run 'cap workflow list' to see registered workflow ids." >&2
 }
 
 fallback_status_store() {
@@ -298,7 +314,7 @@ case "${1:-}" in
   show)
     [ "$#" -eq 2 ] || usage
     WORKFLOW_REF="$(resolve_workflow_ref "$2")" || {
-      echo "workflow not found: $2" >&2
+      workflow_not_found "$2"
       exit 1
     }
     "${PYTHON_BIN}" "${CLI_PY}" show "${CAP_ROOT}" "${WORKFLOW_REF}" "$(get_status_store)"
@@ -316,12 +332,22 @@ case "${1:-}" in
     # log path so follow semantics stay in POSIX shell tooling.
     shift
     LOGS_FOLLOW=0
+    LOGS_TAIL=""
     LOGS_RUN_ID=""
     LOGS_FORWARD=()
     while [ "$#" -gt 0 ]; do
       case "$1" in
         -f|--follow)
           LOGS_FOLLOW=1
+          shift
+          ;;
+        --tail)
+          [ -n "${2:-}" ] || { echo "--tail requires a positive integer" >&2; exit 1; }
+          LOGS_TAIL="$2"
+          shift 2
+          ;;
+        --tail=*)
+          LOGS_TAIL="${1#--tail=}"
           shift
           ;;
         --cap-home|--step)
@@ -339,7 +365,7 @@ case "${1:-}" in
           ;;
         -*)
           echo "Unknown logs option: $1" >&2
-          echo "Usage: cap workflow logs [-f|--follow] <run-id> [--step STEP_ID] [--cap-home PATH]" >&2
+          echo "Usage: cap workflow logs [-f|--follow] [--tail N] <run-id> [--step STEP_ID] [--cap-home PATH]" >&2
           exit 1
           ;;
         *)
@@ -353,15 +379,32 @@ case "${1:-}" in
       esac
     done
     if [ -z "${LOGS_RUN_ID}" ]; then
-      echo "Usage: cap workflow logs [-f|--follow] <run-id> [--step STEP_ID] [--cap-home PATH]" >&2
+      echo "Usage: cap workflow logs [-f|--follow] [--tail N] <run-id> [--step STEP_ID] [--cap-home PATH]" >&2
       exit 1
+    fi
+    if [ -n "${LOGS_TAIL}" ]; then
+      # Reject non-positive integers up-front so we don't pass garbage to
+      # `tail -n` and surface a confusing tail(1) error instead.
+      if ! [[ "${LOGS_TAIL}" =~ ^[1-9][0-9]*$ ]]; then
+        echo "--tail requires a positive integer (got: ${LOGS_TAIL})" >&2
+        exit 1
+      fi
     fi
     LOGS_PATH="$("${PYTHON_BIN}" "${CLI_PY}" logs "${LOGS_FORWARD[@]}" "${LOGS_RUN_ID}")" || exit $?
     if [ "${LOGS_FOLLOW}" -eq 1 ]; then
-      # -n +1 so the user sees existing log content first, then live tail.
-      exec tail -n +1 -f "${LOGS_PATH}"
+      # docker logs habit: --tail N + -f shows last N lines then follows;
+      # without --tail, follow shows full history then live (-n +1).
+      if [ -n "${LOGS_TAIL}" ]; then
+        exec tail -n "${LOGS_TAIL}" -f "${LOGS_PATH}"
+      else
+        exec tail -n +1 -f "${LOGS_PATH}"
+      fi
     else
-      exec cat "${LOGS_PATH}"
+      if [ -n "${LOGS_TAIL}" ]; then
+        exec tail -n "${LOGS_TAIL}" "${LOGS_PATH}"
+      else
+        exec cat "${LOGS_PATH}"
+      fi
     fi
     ;;
   watch)
@@ -414,7 +457,7 @@ case "${1:-}" in
   plan)
     [ "$#" -eq 2 ] || usage
     WORKFLOW_REF="$(resolve_workflow_ref "$2")" || {
-      echo "workflow not found: $2" >&2
+      workflow_not_found "$2"
       exit 1
     }
     "${PYTHON_BIN}" "${CLI_PY}" plan "${CAP_ROOT}" "${WORKFLOW_REF}"
@@ -422,7 +465,7 @@ case "${1:-}" in
   bind)
     [ "$#" -ge 2 ] && [ "$#" -le 3 ] || usage
     WORKFLOW_REF="$(resolve_workflow_ref "$2")" || {
-      echo "workflow not found: $2" >&2
+      workflow_not_found "$2"
       exit 1
     }
     REGISTRY_REF="${3:-}"
@@ -610,7 +653,7 @@ case "${1:-}" in
     fi
 
     WORKFLOW_REF="$(resolve_workflow_ref "${WORKFLOW_ARG}")" || {
-      echo "workflow not found: ${WORKFLOW_ARG}" >&2
+      workflow_not_found "${WORKFLOW_ARG}"
       exit 1
     }
     shift

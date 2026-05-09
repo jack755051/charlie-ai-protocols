@@ -134,7 +134,8 @@ result="$(run_capture bash "${CAP_TASK}" not-a-real-cmd)"
 err4="${result#*|}"; err4="${err4%|*}"; exit4="${result##*|}"
 
 assert_eq "case 4 exit 1" "1" "${exit4}"
-assert_contains "case 4 names unknown" "unknown subcommand" "${err4}"
+assert_contains "case 4 names unknown" "Unknown task subcommand" "${err4}"
+assert_contains "case 4 lists available" "Available: cap task constitution" "${err4}"
 
 # ── Case 5 ──────────────────────────────────────────────────────────────
 echo "Case 5: cap workflow constitution (no args) → exit 1 + deprecation warning"

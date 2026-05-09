@@ -76,6 +76,28 @@ out_bad="${result_bad#*$'\t'}"
 assert_eq "unknown command exits 1" "1" "${rc_bad}"
 assert_contains "unknown command reports command" "Unknown cap command: does-not-exist" "${out_bad}"
 assert_contains "unknown command points to help" "cap help" "${out_bad}"
+# does-not-exist is too far from any known command — must NOT trigger a
+# weak suggestion (cutoff 0.6).
+assert_not_contains "unknown gibberish has no suggestion" "Did you mean" "${out_bad}"
+
+# ── Fuzzy match suggestions for typos ────────────────────────────────
+result_updae="$(run_unknown updae)"
+rc_updae="${result_updae%%$'\t'*}"
+out_updae="${result_updae#*$'\t'}"
+assert_eq "cap updae exits 1" "1" "${rc_updae}"
+assert_contains "cap updae names typo" "Unknown cap command: updae" "${out_updae}"
+assert_contains "cap updae suggests update" "Did you mean: cap update?" "${out_updae}"
+
+result_hellp="$(run_unknown hellp)"
+rc_hellp="${result_hellp%%$'\t'*}"
+out_hellp="${result_hellp#*$'\t'}"
+assert_eq "cap hellp exits 1" "1" "${rc_hellp}"
+assert_contains "cap hellp suggests help" "Did you mean: cap help?" "${out_hellp}"
+
+result_wofkflow="$(run_unknown wofkflow)"
+rc_wofkflow="${result_wofkflow%%$'\t'*}"
+out_wofkflow="${result_wofkflow#*$'\t'}"
+assert_contains "cap wofkflow suggests workflow" "Did you mean: cap workflow?" "${out_wofkflow}"
 
 echo "Summary: $((checks - failures)) passed, ${failures} failed"
 [ "${failures}" -eq 0 ]

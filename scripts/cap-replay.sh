@@ -146,8 +146,9 @@ case "${SUBCOMMAND}" in
   verify) ;;
   -h|--help) usage ;;
   *)
-    printf 'cap replay: unknown subcommand: %s\n' "${SUBCOMMAND}" >&2
-    usage
+    echo "Unknown replay subcommand: ${SUBCOMMAND}" >&2
+    echo "Available: cap replay verify" >&2
+    exit 1
     ;;
 esac
 

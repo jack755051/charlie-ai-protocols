@@ -566,6 +566,13 @@ def cmd_ps(status_file: str, ps_filter: str) -> None:
             f"{_clip(row[6], widths[6]):<{widths[6]}}"
         )
 
+    # Footer hint — point operators at the live observation surfaces
+    # (Phase 1-4 of run-observability). Single line so the table stays
+    # readable in narrow terminals; matches the docker `ps` style of
+    # one-line trailers.
+    print()
+    print("Tip: cap workflow logs <run-id> | watch <run-id> | inspect <run-id>")
+
 
 # ---------------------------------------------------------------------------
 # Subcommand: show

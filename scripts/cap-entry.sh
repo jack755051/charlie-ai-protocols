@@ -90,6 +90,7 @@ COMMAND                            DESCRIPTION
   cap workflow inspect <run-id>    Show details for one workflow run
   cap workflow logs <run-id>       Print the run's workflow.log (docker-like)
   cap workflow logs -f <run-id>    Follow the run's workflow.log live (tail -f)
+  cap workflow logs --tail N <run-id>   Print only the last N lines (docker-like)
   cap workflow logs <run-id> --step <step-id>     Print a step's output (raw.log/md/handoff.md)
   cap workflow logs -f <run-id> --step <step-id>  Follow a step's output live
   cap workflow watch <run-id>      Live snapshot of run state (refreshes on tty)
@@ -124,9 +125,49 @@ COMMAND                            DESCRIPTION
 EOF
 }
 
+# Top-level commands the dispatcher recognises. Source of truth for the
+# unknown_command fuzzy-match suggester. Kept in sync manually with the
+# main case in this file — small enough to spot-check at review time.
+KNOWN_COMMANDS=(
+  help -h --help
+  -v --version version update rollback release-check
+  skill registry check-aliases
+  workflow wf
+  project p proj
+  task
+  promote
+  replay
+  agent
+  provider prov
+  codex claude session
+  artifact
+  paths
+  setup sync install uninstall
+  run
+)
+
 unknown_command() {
   local command="$1"
   echo "Unknown cap command: ${command}" >&2
+
+  # Fuzzy match via difflib (cutoff 0.6 mirrors python's default).
+  # Falls through silently when no close match — we don't want to nag
+  # users with weak suggestions ("did you mean xyz?" for unrelated
+  # typos is worse than no suggestion).
+  local suggestion
+  suggestion="$(printf '%s\n' "${KNOWN_COMMANDS[@]}" \
+    | CAP_FUZZY_INPUT="${command}" python3 -c "
+import os, sys, difflib
+words = [w.strip() for w in sys.stdin if w.strip()]
+target = os.environ.get('CAP_FUZZY_INPUT', '')
+matches = difflib.get_close_matches(target, words, n=1, cutoff=0.6)
+if matches:
+    print(matches[0])
+" 2>/dev/null)"
+
+  if [ -n "${suggestion}" ]; then
+    echo "Did you mean: cap ${suggestion}?" >&2
+  fi
   echo "Run 'cap help' to see available commands." >&2
   exit 1
 }

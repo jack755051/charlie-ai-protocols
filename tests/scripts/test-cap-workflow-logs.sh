@@ -254,6 +254,95 @@ assert_eq "9a. --step missing exits 1" "1" "${rc_9}"
 assert_contains "9b. error names step-id (Chinese stderr)" "${out_9}" "找不到 step missing_step"
 assert_contains "9c. error mentions fallback chain" "${out_9}" "raw.log / md / handoff.md"
 
+# Phase 4 polish: --tail N (docker-style) ----------------------------------
+
+# Case T1: --tail N prints only the last N lines (no follow)
+echo "Case T1: --tail N selects trailing window"
+IFS='|' read -r CAP_HOME_T1 RUN_DIR_T1 <<<"$(stage_run_dir caseT1)"
+LOG_T1="${RUN_DIR_T1}/workflow.log"
+printf 'L1\nL2\nL3\nL4\nL5\n' > "${LOG_T1}"
+
+set +e
+out_T1="$(bash "${CAP_WORKFLOW_SH}" logs --cap-home "${CAP_HOME_T1}" --tail 2 run_caseT1 2>&1)"
+rc_T1=$?
+set -e
+
+assert_eq "T1a. --tail 2 exits 0" "0" "${rc_T1}"
+assert_eq "T1b. --tail 2 prints exactly 2 lines" "2" "$(printf '%s\n' "${out_T1}" | grep -cE '^L[0-9]+$')"
+if grep -qF "L4" <<<"${out_T1}" && grep -qF "L5" <<<"${out_T1}"; then
+  echo "  PASS: T1c. last 2 lines (L4 L5) present"
+  pass_count=$((pass_count + 1))
+else
+  echo "  FAIL: T1c. expected L4+L5 in output"
+  fail_count=$((fail_count + 1))
+fi
+if grep -qF "L1" <<<"${out_T1}"; then
+  echo "  FAIL: T1d. earlier lines should be elided"
+  fail_count=$((fail_count + 1))
+else
+  echo "  PASS: T1d. earlier lines correctly elided"
+  pass_count=$((pass_count + 1))
+fi
+
+# Case T2: --tail with non-positive integer rejected
+echo "Case T2: --tail rejects non-positive integers"
+IFS='|' read -r CAP_HOME_T2 RUN_DIR_T2 <<<"$(stage_run_dir caseT2)"
+printf 'x\n' > "${RUN_DIR_T2}/workflow.log"
+
+set +e
+out_T2_zero="$(bash "${CAP_WORKFLOW_SH}" logs --cap-home "${CAP_HOME_T2}" --tail 0 run_caseT2 2>&1)"
+rc_T2_zero=$?
+out_T2_neg="$(bash "${CAP_WORKFLOW_SH}" logs --cap-home "${CAP_HOME_T2}" --tail -3 run_caseT2 2>&1)"
+rc_T2_neg=$?
+out_T2_word="$(bash "${CAP_WORKFLOW_SH}" logs --cap-home "${CAP_HOME_T2}" --tail abc run_caseT2 2>&1)"
+rc_T2_word=$?
+set -e
+
+assert_eq "T2a. --tail 0 exits 1" "1" "${rc_T2_zero}"
+assert_contains "T2b. --tail 0 emits clear error" "${out_T2_zero}" "positive integer"
+assert_eq "T2c. --tail -3 exits 1" "1" "${rc_T2_neg}"
+assert_eq "T2d. --tail abc exits 1" "1" "${rc_T2_word}"
+
+# Case T3: --tail combined with -f shows last N + follows
+echo "Case T3: -f --tail N follows after showing last N"
+IFS='|' read -r CAP_HOME_T3 RUN_DIR_T3 <<<"$(stage_run_dir caseT3)"
+LOG_T3="${RUN_DIR_T3}/workflow.log"
+printf 'A1\nA2\nA3\nA4\n' > "${LOG_T3}"
+
+FOLLOW_OUT_T3="${SANDBOX}/follow-tail.out"
+(
+  bash "${CAP_WORKFLOW_SH}" logs -f --tail 2 --cap-home "${CAP_HOME_T3}" run_caseT3 \
+    > "${FOLLOW_OUT_T3}" 2>&1 &
+  FOLLOW_PID=$!
+  sleep 0.3
+  printf 'A5\n' >> "${LOG_T3}"
+  sleep 0.5
+  kill "${FOLLOW_PID}" 2>/dev/null || true
+  wait "${FOLLOW_PID}" 2>/dev/null || true
+) &
+FOLLOW_DRIVER_T3=$!
+(
+  sleep 3
+  kill "${FOLLOW_DRIVER_T3}" 2>/dev/null || true
+) &
+TIMEOUT_PID_T3=$!
+wait "${FOLLOW_DRIVER_T3}" 2>/dev/null || true
+kill "${TIMEOUT_PID_T3}" 2>/dev/null || true
+wait "${TIMEOUT_PID_T3}" 2>/dev/null || true
+
+follow_out_T3_content="$(cat "${FOLLOW_OUT_T3}" 2>/dev/null || true)"
+# A1/A2 should be elided (--tail 2), A3/A4 are the trailing window, A5 is the live append.
+if grep -qF "A1" <<<"${follow_out_T3_content}"; then
+  echo "  FAIL: T3a. earlier lines should be elided by --tail 2"
+  fail_count=$((fail_count + 1))
+else
+  echo "  PASS: T3a. earlier lines elided by --tail"
+  pass_count=$((pass_count + 1))
+fi
+assert_contains "T3b. trailing window line A3 visible" "${follow_out_T3_content}" "A3"
+assert_contains "T3c. trailing window line A4 visible" "${follow_out_T3_content}" "A4"
+assert_contains "T3d. follow picks up appended A5" "${follow_out_T3_content}" "A5"
+
 # Case 10: -f --step follows the resolved step file
 echo "Case 10: -f --step follows step .md"
 IFS='|' read -r CAP_HOME_10 RUN_DIR_10 <<<"$(stage_run_dir case10)"

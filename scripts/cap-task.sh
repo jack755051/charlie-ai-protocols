@@ -108,8 +108,8 @@ main() {
       usage
       ;;
     *)
-      echo "cap-task: unknown subcommand: ${sub}" >&2
-      usage
+      echo "Unknown task subcommand: ${sub}" >&2
+      echo "Available: cap task constitution | plan | compile | run" >&2
       exit 1
       ;;
   esac

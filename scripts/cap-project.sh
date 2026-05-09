@@ -410,8 +410,8 @@ main() {
       usage
       ;;
     *)
-      echo "cap-project: unknown subcommand: ${sub}" >&2
-      usage
+      echo "Unknown project subcommand: ${sub}" >&2
+      echo "Available: cap project init | status | doctor | constitution | migrate-config" >&2
       exit 1
       ;;
   esac
