@@ -117,6 +117,112 @@ skills:
 
 > Shared layer **預設不被允許**（見 `docs/cap/P9-SOURCE-RESOLVER-DESIGN.md` §3.1.2）；不顯式宣告會被 source policy 擋。
 
+## 場景 5：使用者自訂全新 role（v0.24.11+）
+
+> 與場景 1-3 的差別：那些是**覆蓋既有 builtin role**；本場景是**新增完全屬於使用者的 role**（如 mobile、api-reviewer、game-designer），CAP builtin 沒有對應條目。
+> Normative 規則：[`policies/agent-skills-baseline.md`](../../policies/agent-skills-baseline.md) §3.5。
+
+### 5.1 在專案層註冊新 role（最簡單）
+
+需求：本專案有特殊的 mobile 開發需求，要新增一個 `$mobile` role，只在這個 repo 生效。
+
+```yaml
+# <project_root>/.cap/skills.yaml
+schema_version: 2
+
+skills:
+  - skill_id: project-mobile-agent
+    kind: role                      # v0.24.7+ 顯式宣告（非必填但強烈建議）
+    agent_alias: mobile
+    provider: project
+    enabled: true
+    priority: 100
+    prompt_file: agent-skills/mobile-agent.md   # 你自己寫的 prompt
+    cli: claude
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - mobile_implementation
+    fallback_roles:
+      - implementer
+```
+
+對應的 prompt 檔放在 `<project_root>/agent-skills/mobile-agent.md`（**注意**：這個目錄不會被 `factory.py` glob，必須由 registry entry 顯式引用 `prompt_file` 才會被使用）。
+
+效果：
+
+- workflow 中任何依賴 `mobile_implementation` capability 的 step 會解到 `project-mobile-agent`。
+- Binding report：`selected_skill_id: project-mobile-agent`、`skill_source.source_layer: project`。
+- 此 role 不影響 builtin frontend / backend / qa 等既有 role。
+
+### 5.2 在 shared 層註冊跨 repo role
+
+需求：你維護的所有 repo 都需要同一個 `$api-reviewer` role 做 API contract review。
+
+**Step 1**：寫到 shared 層
+
+```yaml
+# ~/.cap/shared/skills.yaml
+schema_version: 2
+
+skills:
+  - skill_id: shared-api-reviewer
+    kind: role
+    agent_alias: api-reviewer
+    provider: shared
+    enabled: true
+    priority: 90
+    prompt_file: ~/.cap/shared/prompts/api-reviewer.md
+    cli: claude
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - api_contract_review
+```
+
+**Step 2**：每個要使用該 role 的專案，在 `.cap/constitution.yaml` 顯式允許 shared root
+
+```yaml
+# <project_root>/.cap/constitution.yaml
+workflow_policy:
+  enforce_allowed_source_roots: true
+  allowed_source_roots:
+    - ~/.cap/shared/skills.yaml
+```
+
+> ⚠️ 不顯式宣告會被 `SkillSourcePolicyError` 擋下（halt binding，不會 silently degrade）。這是設計上故意的 supply-chain 防呆。
+
+### 5.3 驗證新 role 已被 CAP 看到
+
+```bash
+cap workflow bind <workflow-id> | jq '.steps[] | {step_id, selected_skill_id, skill_source}'
+```
+
+預期：
+
+```json
+{
+  "step_id": "review_api_contracts",
+  "selected_skill_id": "shared-api-reviewer",
+  "skill_source": {
+    "source_layer": "shared",
+    "source_path": "/Users/.../.cap/shared/skills.yaml"
+  }
+}
+```
+
+### 5.4 嚴禁的註冊方式（Hard Rules）
+
+| ❌ 錯誤做法 | 為什麼禁止 |
+|---|---|
+| 寫入 `~/.codex/AGENTS.md` | Codex CLI 全域檔；非 CAP registry target；CAP runtime 看不到、binding report 無法稽核 |
+| 寫入 `~/.claude/CLAUDE.md` | Claude Code 全域檔；同上 |
+| 走 `~/.claude/agents/` 註冊 sub-agent | provider 專屬機制；非跨 provider 可移植；CAP runtime 不會解析 |
+| 直接編輯 `<cap_root>/agent-skills/*.md` 加新 role | 違反 baseline 唯讀規則；下次 CAP release 會 conflict |
+| `provided_capabilities` 與 builtin capability 同名 | 會無意搶 builtin 已綁定的 step；應該用獨立新 capability |
+
+### 5.5 何時應該 promote 成 builtin？
+
+只有當 user role 經過足夠 dogfood（多 provider、多 workflow、多次真實任務驗證確實有用），才考慮提到 CAP builtin baseline。Promotion 流程與證據要求見 `docs/cap/ROLE-SKILL-REGISTRY-MODEL-MEMO.md` §Phase 6。
+
 ## Pitfall 與常見錯誤
 
 - ❌ **直接編輯 `<cap_root>/agent-skills/04-frontend-agent.md`**：違反 baseline 唯讀規則；下次 CAP release 會 conflict。改走 §1 / §2 / §3。

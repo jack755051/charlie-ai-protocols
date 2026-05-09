@@ -141,3 +141,61 @@ fields:
             type: string
           owner:
             type: string
+
+# ── Examples ────────────────────────────────────────────────────────
+#
+# Example A: user-imported role registered in project layer
+# (kind=role, new agent_alias, new capability — does not override builtin)
+#
+#   schema_version: 2
+#   skills:
+#     - skill_id: project-mobile-agent
+#       kind: role
+#       agent_alias: mobile
+#       provider: project
+#       enabled: true
+#       priority: 100
+#       prompt_file: agent-skills/mobile-agent.md
+#       cli: claude
+#       compatible_workflow_versions: [1, 2, 3]
+#       provided_capabilities:
+#         - mobile_implementation
+#       fallback_roles:
+#         - implementer
+#
+# Example B: user-imported role registered in shared layer
+# (cross-project; constitution must explicitly allow shared root —
+# see policies/agent-skills-baseline.md §3.5)
+#
+#   schema_version: 2
+#   skills:
+#     - skill_id: shared-mobile-agent
+#       kind: role
+#       agent_alias: mobile
+#       provider: shared
+#       enabled: true
+#       priority: 90
+#       prompt_file: ~/.cap/shared/prompts/mobile-agent.md
+#       cli: claude
+#       compatible_workflow_versions: [1, 2, 3]
+#       provided_capabilities:
+#         - mobile_implementation
+#
+# Example C: advisory skill registered in shared layer
+# (kind=skill, mountable guardrail; today still requires execution
+# metadata until Phase 5 attachment relaxes the requirement)
+#
+#   schema_version: 2
+#   skills:
+#     - skill_id: shared-karpathy-guidelines
+#       kind: skill
+#       agent_alias: karpathy-guidelines
+#       provider: shared
+#       enabled: true
+#       priority: 80
+#       prompt_file: agent-skills/strategies/karpathy-guidelines.md
+#       cli: claude
+#       compatible_workflow_versions: [1, 2, 3]
+#       provided_capabilities:
+#         - engineering_guardrails
+#         - code_review_guardrails

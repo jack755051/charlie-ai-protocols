@@ -325,7 +325,9 @@ Mitigation already in place (v0.24.8):
 
 ### Phase 3: User-Imported Role Registration
 
-Goal: make user-owned roles first-class through shared / project registries.
+> Status: **landed at v0.24.11** — docs / schema example / resolver tests only.
+> Runtime attachment behaviour is unchanged (still single selected entry per
+> capability); advisory skill attachment remains deferred to Phase 5.
 
 Tasks:
 
@@ -340,6 +342,25 @@ Exit criteria:
 - A user role can be discovered by CAP through shared / project registry.
 - Source policy remains enforced.
 - No provider global files are modified.
+
+Landing artefacts (v0.24.11):
+
+- `policies/agent-skills-baseline.md` §3.5 — normative registry contract,
+  source-layer rules, hard write-boundaries.
+- `docs/cap/AGENT-SKILLS-CUSTOMIZATION.md` 場景 5 — user-facing how-to
+  with project-layer + shared-layer examples and `cap workflow bind`
+  verification flow.
+- `schemas/skill-registry.schema.yaml` Examples block — three inline
+  examples (project role, shared role, advisory skill).
+- `tests/scripts/test-user-imported-role.sh` — six resolver / source-policy
+  cases including the negative test for unauthorised shared layer.
+
+Boundary kept (still untouched in v0.24.11):
+
+- `engine/runtime_binder.py` not modified.
+- `scripts/cap-workflow-exec.sh` not modified.
+- `agent-skills/*-agent.md` builtin prompts not modified.
+- No new schema fields added (only docstring-style examples).
 
 ### Phase 4: Advisory Skill Attachment Design
 
