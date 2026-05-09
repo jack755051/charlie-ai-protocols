@@ -6,6 +6,33 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.24.6] - 2026-05-09
+
+> Patch release — Phase 5 read-only filter wave. Three docker / kubectl-style filters bring `cap workflow watch` and `cap workflow logs` closer to filtering ergonomics seen in production observability tools. Pure render / parse layer.
+
+### Added
+
+- `cap workflow watch --failed-only`: filter steps / sessions / artifacts to failed entries only. Empty filter result renders `(no failed steps)` placeholder so operators see the filter actually ran. Composes with `--compact`, `--json`, `--once`, `--interval`.
+- `cap workflow watch --step <step-id>`: focus on a single step's row + its sessions + artifacts produced by it. Missing step exits 1 with Chinese stderr matching the `cap workflow logs --step` error wording. Composes with `--failed-only` (intersection).
+- `cap workflow logs --since <value>`: docker-style timestamp filter. Accepts relative duration (`30s` / `5m` / `1h` / `2d`) or absolute timestamp (`YYYY-MM-DD HH:MM:SS` / ISO 8601). Streams `workflow.log` lines whose `[YYYY-MM-DD HH:MM:SS]` glyph is `>=` cutoff; lines without parseable timestamps are dropped (consistent with docker behaviour). Composes with `--step` (filters the resolved step file).
+- All three flags surface in dispatcher `--help` (`cap workflow watch --help` / `cap workflow logs --help`), `cap help observe` topic, and `cap help --advanced`.
+
+### Changed
+
+- `cap workflow logs --since` combined with `-f` is rejected up front by the bash dispatcher with a workaround hint pointing at single-shot `--since` or follow-without-filter. Composing follow with the timestamp filter is intentionally deferred — the value-to-complexity ratio is too low for the first `--since` cut.
+
+### Verified
+
+- New: watch **104 / 104** (+25 Phase 5), logs **63 / 63** (+17 Phase 5).
+- Other observability + CLI surface fixtures: help-topics **43 / 43**, help-surface **71 / 71**, inspect **56 / 56**, ps-tip **9 / 9**, shortcuts **12 / 12**, unknown-command **16 / 16**, namespace-unknown **23 / 23**, mapper-global **14 / 14** — all PASS.
+- Full smoke: `scripts/workflows/smoke-per-stage.sh` — **87 passed / 0 failed / 0 skipped** (parity with v0.24.5 baseline; no regression).
+
+### Boundary
+
+- Pure read-only filter / parse layer. No changes to `cap-workflow-exec.sh`, AI prompts, agent steps, or provider invocation. Zero token cost.
+
+---
+
 ## [v0.24.5] - 2026-05-09
 
 > Patch release — help / docs discoverability. After v0.24.3 / v0.24.4 shipped the full observability surface (logs / watch / inspect / ps), users still had to read CHANGELOG or the operations guide to find them. v0.24.5 plants signposts on every help path so the surfaces surface themselves.
