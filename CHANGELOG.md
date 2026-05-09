@@ -6,6 +6,39 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.24.11] - 2026-05-10
+
+> Patch release — Role / Skill Registry Phase 3 user-imported role registration. Pure docs / schema example / resolver tests; runtime selection behaviour is unchanged from v0.24.10. Phase 4 attachment design and Phase 5 runtime attachment remain deferred.
+
+### Added
+
+- `policies/agent-skills-baseline.md` §3.5 (new section): normative registry contract for user-imported NEW roles in project / shared layer. Covers required fields (`skill_id`, `kind`, `agent_alias`, `prompt_file`, `cli`, `provided_capabilities`, `compatible_workflow_versions`), source-layer rules (project auto-allowed, shared requires explicit `allowed_source_roots`), and hard write-boundaries banning `~/.codex/AGENTS.md` / `~/.claude/CLAUDE.md` / `~/.claude/agents/` as registration targets.
+- `docs/cap/AGENT-SKILLS-CUSTOMIZATION.md` 場景 5 (new section): user-facing how-to. 5.1 project-layer example with full kind=role entry, 5.2 shared-layer example with project constitution `allowed_source_roots` declaration, 5.3 `cap workflow bind` verification with `selected_skill_id` / `skill_source` jq query, 5.4 forbidden-registration table (provider global files, sub-agent dirs, capability collision), 5.5 promotion-to-builtin pointer.
+- `schemas/skill-registry.schema.yaml` Examples block (new, end-of-file): three inline YAML examples anchoring the v0.24.8 `kind` enum in concrete shapes — Example A project-layer user role with `mobile_implementation`, Example B shared-layer user role with priority 90, Example C advisory skill (Karpathy-style) with two capabilities.
+- `tests/scripts/test-user-imported-role.sh` (new, 19 cases / 6 case groups): Case 1 project-layer NEW role (`_find_candidates` discovery + `_source_layer=project` tag + `_has_execution_metadata` accept), Case 2 shared-layer NEW role under explicit `allowed_source_roots` (positive source-policy path through `_compute_effective_allowed_roots` + `_assert_skill_source_allowed`), Case 3 shared-layer NEW role without declaration triggers `SkillSourcePolicyError` with `halt_stage=skill_source_policy` (**negative test** for the policy gate), Case 4 project + shared same `skill_id` layer ordering preserved for user roles, Case 5 capability isolation (user role's new capability doesn't surface as builtin candidate; builtin doesn't surface under user capability), Case 6 `kind=role` missing `prompt_file` rejected by `_has_execution_metadata` (same gate applies to user roles as builtin).
+
+### Changed
+
+- `docs/cap/ROLE-SKILL-REGISTRY-MODEL-MEMO.md` Phase 3 section: marked **landed at v0.24.11** with explicit landing artefacts list (5 files modified / created) and boundary statement (docs / schema example / tests only; runtime untouched).
+
+### Verified
+
+- New: user-imported-role **19 / 19** PASS across all 6 case groups.
+- Regression baseline (post schema Examples-block addition): skill-registry-resolver **22 / 22**, skill-registry-kind-field **10 / 10**, skill-registry-override **29 / 29**. All green.
+
+### Boundary
+
+- v0.24.11 is **docs + schema example + resolver tests only**. The following are deliberately untouched:
+  - `engine/runtime_binder.py` — no candidate ranking change, no kind branching, source-policy hooks unchanged
+  - `scripts/cap-workflow-exec.sh` — no prompt assembly change
+  - `agent-skills/*-agent.md` builtin prompts — no role prompt change
+  - `schemas/skill-registry.schema.yaml` structural fields — only docstring-style Examples block added at end-of-file
+- **Phase 4 advisory skill attachment design** and **Phase 5 runtime attachment implementation** remain deferred. The memo entry/exit criteria for those phases are unchanged; they wait for real multi-skill use cases to drive design.
+- **Provider global files** (`~/.codex/AGENTS.md` / `~/.claude/CLAUDE.md`) and **provider sub-agent directories** (`~/.claude/agents/`) are explicitly named as forbidden registration targets in normative policy. No provider-side changes shipped.
+- After v0.24.11, the project enters **natural dogfood mode** — Phase 4 / 5 will only open when a real user-imported role hits a limitation that requires advisory skill attachment.
+
+---
+
 ## [v0.24.10] - 2026-05-10
 
 > Patch release — Karpathy Phase 2 integration-mode evidence consolidation. v0.24.9 promoted the strategy to builtin and added agent-prompt references in 7 candidate agents; v0.24.10 records the first two real-run observations of that integration path and pins the visibility spectrum that production usage should expect.
