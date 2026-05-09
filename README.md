@@ -137,6 +137,37 @@ cap codex  [ARGS...]                               # CAP project 內記錄 trace
 
 完整 CLI 入口由 `scripts/cap-entry.sh` 派發；策略 / dry-run / agent-session 等行為以 [docs/cap/ARCHITECTURE.md](docs/cap/ARCHITECTURE.md) 為準。
 
+## Observe / Debug Workflow Runs
+
+`cap workflow run` 啟動的每個 run 都會在 `~/.cap/projects/<project_id>/reports/workflows/<workflow_id>/<run_id>/` 留下 `workflow.log` / `runtime-state.json` / `agent-sessions.json` / `<phase>-<step>.md` 等檔案。下列指令是純讀取的觀察層，**不會重跑 provider**、**不會增加 token 消耗**。
+
+```bash
+# Run 級 log（類似 docker logs）
+cap workflow logs <run-id>                          # cat workflow.log
+cap workflow logs -f <run-id>                       # tail -f workflow.log
+
+# Step 級 provider output（fallback：raw.log → md → handoff.md）
+cap workflow logs <run-id> --step <step-id>
+cap workflow logs -f <run-id> --step <step-id>
+
+# Live 狀態畫面（類似 watch / kubectl get -w）
+cap workflow watch <run-id>                         # tty: 2 秒刷新；pipe 自動 single-shot
+cap workflow watch --once <run-id>                  # CI / scripts 一次性
+cap workflow watch --compact <run-id>               # 單螢幕簡潔模式（< 15 行）
+cap workflow watch --json <run-id>                  # 給 dashboard / jq 消費
+cap workflow watch --interval 1 --tail 20 <run-id>  # 自訂刷新與 last log 行數
+
+# 完整一次性詳情（六區塊：Run Header / Summary / Failures / Sessions / Artifacts / Logs Pointer / Follow-up）
+cap workflow inspect <run-id>
+cap workflow inspect <run-id> --json
+
+# 跨 repo / 沙箱觀察
+cap workflow logs <run-id> --cap-home /path/to/sandbox/.cap
+cap workflow watch <run-id> --cap-home /path/to/sandbox/.cap
+```
+
+完整使用情境、fallback 規則與 run_dir 佈局見 [docs/cap/RUN-OBSERVABILITY-GUIDE.md](docs/cap/RUN-OBSERVABILITY-GUIDE.md)。
+
 ### Provider Isolation
 
 CAP **不會**預設包裹（hijack）裸 `claude` / `codex`：
