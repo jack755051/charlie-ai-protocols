@@ -273,6 +273,56 @@ Exit criteria:
 - Binder can explain whether an entry is role-like or skill-like.
 - Existing workflow run behavior is unchanged.
 
+#### Risks (from v0.24.8 dogfood)
+
+Captured from real-run `run_20260510031125_51290ea5` (Claude smoke run after
+the live `~/.cap/shared/skills.yaml` Karpathy entry adopted explicit
+`kind: skill`):
+
+- **The legacy inference rule reads counterintuitively to AI consumers.**
+  Claude wrote in its advisory: "依 schema 推論規則 `agent_alias absent →
+  kind = skill` 等價" — but the Karpathy entry *has* `agent_alias:
+  karpathy-guidelines`, so the correct legacy mapping is
+  `agent_alias present → kind = role`. The model still produced the right
+  behaviour because explicit `kind: skill` overrides the inference; but the
+  AI itself reasoned about the rule in the wrong direction.
+
+  Root cause: `RuntimeBinder._has_execution_metadata` requires every
+  selectable entry to carry `agent_alias` + `prompt_file` + `cli`. So
+  advisory skills today **must** carry `agent_alias` even though the
+  field's name implies "this is an executable agent". The presence of
+  `agent_alias` is therefore a weak signal for "is this entry a role?" —
+  in practice it's true for both roles and currently-selectable skills.
+
+- **Phase 2 implementation must keep explicit `kind` strictly above
+  inference.** The schema description already says so; this risk pins the
+  contract by code-level requirement. Tests should assert: `kind: skill`
+  on an entry that *also* has `agent_alias` is classified as `skill`,
+  not coerced to `role` by inference.
+
+- **Phase 4 attachment design should revisit `_has_execution_metadata`.**
+  If advisory skills no longer need to be "selectable in the same slot as
+  a role" once attachment is implemented (Phase 5), the metadata
+  requirement can relax. A separate field (e.g. `mountable: true`) might
+  carry the "this entry is consumable as a guardrail attachment" signal
+  more cleanly than `agent_alias` does today.
+
+- **Documentation hazard.** The schema description's compat rule reads
+  `agent_alias present → role`. Anyone reading it without context may
+  conclude "all current advisory entries are role-misclassified", which
+  is technically true under inference and false under explicit `kind`.
+  When Phase 2 ships, the rule should be re-stated in
+  `schemas/skill-registry.schema.yaml` with an explicit caveat: "explicit
+  `kind` always wins; inference is a soft fallback only".
+
+Mitigation already in place (v0.24.8):
+
+- Schema description spells out "explicit `kind` beats inference" in
+  prose.
+- `tests/scripts/test-skill-registry-kind-field.sh` case 4b asserts
+  `explicit kind=skill wins over agent_alias-based inference` —
+  if Phase 2 implementation regresses this, that test fails.
+
 ### Phase 3: User-Imported Role Registration
 
 Goal: make user-owned roles first-class through shared / project registries.
