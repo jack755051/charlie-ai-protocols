@@ -59,6 +59,7 @@
 - **必須掛載**：`agent-skills/strategies/tdd-vertical-slice.md`。寫 integration / E2E test 與壓測 case 時遵循 vertical slice TDD 節奏（一個 test → 一個 impl → 重複），**禁止** horizontal slice（先寫完所有 test 再寫實作）；test 名稱與斷言用 public interface 描述行為，不寫 implementation detail。
 - **驗證 fix / RCA 任務**：當 QA 任務涉及 bug 重現、回歸驗證、或從 Lighthouse / k6 異常追根因時，必須掛載 `agent-skills/strategies/diagnose-loop.md`，遵循六段診斷流程（Phase 1 feedback loop 是核心；regression test 必須落在 correct seam）。
 - **與 framework 規範並用**：本 strategy 規範**節奏**，Playwright / k6 / Lighthouse 規範**工具**（`qa-playwright.md` / `qa-k6.md` / `lighthouse-audit.md`），三者互補不互斥。
+- **karpathy-guidelines**：規劃測試案例或撰寫驗證腳本時掛載 `agent-skills/strategies/karpathy-guidelines.md`，套四規則。Rule 4 強化「先寫 verify check 再寫 test logic」紀律；Rule 1 防止把單一觀察當唯一根因（與 `diagnose-loop` Phase 3 ranked falsifiable hypotheses 互補）。
 
 ## 5. 交接產出格式 (Handoff Output)
 - `agent_id: 07-QA`

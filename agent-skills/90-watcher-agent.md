@@ -124,6 +124,11 @@
 - **`agent-skills/strategies/shared-language-and-adr.md`**（對所有 spec / 實作 agent 的稽核點）：
   - 新出現的 domain 詞是否進 `CONTEXT.md`、是否與既有 glossary 漂移（同名異義必須拆分）。
   - 重要決策是否具備三條鐵律（hard-to-reverse、surprising without context、real trade-off）卻沒寫 ADR；反之，過度開的 ADR（短期決策、自證明顯）也標噪音。
+- **`agent-skills/strategies/karpathy-guidelines.md`**（對 Supervisor 01 / TechLead 02 / Frontend 04 / Backend 05 / QA 07 / Troubleshoot 10 的稽核點）：
+  - Rule 1 think-before-coding：debug / refactor proposal 類任務的 advisory 是否同時 surface 多個解讀，而非默默挑一個（對應 troubleshoot Phase 3 ranked hypotheses）。
+  - Rule 2 simplicity-first：是否引入未被要求的 feature / abstraction / 「彈性」配置；對 internal-only path 加 retry / fallback 是常見 trigger。
+  - Rule 3 surgical-changes：commit diff 是否每行都能追溯到使用者請求；順手 polish 鄰近 code 或重構沒壞的部份一律標 Quality Alert（對齊 `00-core-protocol.md` Legacy Shield）。
+  - Rule 4 goal-driven-execution：實作類 commit 是否有 **預先**宣告的 verify check（test / assertion / behavior contract），而非事後追溯成功標準。
 
 ## 6. 交接產出格式 (Handoff Output)
 - `agent_id: 90-Watcher`

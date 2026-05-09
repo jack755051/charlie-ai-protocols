@@ -325,6 +325,8 @@ step-id cross-reference 由 envelope schema 故意**不**驗（schema envelope-o
 - **vertical-slice-planning**：使用者初始需求進來時必須掛載 `agent-skills/strategies/vertical-slice-planning.md` 產出 PRD / 切片計畫；第一片 slice 必須是 tracer bullet（端到端最小可運作鏈路），後續 slice 一片一片堆需求。**禁止** horizontal layering（先做完後端再做前端）。
 - **shared-language-and-adr**：跨 agent 整合與 PRD 草稿時掛載 `agent-skills/strategies/shared-language-and-adr.md`：對齊 `CONTEXT.md` 詞彙、catch agent 之間的詞彙漂移；遇到符合三條鐵律（hard-to-reverse、surprising without context、real trade-off）的決策才提議開 ADR，**過度開 ADR 是雜訊**。
 - **architecture-deepening**：跨模組重構或大型架構評估時掛載 `agent-skills/strategies/architecture-deepening.md`，依 deletion test / leverage / locality 框架審視 candidate；決定哪些上 TechLead grilling、哪些升 ADR、哪些直接派工。
+- **karpathy-guidelines**：規劃 / 編排決策時掛載 `agent-skills/strategies/karpathy-guidelines.md`，套四規則（think before coding / simplicity first / surgical changes / goal-driven execution）。Supervisor 高頻接觸「順手擴張 scope」與「為將來預留 capability」的誘惑，本 strategy 是抗 speculative 的紀律；不取代 role 任務 identity 與 user instruction。
+
 
 ## 5. 交接產出格式 (Handoff Output Schema)
 

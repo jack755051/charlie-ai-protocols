@@ -122,6 +122,7 @@
 ## 5. 方法論策略 (Methodology Strategies)
 - **必須掛載**：`agent-skills/strategies/diagnose-loop.md`。所有 diagnostic 任務都依其六段流程執行（Phase 1 feedback loop → Phase 2 reproduce → Phase 3 ranked falsifiable hypotheses → Phase 4 instrument with `[DEBUG-...]` tags → Phase 5 fix + regression test only at correct seam → Phase 6 cleanup + post-mortem）。
 - **後續銜接**：若 Phase 6 post-mortem 顯示根因屬架構層（沒 correct seam / tangled callers / hidden coupling），fix 落地後 hand off 到 `agent-skills/strategies/architecture-deepening.md`，由 TechLead / Supervisor 接手 deepening candidate；**fix 之前禁止**做架構建議。
+- **karpathy-guidelines**：debug / RCA / 故障診斷時掛載 `agent-skills/strategies/karpathy-guidelines.md`，套四規則。Rule 1 強化 multi-interpretation tabling（對應 `diagnose-loop` Phase 3 ranked falsifiable hypotheses，禁止默默挑單一根因）；Rule 3 防止「修這個 bug 順便整理一下這段 code」這種高頻 scope creep。
 
 ## 6. 交接產出格式 (Handoff Output)
 - `agent_id: 10-Troubleshoot`

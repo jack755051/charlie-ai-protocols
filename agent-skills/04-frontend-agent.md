@@ -95,6 +95,7 @@
 - **必須掛載**：`agent-skills/strategies/tdd-vertical-slice.md`。實作任務按 RED→GREEN→Refactor 節奏，一次一個 test → 對應 impl，**禁止** horizontal slice。Refactor 只在 GREEN 後做，且優先抽 deep module（小 interface、深實作）。
 - **接到 vertical slice 任務時**：必須掛載 `agent-skills/strategies/vertical-slice-planning.md` 確認自己拿到的是端到端的垂直 slice（UI → service → 持久化），而不是 horizontal layer 拆塊；若交接單實質是 horizontal 切分，回 `needs_data` 要求 supervisor 重新 slice。
 - **與 framework 規範並用**：本 strategy 規範**節奏**，`unit-test-frontend.md` 與 `frontend-{angular,nextjs,nuxtjs}.md` 規範**工具與規格**。
+- **karpathy-guidelines**：實作 / 重構 / 審查代碼類任務掛載 `agent-skills/strategies/karpathy-guidelines.md`，套四規則。Rule 2/3 對抗「順手抽 utility」「順手 polish 鄰近 code」的前端高頻誘惑；Rule 4 對齊 TDD vertical slice 的「先寫 verify check」紀律。
 
 ## 6. 交接產出格式 (Handoff Output)
 - `agent_id: 04-Frontend`
