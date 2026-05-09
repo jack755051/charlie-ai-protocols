@@ -36,8 +36,8 @@ cap workflow run --strategy auto version-control "版本更新"
 
 ## Status
 
-- **Latest tag**：`v0.24.3` — Docker-like run observability surface (`logs` / `watch` / `inspect` follow-up) plus CLI message English-ification
-- **Phase 進度**：v0.22 GA 達成 **P0–P10 全段 closeout**（platform-level capabilities 跨 rc1–rc18 達 steady state，canonical 收斂見 [docs/cap/PLATFORM-CLOSEOUT-v0.22.md](docs/cap/PLATFORM-CLOSEOUT-v0.22.md)）；v0.23 harness checkpoint 收斂 **A0 agent-skills baseline + H1–H4 replay verifier / project skills snapshot / input snapshots**；v0.24 收斂安裝後 CLI 主路徑、provider doctor / fail-fast、非 project workflow list、default help surface、namespace shortcuts 與 fixture 穩定性；**v0.24.3** 加上 read-only run observability 觀察層（`cap workflow logs / watch / inspect` follow-up + `--step / --compact / --json / --cap-home`）並把 `cap` CLI 對外訊息英文化；H5 / H6 / H7 deferred，等真實使用者 dogfood 反饋再開
+- **Latest tag**：`v0.24.4` — Observability dashboard polish (status glyphs, failed-step Next-action footer) plus CLI surface alignment (ps tip, logs `--tail`, fuzzy unknown command, namespace error parity)
+- **Phase 進度**：v0.22 GA 達成 **P0–P10 全段 closeout**（platform-level capabilities 跨 rc1–rc18 達 steady state，canonical 收斂見 [docs/cap/PLATFORM-CLOSEOUT-v0.22.md](docs/cap/PLATFORM-CLOSEOUT-v0.22.md)）；v0.23 harness checkpoint 收斂 **A0 agent-skills baseline + H1–H4 replay verifier / project skills snapshot / input snapshots**；v0.24 收斂安裝後 CLI 主路徑、provider doctor / fail-fast、非 project workflow list、default help surface、namespace shortcuts 與 fixture 穩定性；**v0.24.3** 加上 read-only run observability 觀察層（`cap workflow logs / watch / inspect` follow-up + `--step / --compact / --json / --cap-home`）並把 `cap` CLI 對外訊息英文化；**v0.24.4** 把觀察體驗推到 docker / kubectl 等級（status glyphs、failed-step `Next:` footer、ps tip、`logs --tail`、fuzzy unknown command、namespace 錯誤訊息一致化）；H5 / H6 / H7 deferred，等真實使用者 dogfood 反饋再開
 - **單一進度來源**：[docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md](docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md)
 - **完整 release 紀錄**：[docs/cap/RELEASE-NOTES.md](docs/cap/RELEASE-NOTES.md)
 

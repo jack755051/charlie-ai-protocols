@@ -6,6 +6,40 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.24.4] - 2026-05-09
+
+> Patch release — observability dashboard polish (status glyphs, failed-step hints, Next-action footer) plus CLI surface alignment (ps tip, logs `--tail`, fuzzy unknown command, namespace error parity).
+
+### Added
+
+- Status glyphs across `watch` / `inspect`: every step row, session row, and run-state header carries a unicode glyph + normalized label (`✓ ok` / `● running` / `○ pending` / `✗ failed` / `⊘ skipped` / `◐ blocked` / `⊠ cancelled` / `? unknown`). Trailing label keeps rows readable when a font drops the glyph.
+- `cap workflow watch` dashboard footer (both compact and verbose): a `Next:` / `# Next` block recommends the next command based on run state. Failed run → `cap workflow logs <run-id> --step <failed-step>` + `cap session inspect --run-id <run-id>`. Running run → `cap workflow watch <run-id>` + `cap workflow logs -f <run-id> --step <running-step>`. Completed run → `cap workflow inspect <run-id>`.
+- `cap workflow inspect` Follow-up section gains a `Next:` sub-block driven by the same hint helper. Self-reference filter prevents a completed run from suggesting "inspect <same run>" within its own inspect output.
+- `cap workflow ps` tip footer: docker-style trailer line `Tip: cap workflow logs <run-id> | watch <run-id> | inspect <run-id>` beneath the table when there are runs. Suppressed on empty stores.
+- `cap workflow logs --tail N`: docker habit. Without `-f`: `tail -n N`. With `-f`: `tail -n N -f`. Non-positive integers rejected up front so the user never sees a confusing tail(1) error.
+- `latest_artifact:` label across surfaces: watch verbose / inspect rename `latest:` to `latest_artifact:` (clearer vs run / log timestamps); watch compact adds inline `(latest: <name>)` next to the artifact count.
+- Fuzzy unknown-command suggestions: `cap updae` → `Did you mean: cap update?`, `cap hellp` → `Did you mean: cap help?`. Uses python's `difflib.get_close_matches` (cutoff 0.6); unrelated garbage stays silent so weak matches don't nag operators.
+- New test fixtures: `test-cap-workflow-ps-tip.sh` (9 cases) and `test-cap-namespace-unknown.sh` (23 cases). `test-cap-workflow-watch.sh` grows to 66 cases (+22 P2); `test-cap-workflow-inspect.sh` to 56 (+6 P2); `test-cap-workflow-logs.sh` to 37 (+12 `--tail`); `test-cap-entry-unknown-command.sh` to 16 (+7 fuzzy).
+
+### Changed
+
+- Namespace unknown-subcommand wording aligned to the v0.24.2 skill / provider format `Unknown <ns> subcommand: <x>` + `Available: <pipe-separated list>`:
+  - `scripts/cap-task.sh`, `scripts/cap-replay.sh`, `scripts/cap-project.sh` realigned (legacy lowercase `cap-task: unknown subcommand:` etc. removed).
+  - `scripts/cap-workflow.sh` keeps the shorthand fallback (`cap workflow <id>` still routes to `show` / `run`) but adds an `Available subcommands:` hint beneath the `workflow not found:` line so typos surface clearly without breaking the shorthand.
+- `cap workflow watch --tail` default sentinel keeps the v0.24.3 verbose=10 / compact=1 split; no behaviour change here, just kept consistent with the new compact dashboard.
+
+### Verified
+
+- Run-observability suites: watch **66 / 66**, inspect **56 / 56**, logs **37 / 37**, ps-tip **9 / 9**.
+- Namespace / CLI surface fixtures: namespace-unknown **23 / 23**, help-surface **65 / 65**, shortcuts **12 / 12**, unknown-command **16 / 16**, mapper-global **14 / 14**.
+- Full smoke: `scripts/workflows/smoke-per-stage.sh` — **87 passed / 0 failed / 0 skipped** (parity with v0.24.3 baseline; no regression).
+
+### Boundary
+
+- Pure read-only / render layer. No changes to `cap-workflow-exec.sh`, AI prompts, agent steps, or provider invocation. Zero token cost.
+
+---
+
 ## [v0.24.3] - 2026-05-09
 
 > Patch release — ship a docker-like run observability surface (`logs` / `watch` / `inspect` follow-up) and translate CLI messages from Chinese to English.
