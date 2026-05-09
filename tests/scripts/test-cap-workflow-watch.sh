@@ -186,11 +186,16 @@ assert_eq "1a. --once exits 0" "0" "${rc_1}"
 assert_contains "1b. shows watch header" "${out_1}" "# Watch"
 assert_contains "1c. shows workflow_id" "${out_1}" "watch-wf"
 assert_contains "1d. shows run_id" "${out_1}" "run_case1"
-assert_contains "1e. shows step + state" "${out_1}" "spec_step: validated"
+# P2: step renders with status glyph + normalized label.
+assert_contains "1e. shows step glyph + state" "${out_1}" "✓ spec_step: ok"
 assert_contains "1f. shows session lifecycle/result/provider" "${out_1}" "lifecycle=completed result=success provider=claude"
 assert_contains "1g. shows artifacts count" "${out_1}" "count: 1"
-assert_contains "1h. shows latest artifact" "${out_1}" "latest: spec_doc"
+# P2: rename "latest:" -> "latest_artifact:" for clarity vs run/log timestamps.
+assert_contains "1h. shows latest_artifact" "${out_1}" "latest_artifact: spec_doc"
 assert_contains "1i. shows last log line" "${out_1}" "[workflow][success]"
+# P2: completed run shows # Next section pointing at inspect.
+assert_contains "1j. verbose # Next section present" "${out_1}" "# Next"
+assert_contains "1k. Next on completed run suggests inspect" "${out_1}" "cap workflow inspect run_case1"
 
 # ---------------------------------------------------------------------------
 # Case 2: --once on running run still renders, no final_result
@@ -347,13 +352,20 @@ set -e
 assert_eq "8a. --compact exits 0" "0" "${rc_8}"
 assert_contains "8b. shows compact watch header" "${out_8}" "# Watch (compact)"
 assert_contains "8c. one-line summary present" "${out_8}" "watch-wf | run_case8 |"
-assert_contains "8d. step rendered as id:state" "${out_8}" "spec_step: validated"
+# P2: compact step row carries status glyph + normalized state label.
+assert_contains "8d. step row has glyph + state" "${out_8}" "✓ spec_step: ok"
 assert_contains "8e. sessions count + last session blurb" "${out_8}" "sessions: 1 (last: completed/success/claude)"
-assert_contains "8f. artifacts count line" "${out_8}" "artifacts: 1"
+# P2: compact artifacts line includes latest artifact name (path stays in verbose).
+assert_contains "8f. compact artifacts shows latest name" "${out_8}" "artifacts: 1 (latest: spec_doc)"
 # Compact must NOT emit the verbose # Steps / # Sessions / # Artifacts headers
 assert_not_contains "8g. no verbose Steps header" "${out_8}" "# Steps"
 assert_not_contains "8h. no verbose Sessions header" "${out_8}" "# Sessions"
 assert_not_contains "8i. no verbose Artifacts header" "${out_8}" "# Artifacts"
+# P2: compact dashboard shows Next: footer; completed run -> inspect.
+assert_contains "8j. compact Next footer present" "${out_8}" "Next:"
+assert_contains "8k. completed compact suggests inspect" "${out_8}" "cap workflow inspect run_case8"
+# P2: completed run header glyph reflects state.
+assert_contains "8l. compact header has ok glyph" "${out_8}" "✓ ok"
 
 # Case 9: --compact default --tail collapses to 1
 echo "Case 9: --compact default --tail = 1"
@@ -416,6 +428,186 @@ print(",".join(k for k in keys if k in data))
 ' <<<"${out_11}")"
 assert_eq "11b. all top-level keys preserved in --json --compact" \
   "workflow_id,run_id,steps,sessions,artifacts,last_log_lines" "${keys_present}"
+
+# ---------------------------------------------------------------------------
+# P2 cases — status symbols + dashboard footer for failed / running runs
+# ---------------------------------------------------------------------------
+
+# stage_failed_run_dir <name>: same shape as stage_run_dir but step
+# execution_state = "failed" so cmd_watch's failure detection fires.
+stage_failed_run_dir() {
+  local case_name="$1"
+  local cap_home="${SANDBOX}/${case_name}/cap"
+  local run_dir="${cap_home}/projects/watch-proj/reports/workflows/watch-wf/run_${case_name}"
+  mkdir -p "${run_dir}"
+  cat > "${run_dir}/runtime-state.json" <<'EOF'
+{
+  "artifacts": {
+    "spec_doc": {"artifact": "spec_doc", "source_step": "spec_step", "path": "/tmp/spec.md"}
+  },
+  "steps": {
+    "spec_step": {
+      "phase": "1",
+      "capability": "specification",
+      "execution_state": "failed",
+      "blocked_reason": "auth_error",
+      "output_source": "captured_stdout",
+      "output_path": "/tmp/spec.md",
+      "handoff_path": ""
+    }
+  }
+}
+EOF
+  cat > "${run_dir}/agent-sessions.json" <<EOF
+{
+  "version": 1,
+  "run_id": "run_${case_name}",
+  "workflow_id": "watch-wf",
+  "workflow_name": "Watch Failed Test",
+  "sessions": [
+    {
+      "session_id": "run_${case_name}.1.spec_step",
+      "step_id": "spec_step",
+      "role": "ba",
+      "capability": "specification",
+      "executor": "ai",
+      "provider": "claude",
+      "lifecycle": "completed",
+      "result": "failed",
+      "duration_seconds": 5
+    }
+  ]
+}
+EOF
+  cat > "${run_dir}/run-summary.md" <<EOF
+# Workflow Run Summary
+
+- workflow_id: watch-wf
+- workflow_name: Watch Failed Test
+- run_id: run_${case_name}
+- started_at: 2026-05-09 10:00:00
+
+## Steps
+
+### spec_step
+
+- status: failed
+- duration_seconds: 5
+
+## Finished
+
+- finished_at: 2026-05-09 10:00:05
+- total_duration_seconds: 5
+- completed: 0
+- failed: 1
+- skipped: 0
+EOF
+  printf '[2026-05-09 10:00:05][step:spec_step][error_type:auth]\n' \
+    > "${run_dir}/workflow.log"
+  printf '%s|%s' "${cap_home}" "${run_dir}"
+}
+
+# stage_running_run_dir <name>: step execution_state = "running",
+# run-summary has no Finished block so the builder leaves final_state
+# at "running".
+stage_running_run_dir() {
+  local case_name="$1"
+  local cap_home="${SANDBOX}/${case_name}/cap"
+  local run_dir="${cap_home}/projects/watch-proj/reports/workflows/watch-wf/run_${case_name}"
+  mkdir -p "${run_dir}"
+  cat > "${run_dir}/runtime-state.json" <<'EOF'
+{
+  "artifacts": {},
+  "steps": {
+    "spec_step": {
+      "phase": "1",
+      "capability": "specification",
+      "execution_state": "running",
+      "blocked_reason": "",
+      "output_source": "",
+      "output_path": "",
+      "handoff_path": ""
+    }
+  }
+}
+EOF
+  cat > "${run_dir}/agent-sessions.json" <<EOF
+{
+  "version": 1,
+  "run_id": "run_${case_name}",
+  "workflow_id": "watch-wf",
+  "workflow_name": "Watch Running Test",
+  "sessions": []
+}
+EOF
+  cat > "${run_dir}/run-summary.md" <<EOF
+# Workflow Run Summary
+
+- workflow_id: watch-wf
+- run_id: run_${case_name}
+- started_at: 2026-05-09 10:00:00
+
+## Steps
+
+### spec_step
+
+- status: running
+EOF
+  printf '[2026-05-09 10:00:00][step:spec_step][started]\n' \
+    > "${run_dir}/workflow.log"
+  printf '%s|%s' "${cap_home}" "${run_dir}"
+}
+
+# Case 12: failed run compact → ✗ glyph + step-specific logs hint + session inspect
+echo "Case 12: --compact on failed run emits failed-step shortcut"
+IFS='|' read -r CAP_HOME_12 RUN_DIR_12 <<<"$(stage_failed_run_dir case12)"
+
+set +e
+out_12="$(bash "${CAP_WORKFLOW_SH}" watch --once --compact \
+  --cap-home "${CAP_HOME_12}" run_case12 2>&1)"
+rc_12=$?
+set -e
+
+assert_eq "12a. failed compact exit 0" "0" "${rc_12}"
+assert_contains "12b. failed header glyph" "${out_12}" "✗ failed"
+assert_contains "12c. failed step row glyph" "${out_12}" "✗ spec_step: failed"
+assert_contains "12d. failed Next: footer" "${out_12}" "Next:"
+assert_contains "12e. failed shortcut names step id" "${out_12}" "cap workflow logs run_case12 --step spec_step"
+assert_contains "12f. failed shortcut suggests session inspect" "${out_12}" "cap session inspect --run-id run_case12"
+# Failed runs MUST NOT suggest inspect (the dashboard already pinpoints the failure).
+assert_not_contains "12g. failed run skips generic inspect hint" "${out_12}" "cap workflow inspect run_case12"
+
+# Case 13: running run compact → ● glyph + watch + logs -f --step hints
+echo "Case 13: --compact on running run emits live-tail shortcuts"
+IFS='|' read -r CAP_HOME_13 RUN_DIR_13 <<<"$(stage_running_run_dir case13)"
+
+set +e
+out_13="$(bash "${CAP_WORKFLOW_SH}" watch --once --compact \
+  --cap-home "${CAP_HOME_13}" run_case13 2>&1)"
+rc_13=$?
+set -e
+
+assert_eq "13a. running compact exit 0" "0" "${rc_13}"
+assert_contains "13b. running header glyph" "${out_13}" "● running"
+assert_contains "13c. running step row glyph" "${out_13}" "● spec_step: running"
+assert_contains "13d. running Next includes watch" "${out_13}" "cap workflow watch run_case13"
+assert_contains "13e. running Next includes step-specific logs -f" "${out_13}" "cap workflow logs -f run_case13 --step spec_step"
+
+# Case 14: verbose mode also gets P2 enhancements (glyphs + # Next section + latest_artifact label)
+echo "Case 14: verbose mode shows # Next section + latest_artifact label"
+IFS='|' read -r CAP_HOME_14 RUN_DIR_14 <<<"$(stage_failed_run_dir case14)"
+
+set +e
+out_14="$(bash "${CAP_WORKFLOW_SH}" watch --once \
+  --cap-home "${CAP_HOME_14}" run_case14 2>&1)"
+rc_14=$?
+set -e
+
+assert_eq "14a. verbose failed exit 0" "0" "${rc_14}"
+assert_contains "14b. verbose Steps glyph" "${out_14}" "✗ spec_step: failed"
+assert_contains "14c. verbose # Next header" "${out_14}" "# Next"
+assert_contains "14d. verbose Next has logs --step" "${out_14}" "cap workflow logs run_case14 --step spec_step"
+assert_contains "14e. verbose latest_artifact label" "${out_14}" "latest_artifact: spec_doc"
 
 # ---------------------------------------------------------------------------
 # Summary

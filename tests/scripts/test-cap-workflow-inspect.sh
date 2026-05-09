@@ -357,6 +357,81 @@ assert_contains "inputs: binding_dir line"               "${OUT7}" "binding_dir:
 # Sanity: Case 1 (withjson, no dirs staged) must NOT show # Inputs.
 assert_not_contains "withjson(case1) omits # Inputs"     "${OUT1}" "# Inputs"
 
+# ── Case 8: failed run → Follow-up gains a Next: sub-block ─────────────
+#
+# P2: when a run failed, # Follow-up should include the failed-step
+# shortcut and `cap session inspect`. Successful runs (Case 1) must NOT
+# emit a self-referential "inspect <same run>" Next: line.
+
+echo ""
+echo "Case 8: failed run → # Follow-up emits Next: with logs --step + session inspect"
+RUN8_DIR="${SANDBOX}/failed/cap/projects/inspect-proj/reports/workflows/inspect-wf/run_failed"
+mkdir -p "${RUN8_DIR}"
+cat > "${RUN8_DIR}/runtime-state.json" <<'EOF'
+{
+  "artifacts": {},
+  "steps": {
+    "spec_step": {
+      "phase": "1",
+      "capability": "specification",
+      "execution_state": "failed",
+      "blocked_reason": "auth_error",
+      "output_source": "captured_stdout",
+      "output_path": "",
+      "handoff_path": ""
+    }
+  }
+}
+EOF
+cat > "${RUN8_DIR}/agent-sessions.json" <<'EOF'
+{
+  "version": 1,
+  "run_id": "run_failed",
+  "workflow_id": "inspect-wf",
+  "workflow_name": "Failed Run",
+  "sessions": [
+    {"session_id": "run_failed.1.spec_step", "step_id": "spec_step",
+     "role": "ba", "capability": "specification", "executor": "ai",
+     "provider": "claude", "lifecycle": "completed", "result": "failed",
+     "duration_seconds": 5}
+  ]
+}
+EOF
+cat > "${RUN8_DIR}/run-summary.md" <<'EOF'
+# Workflow Run Summary
+
+- workflow_id: inspect-wf
+- run_id: run_failed
+- started_at: 2026-05-09 10:00:00
+
+## Steps
+### spec_step
+- status: failed
+
+## Finished
+- finished_at: 2026-05-09 10:00:05
+- total_duration_seconds: 5
+- completed: 0
+- failed: 1
+- skipped: 0
+EOF
+printf '[2026-05-09 10:00:05][step:spec_step][error_type:auth]\n' \
+  > "${RUN8_DIR}/workflow.log"
+
+OUT8="$("${PYTHON_BIN}" "${CLI_PY}" inspect "${EMPTY_STATUS}" "run_failed" \
+  --cap-home "${SANDBOX}/failed/cap" 2>&1)"
+RC8=$?
+assert_eq "failed: exit 0"                                 "0" "${RC8}"
+assert_contains "failed: # Follow-up still present"        "${OUT8}" "# Follow-up"
+assert_contains "failed: Follow-up Next: sub-block"        "${OUT8}" "Next:"
+assert_contains "failed: Next includes failed step logs"   "${OUT8}" "cap workflow logs run_failed --step spec_step"
+assert_contains "failed: Next includes session inspect"    "${OUT8}" "cap session inspect --run-id run_failed"
+
+# Successful run (Case 1) must NOT emit a self-referential inspect hint
+# in Follow-up Next:. (Verifies the inspect-side filter for completed runs.)
+assert_not_contains "withjson(case1) omits self-inspect Next" \
+  "${OUT1}" "Next:"
+
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"
 [ "${fail_count}" -eq 0 ]

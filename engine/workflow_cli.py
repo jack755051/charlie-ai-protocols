@@ -791,16 +791,27 @@ def _print_inspect_text(result: dict) -> None:
         if wll is not None:
             print(f"  workflow_log_lines: {wll}")
 
-    # Follow-up commands (Phase 4): nudge operators to the live surfaces
-    # without making them hunt through README. Skipped when run_id is
-    # missing (legacy / corrupt status entries) so we never print an
-    # unusable hint.
+    # Follow-up commands (Phase 4 + P2 enhancement): nudge operators to
+    # the most useful next surface. Phase 4 always offered logs / watch;
+    # P2 adds a context-aware "Next:" sub-block that surfaces the
+    # failed-step shortcut + session inspect when a run failed, or the
+    # running-step tail when a run is still in flight. Skipped when
+    # run_id is missing (legacy / corrupt status entries).
     run_id_value = result.get("run_id")
     if run_id_value:
         print()
         print("# Follow-up")
         print(f"  logs:  cap workflow logs {run_id_value}")
         print(f"  watch: cap workflow watch {run_id_value}")
+        # Drop self-reference: an "inspect <same run>" hint is noise
+        # when we ARE the inspect output. The shared helper still
+        # emits it for the watch surface (different screen).
+        self_inspect = f"cap workflow inspect {run_id_value}"
+        next_hints = [h for h in _next_action_hints(result) if h != self_inspect]
+        if next_hints:
+            print("  Next:")
+            for hint in next_hints:
+                print(f"    {hint}")
 
 
 def _legacy_status_store_inspect(
@@ -1038,21 +1049,157 @@ def _collect_watch_payload(
     return payload
 
 
-def _render_watch_compact(payload: dict) -> None:
-    """Single-screen watch view (Phase 4 — compact mode).
+# Status symbol mapping for watch / inspect step + session rows.
+# Unicode glyphs widely supported on modern terminals; the trailing
+# label keeps the row readable when a font drops the glyph. Same
+# table is used for execution_state (steps), lifecycle (sessions),
+# and final_state (run header), so mapping covers both raw values
+# (`validated`) and normalized enums (`completed` / `failed` / ...).
+_STATUS_SYMBOLS: dict[str, tuple[str, str]] = {
+    # OK family
+    "validated":  ("✓", "ok"),
+    "completed":  ("✓", "ok"),
+    "success":    ("✓", "ok"),
+    "ok":         ("✓", "ok"),
+    "passed":     ("✓", "ok"),
+    # Active
+    "running":    ("●", "running"),
+    "executing":  ("●", "running"),
+    "in_progress":("●", "running"),
+    # Wait
+    "pending":    ("○", "pending"),
+    "queued":     ("○", "pending"),
+    "waiting":    ("○", "pending"),
+    # Fail
+    "failed":     ("✗", "failed"),
+    "error":      ("✗", "failed"),
+    # Skip / block / cancelled
+    "skipped":    ("⊘", "skipped"),
+    "skip":       ("⊘", "skipped"),
+    "blocked":    ("◐", "blocked"),
+    "cancelled":  ("⊠", "cancelled"),
+    "canceled":   ("⊠", "cancelled"),
+}
 
-    Targets <15 lines so it fits in a small terminal without scrolling.
-    Drops per-session detail (rolled into a count + last-session blurb)
-    and artifact latest-pointer (count only). Step list keeps one line
-    per step because losing per-step state defeats the purpose of watch.
+
+def _status_symbol(state: str | None) -> tuple[str, str]:
+    """Return (glyph, normalized_label) for a state string.
+
+    Unknown / empty input falls back to ``("?", "unknown")`` so callers
+    never see a KeyError on edge cases (legacy runs with unrecognised
+    values, or partially-written runtime-state.json mid-execution).
+    """
+    if not state:
+        return ("?", "unknown")
+    return _STATUS_SYMBOLS.get(state.lower(), ("?", state))
+
+
+def _find_failed_step_ids(payload: dict) -> list[str]:
+    """Collect step_ids whose execution_state implies failure.
+
+    Used by the dashboard footer to point operators at the failing
+    step's logs. Order preserved (steps come from runtime-state in
+    insertion order, normalised by the builder).
+    """
+    failed: list[str] = []
+    for step in payload.get("steps") or []:
+        state = (step.get("execution_state") or "").lower()
+        status = (step.get("status") or "").lower()
+        if state in {"failed", "error"} or status in {"failed", "error"}:
+            sid = step.get("step_id")
+            if sid:
+                failed.append(sid)
+    return failed
+
+
+def _find_running_step_id(payload: dict) -> str | None:
+    """Return the step_id of the most recent step still in flight.
+
+    Picks the LAST step with a running-family state because workflows
+    are sequential — the latest running entry is the one operators want
+    to tail. Returns None when nothing is running.
+    """
+    running_states = {"running", "executing", "in_progress"}
+    found: str | None = None
+    for step in payload.get("steps") or []:
+        state = (step.get("execution_state") or "").lower()
+        if state in running_states:
+            sid = step.get("step_id")
+            if sid:
+                found = sid
+    return found
+
+
+def _next_action_hints(payload: dict) -> list[str]:
+    """Compute up to ~3 next-step shell command suggestions.
+
+    Priority:
+      1. Failed run → logs --step <failed_step> + session inspect.
+      2. Running run → watch -f / logs -f; if a specific step is
+         running, point at logs --step <running_step> too.
+      3. Completed run → inspect (cap workflow inspect <run-id>).
+
+    Returns shell-ready command strings (no leading prompt). Empty list
+    when run_id is missing — the caller skips the dashboard section.
+    """
+    run_id = payload.get("run_id")
+    if not run_id:
+        return []
+
+    final_state = (payload.get("final_state") or "").lower()
+    final_result = (payload.get("final_result") or "").lower()
+    failed_steps = _find_failed_step_ids(payload)
+
+    hints: list[str] = []
+
+    # Failed run beats everything: operators need the failure context first.
+    if final_state == "failed" or final_result == "failed" or failed_steps:
+        target = failed_steps[0] if failed_steps else None
+        if target:
+            hints.append(f"cap workflow logs {run_id} --step {target}")
+        else:
+            hints.append(f"cap workflow logs {run_id}")
+        hints.append(f"cap session inspect --run-id {run_id}")
+        return hints
+
+    # Running: nudge toward live surfaces.
+    if final_state == "running" or not final_state:
+        hints.append(f"cap workflow watch {run_id}")
+        running_step = _find_running_step_id(payload)
+        if running_step:
+            hints.append(f"cap workflow logs -f {run_id} --step {running_step}")
+        else:
+            hints.append(f"cap workflow logs -f {run_id}")
+        return hints
+
+    # Completed (or other terminal states): point at inspect for the full picture.
+    hints.append(f"cap workflow inspect {run_id}")
+    return hints
+
+
+def _render_watch_compact(payload: dict) -> None:
+    """Single-screen watch view (Phase 4 + P2 enhancements).
+
+    Targets <20 lines so it fits in a small terminal without scrolling.
+    P2 additions over the original Phase 4 layout:
+      - Header state gets a status glyph (✓/●/○/✗ + label).
+      - Step list shows the same glyph + state for visual scanning.
+      - latest_artifact line surfaces the most recent artifact name
+        (path stays in verbose / inspect — compact stays terse).
+      - Next: footer prints next-action shortcuts (logs --step on
+        failure, watch + logs -f on running, inspect on completion).
     """
     workflow_id = payload.get("workflow_id") or "-"
     run_id = payload.get("run_id") or "-"
     final_state = payload.get("final_state") or "-"
+    state_glyph, state_label = _status_symbol(final_state)
     duration = payload.get("total_duration_seconds")
     duration_str = f"{duration}s" if duration is not None else "-"
     print(f"# Watch (compact)")
-    print(f"  {workflow_id} | {run_id} | {final_state} | duration {duration_str}")
+    print(
+        f"  {workflow_id} | {run_id} | {state_glyph} {state_label} | "
+        f"duration {duration_str}"
+    )
 
     summary = payload.get("summary", {}) or {}
     if summary:
@@ -1069,8 +1216,9 @@ def _render_watch_compact(payload: dict) -> None:
         print("  steps: (none)")
     else:
         for idx, step in enumerate(steps):
-            label = "steps:" if idx == 0 else "      "
-            print(f"  {label} {step.get('step_id', '-')}: {step.get('execution_state', '-')}")
+            label_prefix = "steps:" if idx == 0 else "      "
+            glyph, slabel = _status_symbol(step.get("execution_state"))
+            print(f"  {label_prefix} {glyph} {step.get('step_id', '-')}: {slabel}")
 
     sessions = payload.get("sessions") or []
     if not sessions:
@@ -1083,7 +1231,11 @@ def _render_watch_compact(payload: dict) -> None:
         )
 
     artifacts = payload.get("artifacts") or []
-    print(f"  artifacts: {len(artifacts)}")
+    if artifacts:
+        latest = artifacts[-1]
+        print(f"  artifacts: {len(artifacts)} (latest: {latest.get('name', '-')})")
+    else:
+        print("  artifacts: 0")
 
     log_lines = payload.get("last_log_lines") or []
     if not log_lines:
@@ -1091,8 +1243,15 @@ def _render_watch_compact(payload: dict) -> None:
     else:
         print(f"  log: {log_lines[-1]}")
 
+    hints = _next_action_hints(payload)
+    if hints:
+        print()
+        print("  Next:")
+        for hint in hints:
+            print(f"    {hint}")
 
-def _render_watch_text(payload: dict) -> None:
+
+def _render_watch_text(payload: dict) -> None:  # noqa: C901 — render walkers stay flat for readability
     """Compact watch view (less verbose than inspect on purpose).
 
     Sections: Header / Steps / Sessions / Artifacts (count + latest) /
@@ -1130,8 +1289,8 @@ def _render_watch_text(payload: dict) -> None:
         print("  (none)")
     else:
         for step in steps:
-            state = step.get("execution_state", "-")
-            print(f"  - {step.get('step_id', '-')}: {state}")
+            glyph, slabel = _status_symbol(step.get("execution_state"))
+            print(f"  {glyph} {step.get('step_id', '-')}: {slabel}")
 
     sessions = payload.get("sessions") or []
     print()
@@ -1143,8 +1302,9 @@ def _render_watch_text(payload: dict) -> None:
             lifecycle = session.get("lifecycle", "-")
             session_result = session.get("result", "-")
             provider = session.get("provider", "-")
+            glyph, _ = _status_symbol(lifecycle)
             print(
-                f"  - {session.get('step_id', '-')}: "
+                f"  {glyph} {session.get('step_id', '-')}: "
                 f"lifecycle={lifecycle} result={session_result} provider={provider}"
             )
 
@@ -1154,7 +1314,7 @@ def _render_watch_text(payload: dict) -> None:
     print(f"  count: {len(artifacts)}")
     if artifacts:
         latest = artifacts[-1]
-        print(f"  latest: {latest.get('name', '-')} -> {latest.get('path', '-')}")
+        print(f"  latest_artifact: {latest.get('name', '-')} -> {latest.get('path', '-')}")
 
     log_lines = payload.get("last_log_lines") or []
     window = payload.get("log_tail_window", 0)
@@ -1165,6 +1325,17 @@ def _render_watch_text(payload: dict) -> None:
     else:
         for line in log_lines:
             print(f"  {line}")
+
+    # Next-action hints (Phase 5 / P2): point operators at the most
+    # useful follow-up surface based on run state. Suppressed when no
+    # hint applies (e.g. run_id missing) so the section never renders
+    # empty.
+    hints = _next_action_hints(payload)
+    if hints:
+        print()
+        print("# Next")
+        for hint in hints:
+            print(f"  {hint}")
 
 
 def cmd_watch(
