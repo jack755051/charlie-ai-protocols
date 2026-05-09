@@ -6,6 +6,43 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.24.8] - 2026-05-10
+
+> Patch release — Role / Skill Registry Phase 1 (schema preparation). Adds an optional `kind` discriminator (`role` / `skill`) to the skill-registry schema and the design memo behind it. Schema-only: the runtime does NOT yet branch on `kind`; future runtime work will switch on this enum instead of inferring entry type from `agent_alias` presence.
+
+### Added
+
+- `schemas/skill-registry.schema.yaml`: new optional `kind` field with enum `[role, skill]`. Description spells out the legacy compatibility rule used until the runtime adopts `kind`:
+    - `agent_alias` present → `kind = role` (legacy executable role)
+    - `agent_alias` absent  → `kind = skill` (legacy mountable strategy)
+  Real entries today resolve as expected: all builtin agent-skills implicitly `kind=role`; the Karpathy shared-layer entry implicitly `kind=skill`. Entries can opt into explicit `kind` without changing runtime behaviour.
+- `docs/cap/ROLE-SKILL-REGISTRY-MODEL-MEMO.md`: planning memo for the staged separation of executable agent roles from attachable advisory skills / guardrails. Captures the conceptual model, complexity assessment (low-risk schema work vs higher-risk runtime work), phase plan, and entry / exit criteria. Non-goal: no runtime implementation in this memo.
+- `tests/scripts/test-skill-registry-kind-field.sh` (new, 10 cases): sandbox layout with three registry shapes (legacy / explicit `kind=role` / explicit `kind=skill`) loaded through `RuntimeBinder.load_skill_registry`. Asserts the loader doesn't reject the new field, all three entries appear with correct source-layer attribution, the legacy compat inference is observable, explicit `kind` beats inference, and Phase 1 boundary holds (none of the three is silently excluded from `_find_candidates`).
+- `docs/cap/README.md` index: rows pointing at the new memo plus a backfill row for `KARPATHY-GUIDELINES-INTEGRATION-MEMO.md` (v0.24.7 release missed it).
+
+### Changed
+
+- None. Phase 1 is strictly additive: schema field + memo + fixture. `engine/runtime_binder.py`, `scripts/cap-workflow-exec.sh`, `agent-skills/`, `~/.codex/`, and `~/.claude/` are all untouched.
+
+### Verified
+
+- Dogfood on the live `~/.cap/shared/skills.yaml`: added `kind: skill` to the `shared-karpathy-guidelines` entry. Real bind output:
+    ```
+    summary: total=1, resolved=1, fallback=0, required_unresolved=0
+    mount_guardrails (phase 1) => resolved / skill=shared-karpathy-guidelines / provider=shared
+    ```
+  Direct `RuntimeBinder.load_skill_registry()` query confirms `kind: skill` round-trips into the loaded dict alongside the existing `agent_alias`, `source_layer`, and `source_path`.
+- New: skill-registry-kind-field **10 / 10**.
+- Existing fixtures unchanged: skill-registry-override **29 / 29**, skill-registry-resolver **22 / 22**, cap-home-default **6 / 6**.
+- Run-observability + CLI surface stay green: watch **104 / 104**, logs **63 / 63**, inspect **56 / 56**, ps-tip **9 / 9**, help-topics **43 / 43**, help-surface **71 / 71**, shortcuts **12 / 12**, unknown-command **16 / 16**, namespace-unknown **23 / 23**, mapper-global **14 / 14**.
+- Full smoke: `scripts/workflows/smoke-per-stage.sh` — **87 passed / 0 failed / 0 skipped** (parity with v0.24.7 baseline; no regression).
+
+### Boundary
+
+- Phase 1 is schema-only. No runtime branching on `kind`, no candidate-ranking changes, no prompt-assembly changes, no role + attached-skill composition support. Phase 2 (runtime adoption) and Phase 3 (composition) are gated on dogfood evidence per the model memo.
+
+---
+
 ## [v0.24.7] - 2026-05-10
 
 > Patch release — wire the Karpathy guardrails shared-layer skill end-to-end through the RuntimeBinder (Phase 1 dogfood scaffold) and default `CAP_HOME` to `~/.cap` so `cap workflow *` finds the shared layer without manual env prefixing.
