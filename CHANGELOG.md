@@ -6,6 +6,37 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.24.5] - 2026-05-09
+
+> Patch release — help / docs discoverability. After v0.24.3 / v0.24.4 shipped the full observability surface (logs / watch / inspect / ps), users still had to read CHANGELOG or the operations guide to find them. v0.24.5 plants signposts on every help path so the surfaces surface themselves.
+
+### Added
+
+- `cap help workflow` topic page: full cap workflow subcommand index grouped into `[Discover]` / `[Run]` / `[Observe]` / `[Constitution / Task]`. Shorthand documented (`cap workflow <id>` → show / run). Alias `cap help wf`.
+- `cap help observe` topic page (alias `observability`): when-to-use-which-surface table covering `logs` / `logs -f` / `logs --tail` / `logs --step` / `watch` (default / `--once` / `--compact` / `--json`) / `inspect` / `ps`. Includes the shared status glyph table (`✓ ok` / `● running` / `○ pending` / `✗ failed` / `⊘ skipped` / `◐ blocked` / `⊠ cancelled` / `? unknown`), the step-output fallback chain (`raw.log` → `md` → `handoff.md`), and the boundary disclaimer.
+- `cap help` main page gains an `[Observe Runs]` block (4 lines: `ps` / `logs` / `watch` / `inspect`) so first-time users see the observability surfaces without `--advanced`. A topic-style footer points at the new topic pages.
+- `cap workflow logs --help` and `cap workflow watch --help` now print dispatcher-side usage with the FULL flag list. The previous behaviour forwarded to Python's argparse, which couldn't see bash-side flags (`logs --tail` / `-f`) or render the watch behaviour matrix / status glyph notes. Both pages now include usage examples and a See-also block linking to the observe topic.
+- README `## Observe / Debug Workflow Runs` gains a 「常見除錯流程」 subsection: three scenario-driven walkthroughs in 繁中 narrative + English commands — failed run triage, live progress check, per-step provider output. Followed by a jump table to `cap help observe` / `cap workflow logs --help` / etc.
+- `tests/scripts/test-cap-help-topics.sh` (new, 43 cases): topic page rendering + alias routing (`wf` → workflow, `observability` → observe) + unknown-topic exit 1 with the updated Available list naming all four pages.
+
+### Changed
+
+- `cap help <unknown>` Available list now names all four topic pages: `cap help | cap help --advanced | cap help workflow | cap help observe`.
+- The `main help hides workflow inspect` regression assertion was removed: inspect is now an intentional first-screen entry under `[Observe Runs]`.
+
+### Verified
+
+- New: help-topics **43 / 43**.
+- Run-observability suites: watch **79 / 79** (+13 dispatcher --help), inspect **56 / 56**, logs **46 / 46** (+9 dispatcher --help), ps-tip **9 / 9**.
+- CLI / namespace surface fixtures: help-surface **71 / 71** (+6 P3), shortcuts **12 / 12**, unknown-command **16 / 16**, namespace-unknown **23 / 23**, mapper-global **14 / 14**.
+- Full smoke: `scripts/workflows/smoke-per-stage.sh` — **87 passed / 0 failed / 0 skipped** (parity with v0.24.4 baseline; no regression).
+
+### Boundary
+
+- Pure help / docs / dispatcher polish. No changes to `cap-workflow-exec.sh`, AI prompts, agent steps, or provider invocation. Zero token cost.
+
+---
+
 ## [v0.24.4] - 2026-05-09
 
 > Patch release — observability dashboard polish (status glyphs, failed-step hints, Next-action footer) plus CLI surface alignment (ps tip, logs `--tail`, fuzzy unknown command, namespace error parity).
