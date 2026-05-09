@@ -66,6 +66,17 @@ assert_contains() {
   fi
 }
 
+assert_not_contains() {
+  local desc="$1" haystack="$2" needle="$3"
+  if ! grep -qF -- "${needle}" <<<"${haystack}"; then
+    echo "  PASS: ${desc}"
+    pass_count=$((pass_count + 1))
+  else
+    echo "  FAIL: ${desc} (unexpected match): ${needle}"
+    fail_count=$((fail_count + 1))
+  fi
+}
+
 # stage_run_dir <case_name> [finished:0|1] — create canonical run_dir
 # layout. ``finished=1`` adds a ``## Finished`` block to run-summary.md
 # so build_workflow_result resolves a final_result; ``finished=0`` leaves
@@ -318,6 +329,93 @@ rc_7="$(cat "${SANDBOX}/case7/rc" 2>/dev/null || echo 124)"
 
 assert_eq "7a. non-tty auto-fallback exits 0" "0" "${rc_7}"
 assert_contains "7b. snapshot still rendered" "${out_7}" "run_case7"
+
+# ---------------------------------------------------------------------------
+# Phase 4 cases — --compact mode
+# ---------------------------------------------------------------------------
+
+# Case 8: --compact renders the terse single-screen view
+echo "Case 8: --compact terse view"
+IFS='|' read -r CAP_HOME_8 RUN_DIR_8 <<<"$(stage_run_dir case8 1)"
+
+set +e
+out_8="$(bash "${CAP_WORKFLOW_SH}" watch --once --compact \
+  --cap-home "${CAP_HOME_8}" run_case8 2>&1)"
+rc_8=$?
+set -e
+
+assert_eq "8a. --compact exits 0" "0" "${rc_8}"
+assert_contains "8b. shows compact watch header" "${out_8}" "# Watch (compact)"
+assert_contains "8c. one-line summary present" "${out_8}" "watch-wf | run_case8 |"
+assert_contains "8d. step rendered as id:state" "${out_8}" "spec_step: validated"
+assert_contains "8e. sessions count + last session blurb" "${out_8}" "sessions: 1 (last: completed/success/claude)"
+assert_contains "8f. artifacts count line" "${out_8}" "artifacts: 1"
+# Compact must NOT emit the verbose # Steps / # Sessions / # Artifacts headers
+assert_not_contains "8g. no verbose Steps header" "${out_8}" "# Steps"
+assert_not_contains "8h. no verbose Sessions header" "${out_8}" "# Sessions"
+assert_not_contains "8i. no verbose Artifacts header" "${out_8}" "# Artifacts"
+
+# Case 9: --compact default --tail collapses to 1
+echo "Case 9: --compact default --tail = 1"
+IFS='|' read -r CAP_HOME_9 RUN_DIR_9 <<<"$(stage_run_dir case9 1)"
+# stage_run_dir writes 3 log lines; verbose mode would show all 3, compact only 1.
+
+set +e
+out_9_compact_json="$(bash "${CAP_WORKFLOW_SH}" watch --json --compact \
+  --cap-home "${CAP_HOME_9}" run_case9 2>&1)"
+rc_9=$?
+set -e
+
+assert_eq "9a. --json --compact exits 0" "0" "${rc_9}"
+tail_count_compact="$(${PYTHON_BIN} -c '
+import json, sys
+print(len(json.loads(sys.stdin.read()).get("last_log_lines", [])))
+' <<<"${out_9_compact_json}")"
+assert_eq "9b. compact default --tail = 1 line" "1" "${tail_count_compact}"
+
+window_compact="$(${PYTHON_BIN} -c '
+import json, sys
+print(json.loads(sys.stdin.read()).get("log_tail_window"))
+' <<<"${out_9_compact_json}")"
+assert_eq "9c. log_tail_window reflects compact default" "1" "${window_compact}"
+
+# Case 10: explicit --tail overrides the compact default
+echo "Case 10: --compact --tail N overrides default"
+IFS='|' read -r CAP_HOME_10 RUN_DIR_10 <<<"$(stage_run_dir case10 1)"
+
+set +e
+out_10="$(bash "${CAP_WORKFLOW_SH}" watch --json --compact --tail 3 \
+  --cap-home "${CAP_HOME_10}" run_case10 2>&1)"
+rc_10=$?
+set -e
+
+assert_eq "10a. --tail 3 with --compact exit 0" "0" "${rc_10}"
+tail_count_explicit="$(${PYTHON_BIN} -c '
+import json, sys
+print(len(json.loads(sys.stdin.read()).get("last_log_lines", [])))
+' <<<"${out_10}")"
+assert_eq "10b. explicit --tail 3 wins over compact default" "3" "${tail_count_explicit}"
+
+# Case 11: --json output ignores --compact (consumers cherry-pick fields)
+echo "Case 11: --json with --compact still emits full JSON"
+IFS='|' read -r CAP_HOME_11 RUN_DIR_11 <<<"$(stage_run_dir case11 1)"
+
+set +e
+out_11="$(bash "${CAP_WORKFLOW_SH}" watch --json --compact \
+  --cap-home "${CAP_HOME_11}" run_case11 2>&1)"
+rc_11=$?
+set -e
+
+assert_eq "11a. --json --compact exits 0" "0" "${rc_11}"
+# JSON consumers expect the full structured payload regardless of compact.
+keys_present="$(${PYTHON_BIN} -c '
+import json, sys
+data = json.loads(sys.stdin.read())
+keys = ["workflow_id", "run_id", "steps", "sessions", "artifacts", "last_log_lines"]
+print(",".join(k for k in keys if k in data))
+' <<<"${out_11}")"
+assert_eq "11b. all top-level keys preserved in --json --compact" \
+  "workflow_id,run_id,steps,sessions,artifacts,last_log_lines" "${keys_present}"
 
 # ---------------------------------------------------------------------------
 # Summary

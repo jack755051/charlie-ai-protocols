@@ -16,7 +16,7 @@ Usage:
   cap workflow show <id>
   cap workflow inspect <run-id>
   cap workflow logs [-f|--follow] <run-id> [--step STEP_ID] [--cap-home PATH]
-  cap workflow watch [--once] [--json] [--interval SEC] [--tail N] <run-id> [--cap-home PATH]
+  cap workflow watch [--once] [--json] [--compact] [--interval SEC] [--tail N] <run-id> [--cap-home PATH]
   cap workflow plan <id>
   cap workflow bind <id> [registry]
   cap workflow constitution <request...>
@@ -373,7 +373,7 @@ case "${1:-}" in
     WATCH_FORWARD=()
     while [ "$#" -gt 0 ]; do
       case "$1" in
-        --once|--json)
+        --once|--json|--compact)
           WATCH_FORWARD+=("$1")
           shift
           ;;
@@ -392,7 +392,7 @@ case "${1:-}" in
           ;;
         -*)
           echo "Unknown watch option: $1" >&2
-          echo "Usage: cap workflow watch [--once] [--json] [--interval SEC] [--tail N] <run-id> [--cap-home PATH]" >&2
+          echo "Usage: cap workflow watch [--once] [--json] [--compact] [--interval SEC] [--tail N] <run-id> [--cap-home PATH]" >&2
           exit 1
           ;;
         *)
@@ -406,7 +406,7 @@ case "${1:-}" in
       esac
     done
     if [ -z "${WATCH_RUN_ID}" ]; then
-      echo "Usage: cap workflow watch [--once] [--json] [--interval SEC] [--tail N] <run-id> [--cap-home PATH]" >&2
+      echo "Usage: cap workflow watch [--once] [--json] [--compact] [--interval SEC] [--tail N] <run-id> [--cap-home PATH]" >&2
       exit 1
     fi
     exec "${PYTHON_BIN}" "${CLI_PY}" watch "${WATCH_FORWARD[@]}" "${WATCH_RUN_ID}"

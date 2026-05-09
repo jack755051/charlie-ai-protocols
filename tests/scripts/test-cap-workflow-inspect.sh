@@ -205,6 +205,10 @@ assert_contains "withjson: Artifacts section"    "${OUT1}" "# Artifacts"
 assert_contains "withjson: spec_doc artifact"    "${OUT1}" "spec_doc: /tmp/spec.md"
 assert_contains "withjson: Logs Pointer section" "${OUT1}" "# Logs Pointer"
 assert_contains "withjson: workflow_log line"    "${OUT1}" "workflow_log:"
+# Phase 4: inspect text mode advertises live observation surfaces.
+assert_contains "withjson: Follow-up section"    "${OUT1}" "# Follow-up"
+assert_contains "withjson: follow-up logs hint"  "${OUT1}" "logs:  cap workflow logs run_withjson"
+assert_contains "withjson: follow-up watch hint" "${OUT1}" "watch: cap workflow watch run_withjson"
 
 # ── Case 2: --json flag emits the workflow-result JSON ────────────────
 
@@ -225,6 +229,8 @@ assert_eq "json: parsed run_id+workflow_id+state+completed" \
   "run_withjson inspect-wf completed 1" "${JSON_CHECK}"
 # Sanity: text-mode marker should NOT appear in JSON output.
 assert_not_contains "json: no Run Header heading"  "${OUT2}" "# Run Header"
+# Phase 4: Follow-up hint is a text-mode surface; --json must not emit it.
+assert_not_contains "json: no Follow-up section"   "${OUT2}" "# Follow-up"
 
 # ── Case 3: workflow-result.json missing → builder fallback ───────────
 

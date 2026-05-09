@@ -94,6 +94,7 @@ COMMAND                            DESCRIPTION
   cap workflow logs -f <run-id> --step <step-id>  Follow a step's output live
   cap workflow watch <run-id>      Live snapshot of run state (refreshes on tty)
   cap workflow watch --once <run-id>  Single-shot snapshot (deterministic for CI)
+  cap workflow watch --compact <run-id>  Terse single-screen view (<15 lines)
   cap workflow watch --json <run-id>  JSON snapshot for scripts / dashboards
 
 [Execution]

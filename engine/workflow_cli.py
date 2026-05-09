@@ -784,6 +784,17 @@ def _print_inspect_text(result: dict) -> None:
         if wll is not None:
             print(f"  workflow_log_lines: {wll}")
 
+    # Follow-up commands (Phase 4): nudge operators to the live surfaces
+    # without making them hunt through README. Skipped when run_id is
+    # missing (legacy / corrupt status entries) so we never print an
+    # unusable hint.
+    run_id_value = result.get("run_id")
+    if run_id_value:
+        print()
+        print("# Follow-up")
+        print(f"  logs:  cap workflow logs {run_id_value}")
+        print(f"  watch: cap workflow watch {run_id_value}")
+
 
 def _legacy_status_store_inspect(
     status_file: str, run_id: str, *, output_json: bool
@@ -1020,6 +1031,60 @@ def _collect_watch_payload(
     return payload
 
 
+def _render_watch_compact(payload: dict) -> None:
+    """Single-screen watch view (Phase 4 — compact mode).
+
+    Targets <15 lines so it fits in a small terminal without scrolling.
+    Drops per-session detail (rolled into a count + last-session blurb)
+    and artifact latest-pointer (count only). Step list keeps one line
+    per step because losing per-step state defeats the purpose of watch.
+    """
+    workflow_id = payload.get("workflow_id") or "-"
+    run_id = payload.get("run_id") or "-"
+    final_state = payload.get("final_state") or "-"
+    duration = payload.get("total_duration_seconds")
+    duration_str = f"{duration}s" if duration is not None else "-"
+    print(f"# Watch (compact)")
+    print(f"  {workflow_id} | {run_id} | {final_state} | duration {duration_str}")
+
+    summary = payload.get("summary", {}) or {}
+    if summary:
+        print(
+            f"  totals: total={summary.get('total_steps', 0)} "
+            f"done={summary.get('completed', 0)} "
+            f"fail={summary.get('failed', 0)} "
+            f"skip={summary.get('skipped', 0)} "
+            f"block={summary.get('blocked', 0)}"
+        )
+
+    steps = payload.get("steps") or []
+    if not steps:
+        print("  steps: (none)")
+    else:
+        for idx, step in enumerate(steps):
+            label = "steps:" if idx == 0 else "      "
+            print(f"  {label} {step.get('step_id', '-')}: {step.get('execution_state', '-')}")
+
+    sessions = payload.get("sessions") or []
+    if not sessions:
+        print("  sessions: 0")
+    else:
+        last = sessions[-1]
+        print(
+            f"  sessions: {len(sessions)} "
+            f"(last: {last.get('lifecycle', '-')}/{last.get('result', '-')}/{last.get('provider', '-')})"
+        )
+
+    artifacts = payload.get("artifacts") or []
+    print(f"  artifacts: {len(artifacts)}")
+
+    log_lines = payload.get("last_log_lines") or []
+    if not log_lines:
+        print("  log: (none)")
+    else:
+        print(f"  log: {log_lines[-1]}")
+
+
 def _render_watch_text(payload: dict) -> None:
     """Compact watch view (less verbose than inspect on purpose).
 
@@ -1102,23 +1167,33 @@ def cmd_watch(
     output_json: bool = False,
     interval: float = 2.0,
     once: bool = False,
-    log_tail_lines: int = 10,
+    compact: bool = False,
+    log_tail_lines: int | None = None,
 ) -> None:
     """Live snapshot of a workflow run.
 
     Behaviour matrix:
-      - ``--json``  → always single-shot dump (machine-friendly; loops
-                       across newlines are noisy for jq pipelines).
-      - ``--once``  → single-shot text snapshot.
-      - default     → if stdout is a TTY: ANSI-clear-and-redraw loop
-                       every ``interval`` seconds; if stdout is piped or
-                       redirected, auto-fallback to single-shot so we
-                       don't pollute log files / pagers.
+      - ``--json``      → always single-shot dump (machine-friendly;
+                           loops across newlines are noisy for jq).
+                           ``--compact`` is ignored: JSON consumers
+                           already pick the fields they need.
+      - ``--once``      → single-shot text snapshot.
+      - ``--compact``   → terse single-screen text view (<15 lines).
+                           Default ``--tail`` collapses to 1 since
+                           compact callers want a one-glance status
+                           rather than a log roll.
+      - default         → tty: ANSI-clear-and-redraw loop every
+                           ``interval`` seconds; pipes / redirects
+                           auto-fallback to single-shot.
 
     SIGINT (Ctrl-C) exits the loop cleanly via ``KeyboardInterrupt``;
     callers see exit code 0 because the loop terminated normally.
     """
+    if log_tail_lines is None:
+        log_tail_lines = 1 if compact else 10
+
     if output_json:
+        # JSON dump is independent of compact (consumers cherry-pick).
         payload = _collect_watch_payload(
             run_id, cap_home=cap_home, log_tail_lines=log_tail_lines
         )
@@ -1127,6 +1202,7 @@ def cmd_watch(
 
     is_tty = sys.stdout.isatty()
     effective_once = once or not is_tty
+    render = _render_watch_compact if compact else _render_watch_text
 
     try:
         while True:
@@ -1137,7 +1213,7 @@ def cmd_watch(
                 # ANSI clear screen + cursor home — skipped on non-tty so
                 # piped output stays grep-friendly.
                 sys.stdout.write("\033[H\033[2J")
-            _render_watch_text(payload)
+            render(payload)
             if effective_once:
                 return
             sys.stdout.flush()
@@ -2087,6 +2163,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Render a single snapshot and exit (deterministic for tests/CI).",
     )
     p.add_argument(
+        "--compact",
+        action="store_true",
+        dest="compact",
+        help="Single-screen terse view (<15 lines) — for narrow terminals / quick checks.",
+    )
+    p.add_argument(
         "--interval",
         dest="interval",
         type=float,
@@ -2097,8 +2179,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "--tail",
         dest="log_tail_lines",
         type=int,
-        default=10,
-        help="Number of trailing workflow.log lines to show (default: 10).",
+        default=None,
+        help="Number of trailing workflow.log lines to show (default: 10 verbose / 1 compact).",
     )
 
     # plan
@@ -2271,6 +2353,7 @@ def main() -> None:
                 output_json=args.output_json,
                 interval=args.interval,
                 once=args.once,
+                compact=args.compact,
                 log_tail_lines=args.log_tail_lines,
             )
         case "plan":
