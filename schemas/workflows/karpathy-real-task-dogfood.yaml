@@ -1,0 +1,72 @@
+workflow_id: karpathy-real-task-dogfood
+version: 1
+name: Karpathy Real-Task Dogfood
+summary: |
+  Dogfood workflow for the Karpathy guardrails shared-layer skill.
+  Beyond karpathy-guardrails-smoke (binding contract probe, no real
+  input), this workflow exercises the guardrail on actual artifacts:
+  the user passes a code snippet or task description through the
+  prompt, and the AI applies Karpathy's four rules
+  (think-before-coding / simplicity-first / surgical-changes /
+  goal-driven-execution) to produce a review advisory grounded in
+  that input.
+
+  Phase 2 promotion evidence collector — see
+  docs/cap/KARPATHY-GUIDELINES-INTEGRATION-MEMO.md exit criteria
+  ("at least two real runs are observed without prompt conflicts"
+  and downstream Phase 2 entry conditions). Real-task dogfood is
+  what tells us whether the guardrail measurably reduces
+  speculative abstractions / unverified completion claims.
+owner: supervisor
+triggers:
+  - manual
+  - dogfood
+
+artifacts:
+  review_advisory: |
+    Karpathy-style review advisory grounded in user-supplied input.
+    Captures observations against the four rules, calls out specific
+    concerns in the input (not generic admonitions), and explicitly
+    respects the advisory boundary (does not override role prompt /
+    project constitution / explicit user instruction).
+
+steps:
+  - id: review_with_guardrails
+    name: Review user input through Karpathy guardrails
+    capability: engineering_guardrails
+    # Note: no `inputs:` declared — the user-supplied code/task description
+    # is the workflow prompt, threaded in by `cap workflow run "<prompt>"`.
+    # That's the intended path for free-form review input. Declaring an
+    # input artifact (e.g. user_prompt) would force cap-workflow-exec.sh
+    # to look for an upstream producer that doesn't exist, and fail with
+    # `missing_input_artifact`. Sister workflow karpathy-guardrails-smoke
+    # uses the same shape.
+    outputs:
+      - review_advisory
+    done_when:
+      - Output is grounded in the actual user input — review observations
+        cite the specific code / decision points the user passed in,
+        not generic Karpathy admonitions.
+      - Karpathy 4 rules are visibly applied (the advisory enumerates
+        which rule each observation maps to).
+      - Advisory boundary respected (does NOT propose role-level
+        rewrites, does NOT override project constitution, does NOT
+        contradict explicit user instructions).
+      - Output stays surgical (no speculative refactors, no
+        unrelated cleanup suggestions, no scope creep beyond what
+        the user asked).
+    on_fail: halt
+    notes:
+      - |
+        Real-task dogfood for the Karpathy shared-layer skill;
+        informs Phase 2 promotion evidence per KARPATHY-GUIDELINES-
+        INTEGRATION-MEMO Phase 1 exit criteria.
+      - |
+        Sister workflow karpathy-guardrails-smoke covers the binding
+        contract (no real input). This workflow covers behaviour
+        with real input. Both are dogfood-only — do not extend
+        either with downstream consumers.
+      - |
+        Provider parity — run with --cli claude AND --cli codex when
+        gathering Phase 2 evidence; cross-provider divergence in
+        advisory shape is itself useful data.
