@@ -122,6 +122,7 @@ entry (priority 90, `kind: skill` since v0.24.8). All runs cite their
 | 3 | `run_20260510031125_51290ea5` | Claude 2.1.137 | karpathy-guardrails-smoke | meta (with explicit `kind: skill` metadata visible) | ✓ 122s | Claude observed the explicit `kind: skill` and self-declared advisory boundary. Surfaced the inference-rule misreading captured in ROLE-SKILL-REGISTRY-MODEL-MEMO §Phase 2 Risks. |
 | 4 | `run_20260510032244_3b28eddb` | Claude 2.1.137 | karpathy-real-task-dogfood | real Python helper (`engine/workflow_cli.py:_filter_log_since`, 11 lines) | ✓ 114s | First real-task run; 5 grounded observations all citing specific lines / comments; respected "do NOT propose changes" user constraint. |
 | 5 | `run_20260510032846_ea97f727` | Codex 0.128.0 | karpathy-real-task-dogfood | same prompt as #4 (Claude-Codex parity) | ✓ 54s | Codex parity on real-task; **complementary** observation set vs Claude. |
+| 6 | `run_20260510033543_cf1c5900` | Claude 2.1.137 | karpathy-real-task-dogfood | refactor-proposal evaluation (extract cap-workflow.sh logs/watch dispatchers); explicit "do NOT write patch" constraint | ✓ 216s | **Scope-creep-resistance test.** Claude resisted the temptation to write the patch, surfaced 5 specific re-evaluation triggers + 5 operationalised "extraction succeeded" criteria, and called out a hidden classification question in the proposal itself ("why logs/watch but not inspect/ps/show?"). See A/B note below. |
 
 #### Cross-provider parity — same input, different observation profile
 
@@ -168,23 +169,74 @@ builtin-shaped lookup before honoring the shared-layer prompt
 delivery — useful context for the future Phase 4 prompt-assembly
 design.
 
-### Toward Phase 2 Entry
+#### Scope-creep-resistance evidence (run #6)
+
+The refactor-proposal scenario is harder than code review because the
+default failure mode of an LLM facing "should I refactor X?" is to
+just write the refactor. Run #6 was deliberately constructed to test
+that:
+
+- The user prompt asked four advisory questions (worth-doing? missed
+  tradeoffs? do-nothing alternative? success criteria?) and explicitly
+  forbade a patch / target file structure / exec wiring.
+- Claude lean: **"do not extract right now"** — concrete enough to
+  act on, not handwavy.
+- Five re-evaluation triggers are operationalised (e.g. "logs or
+  watch case body grows past 200 lines", "third observe-class verb
+  appears so the extraction names a real category"); none are
+  speculative "maybe someday".
+- Five "extraction succeeded" criteria push back on `tests pass` as a
+  vanity metric and demand byte-level help-text equivalence,
+  CAP_HOME-SSOT preservation, a 30–60 day post-extraction PR-rate
+  signal, and a 2-jump cognitive-cost test.
+- Surfaced a hidden classification question already in the proposal
+  ("why logs/watch but not inspect/ps/show?") that the user prompt
+  did not ask about — but it's a real boundary risk inside the
+  proposal scope, so it counts as inside the advisory remit, not as
+  scope creep.
+- Boundary self-check at the end explicitly enumerates what the
+  advisory did NOT do (no patch, no target structure, no exec
+  wiring, no constitution / role override).
+
+Behavioural footprint vs runs #4 / #5 (code-review shape):
+
+| Dimension | Code-review (run #4 Claude) | Refactor-proposal (run #6 Claude) |
+|---|---|---|
+| Headline output | 5 grounded observations | A direct lean + 4 structured answers |
+| Default LLM failure mode | Generic Karpathy admonitions | Just-do-the-refactor |
+| Counter-pressure visible? | Yes — "Constraint" honored | Yes — `do NOT propose changes` honored more times than user said it |
+| New observation type | Code-line-level concerns | Re-evaluation triggers, success-criteria operationalisation, hidden category boundaries |
+| Duration | 114s | 216s (deeper deliberation matches harder ask) |
+
+#### Toward Phase 2 Entry
 
 Provisional evidence count after the runs above:
 
-- ✓ Two-plus real runs without prompt conflict (criterion satisfied).
+- ✓ Two-plus real runs without prompt conflict (criterion satisfied;
+  6 runs total).
 - ✓ Cross-provider parity confirmed (Claude + Codex both honor the
   advisory boundary; behaviour shape is provider-specific but
   contract is consistent).
-- ⏳ "Reduces avoidable mistakes such as speculative abstractions /
-  unrelated refactors / hidden assumptions / unverified completion
-  claims" — needs more runs against varied inputs (refactor target,
-  test plan, design review, debug task) before Phase 2 can confirm.
+- ✓ "Reduces avoidable mistakes" — partially confirmed via run #6
+  scope-creep resistance (refactor-proposal scenario where the
+  default LLM failure mode is to write the refactor; guardrail
+  successfully redirected the response to advisory + operationalised
+  criteria). Code-review scenarios (#4, #5) confirmed the guardrail
+  produces grounded observations, not generic admonitions.
+- ⏳ Open: a hidden-assumption / debug scenario would round out the
+  evidence to four task shapes (smoke / code review / refactor
+  proposal / debug or design review). Optional but recommended
+  before promotion.
 
-Recommendation: collect 1–2 more dogfood runs on different task
-shapes before considering builtin promotion. Suggested next inputs
-in the "scope creep risk" and "hidden assumption" categories so the
-evidence covers more than just code review.
+The scope-creep-resistance evidence (run #6) is the strongest signal
+yet for Phase 2: the guardrail visibly changed the AI's default
+behaviour on a task where the AI was likely to over-engineer. That's
+the exact "useful effect" the integration memo Phase 2 entry
+criteria asks about.
+
+Recommendation update: one optional further dogfood run on a
+hidden-assumption / debug scenario; if positive, Phase 2 entry
+criteria are met and builtin promotion can be evaluated.
 
 ## Phase 2: Builtin Candidate
 
