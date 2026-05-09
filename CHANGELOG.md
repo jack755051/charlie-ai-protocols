@@ -6,6 +6,41 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.24.3] - 2026-05-09
+
+> Patch release — ship a docker-like run observability surface (`logs` / `watch` / `inspect` follow-up) and translate CLI messages from Chinese to English.
+
+### Added
+
+- `cap workflow logs <run-id>` — print `workflow.log` to stdout (docker-like). `-f` / `--follow` for `tail -f` mode.
+- `cap workflow logs <run-id> --step <step-id>` — per-step provider output via the `raw.log → md → handoff.md` fallback chain. Legacy `raw.log` is honoured when present; `<phase>-<step>.md` is the current SSOT; `<phase>-<step>.handoff.md` is the last-resort Type D summary. Operators don't need to know phase numbers — the resolver globs across phases. Also supports `-f --step` to follow the resolved file.
+- `cap workflow watch <run-id>` — live snapshot view of run state. tty default loops with ANSI clear-and-redraw every 2s; pipe / redirect auto-falls-back to single-shot so JSON / log redirects stay grep-friendly.
+- `cap workflow watch` flags: `--once` (deterministic single-shot), `--json` (always single-shot, full payload for jq pipelines), `--interval N`, `--tail N`, `--compact` (single-screen <15-line view; default `--tail` collapses to 1, override with explicit `--tail N`).
+- `cap workflow inspect <run-id>` gains a `# Follow-up` section after Logs Pointer, advertising `cap workflow logs / watch <run-id>` so operators can pivot from a finished run to the live surfaces. Skipped when `run_id` is missing (legacy / corrupt status entries) and absent from `--json` output.
+- `--cap-home PATH` flag on every observability surface for cross-repo / sandbox reads.
+- `docs/cap/RUN-OBSERVABILITY-GUIDE.md` — user-facing operations guide (TL;DR table, run_dir layout reference, behaviour matrix, `--cap-home` walkthrough).
+- `docs/cap/RUN-OBSERVABILITY-MEMO.md` — Phase 1–4 planning memo, kept as historical roadmap alongside the live guide.
+- README `## Observe / Debug Workflow Runs` section with one-line use cases for each surface; `docs/cap/README.md` index gains rows for both the guide and the memo so docs entry directs by intent (operate vs design rationale).
+- New test suites: `tests/scripts/test-cap-workflow-logs.sh` (25 cases) and `tests/scripts/test-cap-workflow-watch.sh` (44 cases). `tests/scripts/test-cap-workflow-inspect.sh` extended to 50 cases for Phase 4 follow-up assertions.
+
+### Changed
+
+- `cap` CLI user-facing messages translated from Traditional Chinese to English: `install.sh` banner / step prompts, `cap-entry.sh` (main + advanced help, unknown-command errors, skill subcommand errors), `cap-workflow.sh` (usage / `--cli` errors / "workflow not found" / design-source halts), `cap-workflow-exec.sh` (CLI-missing prompts, auth / rate-limit / network / trust hints, shell→AI fallback messaging), `cap-provider.sh`, `mapper.sh` (install / uninstall / sync banners, `CAP_LINK_MODE` errors). Test fixture assertions updated in lockstep. Heads-up: scripts that grep localized CLI output should switch to the English equivalents.
+- `cap workflow watch --tail` default sentinel changed from `10` to `None`; verbose mode resolves to `10` (unchanged behaviour), compact mode resolves to `1` so the terse view actually fits in a single screen.
+
+### Verified
+
+- Run-observability suites: logs **25 / 25**, watch **44 / 44**, inspect **50 / 50** PASS.
+- CLI surface fixtures: help-surface **65 / 65**, shortcuts **12 / 12**, unknown-command **9 / 9**, mapper-global **14 / 14**.
+- Full smoke: `scripts/workflows/smoke-per-stage.sh` — **87 passed / 0 failed / 0 skipped** (parity with v0.24.2 baseline; no regression).
+
+### Boundary
+
+- Pure read-only observability layer. No changes to `cap-workflow-exec.sh`, AI prompts, agent steps, or provider invocation. Zero token cost — every surface consumes existing run_dir files (`workflow.log`, `runtime-state.json`, `agent-sessions.json`, `<phase>-<step>.md` / `.handoff.md`).
+- `raw.log` writer **not** revived. Inventory showed `raw.log` was a redundant byte-level dup of `<phase>-<step>.md` and stopped being produced after April 24; Phase 3 reads it when present (legacy runs) but does not reintroduce the writer.
+
+---
+
 ## [v0.24.2] - 2026-05-08
 
 > Patch release — add safe CLI shortcuts for common namespaces and read-only version flags.
