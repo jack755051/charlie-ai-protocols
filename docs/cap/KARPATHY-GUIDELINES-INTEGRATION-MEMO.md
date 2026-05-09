@@ -366,6 +366,85 @@ Exit criteria:
   prompts.
 - Release notes document the promotion from shared dogfood to builtin baseline.
 
+### Phase 2 Closeout (v0.24.9)
+
+All four exit criteria satisfied. Shipped in commit `7b611b0` on
+2026-05-10:
+
+- ✓ **Builtin strategy committed**: `agent-skills/strategies/karpathy-guidelines.md`
+  ships as a methodology strategy file (not a selectable skill — see
+  the Phase 2 Risks notes in `ROLE-SKILL-REGISTRY-MODEL-MEMO.md` for
+  why those two layers stay separate). Strategy file pins the four
+  rules with CAP-corresponding discipline notes per rule, the
+  conflict resolution order (user instruction > project constitution
+  > role prompt > other strategies > Karpathy), the boundary
+  disclaimers, and a cross-strategy compatibility matrix.
+- ✓ **Selected agents reference the strategy**: 7 candidate agents
+  gain a contextualised reference in their `## 方法論策略` section.
+  Each reference is tailored to that agent's typical scope-creep
+  vector:
+    - `01-supervisor`: anti-scope-creep (orchestration fan-out).
+    - `02-techlead`: anti-speculative (architecture / refactor).
+    - `04-frontend`: anti-utility-extraction (frontend churn).
+    - `05-backend`: anti-impossible-state-handling (over-defensive).
+    - `07-qa`: strengthen verify-check first (test goal precision).
+    - `10-troubleshoot`: multi-interpretation tabling (debug RCA).
+    - `90-watcher`: audit entry — Karpathy violations now trigger
+      Quality Alerts via the Watcher's strategy audit list.
+- ✓ **Codex and Claude receive guidance through CAP-controlled
+  prompts**: existing 7-run dogfood evidence covers both providers
+  (#2 Codex smoke, #5 Codex real-task) without prompt conflicts.
+  No `~/.codex/` or `~/.claude/` config is required.
+- ✓ **Release notes document the promotion**: v0.24.9 release notes
+  (companion commit) record the shared-to-builtin transition,
+  evidence count, and the 7-vs-4 agent boundary decision.
+
+#### What was deliberately NOT done in Phase 2
+
+These choices keep the promotion narrow and reversible:
+
+- **Shared layer entry NOT removed**. `~/.cap/shared/skills/karpathy-guidelines.md`
+  and the registry entry stay in place as a user-local override
+  pattern. The smoke and real-task workflows still bind through
+  shared layer for capability resolution; the agent prompt path is
+  what changed (now references the builtin strategy directly).
+- **`engine/runtime_binder.py` NOT touched**. The Phase 2 risks memo
+  (in `ROLE-SKILL-REGISTRY-MODEL-MEMO.md`) flagged that explicit
+  `kind > inference` must hold once the runtime adopts the field.
+  Phase 2 doesn't introduce that runtime branching — strategy
+  references in agent prompts are documentation-layer artifacts,
+  not selectable skills, so the inference rule never fires for
+  them.
+- **4 excluded agents stay excluded**. `03-ui` / `09-analytics` /
+  `12-figma` / `99-logger` (plus `06-devops` release/tag-only
+  paths) deliberately do not gain a Karpathy reference. The fixture
+  test pins their absence as a boundary safeguard. Future expansion
+  needs concrete dogfood evidence per affected role, not a default
+  rollout.
+
+#### Open follow-up after Phase 2
+
+Things this Phase 2 commit does NOT close, intentionally:
+
+- **Real-run validation in builtin mode**. The 7 dogfood runs all
+  predate the strategy reference being in agent prompts. After
+  v0.24.9 ships, the next time `01-supervisor` / `02-techlead` /
+  any of the 7 actually run, that's the first integration-mode
+  evidence. Worth catching the first 1-2 such runs and recording
+  whether the strategy reference visibly affected output (similar
+  to how `tdd-vertical-slice` references shape implementation
+  agents today).
+- **Watcher audit reach**. `90-watcher` now lists Karpathy as an
+  audit dimension. The first time Watcher reports a Karpathy-rule
+  violation as a Quality Alert is itself evidence — log it.
+- **Phase 4 / 5 attachment design** (advisory skill formal
+  attachment with `attach_to_capabilities` / `attach_to_roles` /
+  prompt assembly order) remains in the model memo, untouched. The
+  agent-reference path used here is intentionally lighter-weight:
+  it works without any runtime change. Phase 4 / 5 only become
+  necessary when CAP needs a role to receive multiple advisory
+  skills with different attach scopes — not yet a real case.
+
 ## Deferred
 
 - Direct Claude plugin installation.
