@@ -16,6 +16,7 @@
 | 看開發路線圖（按 Phase / 階段） | [IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md) |
 | 操作 / debug 一個正在跑或剛結束的 workflow run（logs / watch / inspect） | [RUN-OBSERVABILITY-GUIDE.md](RUN-OBSERVABILITY-GUIDE.md) |
 | 想知道 run observability 為什麼這樣設計（planning / phase roadmap） | [RUN-OBSERVABILITY-MEMO.md](RUN-OBSERVABILITY-MEMO.md) |
+| Phase 5 後三項（stderr capture / `run -d` / TUI）的 deferred 設計討論 | [RUN-OBSERVABILITY-PHASE-5-LATER-MEMO.md](RUN-OBSERVABILITY-PHASE-5-LATER-MEMO.md) |
 
 ## 二、邊界備忘錄（Boundary memos）
 
