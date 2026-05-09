@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 import uuid
@@ -921,6 +922,70 @@ def cmd_inspect(
 #      than reporting "not found" for the operator.
 _STEP_LOG_FALLBACK_SUFFIXES: tuple[str, ...] = ("raw.log", "md", "handoff.md")
 
+# --since accepts either a relative duration ("30s", "5m", "1h", "2d")
+# or an absolute timestamp. Mirrors docker logs --since semantics.
+_SINCE_RELATIVE_RE = re.compile(r"^(\d+)([smhd])$")
+_SINCE_TIMESTAMP_RE = re.compile(r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]")
+_SINCE_UNIT_TO_SECONDS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+
+
+def _parse_since(value: str) -> datetime:
+    """Parse --since into a cutoff datetime.
+
+    Accepts:
+      - Relative: ``Ns`` / ``Nm`` / ``Nh`` / ``Nd`` (positive integer N).
+      - Absolute: ``YYYY-MM-DD HH:MM:SS`` (matches workflow.log glyph
+        format) or ``YYYY-MM-DDTHH:MM:SS`` (ISO 8601 without zone).
+
+    Raises ValueError on anything else so cmd_logs can emit a clean
+    error and exit 1 instead of leaking a Python traceback.
+    """
+    value = value.strip()
+    rel = _SINCE_RELATIVE_RE.match(value)
+    if rel:
+        n = int(rel.group(1))
+        if n <= 0:
+            raise ValueError(f"--since duration must be positive: {value}")
+        seconds = n * _SINCE_UNIT_TO_SECONDS[rel.group(2)]
+        return datetime.now() - timedelta(seconds=seconds)
+    # Absolute formats. workflow.log uses "YYYY-MM-DD HH:MM:SS"; ISO 8601
+    # uses "T" separator. Accept both so jq pipeline-style invocations
+    # work without reformatting.
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    raise ValueError(
+        f"--since must be a duration (30s/5m/1h/2d) or "
+        f"YYYY-MM-DD HH:MM:SS timestamp; got: {value}"
+    )
+
+
+def _filter_log_since(log_path: Path, cutoff: datetime) -> None:
+    """Print log lines whose [YYYY-MM-DD HH:MM:SS] glyph >= cutoff.
+
+    Lines without a parseable leading timestamp are skipped — same
+    contract as docker logs --since (timestamps drive the filter; an
+    untimestamped line could pre-date the cutoff and we have no way
+    to know).
+    """
+    if not log_path.is_file():
+        # cmd_logs already validated path existence; this guard keeps
+        # us safe against a TOCTOU race between resolution and read.
+        return
+    with log_path.open("r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            m = _SINCE_TIMESTAMP_RE.match(line)
+            if not m:
+                continue
+            try:
+                line_dt = datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                continue
+            if line_dt >= cutoff:
+                sys.stdout.write(line)
+
 
 def _find_step_log_path(run_dir: Path, step_id: str) -> Path | None:
     """Resolve a step's output file inside ``run_dir``.
@@ -949,26 +1014,33 @@ def cmd_logs(
     *,
     cap_home: str | None = None,
     step_id: str | None = None,
+    since: str | None = None,
 ) -> None:
-    """Resolve a run's log file and print its absolute path to stdout.
+    """Resolve a run's log file and emit its path or filtered content.
 
-    Two modes:
-      - default (``step_id is None``)  → workflow.log (Phase 1).
-      - ``--step <step-id>`` (Phase 3) → step-scoped log via the
-        raw.log → md → handoff.md fallback chain.
+    Three modes:
+      - default                            → print workflow.log path.
+      - ``--step <step-id>``               → print step-log path via
+                                              raw.log → md → handoff.md
+                                              fallback chain.
+      - ``--since <value>``                → STREAM filtered log content
+                                              directly (lines whose
+                                              [YYYY-MM-DD HH:MM:SS]
+                                              timestamp >= cutoff).
+                                              The dispatcher detects
+                                              this case and skips its
+                                              own cat / tail wiring.
 
-    The shell dispatcher in cap-workflow.sh consumes the printed path
-    and runs ``cat`` / ``tail -f`` itself, so follow semantics stay in
-    POSIX shell tooling instead of a Python event loop.
-
-    Resolution mirrors ``cmd_inspect``: explicit ``--cap-home`` beats the
-    ``CAP_HOME`` env var, which beats the default ``~/.cap``. ``_find_run_dir``
-    globs ``<cap_home>/projects/*/reports/workflows/*/<run_id>``.
+    --since composes with --step (filters the resolved step file's
+    timestamped lines) but NOT with -f / --follow — the bash side
+    rejects that combination up front so the Python path stays
+    single-shot.
 
     Errors (繁中, engine-python.md guideline):
       - run_dir not found        → exit 1, ``找不到 run_id: <id>``.
       - workflow.log missing     → exit 1, ``找不到 workflow.log: <path>``.
       - --step but no match      → exit 1, ``找不到 step <step-id> 的輸出檔...``.
+      - --since parse error      → exit 1, ``--since 解析失敗: <reason>``.
     """
     cap_home_raw = cap_home or os.environ.get("CAP_HOME") or str(Path.home() / ".cap")
     cap_home_path = Path(cap_home_raw).expanduser()
@@ -987,15 +1059,23 @@ def cmd_logs(
                 file=sys.stderr,
             )
             sys.exit(1)
-        print(str(step_path))
+        target_path = step_path
+    else:
+        target_path = run_dir / "workflow.log"
+        if not target_path.is_file():
+            print(f"找不到 workflow.log: {target_path}", file=sys.stderr)
+            sys.exit(1)
+
+    if since is not None:
+        try:
+            cutoff = _parse_since(since)
+        except ValueError as exc:
+            print(f"--since 解析失敗: {exc}", file=sys.stderr)
+            sys.exit(1)
+        _filter_log_since(target_path, cutoff)
         return
 
-    log_path = run_dir / "workflow.log"
-    if not log_path.is_file():
-        print(f"找不到 workflow.log: {log_path}", file=sys.stderr)
-        sys.exit(1)
-
-    print(str(log_path))
+    print(str(target_path))
 
 
 # ---------------------------------------------------------------------------
@@ -1130,6 +1210,88 @@ def _find_running_step_id(payload: dict) -> str | None:
     return found
 
 
+def _apply_watch_filters(
+    payload: dict,
+    *,
+    step_id: str | None,
+    failed_only: bool,
+) -> dict:
+    """Return a shallow-copy payload with steps / sessions / artifacts
+    narrowed by the filter flags.
+
+    --step <id>      Keep just that step row + sessions referencing it
+                     + artifacts whose producer_step_id matches. Missing
+                     step → emit Chinese stderr + sys.exit(1) so the
+                     filtered render never silently shows nothing.
+    --failed-only    Keep steps in {failed, error}, sessions whose
+                     result is failed, and artifacts produced by any
+                     of those steps. Empty filter result is allowed
+                     here — operators want to confirm "nothing failed".
+
+    Both filters can compose (intersection). Top-level metadata
+    (workflow_id / run_id / final_state / summary / last_log_lines / ...)
+    is unchanged so the header still reads correctly.
+    """
+    if step_id is None and not failed_only:
+        return payload
+
+    filtered = dict(payload)
+    steps = list(filtered.get("steps") or [])
+    sessions = list(filtered.get("sessions") or [])
+    artifacts = list(filtered.get("artifacts") or [])
+
+    if step_id is not None:
+        target_step_ids = {step_id}
+        match_ids = {s.get("step_id") for s in steps if s.get("step_id") == step_id}
+        if not match_ids:
+            print(
+                f"找不到 step {step_id} 的 watch 資料（run 內無此 step_id）",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        steps = [s for s in steps if s.get("step_id") == step_id]
+        sessions = [s for s in sessions if s.get("step_id") == step_id]
+        artifacts = [a for a in artifacts if a.get("producer_step_id") == step_id]
+    else:
+        target_step_ids = {s.get("step_id") for s in steps if s.get("step_id")}
+
+    if failed_only:
+        failed_step_ids = {
+            s.get("step_id")
+            for s in steps
+            if (s.get("execution_state") or "").lower() in {"failed", "error"}
+            or (s.get("status") or "").lower() in {"failed", "error"}
+        }
+        steps = [
+            s for s in steps
+            if (s.get("execution_state") or "").lower() in {"failed", "error"}
+            or (s.get("status") or "").lower() in {"failed", "error"}
+        ]
+        sessions = [
+            s for s in sessions
+            if (s.get("result") or "").lower() == "failed"
+            or s.get("step_id") in failed_step_ids
+        ]
+        artifacts = [
+            a for a in artifacts
+            if a.get("producer_step_id") in failed_step_ids
+        ]
+        # Tag the payload so renderers can show "(no failed steps)"
+        # placeholders instead of generic "(none)" — a no-op tip for
+        # operators that the filter actually ran.
+        filtered["_filter_failed_only"] = True
+
+    # Suppress payload's existing target-set so callers aren't tempted
+    # to compare to the unfiltered population.
+    if step_id is not None:
+        filtered["_filter_step_id"] = step_id
+    _ = target_step_ids  # reserved for future cross-filter composition
+    filtered["steps"] = steps
+    filtered["sessions"] = sessions
+    filtered["artifacts"] = artifacts
+    return filtered
+
+
 def _next_action_hints(payload: dict) -> list[str]:
     """Compute up to ~3 next-step shell command suggestions.
 
@@ -1212,8 +1374,10 @@ def _render_watch_compact(payload: dict) -> None:
         )
 
     steps = payload.get("steps") or []
+    failed_only = payload.get("_filter_failed_only", False)
+    empty_steps_label = "(no failed steps)" if failed_only else "(none)"
     if not steps:
-        print("  steps: (none)")
+        print(f"  steps: {empty_steps_label}")
     else:
         for idx, step in enumerate(steps):
             label_prefix = "steps:" if idx == 0 else "      "
@@ -1283,10 +1447,11 @@ def _render_watch_text(payload: dict) -> None:  # noqa: C901 — render walkers 
         )
 
     steps = payload.get("steps") or []
+    failed_only = payload.get("_filter_failed_only", False)
     print()
     print("# Steps")
     if not steps:
-        print("  (none)")
+        print(f"  {'(no failed steps)' if failed_only else '(none)'}")
     else:
         for step in steps:
             glyph, slabel = _status_symbol(step.get("execution_state"))
@@ -1347,6 +1512,8 @@ def cmd_watch(
     once: bool = False,
     compact: bool = False,
     log_tail_lines: int | None = None,
+    failed_only: bool = False,
+    step_id: str | None = None,
 ) -> None:
     """Live snapshot of a workflow run.
 
@@ -1375,6 +1542,9 @@ def cmd_watch(
         payload = _collect_watch_payload(
             run_id, cap_home=cap_home, log_tail_lines=log_tail_lines
         )
+        payload = _apply_watch_filters(
+            payload, step_id=step_id, failed_only=failed_only
+        )
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return
 
@@ -1386,6 +1556,9 @@ def cmd_watch(
         while True:
             payload = _collect_watch_payload(
                 run_id, cap_home=cap_home, log_tail_lines=log_tail_lines
+            )
+            payload = _apply_watch_filters(
+                payload, step_id=step_id, failed_only=failed_only
             )
             if not effective_once and is_tty:
                 # ANSI clear screen + cursor home — skipped on non-tty so
@@ -2318,6 +2491,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Resolve a step's output (raw.log -> md -> handoff.md) instead of workflow.log.",
     )
+    p.add_argument(
+        "--since",
+        dest="since",
+        default=None,
+        help="Stream only lines >= the given timestamp (e.g., 30s / 5m / 1h / 2d / YYYY-MM-DD HH:MM:SS).",
+    )
 
     # watch (Phase 2)
     p = sub.add_parser("watch", help="Live snapshot view of a workflow run")
@@ -2359,6 +2538,18 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Number of trailing workflow.log lines to show (default: 10 verbose / 1 compact).",
+    )
+    p.add_argument(
+        "--failed-only",
+        action="store_true",
+        dest="failed_only",
+        help="Filter steps / sessions / artifacts to failed-only entries.",
+    )
+    p.add_argument(
+        "--step",
+        dest="step_id",
+        default=None,
+        help="Focus on a single step's row + sessions + artifacts.",
     )
 
     # plan
@@ -2523,7 +2714,12 @@ def main() -> None:
                 cap_home=args.cap_home,
             )
         case "logs":
-            cmd_logs(args.run_id, cap_home=args.cap_home, step_id=args.step_id)
+            cmd_logs(
+                args.run_id,
+                cap_home=args.cap_home,
+                step_id=args.step_id,
+                since=args.since,
+            )
         case "watch":
             cmd_watch(
                 args.run_id,
@@ -2533,6 +2729,8 @@ def main() -> None:
                 once=args.once,
                 compact=args.compact,
                 log_tail_lines=args.log_tail_lines,
+                failed_only=args.failed_only,
+                step_id=args.step_id,
             )
         case "plan":
             cmd_plan(args.cap_root, args.workflow_ref)

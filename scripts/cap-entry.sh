@@ -107,11 +107,14 @@ When to use which surface:
   - Full line stream (entire workflow.log)         → cap workflow logs <run-id>
   - Live tail of new log lines                     → cap workflow logs -f <run-id>
   - Last N log lines (docker habit)                → cap workflow logs --tail N <run-id>
+  - Lines since a timestamp (relative or absolute) → cap workflow logs --since <value> <run-id>
   - One specific step's provider output            → cap workflow logs <run-id> --step <step-id>
   - Live state snapshot (auto-refresh on tty)      → cap workflow watch <run-id>
   - Single-shot snapshot for CI / scripts          → cap workflow watch --once <run-id>
   - Terse single-screen status (<15 lines)         → cap workflow watch --compact <run-id>
   - JSON snapshot for dashboards / jq pipelines    → cap workflow watch --json <run-id>
+  - Filter watch to failed entries only            → cap workflow watch --failed-only <run-id>
+  - Focus watch on one step                        → cap workflow watch --step <step-id> <run-id>
   - Final run details (six sections)               → cap workflow inspect <run-id>
   - List active or historical runs                 → cap workflow ps [--all]
   - Cross-repo / sandbox observation               → any of the above + --cap-home PATH
@@ -190,12 +193,15 @@ COMMAND                            DESCRIPTION
   cap workflow logs <run-id>       Print the run's workflow.log (docker-like)
   cap workflow logs -f <run-id>    Follow the run's workflow.log live (tail -f)
   cap workflow logs --tail N <run-id>   Print only the last N lines (docker-like)
+  cap workflow logs --since 30s <run-id>  Stream lines from the last 30 seconds (docker --since)
   cap workflow logs <run-id> --step <step-id>     Print a step's output (raw.log/md/handoff.md)
   cap workflow logs -f <run-id> --step <step-id>  Follow a step's output live
   cap workflow watch <run-id>      Live snapshot of run state (refreshes on tty)
   cap workflow watch --once <run-id>  Single-shot snapshot (deterministic for CI)
   cap workflow watch --compact <run-id>  Terse single-screen view (<15 lines)
   cap workflow watch --json <run-id>  JSON snapshot for scripts / dashboards
+  cap workflow watch --failed-only <run-id>      Filter to failed steps / sessions / artifacts
+  cap workflow watch --step <id> <run-id>        Focus on a single step (rows + sessions + artifacts)
 
 [Execution]
   cap codex [ARGS...]              Record trace inside CAP projects; fall back to native Codex outside CAP dirs

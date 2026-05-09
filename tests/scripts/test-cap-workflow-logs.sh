@@ -276,6 +276,9 @@ assert_contains "H1f. logs --help shows --cap-home" "${out_h1}" "--cap-home PATH
 assert_contains "H1g. logs --help has examples" "${out_h1}" "Examples:"
 assert_contains "H1h. logs --help cross-links watch" "${out_h1}" "cap workflow watch"
 assert_contains "H1i. logs --help cross-links observe topic" "${out_h1}" "cap help observe"
+# Phase 5: --since flag listed in dispatcher --help
+assert_contains "H1j. logs --help shows --since" "${out_h1}" "--since VALUE"
+assert_contains "H1k. logs --help notes -f incompat" "${out_h1}" "Cannot combine with -f"
 
 # Phase 4 polish: --tail N (docker-style) ----------------------------------
 
@@ -398,6 +401,103 @@ wait "${TIMEOUT_PID_10}" 2>/dev/null || true
 follow_out_10_content="$(cat "${FOLLOW_OUT_10}" 2>/dev/null || true)"
 assert_contains "10a. follow shows initial step content" "${follow_out_10_content}" "follow-step-initial"
 assert_contains "10b. follow shows appended step content" "${follow_out_10_content}" "follow-step-appended"
+
+# ---------------------------------------------------------------------------
+# Phase 5: --since timestamp filter
+# ---------------------------------------------------------------------------
+
+# Shared fixture for --since cases — workflow.log spans 5 timestamped lines.
+echo "Case S1: --since absolute cutoff selects trailing lines"
+IFS='|' read -r CAP_HOME_S1 RUN_DIR_S1 <<<"$(stage_run_dir caseS1)"
+LOG_S1="${RUN_DIR_S1}/workflow.log"
+cat > "${LOG_S1}" <<'EOF'
+[2026-05-09 09:59:50][workflow][started]
+[2026-05-09 10:00:00][step:s1][ok]
+[2026-05-09 10:00:03][step:s2][failed]
+[2026-05-09 10:00:05][workflow][failed]
+not-a-timestamped-line-should-be-skipped
+EOF
+
+set +e
+out_S1="$(bash "${CAP_WORKFLOW_SH}" logs --since "2026-05-09 10:00:02" \
+  --cap-home "${CAP_HOME_S1}" run_caseS1 2>&1)"
+rc_S1=$?
+set -e
+
+assert_eq "S1a. --since exit 0" "0" "${rc_S1}"
+# Lines >= cutoff: s2 failed (10:00:03), workflow failed (10:00:05).
+assert_contains "S1b. cutoff line s2 failed visible" "${out_S1}" "step:s2"
+assert_contains "S1c. cutoff line workflow failed visible" "${out_S1}" "[workflow][failed]"
+# Earlier lines must be elided.
+if grep -qF "step:s1" <<<"${out_S1}"; then
+  echo "  FAIL: S1d. earlier line step:s1 should be elided"
+  fail_count=$((fail_count + 1))
+else
+  echo "  PASS: S1d. earlier line step:s1 elided"
+  pass_count=$((pass_count + 1))
+fi
+if grep -qF "started" <<<"${out_S1}"; then
+  echo "  FAIL: S1e. earlier line workflow started should be elided"
+  fail_count=$((fail_count + 1))
+else
+  echo "  PASS: S1e. earlier line workflow started elided"
+  pass_count=$((pass_count + 1))
+fi
+# Lines without a parseable timestamp must be skipped (docker-style).
+if grep -qF "not-a-timestamped-line" <<<"${out_S1}"; then
+  echo "  FAIL: S1f. untimestamped line should be skipped"
+  fail_count=$((fail_count + 1))
+else
+  echo "  PASS: S1f. untimestamped line skipped"
+  pass_count=$((pass_count + 1))
+fi
+
+# Case S2: --since 1d on a fresh fixture keeps everything (cutoff far in the past)
+echo "Case S2: --since relative duration"
+IFS='|' read -r CAP_HOME_S2 RUN_DIR_S2 <<<"$(stage_run_dir caseS2)"
+NOW="$(date '+%Y-%m-%d %H:%M:%S')"
+printf '[%s][step:s1][ok]\n[%s][workflow][success]\n' "${NOW}" "${NOW}" \
+  > "${RUN_DIR_S2}/workflow.log"
+
+set +e
+out_S2="$(bash "${CAP_WORKFLOW_SH}" logs --since 1d \
+  --cap-home "${CAP_HOME_S2}" run_caseS2 2>&1)"
+rc_S2=$?
+set -e
+
+assert_eq "S2a. --since 1d exit 0" "0" "${rc_S2}"
+assert_contains "S2b. recent line within 1d window visible" "${out_S2}" "step:s1"
+assert_contains "S2c. workflow success line visible" "${out_S2}" "workflow][success]"
+
+# Case S3: --since invalid value exits 1 with parse error
+echo "Case S3: --since rejects garbage"
+IFS='|' read -r CAP_HOME_S3 RUN_DIR_S3 <<<"$(stage_run_dir caseS3)"
+printf '[2026-05-09 10:00:00][workflow][started]\n' > "${RUN_DIR_S3}/workflow.log"
+
+set +e
+out_S3="$(bash "${CAP_WORKFLOW_SH}" logs --since "not-a-time" \
+  --cap-home "${CAP_HOME_S3}" run_caseS3 2>&1)"
+rc_S3=$?
+set -e
+
+assert_eq "S3a. --since invalid exit 1" "1" "${rc_S3}"
+assert_contains "S3b. parse error names the value" "${out_S3}" "not-a-time"
+assert_contains "S3c. parse error names accepted formats" "${out_S3}" "30s/5m/1h/2d"
+
+# Case S4: --since combined with -f rejected up front
+echo "Case S4: --since + -f rejected"
+IFS='|' read -r CAP_HOME_S4 RUN_DIR_S4 <<<"$(stage_run_dir caseS4)"
+printf '[2026-05-09 10:00:00][workflow][started]\n' > "${RUN_DIR_S4}/workflow.log"
+
+set +e
+out_S4="$(bash "${CAP_WORKFLOW_SH}" logs --since 30s -f \
+  --cap-home "${CAP_HOME_S4}" run_caseS4 2>&1)"
+rc_S4=$?
+set -e
+
+assert_eq "S4a. --since + -f exit 1" "1" "${rc_S4}"
+assert_contains "S4b. error explains incompat" "${out_S4}" "cannot be combined with -f"
+assert_contains "S4c. error suggests workaround" "${out_S4}" "single-shot"
 
 # ---------------------------------------------------------------------------
 # Summary

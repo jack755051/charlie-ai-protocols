@@ -340,11 +340,14 @@ case "${1:-}" in
 cap workflow logs — print or follow a run's workflow.log (docker-like)
 
 Usage:
-  cap workflow logs [-f|--follow] [--tail N] <run-id> [--step STEP_ID] [--cap-home PATH]
+  cap workflow logs [-f|--follow] [--tail N] [--since VALUE] <run-id> [--step STEP_ID] [--cap-home PATH]
 
 Flags:
   -f, --follow             Follow appends live (tail -f). Without this flag, prints once and exits.
   --tail N                 Print only the last N lines (positive integer required).
+  --since VALUE            Stream only lines whose [YYYY-MM-DD HH:MM:SS] timestamp is >= the cutoff.
+                           Accepts relative duration (30s / 5m / 1h / 2d) or absolute timestamp
+                           (YYYY-MM-DD HH:MM:SS). Cannot combine with -f.
   --step STEP_ID           Show a specific step's output instead of workflow.log.
                            Resolves via raw.log -> md -> handoff.md fallback.
   --cap-home PATH          Override CAP_HOME / ~/.cap for cross-repo or sandbox reads.
@@ -354,6 +357,8 @@ Examples:
   cap workflow logs -f run_xxx                    # follow workflow.log
   cap workflow logs --tail 50 run_xxx             # last 50 lines
   cap workflow logs -f --tail 20 run_xxx          # last 20 lines + follow
+  cap workflow logs --since 30s run_xxx           # only lines from the last 30 seconds
+  cap workflow logs --since "2026-05-09 10:00:00" run_xxx
   cap workflow logs run_xxx --step draft_constitution
   cap workflow logs -f run_xxx --step draft_constitution
 
@@ -367,6 +372,7 @@ LOGS_HELP
     esac
     LOGS_FOLLOW=0
     LOGS_TAIL=""
+    LOGS_SINCE=""
     LOGS_RUN_ID=""
     LOGS_FORWARD=()
     while [ "$#" -gt 0 ]; do
@@ -384,6 +390,15 @@ LOGS_HELP
           LOGS_TAIL="${1#--tail=}"
           shift
           ;;
+        --since)
+          [ -n "${2:-}" ] || { echo "--since requires a value (e.g., 30s / 5m / 1h / YYYY-MM-DD HH:MM:SS)" >&2; exit 1; }
+          LOGS_SINCE="$2"
+          shift 2
+          ;;
+        --since=*)
+          LOGS_SINCE="${1#--since=}"
+          shift
+          ;;
         --cap-home|--step)
           [ -n "${2:-}" ] || { echo "$1 requires a value" >&2; exit 1; }
           LOGS_FORWARD+=("$1" "$2")
@@ -399,7 +414,7 @@ LOGS_HELP
           ;;
         -*)
           echo "Unknown logs option: $1" >&2
-          echo "Usage: cap workflow logs [-f|--follow] [--tail N] <run-id> [--step STEP_ID] [--cap-home PATH]" >&2
+          echo "Usage: cap workflow logs [-f|--follow] [--tail N] [--since VALUE] <run-id> [--step STEP_ID] [--cap-home PATH]" >&2
           exit 1
           ;;
         *)
@@ -413,7 +428,7 @@ LOGS_HELP
       esac
     done
     if [ -z "${LOGS_RUN_ID}" ]; then
-      echo "Usage: cap workflow logs [-f|--follow] [--tail N] <run-id> [--step STEP_ID] [--cap-home PATH]" >&2
+      echo "Usage: cap workflow logs [-f|--follow] [--tail N] [--since VALUE] <run-id> [--step STEP_ID] [--cap-home PATH]" >&2
       exit 1
     fi
     if [ -n "${LOGS_TAIL}" ]; then
@@ -423,6 +438,22 @@ LOGS_HELP
         echo "--tail requires a positive integer (got: ${LOGS_TAIL})" >&2
         exit 1
       fi
+    fi
+    if [ -n "${LOGS_SINCE}" ] && [ "${LOGS_FOLLOW}" -eq 1 ]; then
+      # Phase 5: follow + --since composition is intentionally rejected.
+      # The Python streamer is single-shot; supporting follow would mean
+      # interleaving filter logic with tail -f's stream and the value-
+      # to-complexity ratio is too low for the first --since cut.
+      echo "--since cannot be combined with -f / --follow yet" >&2
+      echo "  Workaround: cap workflow logs --since <value> <run-id>   (single-shot)" >&2
+      echo "              cap workflow logs -f <run-id>                (follow without filter)" >&2
+      exit 1
+    fi
+    if [ -n "${LOGS_SINCE}" ]; then
+      # Python streams the filtered content directly; bash skips its
+      # cat / tail wiring entirely. --tail is ignored in this mode
+      # (the cutoff already bounds the output).
+      exec "${PYTHON_BIN}" "${CLI_PY}" logs "${LOGS_FORWARD[@]}" --since "${LOGS_SINCE}" "${LOGS_RUN_ID}"
     fi
     LOGS_PATH="$("${PYTHON_BIN}" "${CLI_PY}" logs "${LOGS_FORWARD[@]}" "${LOGS_RUN_ID}")" || exit $?
     if [ "${LOGS_FOLLOW}" -eq 1 ]; then
@@ -455,16 +486,21 @@ LOGS_HELP
 cap workflow watch — live snapshot of a workflow run
 
 Usage:
-  cap workflow watch [--once] [--json] [--compact] [--interval SEC] [--tail N] <run-id> [--cap-home PATH]
+  cap workflow watch [--once] [--json] [--compact] [--interval SEC] [--tail N]
+                     [--failed-only] [--step STEP_ID] <run-id> [--cap-home PATH]
 
 Flags:
   --once                   Render a single snapshot and exit (deterministic; for CI / scripts).
   --json                   Emit a JSON snapshot. Always single-shot — jq pipelines stay clean.
-                           Full payload regardless of --compact.
+                           Full payload regardless of --compact (filters still applied).
   --compact                Single-screen terse view (<15 lines). Default --tail collapses to 1.
   --interval SEC           Refresh interval in seconds (default 2.0).
   --tail N                 Number of trailing workflow.log lines to show
                            (default: 10 verbose / 1 compact).
+  --failed-only            Filter steps / sessions / artifacts to failed entries only.
+                           Empty result renders "(no failed steps)" so the filter is visibly applied.
+  --step STEP_ID           Focus on a single step's row + its sessions + artifacts.
+                           Missing step exits 1 with a clear error.
   --cap-home PATH          Override CAP_HOME / ~/.cap for cross-repo or sandbox reads.
 
 Behaviour:
@@ -478,6 +514,8 @@ Examples:
   cap workflow watch run_xxx
   cap workflow watch --once run_xxx
   cap workflow watch --compact run_xxx
+  cap workflow watch --failed-only run_xxx              # focus on failures
+  cap workflow watch --step draft_constitution run_xxx  # single-step focus
   cap workflow watch --json run_xxx | jq .summary
   cap workflow watch --interval 1 --tail 20 run_xxx
 
@@ -493,16 +531,16 @@ WATCH_HELP
     WATCH_FORWARD=()
     while [ "$#" -gt 0 ]; do
       case "$1" in
-        --once|--json|--compact)
+        --once|--json|--compact|--failed-only)
           WATCH_FORWARD+=("$1")
           shift
           ;;
-        --interval|--tail|--cap-home)
+        --interval|--tail|--cap-home|--step)
           [ -n "${2:-}" ] || { echo "$1 requires a value" >&2; exit 1; }
           WATCH_FORWARD+=("$1" "$2")
           shift 2
           ;;
-        --interval=*|--tail=*|--cap-home=*)
+        --interval=*|--tail=*|--cap-home=*|--step=*)
           WATCH_FORWARD+=("$1")
           shift
           ;;
@@ -512,7 +550,7 @@ WATCH_HELP
           ;;
         -*)
           echo "Unknown watch option: $1" >&2
-          echo "Usage: cap workflow watch [--once] [--json] [--compact] [--interval SEC] [--tail N] <run-id> [--cap-home PATH]" >&2
+          echo "Usage: cap workflow watch [--once] [--json] [--compact] [--interval SEC] [--tail N] [--failed-only] [--step STEP_ID] <run-id> [--cap-home PATH]" >&2
           exit 1
           ;;
         *)
@@ -526,7 +564,7 @@ WATCH_HELP
       esac
     done
     if [ -z "${WATCH_RUN_ID}" ]; then
-      echo "Usage: cap workflow watch [--once] [--json] [--compact] [--interval SEC] [--tail N] <run-id> [--cap-home PATH]" >&2
+      echo "Usage: cap workflow watch [--once] [--json] [--compact] [--interval SEC] [--tail N] [--failed-only] [--step STEP_ID] <run-id> [--cap-home PATH]" >&2
       exit 1
     fi
     exec "${PYTHON_BIN}" "${CLI_PY}" watch "${WATCH_FORWARD[@]}" "${WATCH_RUN_ID}"

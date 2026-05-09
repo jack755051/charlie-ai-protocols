@@ -457,6 +457,9 @@ assert_contains "H1j. watch --help notes status glyphs" "${out_w_h1}" "status gl
 assert_contains "H1k. watch --help has examples" "${out_w_h1}" "Examples:"
 assert_contains "H1l. watch --help cross-links logs" "${out_w_h1}" "cap workflow logs"
 assert_contains "H1m. watch --help cross-links observe topic" "${out_w_h1}" "cap help observe"
+# Phase 5 filter flags surfaced in dispatcher --help.
+assert_contains "H1n. watch --help shows --failed-only" "${out_w_h1}" "--failed-only"
+assert_contains "H1o. watch --help shows --step focus" "${out_w_h1}" "--step STEP_ID"
 
 # ---------------------------------------------------------------------------
 # P2 cases — status symbols + dashboard footer for failed / running runs
@@ -637,6 +640,202 @@ assert_contains "14b. verbose Steps glyph" "${out_14}" "✗ spec_step: failed"
 assert_contains "14c. verbose # Next header" "${out_14}" "# Next"
 assert_contains "14d. verbose Next has logs --step" "${out_14}" "cap workflow logs run_case14 --step spec_step"
 assert_contains "14e. verbose latest_artifact label" "${out_14}" "latest_artifact: spec_doc"
+
+# ---------------------------------------------------------------------------
+# Phase 5 cases — --failed-only / --step filters
+# ---------------------------------------------------------------------------
+
+# stage_mixed_run_dir <name>: two-step fixture with one ok + one failed
+# step so --failed-only / --step filters have meaningful selectivity.
+stage_mixed_run_dir() {
+  local case_name="$1"
+  local cap_home="${SANDBOX}/${case_name}/cap"
+  local run_dir="${cap_home}/projects/watch-proj/reports/workflows/watch-wf/run_${case_name}"
+  mkdir -p "${run_dir}"
+  cat > "${run_dir}/runtime-state.json" <<'EOF'
+{
+  "artifacts": {
+    "ok_doc":   {"artifact": "ok_doc",   "source_step": "ok_step",   "path": "/tmp/ok.md"},
+    "fail_doc": {"artifact": "fail_doc", "source_step": "fail_step", "path": "/tmp/fail.md"}
+  },
+  "steps": {
+    "ok_step":   {"phase": "1", "capability": "c", "execution_state": "validated", "blocked_reason": "", "output_source": "", "output_path": "/tmp/ok.md", "handoff_path": ""},
+    "fail_step": {"phase": "2", "capability": "c", "execution_state": "failed",    "blocked_reason": "auth", "output_source": "", "output_path": "/tmp/fail.md", "handoff_path": ""}
+  }
+}
+EOF
+  cat > "${run_dir}/agent-sessions.json" <<EOF
+{
+  "version": 1,
+  "run_id": "run_${case_name}",
+  "workflow_id": "watch-wf",
+  "workflow_name": "Watch Mixed Test",
+  "sessions": [
+    {"session_id": "run_${case_name}.1.ok_step", "step_id": "ok_step",
+     "role": "ba", "capability": "c", "executor": "ai",
+     "provider": "claude", "lifecycle": "completed", "result": "success",
+     "duration_seconds": 3},
+    {"session_id": "run_${case_name}.2.fail_step", "step_id": "fail_step",
+     "role": "ba", "capability": "c", "executor": "ai",
+     "provider": "claude", "lifecycle": "completed", "result": "failed",
+     "duration_seconds": 2}
+  ]
+}
+EOF
+  cat > "${run_dir}/run-summary.md" <<EOF
+# Workflow Run Summary
+
+- workflow_id: watch-wf
+- run_id: run_${case_name}
+- started_at: 2026-05-09 10:00:00
+
+## Steps
+### ok_step
+- status: ok
+### fail_step
+- status: failed
+
+## Finished
+- finished_at: 2026-05-09 10:00:05
+- total_duration_seconds: 5
+- completed: 1
+- failed: 1
+- skipped: 0
+EOF
+  printf '[2026-05-09 10:00:00][workflow][started]\n[2026-05-09 10:00:03][step:fail_step][failed]\n' \
+    > "${run_dir}/workflow.log"
+  printf '%s|%s' "${cap_home}" "${run_dir}"
+}
+
+# stage_all_ok_run_dir <name>: all steps validated → --failed-only must
+# show "(no failed steps)" placeholder, not an empty section.
+stage_all_ok_run_dir() {
+  local case_name="$1"
+  local cap_home="${SANDBOX}/${case_name}/cap"
+  local run_dir="${cap_home}/projects/watch-proj/reports/workflows/watch-wf/run_${case_name}"
+  mkdir -p "${run_dir}"
+  cat > "${run_dir}/runtime-state.json" <<'EOF'
+{
+  "artifacts": {"ok_doc": {"artifact": "ok_doc", "source_step": "spec_step", "path": "/tmp/ok.md"}},
+  "steps": {"spec_step": {"phase": "1", "capability": "specification", "execution_state": "validated", "blocked_reason": "", "output_source": "", "output_path": "", "handoff_path": ""}}
+}
+EOF
+  cat > "${run_dir}/agent-sessions.json" <<EOF
+{
+  "version": 1, "run_id": "run_${case_name}", "workflow_id": "watch-wf",
+  "workflow_name": "All OK", "sessions": [
+    {"session_id": "run_${case_name}.1.spec_step", "step_id": "spec_step",
+     "role": "ba", "capability": "specification", "executor": "ai",
+     "provider": "claude", "lifecycle": "completed", "result": "success",
+     "duration_seconds": 3}
+  ]
+}
+EOF
+  cat > "${run_dir}/run-summary.md" <<EOF
+# Workflow Run Summary
+- run_id: run_${case_name}
+- started_at: 2026-05-09 10:00:00
+## Steps
+### spec_step
+- status: ok
+## Finished
+- finished_at: 2026-05-09 10:00:03
+- total_duration_seconds: 3
+- completed: 1
+- failed: 0
+- skipped: 0
+EOF
+  printf '[2026-05-09 10:00:03][workflow][success]\n' > "${run_dir}/workflow.log"
+  printf '%s|%s' "${cap_home}" "${run_dir}"
+}
+
+# Case 15: --failed-only on a mixed run keeps just the failed entries
+echo "Case 15: --failed-only filters mixed run to failed entries"
+IFS='|' read -r CAP_HOME_15 RUN_DIR_15 <<<"$(stage_mixed_run_dir case15)"
+
+set +e
+out_15="$(bash "${CAP_WORKFLOW_SH}" watch --once --compact --failed-only \
+  --cap-home "${CAP_HOME_15}" run_case15 2>&1)"
+rc_15=$?
+set -e
+
+assert_eq "15a. --failed-only exit 0" "0" "${rc_15}"
+assert_contains "15b. shows the failed step row" "${out_15}" "✗ fail_step: failed"
+assert_not_contains "15c. drops the ok step from filtered view" "${out_15}" "ok_step:"
+# Sessions count reflects filter (1 of 2 sessions)
+assert_contains "15d. failed-only sessions count is 1" "${out_15}" "sessions: 1"
+# artifacts list filters to failed-step's artifact only
+assert_contains "15e. shows fail_doc as latest artifact" "${out_15}" "latest: fail_doc"
+assert_not_contains "15f. drops ok_doc from filtered view" "${out_15}" "ok_doc"
+
+# Case 16: --failed-only on an all-ok run shows the placeholder
+echo "Case 16: --failed-only on all-ok run shows (no failed steps)"
+IFS='|' read -r CAP_HOME_16 RUN_DIR_16 <<<"$(stage_all_ok_run_dir case16)"
+
+set +e
+out_16="$(bash "${CAP_WORKFLOW_SH}" watch --once --compact --failed-only \
+  --cap-home "${CAP_HOME_16}" run_case16 2>&1)"
+rc_16=$?
+set -e
+
+assert_eq "16a. --failed-only exit 0 on all-ok" "0" "${rc_16}"
+assert_contains "16b. shows (no failed steps) placeholder" "${out_16}" "(no failed steps)"
+assert_contains "16c. sessions count drops to 0" "${out_16}" "sessions: 0"
+assert_contains "16d. artifacts count drops to 0" "${out_16}" "artifacts: 0"
+
+# Case 17: --step <id> trims to one step
+echo "Case 17: --step focus trims payload"
+IFS='|' read -r CAP_HOME_17 RUN_DIR_17 <<<"$(stage_mixed_run_dir case17)"
+
+set +e
+out_17="$(bash "${CAP_WORKFLOW_SH}" watch --once --compact --step ok_step \
+  --cap-home "${CAP_HOME_17}" run_case17 2>&1)"
+rc_17=$?
+set -e
+
+assert_eq "17a. --step exit 0" "0" "${rc_17}"
+assert_contains "17b. shows the focused step" "${out_17}" "✓ ok_step: ok"
+assert_not_contains "17c. drops other step" "${out_17}" "fail_step:"
+assert_contains "17d. focused sessions count is 1" "${out_17}" "sessions: 1"
+assert_contains "17e. focused artifact is ok_doc" "${out_17}" "latest: ok_doc"
+assert_not_contains "17f. drops fail_doc artifact" "${out_17}" "fail_doc"
+
+# Case 18: --step missing exits 1 with Chinese stderr
+echo "Case 18: --step missing"
+IFS='|' read -r CAP_HOME_18 RUN_DIR_18 <<<"$(stage_mixed_run_dir case18)"
+
+set +e
+out_18="$(bash "${CAP_WORKFLOW_SH}" watch --once --step ghost_step \
+  --cap-home "${CAP_HOME_18}" run_case18 2>&1)"
+rc_18=$?
+set -e
+
+assert_eq "18a. --step missing exits 1" "1" "${rc_18}"
+assert_contains "18b. names missing step (Chinese)" "${out_18}" "找不到 step ghost_step"
+
+# Case 19: --json + --failed-only preserves filter
+echo "Case 19: --json + --failed-only filters payload top-level arrays"
+IFS='|' read -r CAP_HOME_19 RUN_DIR_19 <<<"$(stage_mixed_run_dir case19)"
+
+set +e
+out_19="$(bash "${CAP_WORKFLOW_SH}" watch --json --failed-only \
+  --cap-home "${CAP_HOME_19}" run_case19 2>&1)"
+rc_19=$?
+set -e
+
+assert_eq "19a. --json --failed-only exit 0" "0" "${rc_19}"
+counts="$(${PYTHON_BIN} -c '
+import json, sys
+data = json.loads(sys.stdin.read())
+print("steps:", len(data.get("steps", [])))
+print("sessions:", len(data.get("sessions", [])))
+print("artifacts:", len(data.get("artifacts", [])))
+print("filter_marker:", data.get("_filter_failed_only"))
+' <<<"${out_19}")"
+assert_contains "19b. JSON steps trimmed to 1" "${counts}" "steps: 1"
+assert_contains "19c. JSON sessions trimmed to 1" "${counts}" "sessions: 1"
+assert_contains "19d. JSON artifacts trimmed to 1" "${counts}" "artifacts: 1"
+assert_contains "19e. JSON marks filter active" "${counts}" "filter_marker: True"
 
 # ---------------------------------------------------------------------------
 # Summary
