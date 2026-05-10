@@ -6,6 +6,58 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.25.0] - 2026-05-10
+
+> Minor release — Role / Skill Registry **Phase 4 + Phase 5 land together**: `RuntimeBinder` now selects the executor role and advisory skill attachments through two independent paths, and AI step prompt assembly mounts advisory skills after the role prompt. The post-v0.24.11 "natural dogfood" boundary is closed for advisory attachment; Phase 6 (builtin promotion of shared advisory skills) remains deferred.
+
+### Added
+
+- `schemas/binding-report.schema.yaml` step item: two optional fields anchoring the Phase 5 contract.
+  - `selected_role` (object|null): structured snapshot of the chosen executor role; mirrors the legacy `selected_skill_id` / `selected_agent_alias` / `selected_prompt_file` / `selected_cli` / `skill_source` quartet for consumers wanting a single-object view. Schema rejects `kind=skill` in this slot (defence in depth — the binder already filters it from candidates).
+  - `attached_skills[]` (array): advisory-skill attachments rendered after the role prompt at AI execution. Each item declares `skill_id`, `prompt_file`, `attach_reason` (enum `attach_to_capabilities | attach_to_roles`), and `skill_source`. Strict-attach contract documented in the field description.
+- `engine/runtime_binder.py`: three new helpers driving the role/skill split.
+  - `_classify_kind(skill)` — explicit `kind` wins; legacy inference (`agent_alias` present → role; absent → skill) preserved verbatim for pre-v0.24.7 entries.
+  - `_find_attached_skills(registry, capability, *, workflow_version, selected_role_alias)` — strict-attach selection that requires either `attach_to_capabilities` containing the step's capability (primary, wins on tie) or `attach_to_roles` containing the chosen role's `agent_alias` (secondary). Returns priority-desc + skill_id-asc-sorted `(skill, attach_reason)` pairs. Auto-fan-in over `provided_capabilities` was rejected — see the ADR-style note in `docs/cap/ROLE-SKILL-REGISTRY-MODEL-MEMO.md`.
+  - `_build_selected_role(skill)` / `_build_attached_skill_entry(skill, attach_reason)` — project the registry picks into the binding-report shape; the role builder rejects `kind=skill` and entries missing `prompt_file` so partial picks do not slip through.
+- `engine/step_runtime.py attached-prompts` subcommand — emits one TSV line per attachment (`prompt_file<TAB>skill_id<TAB>attach_reason`) for a given step. Tab-delimited so the stream is orthogonal to flatten-steps' pipe format. Empty stdout for no-attach steps and unknown step ids.
+- `scripts/cap-workflow-exec.sh build_attached_skills_section` — Bash helper that calls `attached-prompts` and renders an "附加規範指引 (Attached Advisory Skills)" block before the structured contract section. References each advisory skill's `prompt_file` by path (same convention as the role prompt's "請嚴格依照 …" line) so the AI provider mounts both files via its filesystem tools — no inline duplication, prompt-hash duplicate detection in `cap session analyze` stays meaningful. Shell-executor steps never reach `build_step_prompt`, so attachments are injection-only for AI executors.
+- `tests/scripts/test-binder-phase5-attachment.sh` (new, 13 cases): drives `_find_candidates` / `_find_attached_skills` / `_build_selected_role` / `_assert_skill_source_allowed` via the `test-user-imported-role.sh` explicit-kwarg sandbox pattern. Asserts kind=skill is filtered out of executor candidates, both attach reasons fire, no auto-fan-in, double-match precedence, priority sort order, source-policy halt with `purpose=attached_skill` + `skill_id` in the message, and the defence-in-depth rejections in `_build_selected_role`.
+- `tests/scripts/test-step-runtime-attached-prompts.sh` (new, 9 cases): locks the attached-prompts TSV contract — two attachments in input order, empty stdout for no-attach / unknown step_id, tab sanitization in payload fields, and the flatten-steps `attached_count = len(attached_skills)` invariant plus the 23-field `NF` check so the cap-workflow-exec.sh IFS read stays positional.
+- `scripts/workflows/smoke-layer.sh` (new from `chore(devops)`): focused smoke slices for local iteration — `contracts | runtime | project | orchestration | e2e | promote | replay | full`. The runtime suite picks up both new Phase 5 fixtures automatically.
+- `docs/cap/DOGFOOD-PROFILES.md` (new from `docs(cap)`): defines repo profiles for dogfood evidence collection so Phase 6 builtin-promotion criteria can land on a stable evidence base.
+
+### Changed
+
+- `engine/runtime_binder.py _find_candidates` filters to `kind=role` only. Advisory skills can no longer silently fill the executor slot via the legacy `agent_alias`-makes-it-selectable path. **This is the Phase 5 contract flip** — previously documented at the post-v0.24.11 boundary as the deliberate behaviour change.
+- `engine/runtime_binder.py _find_fallback` also restricts to `kind=role`. An advisory skill cannot quietly fill the executor slot through fallback either.
+- `engine/runtime_binder.py _assert_skill_source_allowed` accepts `purpose` (default `"role"`) and `skill_id` kwargs so the `SkillSourcePolicyError` message names the offending pick (role vs attached_skill); each attached skill is gated independently and a violation halts the entire bind, not silently drops the attachment (memo §7.4).
+- `engine/runtime_binder.py bind_semantic_plan` writes `selected_role` / `attached_skills` on every step report, including bootstrap-blocked, capability-blocked, shell-executor, and unresolved branches (null role + empty list). `build_bound_execution_phases_from_semantic` propagates both fields to deferred / active / standby steps so flatten_steps and the prompt builder see them.
+- `engine/step_runtime.py flatten_steps` appends a 23rd `attached_count` field to each pipe-delimited row. `scripts/cap-workflow-exec.sh` now binds the 23rd variable explicitly so the IFS read stays positional.
+- `tests/scripts/test-skill-registry-kind-field.sh` case 5 inverts: was "all three entries remain selectable candidates"; now case 5a "role-shaped entries remain selectable" + case 5b "explicit kind=skill is excluded from executor candidates". This locks the Phase 5 invariant.
+- `scripts/workflows/smoke-per-stage.sh` (from `refactor(smoke)`): release gate list is derived from the step inventory rather than hand-maintained, removing the duplication that previously caused additions to drift.
+- `docs/cap/ROLE-SKILL-REGISTRY-MODEL-MEMO.md`: ADR-style note added before the boundary section recording the Phase 5 trigger, scope, strict-attach decision, conflict rules, and rollback strategy. Phase 4 + Phase 5 sections marked **landed at v0.25.0** with explicit task-by-task completion notes. Recommended-next-step guidance shifted to Phase 6 dogfood watching.
+- `docs/cap/AGENT-SKILLS-CUSTOMIZATION.md` 場景 6 (new section): walkthrough for advisory skill attachment. 6.1 strict-attach contract table, 6.2 shared-layer attach example with `attach_to_capabilities`, 6.3 attach_to_roles narrowing, 6.4 constitution authorisation surface, 6.5 `cap workflow bind` verification snippet, 6.6 decision matrix (replace role / new role / attach advisory / disable).
+- `docs/cap/SKILL-RUNTIME-ARCHITECTURE.md` §2 / §3: Phase 5 dual-slot explainer with ASCII diagram (capability → selected_role + attached_skills[]) and the AI step prompt assembly order (role prompt → 「附加規範指引」 → structured sections).
+- `TODOLIST.md` (from `docs(cap)`): collapsed into a focus index that points at the per-track docs rather than restating them, keeping the entry surface small.
+
+### Verified
+
+- Full `smoke-per-stage.sh` release gate: **87 / 87 PASS, 0 failed, 0 skipped**.
+- `smoke-layer.sh` slices: contracts **7 / 7**, runtime **12 / 12** (includes the two new Phase 5 fixtures), orchestration **6 / 6**, project **8 / 8**, replay **5 / 5**.
+- New: `test-binder-phase5-attachment.sh` **13 / 13**, `test-step-runtime-attached-prompts.sh` **9 / 9**.
+- Regression baseline: `test-binding-report-schema.sh` **17 / 17** (10 legacy + 7 new), `test-binding-report-validation-hook.sh` **15 / 15**, `test-skill-registry-resolver.sh` **22 / 22**, `test-skill-registry-override.sh` **29 / 29**, `test-skill-registry-kind-field.sh` **11 / 11** (case 5 contract flip), `test-user-imported-role.sh` **19 / 19**, `test-binding-source-metadata.sh` **17 / 17**.
+
+### Boundary
+
+- `binding-report.schema.yaml schema_version` stays at **1**. `selected_role` and `attached_skills[]` are additive optional fields; pre-Phase 5 binding reports validate unchanged.
+- Legacy quartet (`selected_skill_id` / `selected_agent_alias` / `selected_prompt_file` / `selected_cli`) keeps writing on every step report. Consumers that have not adopted `selected_role` see the same shape as before.
+- `flatten_steps` 23rd field is positional; `cap-workflow-exec.sh` is the only repo-internal consumer and now binds 23 variables. External wrappers iterating only the first 22 fields keep working positionally.
+- **One deliberate behavioural break**: `kind=skill` entries can no longer be standalone executors. Real builtin / shared registries today carry no workflow that depended on this; `tests/scripts/test-skill-registry-kind-field.sh` case 5 is rewritten to lock the new contract. Rollback: toggle `_find_attached_skills` to return `[]` and the runtime collapses to single-role behaviour without any schema change (see memo "Rollback strategy").
+- **Phase 6 builtin promotion of shared advisory skills** remains deferred. Memo entry/exit criteria unchanged; opens only when a specific shared advisory skill has multi-provider, multi-workflow, multi-task evidence of repeated usefulness.
+- Provider global files (`~/.codex/AGENTS.md` / `~/.claude/CLAUDE.md`) and provider sub-agent directories (`~/.claude/agents/`) remain forbidden registration targets; this release does not change provider-side surfaces.
+
+---
+
 ## [v0.24.11] - 2026-05-10
 
 > Patch release — Role / Skill Registry Phase 3 user-imported role registration. Pure docs / schema example / resolver tests; runtime selection behaviour is unchanged from v0.24.10. Phase 4 attachment design and Phase 5 runtime attachment remain deferred.
