@@ -6,6 +6,40 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.25.7] - 2026-05-10
+
+> Patch release — **dogfood follow-up to v0.25.6**, closing bug #6 / #8 (the auto-promote bridge between project-spec-pipeline outputs and the project repo's `docs/`). After v0.25.6 unblocked Phase D end-to-end, the dogfood baseline still required **manual mirroring** of `<run_dir>/4-prd.md` etc. into `docs/architecture/<module>_PRD_v1.md` for the implementation pipeline's AI step to accept the spec layer as "齊備". Phase C ran fine and produced all 6 spec artifacts under `<run_dir>/`, but `workflow-result.json:promote_candidates: count 0` because the v0.25.6 producer only knew about `project_constitution` and `compiled_workflow`. There was no signal to either users or downstream consumers that anything was promotable.
+>
+> Fix: **`spec_artifact` is now a third promote artifact_type**. The producer auto-emits one candidate per validated spec output with the canonical `docs/` target derived from policy §3.3's mapping table. `cap promote inspect` will now show real candidates after a spec pipeline run, and the existing `cap promote --apply` surface can write them to repo. Implementation pipelines still pick up spec artifacts from `<run_dir>/` via the v0.25.4/v0.25.6 cross-pipeline resolvers — promote is the additional path for landing them in git, not a runtime requirement.
+
+### Added
+
+- `engine/promote_candidate_producer.py` — new `_detect_spec_artifact_candidates` helper. Fires only when `workflow_id == "project-spec-pipeline" AND final_state == "completed"`. Reads the run's `runtime-state.json`, walks the canonical `_SPEC_ARTIFACT_TARGET_MAP` (`prd_document` / `tech_plan_document` / `ba_spec` / `schema_ssot` / `api_contract` / `ui_spec`), filters to entries whose `source_step.execution_state == "validated"` and whose `source_path` exists on disk, emits one candidate each with the policy §3.3 target (`docs/architecture/<module>_PRD_v1.md`, `docs/architecture/database/<module>_schema_v1.md`, `docs/design/<module>_UI_v1.md`, etc.). Module name slug precedence: `task_id` → `project_id` → `"module"` literal fallback. Slug rules mirror `_sanitize_project_id` (lowercase / a–z 0–9 . _ -).
+- `_slug_module_name(raw)` private helper: kebab-case slug for filename composition; same character class as `engine/project_context_loader.py`.
+- `tests/scripts/test-promote-candidate-producer-spec-artifact.sh` (new, 16 cases): regression for the v0.25.7 contract. Cases 1a–1j cover the 6-artifact happy path (correct count, correct target paths for each artifact name, source absolute, source_revision tagged with run_id, validation_schema=null per policy §6.1). Case 2 confirms non-spec workflows do not emit spec candidates. Case 3 confirms failed spec runs emit zero. Case 4 confirms blocked source_steps are skipped while validated ones still emit. Case 5 confirms missing-on-disk source paths are silently skipped. Case 6 round-trips a spec_artifact candidate through `validate-jsonschema` against the workflow-result schema to lock the enum extension.
+- `scripts/workflows/smoke-layer.sh promote` suite: append the new fixture so smoke-layer / smoke-per-stage cover it automatically.
+
+### Changed
+
+- `schemas/workflow-result.schema.yaml`: extend `promote_candidates[].items.artifact_type` enum from 2 to 3 values — added `spec_artifact`. Field description updated to document the new type's policy contract.
+- `policies/runtime-promote.md`: §2 promotable categories table gains a `Spec artifact` row (target = `docs/architecture/` or `docs/design/`, gated to spec-pipeline + completed). §3.3 (new) defines the full mapping table, module-name resolution rule, no-partial-override invariant, and validation note (no JSON schema; file-existence + non-empty + `.md` extension only). §3.4 (was §3.3) updated to reflect three target categories instead of two. §5.2 enum and §5.3 detection rule both updated. §6.1 validation table gains the `Spec Artifact` row pointing at file-existence + non-empty + `.md` extension instead of JSON Schema.
+
+### Verified
+
+- `test-promote-candidate-producer-spec-artifact.sh` **16 / 16** PASS.
+- smoke-layer promote **5 / 5** PASS (24 prior + 16 new + 32 + 37 + 32 baseline cases all green).
+- smoke-layer contracts **7 / 7**, runtime **17 / 17** PASS — schema enum extension does not regress existing fixtures.
+- Manual dogfood: cap-test/component-next-dotnet-stt's prior Phase C run will now emit 6 spec_artifact candidates the next time `cap workflow inspect` re-renders the result, and `cap promote inspect` will surface them (target paths `docs/architecture/happy-path-stt-component-formal-spec_PRD_v1.md` etc.).
+
+### Boundary
+
+- One enum extension + one detector helper. No new CLI surface in this release; existing `cap promote inspect` / legacy `cap promote <src> <dst>` consumers gain coverage automatically. A typed `cap promote workflow <run_id> --spec-artifacts` bulk command remains a deferred follow-up — when concrete dogfood evidence shows manually applying 6 candidates per run becomes friction.
+- Implementation pipeline's runtime input resolution is unchanged. Phase D continues to read spec artifacts from `<run_dir>/` via the v0.25.4 `prior_spec_artifacts` resolver and the v0.25.6 named-artifact lookup. Promote is the **path to git**, not a runtime dependency for downstream pipelines.
+- Spec markdown has no JSON schema, so `validation_schema = null` for every spec_artifact candidate. Policy §6.1 documents the post-apply gate's behaviour for this type (file existence + non-empty + `.md` extension).
+- Phase 5 role/skill attachment from v0.25.0 unchanged. Phase 6 builtin promotion still deferred.
+
+---
+
 ## [v0.25.6] - 2026-05-10
 
 > Patch release — **dogfood follow-up to v0.25.5**. After the output_paths normalizer let `persist_task_constitution` succeed, project-implementation-pipeline reached step 4 (`backend`) and immediately blocked with `missing_input_artifact:schema_ssot, api_contract, ba_spec`. The same pattern would repeat at every downstream step (frontend needs `ui_spec` / `ui_design_assets`, qa_testing needs frontend / backend codebases, etc.). The v0.25.4 `prior_spec_artifacts` resolver was umbrella-only; individual artifact names still bounced off `_try_resolve` because the current run's registry had none of them and they are not intrinsic.

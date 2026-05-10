@@ -343,12 +343,20 @@ properties:
           enum:
             - project_constitution
             - compiled_workflow
+            - spec_artifact
           description: |
-            Promotable artifact category (policy §2). Only these two
-            values are valid in v1; run-only artifacts (runtime-state /
-            agent-sessions / route-history / step raw logs) and
-            binding reports are explicitly forbidden from being
-            promote candidates.
+            Promotable artifact category (policy §2). Run-only
+            artifacts (runtime-state / agent-sessions / route-history
+            / step raw logs) and binding reports remain explicitly
+            forbidden from being promote candidates.
+
+            ``spec_artifact`` (v0.25.7+) covers project-spec-pipeline
+            output markdowns — PRD / TechPlan / BA / Schema SSOT /
+            API contract / UI spec — that downstream pipelines and
+            human readers expect to live under ``docs/architecture/``
+            and ``docs/design/``. Producer-emitted candidates carry
+            the canonical mapping (per policy §3.3) so consumers do
+            not have to re-derive target paths.
         reason:
           type: string
           description: One-line explanation of why this artifact qualifies for promotion (e.g. "task constitution finalized after spec_audit pass", "compiled workflow validated after run completed without failures").

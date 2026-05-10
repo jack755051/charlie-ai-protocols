@@ -21,6 +21,7 @@ CAP runtime artifact 分三類：
 |---|---|---|---|
 | **Project Constitution snapshot** | `<cap_home>/projects/<id>/constitutions/<task_id>/constitution.{json,yaml}` | ✓ | `<project_root>/.cap/constitution.yaml` |
 | **Compiled Workflow** | `<cap_home>/projects/<id>/compiled-workflows/<workflow_id>/<timestamp>.json` | ✓（限同 workflow_id） | `<project_root>/.cap/workflows/<workflow_id>.yaml` |
+| **Spec artifact**（v0.25.7+） | `<run_dir>/4-prd.md` / `6-tech_plan.md` / `8-ba.md` / `10-dba_api.md` / `10-ui.md` | ✓（限 `project-spec-pipeline` 且 `final_state == "completed"`） | `<project_root>/docs/architecture/` 或 `docs/design/`（見 §3.3） |
 | **Run-only artifacts** | `<run_dir>/runtime-state.json` / `agent-sessions.json` / `route-history.jsonl` / `<step_id>.raw.log` | ✗ | — |
 
 > **Run-only 為何不可 promote**：這些是 per-run 軌跡（誰跑了什麼、stdout 截錄、route-back 序列），repo 不該收這類「執行過程」資料。它們屬於 `policies/run-archive.md` 規範的 archive scope，由 Logger 結案 + retention 規則處理。
@@ -39,10 +40,28 @@ CAP runtime artifact 分三類：
 - **檔名硬規則**：必須與 `compiled_workflow.workflow_id` 完全一致（小寫 + kebab-case），副檔名 `.yaml`。
 - **不允許 partial override**（**對齊 P9 §4.3**）：promote compiled workflow 必須整檔替換；若使用者只想改某 step，要從 namespaced project workflow 起手手動編輯，不走 promote。
 
-### 3.3 為什麼只允許這兩條 target
-- 兩者都是 **schema-validated artifact**：promote 後可以重新 validate（見 §6）。
-- 兩者都有**穩定 repo 位置**：使用者預期 `.cap/constitution.yaml` 與 `.cap/workflows/` 是 source-of-truth。
-- 其他 runtime artifact（compiled-workflow + binding 的時間戳版本、agent-sessions、handoff tickets）刻意不允許 promote，因為它們是**execution trail**，凍結進 repo 會讓 git history 變雜訊。
+### 3.3 Spec Artifact（v0.25.7+）
+- **適用條件**：僅 `project-spec-pipeline` workflow 的 run 且 `final_state == "completed"` 才會被 producer 標記為 candidate。其他 workflow（含 `project-implementation-pipeline` 的 codebase 輸出）不走 promote 流程；codebase 由實作 step 直接寫入 `<project_root>/`。
+- **target mapping table**：
+
+  | runtime-state artifact name | repo target |
+  |---|---|
+  | `prd_document` | `docs/architecture/<module>_PRD_v1.md` |
+  | `tech_plan_document` | `docs/architecture/<module>_TechPlan_v1.md` |
+  | `ba_spec` | `docs/architecture/<module>_BA_v1.md` |
+  | `schema_ssot` | `docs/architecture/database/<module>_schema_v1.md` |
+  | `api_contract` | `docs/architecture/<module>_API_v1.md` |
+  | `ui_spec` | `docs/design/<module>_UI_v1.md` |
+
+- **`<module>` 解析順序**：`run_result.task_id`（slug 化後）→ `run_result.project_id`（slug 化）→ `"module"` 字面值。Slug 規則同 `engine/project_context_loader.py` 的 `_sanitize_project_id`（lowercase / a–z 0–9 . _ -）。
+- **不接受 partial override**：每個 spec_artifact 是整份 markdown 替換；同一 target 多份 candidate（理論上不會發生）以最新 source mtime 為準。
+- **不寫到 `.cap/`**：spec_artifact target 永遠在 `docs/` 子樹下，不會與 §3.1 / §3.2 的 `.cap/` namespace 衝突。
+- **schema 驗證**：spec_artifact 沒有結構化 schema（純 markdown）。`validation_schema` 一律 `null`，post-apply gate（§6）對此類型走 file-existence + non-empty 的最小檢查，不嘗試 JSON Schema validate。
+
+### 3.4 為什麼只允許這三條 target
+- 都是 **可被人類審閱、有穩定 repo 位置** 的 artifact。`.cap/constitution.yaml`、`.cap/workflows/<id>.yaml`、`docs/architecture/<module>_*.md` / `docs/design/<module>_*.md` 各有清楚使用情境。
+- Constitution 與 compiled workflow 是 schema-validated；spec markdown 是人類審閱對象。
+- 其他 runtime artifact（compiled-workflow + binding 的時間戳版本、agent-sessions、handoff tickets、step raw log）刻意不允許 promote，因為它們是 **execution trail**，凍結進 repo 會讓 git history 變雜訊。
 
 ## 4. Overwrite / Backup / Skip 規則 (Conflict Handling)
 
@@ -80,20 +99,24 @@ P7 `engine/result_report_builder.py:build_workflow_result` 結尾呼叫**新模�
 required:
   - source_path        # 絕對路徑，runtime artifact 位置
   - target_path        # 絕對路徑或 repo-relative，repo 預期位置
-  - artifact_type      # enum: project_constitution | compiled_workflow
+  - artifact_type      # enum: project_constitution | compiled_workflow | spec_artifact
   - reason             # 一句說明為何此 artifact 是 promote candidate
 optional:
-  - validation_schema  # 對應 schema 路徑（schema 驗證在 promote-after gate 用）
+  - validation_schema  # 對應 schema 路徑（schema 驗證在 promote-after gate 用；spec_artifact 一律 null）
   - source_layer       # 從 P9 _source_layer 拉出（informational）
   - source_revision    # 若有 hash / timestamp / 版本標記則填入
 ```
 
-`artifact_type` enum **僅**這兩個值。其他類型在當前 v1 一律不產出 candidate；新類型必須先進本 policy §2 表才能加 enum。
+`artifact_type` enum **僅**這三個值。其他類型在當前 v1 一律不產出 candidate；新類型必須先進本 policy §2 表才能加 enum。
 
 ### 5.3 Producer 偵測規則
 - **Project Constitution**：當 `run_result.task_id` 非 null 且 `<cap_home>/projects/<project_id>/constitutions/<task_id>/constitution.{yaml,json}` 存在 → emit candidate，target=`<project_root>/.cap/constitution.yaml`。
 - **Compiled Workflow**：當 `run_result.workflow_id` 非空、`<cap_home>/projects/<project_id>/compiled-workflows/<workflow_id>/` 有檔案，且 `final_state == "completed"` → emit candidate（取最新 timestamp），target=`<project_root>/.cap/workflows/<workflow_id>.yaml`。
   - **`final_state != completed` 不 emit**：fail / blocked / cancelled run 的 compiled workflow 不應被 promote，避免把壞掉的編譯結果搬回 repo。
+- **Spec Artifact**（v0.25.7+）：當 `run_result.workflow_id == "project-spec-pipeline"`、`final_state == "completed"`，且 `<cap_home>/projects/<project_id>/reports/workflows/project-spec-pipeline/<run_id>/runtime-state.json` 存在 → 讀其 `artifacts` 表，對 §3.3 mapping table 中每個已 `validated` 的 artifact name emit 一支 candidate，target 依 mapping table 計算。
+  - **`final_state != completed` 不 emit**：避免把失敗 run 的 partial 規格搬回 repo。
+  - **`source_step` 未 `validated` 不 emit**：partial 輸出（agent halted）不能成為 candidate。
+  - **`source_path` 不存在 / 已被刪 不 emit**：靜默 skip 該條，其他正常 candidate 不受影響。
 - **找不到對應 source on disk**：靜默不 emit；**不**回報 error，因為「沒 source」是 informational。
 
 ### 5.4 Producer 邊界
@@ -109,6 +132,7 @@ Promote `--apply` 寫入 target 後，**必須**重新 validate promoted artifac
 |---|---|
 | Project Constitution | `step_runtime.py validate-jsonschema <target> schemas/project-constitution.schema.yaml` |
 | Compiled Workflow | `step_runtime.py validate-jsonschema <target> schemas/compiled-workflow.schema.yaml` + `engine/compiled_workflow_validator.py:ensure_valid_compiled_workflow`（同 P4 #1 既有 hook） |
+| Spec Artifact (v0.25.7+) | 檔案存在 + non-empty + 副檔名為 `.md`。spec markdown 沒有結構化 schema，不跑 JSON Schema validate；`validation_schema` 永遠 `null`，consumer 看到 `null` 時跳過 schema 驗證但仍跑 file-existence + non-empty 檢查。 |
 
 ### 6.2 失敗 rollback 規則
 - **Validation fail 必須 rollback**：把 target 還原為 promote 前的內容（如有 backup），或刪除（target 原本不存在）。
