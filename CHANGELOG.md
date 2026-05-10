@@ -6,6 +6,35 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.25.6] - 2026-05-10
+
+> Patch release — **dogfood follow-up to v0.25.5**. After the output_paths normalizer let `persist_task_constitution` succeed, project-implementation-pipeline reached step 4 (`backend`) and immediately blocked with `missing_input_artifact:schema_ssot, api_contract, ba_spec`. The same pattern would repeat at every downstream step (frontend needs `ui_spec` / `ui_design_assets`, qa_testing needs frontend / backend codebases, etc.). The v0.25.4 `prior_spec_artifacts` resolver was umbrella-only; individual artifact names still bounced off `_try_resolve` because the current run's registry had none of them and they are not intrinsic.
+
+### Fixed
+
+- `engine/step_runtime.py validate_inputs._try_resolve` adds a third resolution layer: after registry and intrinsic both fail, scan all prior workflow runs under `${CAP_HOME}/projects/<project_id>/reports/workflows/*/run_*/runtime-state.json` for the named artifact. Latest validated producer wins (lexical max on the timestamped run id). Project-scoped — only the configured project's runs are considered.
+- New helper `_resolve_artifact_from_prior_pipelines(artifact, project_id, cap_home)`: implements the cross-pipeline scan; reads each `runtime-state.json` once, picks entries whose `source_step.execution_state == "validated"`, returns the descriptor for the latest run that produced the artifact.
+
+### Added
+
+- `tests/scripts/test-cross-pipeline-named-artifacts.sh` (new, 7 cases): regression for the v0.25.6 contract. Case 1 spec pipeline run produces schema_ssot → backend's input resolves through prior-pipeline lookup. Case 2 latest run wins among multiple spec runs. Case 3 not-validated entries skipped. Case 4 no prior runs → missing (clear error). Case 5 cross-project leak prevented (project_id env scopes the lookup).
+- `scripts/workflows/smoke-layer.sh` runtime suite: append the new fixture.
+
+### Verified
+
+- `test-cross-pipeline-named-artifacts.sh` **7 / 7** PASS.
+- smoke-layer runtime baseline still green; full suite re-checked after the change.
+- Manual dogfood: cap-test/component-next-dotnet-stt expected to advance into frontend / backend / qa / security / devops / impl_audit AI steps after `cap update` to v0.25.6.
+
+### Boundary
+
+- One-function behaviour change in Python. No schema bump, no provider surface change, no new env vars.
+- The new resolver runs only when registry + intrinsic both fail. Pre-fix successful resolutions are unaffected.
+- `CAP_PROJECT_ID` env var (exported by cap-workflow-exec.sh in v0.25.4) becomes the authoritative project scoping signal for cross-pipeline lookups; falls back to `_read_project_id_from_cwd()` when unset.
+- Phase 5 role/skill attachment from v0.25.0 unchanged. Phase 6 builtin promotion still deferred.
+
+---
+
 ## [v0.25.5] - 2026-05-10
 
 > Patch release — **dogfood follow-up to v0.25.4**. After bridges #4 / #5 / #7 landed, project-implementation-pipeline could finally start. Step 1 (`draft_task_constitution`) succeeded under codex (170s) and emitted task constitution JSON. Step 2 (`persist_task_constitution`) immediately halted with `schema_validation_failed: execution_plan/0/output_paths/0: '...' is not of type 'object'`. Root cause: `schemas/task-constitution.schema.yaml` mandates `execution_plan[].output_paths.items.type = "object"` but `01-supervisor-agent.md` doesn't specify item shape, so codex / claude both emit string items (the bare path). Phase C (project-spec-pipeline) ran fine because its supervisor draft happened to leave `output_paths` empty.

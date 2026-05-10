@@ -30,6 +30,86 @@ from pathlib import Path
 from typing import Any
 
 
+def _resolve_artifact_from_prior_pipelines(
+    artifact: str,
+    project_id: str | None,
+    cap_home: Path,
+) -> dict | None:
+    """Scan prior workflow runs for a named artifact (v0.25.6).
+
+    Project-implementation-pipeline (and other downstream pipelines)
+    declare individual spec artifact names — ``schema_ssot``,
+    ``api_contract``, ``ba_spec``, ``ui_spec``, ``ui_design_assets``
+    — as required step inputs, but the runtime registry only carries
+    artifacts produced in the *current* run. Pre-fix, the
+    ``prior_spec_artifacts`` resolver added in v0.25.4 only handed
+    back a single index-pointer artifact; individual artifact names
+    still bounced off ``_try_resolve`` and validate-inputs marked
+    them missing.
+
+    This resolver fills the gap. For the named ``artifact``, it
+    walks every ``runtime-state.json`` under
+    ``${cap_home}/projects/<project_id>/reports/workflows/*/run_*/``
+    and returns the most recent validated entry across all
+    pipelines (lexical max on the timestamped run id). Without this
+    cross-pipeline view, the implementation pipeline cannot read its
+    own inputs from the spec pipeline that produced them; with it,
+    the same ``inputs:`` declaration in workflow YAML resolves
+    transparently.
+
+    Returns ``None`` when no prior run produced the artifact. Caller
+    treats absence as a missing required input (same surface as
+    pre-fix), which surfaces a clearer error after registry and
+    intrinsic both fail than the generic "no resolver" outcome.
+    """
+    if not project_id:
+        return None
+    workflows_dir = cap_home / "projects" / project_id / "reports" / "workflows"
+    if not workflows_dir.is_dir():
+        return None
+
+    candidates: list[tuple[str, dict]] = []
+    for pipeline_dir in workflows_dir.iterdir():
+        if not pipeline_dir.is_dir():
+            continue
+        for run_dir in pipeline_dir.iterdir():
+            if not run_dir.is_dir() or not run_dir.name.startswith("run_"):
+                continue
+            runtime_state = run_dir / "runtime-state.json"
+            if not runtime_state.is_file():
+                continue
+            try:
+                state = json.loads(runtime_state.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            entry = (state.get("artifacts") or {}).get(artifact)
+            if not isinstance(entry, dict):
+                continue
+            source_step = entry.get("source_step")
+            source_state = (
+                (state.get("steps") or {}).get(source_step, {}).get("execution_state")
+            )
+            if source_state != "validated":
+                continue
+            # Tag with run id so the latest-wins comparator picks
+            # the chronologically most recent producer.
+            candidates.append((run_dir.name, entry))
+
+    if not candidates:
+        return None
+
+    # run IDs are timestamped (`run_<YYYYMMDDHHMMSS>_<hash>`); lexical
+    # max on the run id == chronological latest.
+    candidates.sort(key=lambda pair: pair[0], reverse=True)
+    chosen_run_id, entry = candidates[0]
+    return {
+        "artifact": artifact,
+        "source_step": entry.get("source_step"),
+        "path": entry.get("path"),
+        "handoff_path": entry.get("handoff_path"),
+    }
+
+
 def _read_project_id_from_cwd() -> str | None:
     """Best-effort read of the current project's project_id from CWD config.
 
@@ -685,8 +765,31 @@ def validate_inputs(
                 "handoff_path": "",
             }
 
-        # 3. Neither registry nor intrinsic — caller decides if the
-        # absence is a missing required input or a graceful no-op.
+        # 3. v0.25.6 — cross-pipeline named artifact discovery.
+        # Workflow YAML in implementation / qa pipelines declares
+        # individual spec artifact names (schema_ssot, api_contract,
+        # ba_spec, ui_spec, ui_design_assets, etc.) as required step
+        # inputs. The current run's registry has none of them — the
+        # spec pipeline that produced them was a separate run — and
+        # they are not intrinsic. Without this lookup, every
+        # implementation step blocks at validate-inputs even though
+        # the upstream artifacts exist on disk. Scan all prior runs
+        # under the project's CAP_HOME storage; latest validated
+        # producer wins. This generalises the v0.25.4
+        # ``prior_spec_artifacts`` resolver from "umbrella index
+        # pointer" to "any named spec artifact".
+        project_id = (
+            os.environ.get("CAP_PROJECT_ID")
+            or _read_project_id_from_cwd()
+        )
+        cap_home = Path(os.environ.get("CAP_HOME") or (Path.home() / ".cap"))
+        prior = _resolve_artifact_from_prior_pipelines(artifact, project_id, cap_home)
+        if prior is not None:
+            return prior
+
+        # 4. Neither registry, intrinsic, nor any prior pipeline run
+        # produced the artifact — caller decides if the absence is a
+        # missing required input or a graceful no-op.
         return None
 
     # Required inputs — absence blocks the step.
