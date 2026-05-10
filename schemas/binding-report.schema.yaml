@@ -288,13 +288,13 @@ properties:
               description: Role's CLI command (mirrors selected_cli).
             kind:
               type: [string, "null"]
-              enum: [role, "null"]
+              enum: [role, null]
               description: |
                 Discriminator copied from the registry entry. Always
                 ``role`` when this object is non-null (the binder
                 rejects ``kind=skill`` from the executor slot in
-                Phase 5). ``null`` when the underlying entry omitted
-                ``kind`` and was inferred as role via the
+                Phase 5). JSON ``null`` when the underlying entry
+                omitted ``kind`` and was inferred as role via the
                 ``agent_alias`` legacy rule.
             skill_source:
               type: [object, "null"]

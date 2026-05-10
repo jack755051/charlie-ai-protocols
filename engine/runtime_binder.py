@@ -749,6 +749,12 @@ class RuntimeBinder:
                         "candidate_skill_ids": [],
                         # P9 #4 — bootstrap-blocked branch never picked a skill.
                         "skill_source": None,
+                        # Phase 5 — bootstrap-blocked branch has no role
+                        # and never attaches advisory skills; emit the
+                        # canonical empty shape so consumers don't have
+                        # to special-case absence.
+                        "selected_role": None,
+                        "attached_skills": [],
                     }
                 )
                 continue
@@ -793,6 +799,10 @@ class RuntimeBinder:
                             "candidate_skill_ids": [],
                             # P9 #4 — capability-blocked branch never picked a skill.
                             "skill_source": None,
+                            # Phase 5 — capability-blocked branch has no
+                            # role and never attaches.
+                            "selected_role": None,
+                            "attached_skills": [],
                         }
                     )
                     continue
@@ -837,6 +847,13 @@ class RuntimeBinder:
                         "reason": reason,
                         "candidate_skill_ids": [],
                         "skill_source": shell_skill_source,
+                        # Phase 5 — shell executor steps run no AI
+                        # prompt; selected_role is null and no advisory
+                        # skill attachments are mounted (build_step_prompt
+                        # in cap-workflow-exec.sh skips attachment
+                        # injection for shell executors anyway).
+                        "selected_role": None,
+                        "attached_skills": [],
                     }
                 )
                 continue
@@ -922,7 +939,45 @@ class RuntimeBinder:
                 skill_source,
                 step_id=step["step_id"],
                 effective_allowed_roots=effective_allowed_roots,
+                purpose="role",
+                skill_id=selected_skill_id,
             )
+
+            # Phase 5 — structured selected_role view + attached
+            # advisory skills. selected_role only fills in when the
+            # role pick has full execution metadata (prompt_file is
+            # the schema-required field); attachment is only computed
+            # when the role itself is bound, since an unmounted role
+            # has no anchor for the strict-attach contract.
+            role_has_metadata = bool(chosen_skill) and self._has_execution_metadata(chosen_skill)
+            selected_role_obj = (
+                self._build_selected_role(chosen_skill) if role_has_metadata else None
+            )
+            attached_skills_report: list[dict] = []
+            if role_has_metadata:
+                attached_pairs = self._find_attached_skills(
+                    registry,
+                    capability,
+                    workflow_version=semantic_plan["version"],
+                    selected_role_alias=chosen_skill.get("agent_alias"),
+                )
+                for attached_skill, attach_reason in attached_pairs:
+                    attached_source = self._skill_source_metadata(attached_skill)
+                    # Source policy applies to attached skills the
+                    # same way as the role: a violation halts the
+                    # entire bind (memo §7.4 — never silently drop
+                    # the attachment, that hides the breach).
+                    self._assert_skill_source_allowed(
+                        attached_source,
+                        step_id=step["step_id"],
+                        effective_allowed_roots=effective_allowed_roots,
+                        purpose="attached_skill",
+                        skill_id=attached_skill.get("skill_id"),
+                    )
+                    attached_skills_report.append(
+                        self._build_attached_skill_entry(attached_skill, attach_reason)
+                    )
+
             step_reports.append(
                 {
                     "step_id": step["step_id"],
@@ -940,6 +995,8 @@ class RuntimeBinder:
                     "reason": reason,
                     "candidate_skill_ids": [candidate["skill_id"] for candidate in candidates],
                     "skill_source": skill_source,
+                    "selected_role": selected_role_obj,
+                    "attached_skills": attached_skills_report,
                 }
             )
 
@@ -1038,6 +1095,14 @@ class RuntimeBinder:
                             # extractor can identify which skills came from
                             # project layer without re-running bind_semantic_plan.
                             "skill_source": step_binding.get("skill_source"),
+                            # Phase 5 — propagate role + attached
+                            # advisory skills so flatten_steps and the
+                            # shell prompt builder can mount them.
+                            # Deferred steps never run, so empty values
+                            # here are fine; we still emit for shape
+                            # consistency with active steps.
+                            "selected_role": step_binding.get("selected_role"),
+                            "attached_skills": step_binding.get("attached_skills") or [],
                             "input_mode": self._resolve_input_mode(step, governance),
                             "output_tier": self._resolve_output_tier(step, governance),
                             "continue_reason": step.get("continue_reason")
@@ -1082,6 +1147,11 @@ class RuntimeBinder:
                     "cli": step_binding["selected_cli"],
                     # H2 #4: propagate skill_source for binding_summary extraction.
                     "skill_source": step_binding.get("skill_source"),
+                    # Phase 5 — selected_role mirrors the role pick;
+                    # attached_skills carries advisory prompts to
+                    # mount after the role prompt at AI execution.
+                    "selected_role": step_binding.get("selected_role"),
+                    "attached_skills": step_binding.get("attached_skills") or [],
                     "binding_mode": step_binding["binding_mode"],
                     "missing_policy": step_binding["missing_policy"],
                     "input_mode": self._resolve_input_mode(step, governance),
@@ -1130,6 +1200,11 @@ class RuntimeBinder:
                         "cli": step_binding["selected_cli"],
                         # H2 #4: propagate skill_source for binding_summary.
                         "skill_source": step_binding.get("skill_source"),
+                        # Phase 5 — propagate role + attachments so a
+                        # standby step that gets activated later
+                        # carries the same shape as the inline plan.
+                        "selected_role": step_binding.get("selected_role"),
+                        "attached_skills": step_binding.get("attached_skills") or [],
                     }
                 )
 
@@ -1356,6 +1431,8 @@ class RuntimeBinder:
         *,
         step_id: str,
         effective_allowed_roots: list[str],
+        purpose: str = "role",
+        skill_id: str | None = None,
     ) -> None:
         """Halt binding when a step's selected skill source is outside effective allowed roots.
 
@@ -1379,6 +1456,13 @@ class RuntimeBinder:
         :class:`SkillSourcePolicyError` and halts the binding (memo
         §7.4: governance redline beats availability — never degrade
         to fallback to hide the breach).
+
+        ``purpose`` and ``skill_id`` are Phase 5 audit annotations.
+        ``purpose`` distinguishes role-side checks (default ``"role"``)
+        from attached-skill checks (``"attached_skill"``) so the
+        SkillSourcePolicyError message can name the offending pick;
+        no behavioural change for pre-Phase 5 callers that omit the
+        kwargs.
         """
         if not effective_allowed_roots:
             return
@@ -1391,11 +1475,14 @@ class RuntimeBinder:
         if self._path_is_under_any_root(source_path, effective_allowed_roots):
             return
 
+        skill_label = f" skill_id='{skill_id}'" if skill_id else ""
         raise SkillSourcePolicyError(
-            f"skill 來源不符合 project constitution 限制: step_id={step_id} source_path={source_path}",
+            f"skill 來源不符合 project constitution 限制: step_id={step_id} purpose={purpose}{skill_label} source_path={source_path}",
             stage="skill_source_policy",
             errors=[
-                f"step '{step_id}' selected a skill from '{source_path}' which is not under any of the effective allowed_source_roots: {list(effective_allowed_roots)}"
+                f"step '{step_id}' selected a {purpose} skill"
+                + (f" '{skill_id}'" if skill_id else "")
+                + f" from '{source_path}' which is not under any of the effective allowed_source_roots: {list(effective_allowed_roots)}"
             ],
         )
 
@@ -1511,12 +1598,41 @@ class RuntimeBinder:
         )
 
     @staticmethod
+    def _classify_kind(skill: dict) -> str:
+        """Classify a registry entry as ``role`` or ``skill``.
+
+        Phase 5 discriminator. Explicit ``kind`` always wins (the
+        schema doc has called this out since v0.24.7). When ``kind``
+        is missing, fall back to legacy inference: ``agent_alias``
+        present → role; absent → skill. The fallback covers builtin
+        agent-skills written before v0.24.7 added the field, plus the
+        legacy ``agents.json`` adapter shape.
+        """
+        explicit = skill.get("kind")
+        if explicit in ("role", "skill"):
+            return explicit
+        if skill.get("agent_alias"):
+            return "role"
+        return "skill"
+
+    @staticmethod
     def _find_candidates(
         registry: dict,
         capability: str,
         workflow_version: int,
         preferred_agent_alias: str | None = None,
     ) -> list[dict]:
+        """Role-only executor candidates for a capability.
+
+        Phase 5: a registry entry can only be picked as the executor
+        when ``RuntimeBinder._classify_kind`` returns ``"role"``.
+        ``kind=skill`` entries (advisory guardrails) are filtered out
+        of the executor slot here; ``_find_attached_skills`` selects
+        them separately. ``_masked`` / ``enabled`` / capability /
+        ``compatible_workflow_versions`` filters preserved verbatim
+        from pre-Phase 5 behaviour so legacy registries keep ranking
+        the same way.
+        """
         candidates = []
         for skill in registry.get("skills", []):
             # v0.22.0+ override contract: masked entries (disabled or
@@ -1526,6 +1642,12 @@ class RuntimeBinder:
             if not skill.get("enabled", True):
                 continue
             if capability not in skill.get("provided_capabilities", []):
+                continue
+
+            # Phase 5 — only kind=role entries are executor candidates.
+            # Advisory skills (kind=skill, explicit or legacy-inferred)
+            # are routed through _find_attached_skills instead.
+            if RuntimeBinder._classify_kind(skill) != "role":
                 continue
 
             compatible_versions = skill.get("compatible_workflow_versions", [])
@@ -1543,6 +1665,133 @@ class RuntimeBinder:
             reverse=True,
         )
 
+    @staticmethod
+    def _find_attached_skills(
+        registry: dict,
+        capability: str,
+        *,
+        workflow_version: int,
+        selected_role_alias: str | None,
+    ) -> list[tuple[dict, str]]:
+        """Phase 5 strict-attach: list advisory skills to mount on the role.
+
+        Returns ``(skill_dict, attach_reason)`` pairs sorted by
+        priority desc then skill_id asc, deduped by ``skill_id``.
+
+        Strict-attach contract (memo §"Decision: strict attachment
+        policy (not auto-fan-in)"):
+
+        1. Entry must classify as ``kind=skill`` (explicit; legacy
+           inference into skill is also accepted when ``agent_alias``
+           is absent — it's the same legacy rule, just inverted).
+        2. At least one of the opt-in declarations must match:
+
+           * ``attach_to_capabilities`` contains ``capability``
+             (primary contract surface; takes precedence) → reason
+             ``attach_to_capabilities``.
+           * ``attach_to_roles`` contains ``selected_role_alias``
+             (secondary convenience) → reason ``attach_to_roles``.
+
+           When both would match, ``attach_to_capabilities`` wins
+           because the workflow's contract surface is the capability
+           name, not the executor role.
+
+        3. Standard masking / enabled / version filters apply (same
+           as ``_find_candidates``).
+
+        Auto-fan-in over ``provided_capabilities`` was rejected at the
+        ADR-style note. ``provided_capabilities`` describes what the
+        skill *covers*; ``attach_to_*`` is the explicit opt-in for
+        *attaching* to other capabilities / roles. A skill that only
+        wants to advertise itself for direct selection (rare today,
+        future use case) keeps using ``provided_capabilities`` and
+        won't accidentally attach itself to every step that shares a
+        capability name.
+        """
+        seen: set[str] = set()
+        matched: list[tuple[dict, str]] = []
+        for skill in registry.get("skills", []):
+            if skill.get("_masked"):
+                continue
+            if not skill.get("enabled", True):
+                continue
+            if RuntimeBinder._classify_kind(skill) != "skill":
+                continue
+
+            compatible_versions = skill.get("compatible_workflow_versions", [])
+            if compatible_versions and workflow_version not in compatible_versions:
+                continue
+
+            attach_caps = skill.get("attach_to_capabilities") or []
+            attach_roles = skill.get("attach_to_roles") or []
+            if capability in attach_caps:
+                attach_reason = "attach_to_capabilities"
+            elif selected_role_alias and selected_role_alias in attach_roles:
+                attach_reason = "attach_to_roles"
+            else:
+                continue
+
+            sid = skill.get("skill_id")
+            if not sid or sid in seen:
+                continue
+            seen.add(sid)
+            matched.append((skill, attach_reason))
+
+        matched.sort(
+            key=lambda pair: (
+                -int(pair[0].get("priority", 100) or 100),
+                pair[0].get("skill_id") or "",
+            )
+        )
+        return matched
+
+    @staticmethod
+    def _build_selected_role(skill: dict | None) -> dict | None:
+        """Project a chosen role entry into the binding-report ``selected_role`` shape.
+
+        Returns ``None`` for shell executor selections, unresolved
+        branches, and incompatible roles (missing ``prompt_file``).
+        The schema requires ``prompt_file`` so emitting a partial
+        ``selected_role`` would fail validation; the legacy quartet
+        (``selected_skill_id`` / ``selected_agent_alias`` / ``selected_prompt_file``
+        / ``selected_cli``) keeps writing in those cases for callers
+        that need to surface the partial pick.
+        """
+        if not skill:
+            return None
+        prompt_file = skill.get("prompt_file")
+        if not prompt_file:
+            return None
+        kind = skill.get("kind")
+        # Phase 5 invariant: this slot only carries roles. Don't
+        # propagate "skill" into the report even if a misconfigured
+        # entry slipped through (defence in depth — the candidate
+        # filter already excludes kind=skill).
+        if kind == "skill":
+            return None
+        return {
+            "skill_id": skill.get("skill_id"),
+            "agent_alias": skill.get("agent_alias"),
+            "provider": skill.get("provider"),
+            "prompt_file": prompt_file,
+            "cli": skill.get("cli"),
+            "kind": kind if kind == "role" else None,
+            "skill_source": RuntimeBinder._skill_source_metadata(skill),
+        }
+
+    @staticmethod
+    def _build_attached_skill_entry(skill: dict, attach_reason: str) -> dict:
+        """Project an attached-skill pick into the binding-report items shape."""
+        return {
+            "skill_id": skill.get("skill_id"),
+            "agent_alias": skill.get("agent_alias"),
+            "provider": skill.get("provider"),
+            "prompt_file": skill.get("prompt_file"),
+            "cli": skill.get("cli"),
+            "attach_reason": attach_reason,
+            "skill_source": RuntimeBinder._skill_source_metadata(skill),
+        }
+
     def _find_fallback(self, registry: dict, capability: str) -> dict | None:
         capability_family = self._infer_fallback_role(capability)
         for skill in registry.get("skills", []):
@@ -1552,6 +1801,10 @@ class RuntimeBinder:
             if skill.get("_masked"):
                 continue
             if not skill.get("enabled", True):
+                continue
+            # Phase 5: fallback must also be a role; advisory skills
+            # cannot quietly fill the executor slot via fallback.
+            if RuntimeBinder._classify_kind(skill) != "role":
                 continue
             if capability_family in skill.get("fallback_roles", []):
                 return skill

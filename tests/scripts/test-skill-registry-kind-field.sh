@@ -204,11 +204,18 @@ print([e["kind"] for e in data if e["skill_id"] == "shared-explicit-skill"][0])
 assert_eq "4b. explicit kind=skill wins over agent_alias-based inference" \
   "skill" "${explicit_skill_kind}"
 
-# Phase 1 boundary: confirm the runtime did NOT branch on kind. The
-# easiest signal is that all three entries are still selectable
-# candidates if their capability is asked for — i.e. kind doesn't
-# silently exclude an entry from candidacy.
-candidate_count="$(PYTHONPATH="${REPO_ROOT}" "${PYTHON_BIN}" - \
+# Phase 5 boundary (v0.25.0+): the runtime now branches on kind.
+# Executor candidates must classify as ``role`` (explicit kind=role,
+# or legacy inference: agent_alias present without explicit kind=skill).
+# Explicit ``kind=skill`` entries are filtered out of executor
+# selection entirely — they are routed through the new
+# ``_find_attached_skills`` path (see Commit 2 of the Phase 5 series).
+#
+# Pre-Phase 5 behaviour (test asserted all three entries selectable as
+# candidates) is intentionally inverted here; the legacy assertion
+# would let an advisory skill silently fill the executor slot, which
+# the strict-attach contract forbids.
+role_candidate_count="$(PYTHONPATH="${REPO_ROOT}" "${PYTHON_BIN}" - \
       "${PROJECT_ROOT}" "${CAP_HOME_DIR}" "${BUILTIN_BASE}" <<'PY'
 import sys
 from pathlib import Path
@@ -221,16 +228,14 @@ binder = RuntimeBinder(
     cap_home=Path(cap_home_dir),
 )
 reg = binder.load_skill_registry()
-# _find_candidates is the function bind_semantic_plan uses; calling it
-# directly with the three capabilities our fixture entries provide
-# confirms each entry is still considered.
-caps = [
+# Both role-shaped entries (legacy-inferred and explicit kind=role)
+# remain selectable candidates for their declared capabilities.
+role_caps = [
     ("legacy_capability",        "builtin-legacy-role"),
     ("explicit_role_capability", "shared-explicit-role"),
-    ("explicit_skill_capability","shared-explicit-skill"),
 ]
 seen = 0
-for cap, expected_skill_id in caps:
+for cap, expected_skill_id in role_caps:
     cands = binder._find_candidates(reg, cap, workflow_version=1)
     if any(c.get("skill_id") == expected_skill_id for c in cands):
         seen += 1
@@ -238,8 +243,33 @@ print(seen)
 PY
 )"
 
-assert_eq "5. all three entries remain selectable candidates (kind doesn't exclude)" \
-  "3" "${candidate_count}"
+assert_eq "5a. role-shaped entries remain selectable candidates" \
+  "2" "${role_candidate_count}"
+
+# The explicit kind=skill entry must NOT appear as a candidate even
+# when its capability is asked for. This locks the Phase 5 contract:
+# advisory skills cannot be standalone executors.
+skill_excluded_count="$(PYTHONPATH="${REPO_ROOT}" "${PYTHON_BIN}" - \
+      "${PROJECT_ROOT}" "${CAP_HOME_DIR}" "${BUILTIN_BASE}" <<'PY'
+import sys
+from pathlib import Path
+from engine.runtime_binder import RuntimeBinder
+
+project_root, cap_home_dir, builtin_base = sys.argv[1:4]
+binder = RuntimeBinder(
+    base_dir=Path(builtin_base),
+    project_root=Path(project_root),
+    cap_home=Path(cap_home_dir),
+)
+reg = binder.load_skill_registry()
+cands = binder._find_candidates(reg, "explicit_skill_capability", workflow_version=1)
+hits = [c for c in cands if c.get("skill_id") == "shared-explicit-skill"]
+print(len(hits))
+PY
+)"
+
+assert_eq "5b. explicit kind=skill is excluded from executor candidates" \
+  "0" "${skill_excluded_count}"
 
 echo ""
 total=$((pass_count + fail_count))
