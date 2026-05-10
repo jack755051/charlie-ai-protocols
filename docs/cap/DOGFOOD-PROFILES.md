@@ -57,6 +57,9 @@ Runtime validation for this profile must prove, at minimum:
 - Frontend serves HTTP from the host and can reach the backend server-side.
 - A repo-local smoke script records the checks and exits non-zero on failure.
 
+Template structure and adapter boundaries are defined by
+`docs/cap/COMPONENT-REPO-TEMPLATE-CONTRACT.md`.
+
 ## Profiles
 
 ### 1. Component Repo
@@ -87,6 +90,8 @@ Use this first because failures are easier to attribute.
 
 Current gate after the 2026-05-10 Component Repo closeout:
 
+- Component Repo implementation artifacts must follow the layer contract in
+  `docs/cap/COMPONENT-REPO-TEMPLATE-CONTRACT.md`.
 - Frontend / Backend implementation steps must apply the Component Repo
   sections in `agent-skills/04-frontend-agent.md` and
   `agent-skills/05-backend-agent.md`.
