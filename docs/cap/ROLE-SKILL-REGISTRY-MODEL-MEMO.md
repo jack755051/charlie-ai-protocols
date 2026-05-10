@@ -378,8 +378,8 @@ not touch runtime execution:
 | Run Observability | `logs` / `watch` / `inspect` / `ps` and read-only filters shipped | These surfaces read existing run directories and do not change provider invocation or step execution. |
 | Run Observability Phase 5 Later | stderr capture, background `run -d`, and TUI / dashboard are documented as deferred | The remaining items touch `cap-workflow-exec.sh`, process detaching, or UI framework scope. |
 | Karpathy shared → builtin | shared dogfood, 7-run evidence, builtin promote, and integration evidence are recorded | Further coverage should accumulate naturally; forced matrix completion would be costly and low signal. |
-| Role / Skill Registry | `kind: role\|skill`, user-imported role docs, examples, and resolver tests are shipped | The registry can describe roles and skills; actual role + advisory skill attachment would change binding semantics. |
-| User-imported roles | project/shared registration rules, source-policy tests, precedence tests, and forbidden provider-global paths are documented | A user role can be registered and discovered; the next step would require multi-skill attachment semantics. |
+| Role / Skill Registry | Phase 4 + Phase 5 landed at v0.25.0 — selected_role / attached_skills binding-report fields, role/skill split in `_find_candidates`, strict-attach `_find_attached_skills`, and prompt assembly all shipped | Registry can now bind role + advisory attachments end-to-end. Phase 6 (builtin promotion of shared advisory skills) is the next deferred line. |
+| User-imported roles | project/shared registration rules, source-policy tests, precedence tests, forbidden provider-global paths documented; advisory skill attachment now usable through the same registration channel (kind=skill with attach_to_*) | User roles + user advisory skills can both be registered and discovered. Future deferred work: Phase 6 promotion criteria for shared advisory skills. |
 | CLI UX / Help | shortcuts, help topics, observe section, and unknown-command handling are shipped | Remaining work is polish unless a concrete discoverability issue appears. |
 | CAP_HOME default | workflow dispatcher defaults `CAP_HOME=${HOME}/.cap` without overriding explicit user values | Generalising to every namespace should wait for a real non-workflow shared-layer case. |
 | Provider/global isolation | provider global files are explicitly user-owned and not CAP registry targets | Native provider installation would be a separate high-risk integration path. |
@@ -514,44 +514,84 @@ existing entries; it does not promote anything.
 
 ### Phase 4: Advisory Skill Attachment Design
 
-Goal: design, not yet implement, how one executable role can receive one or
-more advisory skills.
+> Status: **landed at v0.25.0** alongside Phase 5 — see the ADR-style
+> note above for why Phases 4 and 5 shipped as one coordinated change
+> rather than two separate releases.
 
-Tasks:
+Tasks (all landed):
 
-- Define attachment policy fields, for example:
-  - `attach_to_capabilities`
-  - `attach_to_roles`
-  - `attachment_mode: advisory`
-- Define conflict rules:
-  - explicit user request wins
-  - project constitution wins
-  - role prompt owns task identity
-  - advisory skill cannot override role boundaries
-- Define prompt assembly order.
-- Define binding report shape for attached skills.
+- Attachment policy fields (`attach_to_capabilities`, `attach_to_roles`)
+  enforced by `RuntimeBinder._find_attached_skills`.
+- `attachment_mode: advisory` is implicit — every `kind: skill` entry
+  selected through this path is advisory by definition; the role
+  prompt owns task identity. No explicit mode field is needed.
+- Conflict rules implemented as documented:
+  - Explicit workflow request wins (a step that names an advisory
+    in workflow YAML beats registry attach declarations) —
+    contract surface defined; consumer not yet wired (deferred to
+    Phase 6 if a real workflow needs it).
+  - Project constitution wins via the v0.22.0+ override contract
+    (`disabled` / `replaces`) plus the source-policy gate, which
+    halts attachments from unauthorised layers.
+  - Role prompt owns task identity — `selected_role` is rendered
+    first; advisory `attached_skills[]` follow.
+  - Advisory skill cannot override role boundaries — schema rejects
+    `selected_role.kind=skill`; binder filters `kind=skill` out of
+    `_find_candidates` and `_find_fallback`.
+- Prompt assembly order: role file (via the existing
+  「請嚴格依照 ${SKILLS_DIR}/${prompt_file}」 line) → 「附加規範指引
+  (Attached Advisory Skills)」 block listing advisory prompt paths →
+  structured sections / contract / handoff template.
+- Binding-report shape for attached skills: `selected_role` (object|null)
+  + `attached_skills[]` (array, items carry `skill_id`,
+  `prompt_file`, `attach_reason`, `skill_source`).
 
-Exit criteria:
+Exit criteria — **met**:
 
-- CAP can describe a future bound step as role + advisory skills.
-- No executor implementation is required yet.
+- ✅ CAP describes a bound step as role + advisory skills via
+  `binding-report.schema.yaml` v1 (selected_role + attached_skills
+  optional fields, additive — pre-Phase 5 reports still validate).
+- ✅ Executor implementation landed at the same time as the design
+  documentation; design and runtime no longer drift.
 
 ### Phase 5: Runtime Attachment Implementation
 
-Goal: implement advisory skill attachment only after Phase 4 is accepted.
+> Status: **landed at v0.25.0**.
 
-Tasks:
+Tasks (all landed):
 
-- Extend RuntimeBinder to select executor role and advisory skills.
-- Extend execution plan schema with `attached_skill_ids`.
-- Update `cap-workflow-exec.sh` prompt assembly carefully.
-- Add dry-run and real-run tests with both Claude and Codex.
+- ✅ `RuntimeBinder` selects executor role and advisory skills via
+  separate paths (`_find_candidates` for kind=role only;
+  `_find_attached_skills` for kind=skill with strict opt-in).
+- ✅ Execution plan carries `attached_skills` per step
+  (`build_bound_execution_phases_from_semantic` propagates the
+  field to active / deferred / standby steps).
+- ✅ `engine/step_runtime.py` exposes the `attached-prompts`
+  subcommand (TSV: prompt_file<TAB>skill_id<TAB>attach_reason);
+  `flatten-steps` appends a 23rd `attached_count` field.
+- ✅ `scripts/cap-workflow-exec.sh build_step_prompt` calls
+  `attached-prompts` and renders an Attached Advisory Skills
+  section before the structured contract block. Shell-executor
+  steps don't reach `build_step_prompt`, so attachments are
+  injection-only for AI executors.
+- ✅ Tests: `tests/scripts/test-binder-phase5-attachment.sh`
+  (13 cases) + `tests/scripts/test-step-runtime-attached-prompts.sh`
+  (9 cases) added to the smoke-layer runtime suite.
 
-Exit criteria:
+Exit criteria — **met**:
 
-- Existing single-role workflows still run.
-- Advisory skill prompt is visible through CAP-controlled prompt assembly.
-- No prompt conflict appears in representative real runs.
+- ✅ Existing single-role workflows still run unchanged. Only behaviour
+  flip: `kind=skill` entries are no longer accepted as executors —
+  documented at the post-v0.24.11 boundary as the deliberate Phase 5
+  contract change. Real builtin / shared registries today have no
+  workflow that depended on a `kind=skill` entry filling the
+  executor slot.
+- ✅ Advisory skill prompt is mounted through CAP-controlled prompt
+  assembly (via `cap-workflow-exec.sh build_step_prompt`); the AI
+  provider reads both files via its filesystem tools, no inline
+  duplication.
+- ✅ No prompt conflict in representative test fixtures. Real-run
+  monitoring continues through natural dogfood (see Phase 6).
 
 ### Phase 6: Builtin Promotion Policy
 
@@ -573,11 +613,25 @@ Exit criteria:
 
 ## Recommended Next Step
 
-Do Phase 1 only:
+> Status update: this section's earlier guidance ("Do Phase 1 only,
+> do not start Phase 5") was the recommendation **before v0.25.0**.
+> Phases 1 through 5 have all landed; the recommended next step has
+> shifted to:
 
-- add optional `kind`
-- preserve all current behavior
-- add resolver/schema tests
+Watch dogfood evidence accumulate for Phase 6 (builtin promotion
+policy):
 
-Do not start Phase 5 runtime attachment yet. That is the part that can become a
-real refactor.
+- Track which shared advisory skills get attached repeatedly across
+  real workflows.
+- Track whether the role + attached_skills prompt assembly produces
+  visible quality improvements in representative AI runs.
+- Note any prompt-conflict signals — cases where the role prompt
+  and an advisory skill disagree and the AI picks the wrong side.
+- Open Phase 6 only when a specific shared advisory skill has
+  enough evidence to justify promotion to builtin (the bar is the
+  same as user-role promotion: multi-provider, multi-workflow,
+  multi-task, repeatedly useful, no negative side effects).
+
+Until Phase 6 opens, the recommended state is natural dogfood: use
+`kind: skill` advisory skills in real workflows, accumulate evidence,
+and avoid promoting anything proactively.

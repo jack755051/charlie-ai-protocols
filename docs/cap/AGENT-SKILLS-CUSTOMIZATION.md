@@ -223,6 +223,114 @@ cap workflow bind <workflow-id> | jq '.steps[] | {step_id, selected_skill_id, sk
 
 只有當 user role 經過足夠 dogfood（多 provider、多 workflow、多次真實任務驗證確實有用），才考慮提到 CAP builtin baseline。Promotion 流程與證據要求見 `docs/cap/ROLE-SKILL-REGISTRY-MODEL-MEMO.md` §Phase 6。
 
+## 場景 6：把 advisory skill 附掛到 role（v0.25.0+ kind=skill 嚴格附掛）
+
+> 與場景 1-5 的差別：那些都是「替代或新增 executor role」；本場景是**在不替代 role 的前提下，為 step 額外掛上 guardrail / checklist / strategy 規範**。`kind=skill` 的條目永遠不會單獨成為 executor，只能依使用者宣告的 `attach_to_capabilities` / `attach_to_roles` 附掛到既有 role 上。
+
+### 6.1 嚴格附掛規則（strict-attach）
+
+| 規則 | 說明 |
+|---|---|
+| `kind: skill` 必填 | 沒有 explicit `kind=skill` 時走 legacy inference（`agent_alias` 缺席→skill）。新寫的 advisory skill 一律建議顯式宣告 `kind: skill`。 |
+| 必須有附掛宣告 | 必須 listed 在 `attach_to_capabilities`（推薦，跟 capability 對齊）或 `attach_to_roles`（次要，跟 role 的 `agent_alias` 對齊）。**沒有任何宣告 = 不附掛**（不會做 auto-fan-in）。 |
+| 兩個都中時優先順序 | `attach_to_capabilities` > `attach_to_roles`（capability 是 workflow 對外契約，優先）。 |
+| 來源政策一致 | 與 role 走相同的 `_assert_skill_source_allowed` 閘門：shared layer 的 advisory skill 必須在 `allowed_source_roots` 顯式授權，否則 binding 會 halt（`SkillSourcePolicyError purpose=attached_skill`）。 |
+
+### 6.2 在 shared 層註冊 advisory skill（最常見）
+
+```yaml
+# ~/.cap/shared/skills.yaml
+schema_version: 2
+
+skills:
+  - skill_id: shared-karpathy-guidelines
+    kind: skill
+    agent_alias: karpathy-guidelines   # 仍保留為 audit / 名稱用，不會單獨 executor
+    provider: shared
+    enabled: true
+    priority: 80
+    prompt_file: agent-skills/strategies/karpathy-guidelines.md
+    cli: claude
+    compatible_workflow_versions: [1, 2, 3]
+    provided_capabilities:
+      - engineering_guardrails
+    attach_to_capabilities:        # 嚴格附掛宣告（推薦）
+      - frontend_implementation
+      - backend_implementation
+    # 或 attach_to_roles: [frontend, backend]
+```
+
+效果：
+
+- 任何 step 的 capability 是 `frontend_implementation` / `backend_implementation` 時，binding report 會在該 step 的 `attached_skills` 內加入這條記錄，`attach_reason: attach_to_capabilities`。
+- step prompt 在原 role prompt 後追加「附加規範指引 (Attached Advisory Skills)」區塊，列出 advisory prompt 路徑供 AI provider 一併讀取。
+- `selected_role` / `selected_skill_id` 仍是該 step 真正的 executor role；advisory skill 不會搶走 task identity。
+
+### 6.3 把 advisory skill 限縮到特定 role（attach_to_roles）
+
+當 advisory skill 不適合所有同 capability 的 step、只想附給特定 role 時，使用 `attach_to_roles`：
+
+```yaml
+skills:
+  - skill_id: shared-react18-checklist
+    kind: skill
+    provider: shared
+    prompt_file: skills/react18-checklist.md
+    cli: claude
+    compatible_workflow_versions: [1, 2, 3]
+    attach_to_roles:
+      - frontend       # 只在 selected_role.agent_alias = frontend 時附掛
+```
+
+### 6.4 必要的 constitution 授權（shared layer）
+
+shared layer 的 advisory skill 預設不在 implicit allowed roots 內。若你的 project constitution 開啟了 `enforce_allowed_source_roots=true`，必須在 `workflow_policy.allowed_source_roots` 顯式授權 shared registry 路徑：
+
+```yaml
+# <project_root>/.cap.constitution.yaml
+schema_version: 1
+project_id: my-project
+binding_policy:
+  allowed_capabilities: [...]
+workflow_policy:
+  enforce_allowed_source_roots: true
+  allowed_source_roots:
+    - ~/.cap/shared/skills.yaml      # 顯式信任 shared layer
+```
+
+未授權時 binding 會 halt：
+
+```text
+SkillSourcePolicyError: skill 來源不符合 project constitution 限制:
+  step_id=implement purpose=attached_skill skill_id='shared-karpathy-guidelines'
+  source_path=/home/u/.cap/shared/skills.yaml
+```
+
+### 6.5 驗證 attached skills 是否被掛上
+
+```bash
+cap workflow bind project-spec-pipeline | jq '.steps[] | {step_id, selected_role: .selected_role.skill_id, attached: [.attached_skills[].skill_id]}'
+```
+
+預期：
+
+```json
+{
+  "step_id": "implement",
+  "selected_role": "builtin-frontend-agent",
+  "attached": ["shared-karpathy-guidelines", "shared-react18-checklist"]
+}
+```
+
+### 6.6 何時用「替代 / 新增 role」 vs 「attach advisory skill」？
+
+| 情境 | 用法 |
+|---|---|
+| 你想換掉整個 role 的 prompt 內容 | 場景 1（`replaces` / 同 id 覆蓋）或場景 3 |
+| 你想新增一個全新領域的 executor | 場景 5（user-imported role） |
+| 你想保留官方 role，但**追加**規範或 checklist | 場景 6（advisory skill attach） |
+| 你只想關掉某個 capability 的處理 | 場景 2（`disabled: true`） |
+
 ## Pitfall 與常見錯誤
 
 - ❌ **直接編輯 `<cap_root>/agent-skills/04-frontend-agent.md`**：違反 baseline 唯讀規則；下次 CAP release 會 conflict。改走 §1 / §2 / §3。

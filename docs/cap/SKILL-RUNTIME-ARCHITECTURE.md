@@ -56,6 +56,10 @@
 ### 2. Bind / Preflight
 
 - 依 skill registry 將 capability 綁到可用 skill
+- **Phase 5+（v0.25.0+）：capability 同時綁兩個 slot — `selected_role`（executor）與 `attached_skills[]`（advisory guardrails）**
+  - `selected_role`：`_find_candidates` 只挑 `kind=role` 的條目作為 executor。`kind=skill` 條目永遠不會單獨被選為 executor。
+  - `attached_skills[]`：`_find_attached_skills` 嚴格 opt-in，只附掛宣告了 `attach_to_capabilities` / `attach_to_roles` 的 `kind=skill` 條目。**沒有 auto-fan-in**（同 capability 內任意 skill 都自動掛上會讓附掛行為不可審計，已在 ADR-style note 內否決）。
+  - role + attachments 的 source policy 各別過閘門（`_assert_skill_source_allowed`），任一不在 `effective_allowed_roots` 內就 halt 整個 binding，不會悄悄 drop attachment。
 - 若找不到 skill，標記為：
   - `required_unresolved`
   - `optional_unresolved`
@@ -65,12 +69,26 @@
   - `substitute`
   - `manual`
 
-輸出：`binding report`
+輸出：`binding report`，含 `selected_role` 物件 + `attached_skills[]` 陣列（v0.25.0+ schema 增量欄位，向下相容；舊 report 仍可驗）。
+
+```text
+capability
+  ├─ selected_role         (kind=role; 執行 step、擁有 task identity)
+  │    ↳ prompt_file       (cap-workflow-exec.sh build_step_prompt 第一段渲染)
+  └─ attached_skills[]     (kind=skill; advisory guardrail / checklist)
+       ├─ attach_reason: attach_to_capabilities | attach_to_roles
+       └─ prompt_file      (build_step_prompt 第二段「附加規範指引」渲染)
+```
 
 ### 3. Execute
 
 - 只有在 preflight 可接受時才進入正式執行
 - handoff / governance / watcher / logger 仍由 CAP 自己的 schema 管理
+- AI step prompt 組裝順序（Phase 5+）：
+  1. role prompt 路徑（「請嚴格依照 ${SKILLS_DIR}/${prompt_file}」）
+  2. 「附加規範指引 (Attached Advisory Skills)」區塊，列出 `attached_skills[]` 中每條的 `prompt_file`（含 `skill_id` 與 `attach_reason` 供 audit）
+  3. structured sections（contract / handoff template）
+- shell-executor step 不會走到 `build_step_prompt`，因此 `attached_skills` 對 shell step 是 no-op（binding report 仍會寫入空陣列以保持 shape 一致）。
 
 ## 設計結論
 
