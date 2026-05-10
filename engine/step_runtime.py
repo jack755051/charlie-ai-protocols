@@ -884,6 +884,7 @@ def flatten_steps(plan_json: str) -> None:
             fallback = step.get("fallback") or {}
             fallback_executor = str(fallback.get("executor") or "")
             fallback_when = ",".join(fallback.get("when") or [])
+            attached_count = str(len(step.get("attached_skills") or []))
             print("|".join([
                 str(pnum), str(total), ids_joined, agents_joined,
                 step["step_id"], step["capability"],
@@ -894,7 +895,58 @@ def flatten_steps(plan_json: str) -> None:
                 timeout_seconds, stall_seconds, stall_action,
                 input_mode, output_tier, continue_reason,
                 executor, script, fallback_executor, fallback_when,
+                # Phase 5: 23rd field — count of attached advisory
+                # skills for this step. The shell wrapper uses this
+                # purely as a fast "is there anything to inject?"
+                # signal; the actual prompt_file paths come through
+                # the attached-prompts subcommand below to keep the
+                # pipe-delimited line free of nested escaping.
+                attached_count,
             ]))
+
+
+# ─────────────────────────────────────────────────────────
+# 8b. attached-prompts (Phase 5)
+# ─────────────────────────────────────────────────────────
+
+def attached_prompts(plan_json: str, step_id: str) -> None:
+    """Emit attached advisory skill records for one step, TSV-formatted.
+
+    Output: one line per attachment, three tab-separated columns —
+    ``prompt_file<TAB>skill_id<TAB>attach_reason``. Empty stdout when
+    the step has no attachments (the shell wrapper treats empty as
+    "skip the advisory section entirely"). Unknown ``step_id`` is
+    silently empty too — flatten_steps already authoritatively reports
+    which steps exist; this subcommand is consumed only after that
+    list, so a missing id is not a runtime concern here.
+
+    Tab is chosen over pipe to keep this stream independent from the
+    flatten_steps pipe-delimited format; ``prompt_file`` paths and
+    ``skill_id`` values are already constrained to non-tab characters
+    by the registry schema's string fields. ``attach_reason`` is the
+    enum from the binding-report contract (``attach_to_capabilities``
+    / ``attach_to_roles``).
+    """
+    plan: dict[str, Any] = json.loads(plan_json)
+    for phase in plan.get("phases", []) or []:
+        for step in phase.get("steps", []) or []:
+            if step.get("step_id") != step_id:
+                continue
+            for attached in step.get("attached_skills") or []:
+                prompt_file = str(attached.get("prompt_file") or "")
+                if not prompt_file:
+                    continue
+                sid = str(attached.get("skill_id") or "")
+                reason = str(attached.get("attach_reason") or "")
+                # Defensive: tabs in payload would corrupt parsing.
+                # Replace with single space; registry schema doesn't
+                # allow tabs in these fields today, but this keeps the
+                # stream robust against future entry shapes.
+                prompt_file = prompt_file.replace("\t", " ")
+                sid = sid.replace("\t", " ")
+                reason = reason.replace("\t", " ")
+                print(f"{prompt_file}\t{sid}\t{reason}")
+            return
 
 
 # ─────────────────────────────────────────────────────────
@@ -1771,6 +1823,17 @@ def _build_parser() -> argparse.ArgumentParser:
     p_fs = sub.add_parser("flatten-steps", help="展平 plan JSON 為 pipe-delimited 記錄")
     p_fs.add_argument("plan_json")
 
+    # 8b. attached-prompts (Phase 5) — emit attached advisory skill
+    # records for one step (prompt_file<TAB>skill_id<TAB>attach_reason).
+    # Used by cap-workflow-exec.sh build_step_prompt to mount
+    # advisory prompts after the role prompt.
+    p_ap = sub.add_parser(
+        "attached-prompts",
+        help="取一個 step 的 attached advisory skills，TSV 格式輸出",
+    )
+    p_ap.add_argument("plan_json")
+    p_ap.add_argument("step_id")
+
     # 9. plan-meta
     p_pm = sub.add_parser("plan-meta", help="抽 plan JSON 的 workflow_id / name / phase 數")
     p_pm.add_argument("plan_json")
@@ -2242,6 +2305,8 @@ def main(argv: list[str] | None = None) -> None:
             )
         case "flatten-steps":
             flatten_steps(args.plan_json)
+        case "attached-prompts":
+            attached_prompts(args.plan_json, args.step_id)
         case "plan-meta":
             plan_meta(args.plan_json)
         case "parse-input-check":

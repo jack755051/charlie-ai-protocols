@@ -865,8 +865,9 @@ build_step_prompt() {
   local project_docs_dir="${10}"
   local input_mode="${11}"
   local continue_reason="${12}"
-  local structured_sections
+  local structured_sections attached_section
   structured_sections="$(structured_sections_for_capability "${capability}")"
+  attached_section="$(build_attached_skills_section "${step_id}")"
 
   cat <<EOF
 你現在是 ${agent_alias} agent，正在執行 workflow step: ${step_id} (capability: ${capability})。
@@ -906,10 +907,48 @@ ${project_docs_dir}
 本步驟繼續執行的理由：
 ${continue_reason}
 
-${structured_sections}
+${attached_section}${structured_sections}
 
 完成後，請輸出交接摘要（agent_id, task_summary, output_paths, result）。
 EOF
+}
+
+# Phase 5 — render Attached Advisory Skills section for an AI step.
+# Pulls (prompt_file, skill_id, attach_reason) tuples from
+# step_runtime.py attached-prompts and emits a Markdown-style block
+# the role prompt can read alongside its own role file. Empty stdout
+# (and trailing blank line) when the step has no attachments — the
+# build_step_prompt template still renders cleanly because the empty
+# string concatenates inertly into the "${attached_section}${structured_sections}"
+# slot.
+#
+# Why pre-rendered prompt path references (vs. inlining file
+# contents): the role prompt already follows the
+# "請嚴格依照 ${SKILLS_DIR}/${prompt_file}" pattern. Advisory skills
+# inherit the same convention so the AI provider can read both
+# files via its filesystem tools; the section names them, the
+# provider mounts them. This keeps the assembled prompt small and
+# avoids duplicating skill content into every step's invocation
+# (which would also break ``cap session analyze``'s prompt-hash
+# duplicate detection).
+build_attached_skills_section() {
+  local step_id="$1"
+  local records
+  records="$("${PYTHON_BIN}" "${STEP_PY}" attached-prompts "${PLAN_JSON}" "${step_id}" 2>/dev/null)"
+  if [ -z "${records}" ]; then
+    return 0
+  fi
+
+  printf '附加規範指引 (Attached Advisory Skills):\n'
+  printf '本步驟在原本角色規範之外，必須額外遵守以下 advisory skill 中定義的守則。\n'
+  printf '若 advisory skill 與角色規範產生衝突，以角色規範與專案 constitution 為準。\n\n'
+  while IFS=$'\t' read -r prompt_file_attach skill_id_attach attach_reason; do
+    [ -z "${prompt_file_attach}" ] && continue
+    printf -- '- skill_id: %s\n' "${skill_id_attach}"
+    printf -- '  prompt_file: %s/%s\n' "${SKILLS_DIR}" "${prompt_file_attach}"
+    printf -- '  attach_reason: %s\n' "${attach_reason}"
+  done <<< "${records}"
+  printf '\n'
 }
 
 # ── Main execution loop ──
@@ -1128,7 +1167,10 @@ fi
 echo "  Output dir: ${WORKFLOW_OUTPUT_DIR}"
 
 # Flatten phases into step lines:
-# phase_num|total|step_ids|agents|step_id|capability|agent_alias|prompt_file|step_cli|inputs|optional|resolution_status|timeout_seconds|stall_seconds|stall_action|input_mode|output_tier|continue_reason|executor|script|fallback_executor|fallback_when
+# phase_num|total|step_ids|agents|step_id|capability|agent_alias|prompt_file|step_cli|inputs|optional|resolution_status|timeout_seconds|stall_seconds|stall_action|input_mode|output_tier|continue_reason|executor|script|fallback_executor|fallback_when|attached_count
+# Phase 5 added the trailing attached_count field; consumers that
+# only iterate the leading 22 fields keep working because the IFS
+# read line below now binds the 23rd variable explicitly.
 STEP_LINES="$("${PYTHON_BIN}" "${STEP_PY}" flatten-steps "${PLAN_JSON}")"
 
 # ── P6 #8 step iteration: array + index pointer ──
@@ -1226,7 +1268,7 @@ while [ "${step_idx}" -lt "${#STEP_ARRAY[@]}" ]; do
   # at the halt hook (line search: CAP_ENFORCE_ROUTE_BACK).
   CURRENT_STEP_IDX="${step_idx}"
   step_idx=$((step_idx + 1))
-  IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id capability agent_alias prompt_file step_cli inputs optional resolution_status timeout_seconds stall_seconds stall_action input_mode output_tier continue_reason executor script_ref fallback_executor fallback_when <<< "${STEP_ARRAY[${CURRENT_STEP_IDX}]}"
+  IFS='|' read -r phase_num total step_ids_in_phase agents_in_phase step_id capability agent_alias prompt_file step_cli inputs optional resolution_status timeout_seconds stall_seconds stall_action input_mode output_tier continue_reason executor script_ref fallback_executor fallback_when attached_count <<< "${STEP_ARRAY[${CURRENT_STEP_IDX}]}"
 
   # Visit counter — incremented on every entry (forward execution and
   # route_back reruns alike) so the resolver can detect cycles.
