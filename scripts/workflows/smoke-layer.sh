@@ -108,6 +108,7 @@ fixture tests/scripts/test-step-runtime-attached-prompts.sh
 fixture tests/scripts/test-binder-project-context-origin.sh
 fixture tests/scripts/test-validate-inputs-intrinsic-vs-registry.sh
 fixture tests/scripts/test-cross-pipeline-bridges.sh
+fixture tests/scripts/test-persist-task-constitution-output-paths-norm.sh
 EOF
       ;;
     project) cat <<'EOF'

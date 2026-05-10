@@ -355,6 +355,19 @@ if isinstance(plan, list):
             entry["done_when"] = entry.get("acceptance_criteria")
         if "output_paths" not in entry and entry.get("outputs"):
             entry["output_paths"] = entry.get("outputs")
+        # v0.25.5 fix: schemas/task-constitution.schema.yaml requires
+        # output_paths items to be type=object. Codex / Claude commonly
+        # emit strings (just the path) because the supervisor agent
+        # documentation does not mandate the object form. Normalize
+        # strings to {"path": "..."} so the strict schema validates
+        # while preserving full path information for downstream
+        # consumers. List items that are already objects pass through
+        # unchanged.
+        if isinstance(entry.get("output_paths"), list):
+            entry["output_paths"] = [
+                {"path": item} if isinstance(item, str) else item
+                for item in entry["output_paths"]
+            ]
 
 if not data["success_criteria"] and isinstance(plan, list):
     derived_success = []

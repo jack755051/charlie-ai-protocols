@@ -6,6 +6,35 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.25.5] - 2026-05-10
+
+> Patch release — **dogfood follow-up to v0.25.4**. After bridges #4 / #5 / #7 landed, project-implementation-pipeline could finally start. Step 1 (`draft_task_constitution`) succeeded under codex (170s) and emitted task constitution JSON. Step 2 (`persist_task_constitution`) immediately halted with `schema_validation_failed: execution_plan/0/output_paths/0: '...' is not of type 'object'`. Root cause: `schemas/task-constitution.schema.yaml` mandates `execution_plan[].output_paths.items.type = "object"` but `01-supervisor-agent.md` doesn't specify item shape, so codex / claude both emit string items (the bare path). Phase C (project-spec-pipeline) ran fine because its supervisor draft happened to leave `output_paths` empty.
+>
+> The schema is right (downstream consumers want richer descriptors), the AI doc is ambiguous, and the AI emits the natural form. Pragmatic resolution: the persist normalizer auto-converts string items to `{"path": "..."}` objects so the strict schema validates while preserving full path information.
+
+### Fixed
+
+- `scripts/workflows/persist-task-constitution.sh normalize_task_constitution_json`: when `execution_plan[].output_paths` is a list, each string item is rewritten as `{"path": "<the string>"}`. Existing object items (with their full key set) pass through unchanged. Empty lists stay empty. Mixed lists (strings + objects) are normalised per-item.
+
+### Added
+
+- `tests/scripts/test-persist-task-constitution-output-paths-norm.sh` (new, 4 cases): exercises the normalizer's `output_paths` pass directly (extracts the function block and evals it in a clean subshell to avoid running the persist script's main flow). Cases: 1) all-string list → all objects; 2) all-object list → unchanged including extra keys; 3) empty list → empty; 4) mixed list → strings normalised, objects preserved.
+- `scripts/workflows/smoke-layer.sh` runtime suite: append the new fixture.
+
+### Verified
+
+- `test-persist-task-constitution-output-paths-norm.sh` **4 / 4** PASS.
+- smoke-layer runtime baseline still green; full suite re-checked after the change.
+- Manual dogfood: cap-test/component-next-dotnet-stt expected to advance past Phase D step 2 after `cap update` to v0.25.5.
+
+### Boundary
+
+- One-function behaviour change in shell. No schema bump (the schema's strict object requirement stays; the normalizer feeds it the right shape).
+- Pre-fix runs that produced empty `output_paths` lists (e.g. Phase C's project-spec-pipeline draft) keep validating because the empty-list branch is a no-op under both old and new code.
+- Phase 5 role/skill attachment from v0.25.0 unchanged. Phase 6 builtin promotion still deferred.
+
+---
+
 ## [v0.25.4] - 2026-05-10
 
 > Patch release — **dogfood follow-up to v0.25.3**, closing the remaining three bugs (#4, #5, #7) discovered while pushing the `cap-test/component-next-dotnet-stt` Component Repo baseline through Phase B (project-constitution) → Phase C (project-spec-pipeline) → Phase D (project-implementation-pipeline). After v0.25.1–v0.25.3, Phase B + Phase C ran end-to-end (16/16 spec artifacts produced) but constitution was persisted to `~/<project_id>/` instead of the user's repo, the next-pipeline run could not see the persisted constitution because the loader only read the legacy flat-file, and Phase D blocked at step 1 because `prior_spec_artifacts` had no resolver at all.
