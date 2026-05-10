@@ -143,6 +143,7 @@ EOF
     promote) cat <<'EOF'
 fixture tests/scripts/test-promote-candidate-producer.sh
 fixture tests/scripts/test-promote-candidate-producer-spec-artifact.sh
+fixture tests/scripts/test-cap-promote-legacy-target-path.sh
 fixture tests/scripts/test-cap-promote-inspect.sh
 fixture tests/scripts/test-cap-promote-project-constitution.sh
 fixture tests/scripts/test-cap-promote-workflow.sh

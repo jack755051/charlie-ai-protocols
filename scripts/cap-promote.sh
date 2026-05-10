@@ -101,8 +101,22 @@ promote_file() {
   esac
 
   project_store="$(bash "${PATH_HELPER}" get project_store)"
+  # v0.25.9 fix: target_path must land in the user's working repo
+  # (cap-paths.sh's project_root), NOT CAP_ROOT (the cap install
+  # directory). Pre-fix the script joined CAP_ROOT with repo_rel,
+  # which silently wrote to ~/.charlie-ai-protocols/<repo_rel>/
+  # whenever the global cap wrapper was invoked from any working
+  # repo — polluting the cap install dir and never landing the
+  # artifact in the user's repo. Same path-resolution bug family as
+  # the v0.25.1 / v0.25.4 RuntimeBinder / persist-constitution.sh
+  # fixes.
+  project_root="$(bash "${PATH_HELPER}" get project_root)"
+  if [ -z "${project_root}" ]; then
+    echo "cap-promote: 無法解析 project_root；請從 cap project init 過的工作 repo 內執行" >&2
+    exit 1
+  fi
   source_path="${project_store}/${local_rel}"
-  target_path="${CAP_ROOT}/${repo_rel}"
+  target_path="${project_root}/${repo_rel}"
 
   [ -f "${source_path}" ] || {
     echo "找不到來源檔案：${source_path}" >&2

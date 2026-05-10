@@ -6,6 +6,33 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.25.9] - 2026-05-10
+
+> Patch release — **bug #11**, surfaced finishing the component-repo dogfood. After v0.25.7 + v0.25.8 wired the typed `cap promote inspect <spec_artifact_name>` surface, the user's natural follow-up was the legacy `cap promote <src> <dst>` escape hatch (the typed `--apply` path for spec_artifact remains deferred). The escape hatch silently copied artifacts into the cap install dir (`~/.charlie-ai-protocols/<repo_rel>`) instead of the user's working repo — same path-resolution bug family as v0.25.1 (RuntimeBinder), v0.25.2 (workflow_cli), v0.25.4 (persist-constitution.sh). Caught **after** the producer / resolver layers already shipped because no test exercised the legacy branch from outside the cap install dir.
+
+### Fixed
+
+- `scripts/cap-promote.sh` legacy `<src> <dst>` branch (line 105 pre-fix): `target_path` now resolves via `cap-paths.sh get project_root` instead of CAP_ROOT (the cap install directory). Halts with a helpful Chinese message when project_root cannot be resolved (no .cap/project.yaml at the cwd) rather than silently picking CAP_ROOT and polluting it.
+
+### Added
+
+- `tests/scripts/test-cap-promote-legacy-target-path.sh` (new, 9 cases): regression for the v0.25.9 contract. Cases 1a/1b/1c — reports/-rooted source promotes into project_root, file actually exists at the expected path, CAP_ROOT not polluted. Cases 2a/2b — drafts/-rooted source uses the same project_root resolution, no CAP_ROOT pollution. Cases 3a/3b — absolute repo_rel halts with non-zero exit + helpful Chinese message (existing ensure_relative_path guard). Cases 4a/4b — structural lint: source no longer contains `target_path="${CAP_ROOT}/${repo_rel}"`; source contains exactly one `target_path="${project_root}/${repo_rel}"` form so a future refactor reverting to the bare CAP_ROOT join fails the test immediately.
+- `scripts/workflows/smoke-layer.sh` promote suite: append the new fixture.
+
+### Verified
+
+- `test-cap-promote-legacy-target-path.sh` **9 / 9** PASS.
+- smoke-layer promote **6 / 6** PASS — existing inspect / project-constitution / workflow promote fixtures regression-clean.
+- Manual dogfood: `cap promote reports/workflows/project-spec-pipeline/run_xxx/4-prd.md docs/architecture/foo_PRD_v1.md` from cap-test/component-next-dotnet-stt/ now lands at `<project_root>/docs/architecture/foo_PRD_v1.md` instead of `~/.charlie-ai-protocols/docs/architecture/foo_PRD_v1.md`.
+
+### Boundary
+
+- One-line behaviour change in shell. No schema bump, no policy update (the policy never specified that the legacy escape hatch should write to CAP_ROOT — it was a bug in the implementation).
+- Pre-existing typed `cap promote inspect` / `cap promote project-constitution` / `cap promote workflow` surfaces are unaffected (they already used proper project_root resolution).
+- Phase 5 role/skill attachment from v0.25.0 unchanged. Phase 6 builtin promotion still deferred. Typed `cap promote spec-artifact <name> --apply` remains a deferred follow-up.
+
+---
+
 ## [v0.25.8] - 2026-05-10
 
 > Patch release — **resolver-side wiring for v0.25.7 spec_artifact**. The producer-side fix in v0.25.7 made `workflow-result.json:promote_candidates` non-empty, but `cap promote inspect <artifact_name>` still answered "No promote candidate matches" because `engine/promote_resolver.py` only knew the two pre-existing artifact types. v0.25.8 adds the third lookup branch so inspect can resolve spec_artifact candidates by name, with the same target-path computation the producer uses.
