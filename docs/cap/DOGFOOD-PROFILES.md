@@ -87,6 +87,9 @@ Use this first because failures are easier to attribute.
 
 Current gate after the 2026-05-10 Component Repo closeout:
 
+- Frontend / Backend implementation steps must apply the Component Repo
+  sections in `agent-skills/04-frontend-agent.md` and
+  `agent-skills/05-backend-agent.md`.
 - Do not advance a Component Repo run from Phase D to Phase E only because
   `project-implementation-pipeline` reports `completed / success`.
 - Phase D must prove actual implementation artifacts exist on disk, not only

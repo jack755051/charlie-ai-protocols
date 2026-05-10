@@ -27,6 +27,21 @@
 - **業務異常拋出**：若觸發業務邏輯衝突，統一拋出自定義的 `DomainException`。
 - **自動化處理**：所有未捕獲異常必須由全域的 **Global Exception Middleware/Filter** 統一捕獲並轉化為標準的 `ApiResponse`。開發者應專注於撰寫 **Happy Path**。
 
+## 3.5 Profile-specific 後端規則
+
+### 3.5.1 Component Repo 後端模組邊界 (Component Module Boundary)
+- **適用註記**：本節只在交接單、Task Constitution、Dogfood Profile 或 workflow 明確標示 `Component Repo` / `component-repo` 時強制適用；一般 Product Repo / Maintenance Repo 任務可參考本節的 adapter 原則，但不得因此額外拆出 module host 或改寫既有後端邊界。
+- **後端 component 是 module，不是整個產品後端**：在 Component Repo 任務中，你交付的是可被 Product Repo 掛載的 bounded backend module，例如 API endpoint group、Application Service、Domain Model、Provider interface、Store interface 與測試，不是把整個產品的 auth、多租戶、全域部署策略一次塞進來。
+- **Contract first**：先穩定 API endpoints、DTO、`ApiResponse<T>` envelope、Domain Event、Provider Port 與 Store Port。前端與 runtime 只能依賴這些公開 contract，不得依賴 infrastructure implementation 細節。
+- **Infrastructure adapter 可拔換**：SQL DB、Redis、外部 STT provider、queue、object storage 都是 `Infrastructure` adapter。核心 Domain / Application 層不得直接依賴 PostgreSQL、Redis client、provider SDK 或 compose service name。
+- **預設 store 不等於必備 DB**：若任務沒有明確要求持久化，Component Repo 的 core 可先提供 `InMemory*Store` 供 dev/test/smoke 使用；PostgreSQL adapter 只在 integration runtime 或 spec 明確要求保存語意時加入。
+- **Redis / queue 需有觸發條件**：只有出現背景任務、長時間處理、重試、排隊、節流、跨服務事件緩衝或 cache-aside 需求時，才可加入 Redis / queue adapter。不得因為是後端 component 就預設加入 Redis。
+- **Runtime host 與 module 分離**：WebAPI host、Docker Compose、healthcheck 與 seed data 是 demo / integration runtime，用來驗證 module 可運作；module core 必須能透過單元測試與 application-level integration test 獨立驗證。
+- **設定外部化**：連線字串、port、provider endpoint、cache TTL、queue 名稱與 feature flags 必須由 env/config/options 注入；禁止在 Domain / Application 層寫死 `localhost`、container service name、port 或秘密值。
+
+### 3.5.2 Product Repo 後端整合規則
+- **狀態註記**：Product Repo 專章尚未定義。必須等 Product Repo dogfood 產生實際 evidence 後再補；在此之前，Product Repo 任務只套用本文件第 1-5 節共通後端規範與交接單指定的 framework strategy。
+
 ## 4. 實作規範與工程化要求 (Implementation & Engineering)
 - **統一回應格式**：所有 API 回傳必須封裝於 `ApiResponse<T>`。列表型 API 強制使用 `PaginatedResponse<T>` 並包含完整 Meta。
 - **非同步與追蹤埋點**：

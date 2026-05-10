@@ -62,6 +62,20 @@
 - **敏感資料最小化**：不得將 Token、機敏個資或可還原憑證任意寫入 `localStorage` / `sessionStorage`；若技術棧策略有更嚴格規定，必須以策略為準。
 - **Analytics 對齊**：若交接單附帶 Analytics 規格，事件名稱、欄位與 `experiment_id` / `variant_id` 等識別必須嚴格對齊，不得自行命名。
 
+### 3.6 Profile-specific 前端規則
+
+#### 3.6.1 Component Repo 前端切分規則
+- **適用註記**：本節只在交接單、Task Constitution、Dogfood Profile 或 workflow 明確標示 `Component Repo` / `component-repo` 時強制適用；一般 Product Repo / Maintenance Repo 任務可參考本節的抽離原則，但不得因此改寫既有產品架構。
+- **核心邏輯優先抽離**：在 Component Repo 任務中，錄音狀態、提交流程、API client、DTO mapper、錯誤映射與狀態機必須落在 core logic / hooks / facades 層；不得綁定 UI library、route entry、固定 backend URL 或 demo page。
+- **UI library 是 adapter**：Primary Component Runtime Profile 的預設 UI 實作為 `shadcn-ui + Tailwind CSS + Lucide`。這只是表現層 adapter；`use*` hook、facade、mapper、API client 與 ViewModel 不得 import shadcn 元件或 Tailwind class 常數。
+- **設計資產獨立**：tokens、theme、screens、component states 與 copy 應以 `design/tokens.json`、`design/theme.css`、`design/screens.json`、`design/components.md` 或交接單指定等價路徑作為依據；不得把關鍵外觀規則只散落在 `page.tsx` / route entry。
+- **Demo route 不等於 component core**：`app/demo`、`pages/demo` 或 `/` 可用來 smoke runtime 與展示元件，但可複用元件本體必須能被其他 Product Repo import，不依賴 demo route 才能運作。
+- **環境外部化**：API base URL、host port、feature flags 與 mock/live provider 切換必須透過 env/config 注入（如 `NEXT_PUBLIC_API_BASE_URL`、server-side `BACKEND_URL` 或框架等價設定），禁止在 core logic 或元件內寫死 `localhost`、`3000`、`8080`、compose service name。
+- **可消費輸出形狀**：優先產出 `components/<feature>/`、`lib/<feature>/`、`api/<feature>/`、`facades/<feature>/` 與對應測試；route entry 只做組裝與 smoke/demo。
+
+#### 3.6.2 Product Repo 前端整合規則
+- **狀態註記**：Product Repo 專章尚未定義。必須等 Product Repo dogfood 產生實際 evidence 後再補；在此之前，Product Repo 任務只套用本文件第 1-5 節共通前端規範與交接單指定的 framework strategy。
+
 ## 4. 程式碼產出協議 (Execution & Delivery Protocol)
 
 當接收到開發任務時，請依序執行並輸出：
