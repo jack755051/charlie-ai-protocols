@@ -239,3 +239,137 @@ properties:
             source_path:
               type: [string, "null"]
               description: Absolute path of the skill registry file the skill was loaded from; null for builtin-shell / legacy-adapter selections.
+
+        # ── Phase 5 role-skill attachment (v0.25.0+) ──────────────
+        # selected_role / attached_skills are an additive structured
+        # view over the legacy quartet (selected_skill_id /
+        # selected_agent_alias / selected_prompt_file / selected_cli)
+        # plus skill_source. Both fields are optional so binding
+        # reports written before Phase 5 still validate; the producer
+        # writes them post-Phase 5 even on shell / unresolved branches
+        # (selected_role: null, attached_skills: []) so consumers can
+        # rely on field presence without inspecting binding_status.
+        selected_role:
+          type: [object, "null"]
+          description: |
+            Structured snapshot of the chosen executor role for this
+            step. Mirrors the legacy ``selected_skill_id`` /
+            ``selected_agent_alias`` / ``selected_prompt_file`` /
+            ``selected_cli`` / ``skill_source`` quartet for consumers
+            that want a single object view of the role-side selection.
+            Null when no role was selected: unresolved branches
+            (resolution_status in {required_unresolved,
+            optional_unresolved, blocked_by_constitution, incompatible})
+            and shell-executor steps (which use builtin-shell, not a
+            registry role). Phase 5 is strict about kind: a registry
+            entry can only fill ``selected_role`` when its
+            ``kind=role`` (explicit) or its legacy inference resolves
+            to role (``agent_alias`` present and no explicit
+            ``kind=skill``). The legacy quartet keeps writing for
+            backwards compatibility regardless of this field's value.
+          required:
+            - skill_id
+            - prompt_file
+          properties:
+            skill_id:
+              type: string
+              description: Selected role's skill_id (matches selected_skill_id at step level).
+            agent_alias:
+              type: [string, "null"]
+              description: Role's agent_alias for AI executors (mirrors selected_agent_alias).
+            provider:
+              type: [string, "null"]
+              description: Role's provider (mirrors selected_provider).
+            prompt_file:
+              type: string
+              description: Path to the role's prompt file (mirrors selected_prompt_file). Required because the runtime always renders the role prompt first.
+            cli:
+              type: [string, "null"]
+              description: Role's CLI command (mirrors selected_cli).
+            kind:
+              type: [string, "null"]
+              enum: [role, "null"]
+              description: |
+                Discriminator copied from the registry entry. Always
+                ``role`` when this object is non-null (the binder
+                rejects ``kind=skill`` from the executor slot in
+                Phase 5). ``null`` when the underlying entry omitted
+                ``kind`` and was inferred as role via the
+                ``agent_alias`` legacy rule.
+            skill_source:
+              type: [object, "null"]
+              description: Same shape as the step-level ``skill_source``; provenance for the role entry.
+              properties:
+                source_layer:
+                  type: string
+                  enum: [project, shared, builtin, explicit, fallback]
+                source_path:
+                  type: [string, "null"]
+
+        attached_skills:
+          type: array
+          description: |
+            Advisory skills (registry entries with ``kind=skill``)
+            attached to the executor role for this step. Phase 5
+            strict-attach rules: a skill is attached iff (a) the
+            registry entry is ``kind=skill`` (explicit; legacy
+            inference into skill is also accepted when
+            ``agent_alias`` is absent) AND (b) at least one of the
+            opt-in declarations matches — ``attach_to_capabilities``
+            contains this step's capability, OR ``attach_to_roles``
+            contains the selected role's ``agent_alias``. The skill
+            also passes the same source-policy gate as the role
+            (``_assert_skill_source_allowed``); a violation halts
+            the entire bind, never silently drops the attachment.
+            Each entry's ``prompt_file`` is rendered after the role
+            prompt by ``cap-workflow-exec.sh`` build_step_prompt;
+            shell-executor steps receive an empty array and never
+            mount attachments. Auto-fan-in (any skill whose
+            ``provided_capabilities`` intersects the step capability
+            attaches automatically) was rejected — see the memo's
+            ADR-style note on opening Phase 5.
+          items:
+            type: object
+            required:
+              - skill_id
+              - prompt_file
+              - attach_reason
+            properties:
+              skill_id:
+                type: string
+                description: Attached skill's registry id.
+              agent_alias:
+                type: [string, "null"]
+                description: Optional alias copied from the registry entry; advisory skills may omit it once the runtime stops requiring it for selection.
+              provider:
+                type: [string, "null"]
+                description: Skill's provider (e.g. ``shared`` for cross-project advisories).
+              prompt_file:
+                type: string
+                description: Path to the advisory skill's prompt file; rendered after the role prompt at AI step execution time.
+              cli:
+                type: [string, "null"]
+                description: Optional CLI hint copied from the registry entry; advisory skills typically inherit the role's CLI.
+              attach_reason:
+                type: string
+                enum:
+                  - attach_to_capabilities
+                  - attach_to_roles
+                description: |
+                  Which opt-in declaration triggered this attachment.
+                  ``attach_to_capabilities`` means the skill listed
+                  this step's capability; ``attach_to_roles`` means
+                  the skill listed the selected role's
+                  ``agent_alias``. When both would match,
+                  ``attach_to_capabilities`` wins (capability is the
+                  primary contract surface; role is a secondary
+                  convenience).
+              skill_source:
+                type: [object, "null"]
+                description: Provenance of the attached skill (same shape as step-level ``skill_source``). Used by the source-policy gate and by audit / replay consumers.
+                properties:
+                  source_layer:
+                    type: string
+                    enum: [project, shared, builtin, explicit, fallback]
+                  source_path:
+                    type: [string, "null"]

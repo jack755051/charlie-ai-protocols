@@ -312,6 +312,205 @@ fixture="$(write_fixture "neg-cand-int" '{
 rc="$(validate_fixture "${fixture}")"
 assert_eq "exit 1 when candidate_skill_ids item is non-string" "1" "${rc}"
 
+# ── Positive 3: Phase 5 role + attached skills (additive shape) ─────
+echo "Positive 3: role-only step (selected_role + empty attached_skills)"
+fixture="$(write_fixture "pos-role-only" '{
+  "schema_version": 1,
+  "workflow_id": "phase5-role-only",
+  "workflow_version": 2,
+  "binding_status": "ready",
+  "summary": {"total_steps": 1, "resolved_steps": 1, "fallback_steps": 0, "unresolved_required_steps": 0, "unresolved_optional_steps": 0},
+  "steps": [
+    {
+      "step_id": "prd", "phase": 1, "capability": "prd_generation", "optional": false,
+      "resolution_status": "resolved",
+      "selected_skill_id": "supervisor-prd-claude", "selected_provider": "claude",
+      "selected_agent_alias": "supervisor",
+      "selected_prompt_file": "agent-skills/01-supervisor-agent.md",
+      "selected_cli": "claude",
+      "binding_mode": "strict", "missing_policy": "halt", "reason": "found compatible skill",
+      "selected_role": {
+        "skill_id": "supervisor-prd-claude",
+        "agent_alias": "supervisor",
+        "provider": "claude",
+        "prompt_file": "agent-skills/01-supervisor-agent.md",
+        "cli": "claude",
+        "kind": "role",
+        "skill_source": {"source_layer": "builtin", "source_path": "/repo/.cap/skills.yaml"}
+      },
+      "attached_skills": []
+    }
+  ]
+}')"
+rc="$(validate_fixture "${fixture}")"
+assert_eq "exit 0 on role-only step with empty attached_skills" "0" "${rc}"
+
+echo "Positive 4: role + attached advisory skill (attach_to_capabilities)"
+fixture="$(write_fixture "pos-role-attach" '{
+  "schema_version": 1,
+  "workflow_id": "phase5-role-attach",
+  "workflow_version": 2,
+  "binding_status": "ready",
+  "summary": {"total_steps": 1, "resolved_steps": 1, "fallback_steps": 0, "unresolved_required_steps": 0, "unresolved_optional_steps": 0},
+  "steps": [
+    {
+      "step_id": "implement", "phase": 4, "capability": "frontend_implementation", "optional": false,
+      "resolution_status": "resolved",
+      "selected_skill_id": "builtin-frontend-agent", "selected_provider": "claude",
+      "selected_agent_alias": "frontend",
+      "selected_prompt_file": "agent-skills/04-frontend-agent.md",
+      "selected_cli": "claude",
+      "binding_mode": "strict", "missing_policy": "halt", "reason": "found compatible role",
+      "selected_role": {
+        "skill_id": "builtin-frontend-agent",
+        "agent_alias": "frontend",
+        "provider": "claude",
+        "prompt_file": "agent-skills/04-frontend-agent.md",
+        "cli": "claude",
+        "kind": "role",
+        "skill_source": {"source_layer": "builtin", "source_path": "/repo/.cap/skills.yaml"}
+      },
+      "attached_skills": [
+        {
+          "skill_id": "shared-karpathy-guidelines",
+          "agent_alias": "karpathy-guidelines",
+          "provider": "shared",
+          "prompt_file": "agent-skills/strategies/karpathy-guidelines.md",
+          "cli": "claude",
+          "attach_reason": "attach_to_capabilities",
+          "skill_source": {"source_layer": "shared", "source_path": "/home/u/.cap/shared/skills.yaml"}
+        }
+      ]
+    }
+  ]
+}')"
+rc="$(validate_fixture "${fixture}")"
+assert_eq "exit 0 on role + attached skill" "0" "${rc}"
+
+echo "Positive 5: shell executor step (selected_role null, attached_skills empty)"
+fixture="$(write_fixture "pos-shell-null-role" '{
+  "schema_version": 1,
+  "workflow_id": "phase5-shell",
+  "workflow_version": 2,
+  "binding_status": "ready",
+  "summary": {"total_steps": 1, "resolved_steps": 1, "fallback_steps": 0, "unresolved_required_steps": 0, "unresolved_optional_steps": 0},
+  "steps": [
+    {
+      "step_id": "persist", "phase": 2, "capability": "constitution_persistence", "optional": false,
+      "resolution_status": "resolved",
+      "selected_skill_id": "builtin-shell", "selected_provider": "builtin",
+      "selected_agent_alias": "shell",
+      "selected_prompt_file": null,
+      "selected_cli": null,
+      "binding_mode": "strict", "missing_policy": "halt", "reason": "shell executor resolved directly",
+      "selected_role": null,
+      "attached_skills": []
+    }
+  ]
+}')"
+rc="$(validate_fixture "${fixture}")"
+assert_eq "exit 0 on shell step with null selected_role" "0" "${rc}"
+
+# ── Negative 9: attached_skills item missing required attach_reason ─
+echo "Negative 9: attached_skills item missing attach_reason"
+fixture="$(write_fixture "neg-attach-no-reason" '{
+  "schema_version": 1,
+  "workflow_id": "x",
+  "workflow_version": 2,
+  "binding_status": "ready",
+  "summary": {"total_steps": 1, "resolved_steps": 1, "fallback_steps": 0, "unresolved_required_steps": 0, "unresolved_optional_steps": 0},
+  "steps": [
+    {
+      "step_id": "x", "phase": 1, "capability": "x", "optional": false,
+      "resolution_status": "resolved",
+      "selected_skill_id": "x", "selected_provider": "claude",
+      "selected_agent_alias": "x", "selected_prompt_file": "x",
+      "selected_cli": "claude",
+      "binding_mode": "strict", "missing_policy": "halt", "reason": "x",
+      "attached_skills": [
+        {"skill_id": "advisory", "prompt_file": "advisory.md"}
+      ]
+    }
+  ]
+}')"
+rc="$(validate_fixture "${fixture}")"
+assert_eq "exit 1 when attached_skills item missing attach_reason" "1" "${rc}"
+
+# ── Negative 10: attach_reason not in enum ───────────────────────────
+echo "Negative 10: attach_reason not in enum"
+fixture="$(write_fixture "neg-attach-bad-reason" '{
+  "schema_version": 1,
+  "workflow_id": "x",
+  "workflow_version": 2,
+  "binding_status": "ready",
+  "summary": {"total_steps": 1, "resolved_steps": 1, "fallback_steps": 0, "unresolved_required_steps": 0, "unresolved_optional_steps": 0},
+  "steps": [
+    {
+      "step_id": "x", "phase": 1, "capability": "x", "optional": false,
+      "resolution_status": "resolved",
+      "selected_skill_id": "x", "selected_provider": "claude",
+      "selected_agent_alias": "x", "selected_prompt_file": "x",
+      "selected_cli": "claude",
+      "binding_mode": "strict", "missing_policy": "halt", "reason": "x",
+      "attached_skills": [
+        {"skill_id": "advisory", "prompt_file": "advisory.md", "attach_reason": "auto_fanin"}
+      ]
+    }
+  ]
+}')"
+rc="$(validate_fixture "${fixture}")"
+assert_eq "exit 1 when attach_reason not in enum" "1" "${rc}"
+
+# ── Negative 11: selected_role missing required prompt_file ──────────
+echo "Negative 11: selected_role missing required prompt_file"
+fixture="$(write_fixture "neg-role-no-prompt" '{
+  "schema_version": 1,
+  "workflow_id": "x",
+  "workflow_version": 2,
+  "binding_status": "ready",
+  "summary": {"total_steps": 1, "resolved_steps": 1, "fallback_steps": 0, "unresolved_required_steps": 0, "unresolved_optional_steps": 0},
+  "steps": [
+    {
+      "step_id": "x", "phase": 1, "capability": "x", "optional": false,
+      "resolution_status": "resolved",
+      "selected_skill_id": "x", "selected_provider": "claude",
+      "selected_agent_alias": "x", "selected_prompt_file": "x",
+      "selected_cli": "claude",
+      "binding_mode": "strict", "missing_policy": "halt", "reason": "x",
+      "selected_role": {"skill_id": "role-without-prompt"}
+    }
+  ]
+}')"
+rc="$(validate_fixture "${fixture}")"
+assert_eq "exit 1 when selected_role missing prompt_file" "1" "${rc}"
+
+# ── Negative 12: selected_role.kind=skill (forbidden in executor slot)
+echo "Negative 12: selected_role.kind=skill is rejected"
+fixture="$(write_fixture "neg-role-kind-skill" '{
+  "schema_version": 1,
+  "workflow_id": "x",
+  "workflow_version": 2,
+  "binding_status": "ready",
+  "summary": {"total_steps": 1, "resolved_steps": 1, "fallback_steps": 0, "unresolved_required_steps": 0, "unresolved_optional_steps": 0},
+  "steps": [
+    {
+      "step_id": "x", "phase": 1, "capability": "x", "optional": false,
+      "resolution_status": "resolved",
+      "selected_skill_id": "x", "selected_provider": "claude",
+      "selected_agent_alias": "x", "selected_prompt_file": "x",
+      "selected_cli": "claude",
+      "binding_mode": "strict", "missing_policy": "halt", "reason": "x",
+      "selected_role": {
+        "skill_id": "advisory",
+        "prompt_file": "advisory.md",
+        "kind": "skill"
+      }
+    }
+  ]
+}')"
+rc="$(validate_fixture "${fixture}")"
+assert_eq "exit 1 when selected_role.kind=skill" "1" "${rc}"
+
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"
 [ ${fail_count} -eq 0 ]
