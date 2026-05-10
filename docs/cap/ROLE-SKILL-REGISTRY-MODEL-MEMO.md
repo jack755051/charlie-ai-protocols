@@ -362,6 +362,44 @@ Boundary kept (still untouched in v0.24.11):
 - `agent-skills/*-agent.md` builtin prompts not modified.
 - No new schema fields added (only docstring-style examples).
 
+### Post-v0.24.11 Safe Completion Boundary
+
+Phase 3 intentionally stops at documentation, schema examples, and resolver /
+source-policy tests. There is **no formal "user role dry-run" phase** in this
+roadmap. A dry-run cookbook can be useful as an optional operator exercise, but
+it is not a required lifecycle phase and should not be treated as a blocker for
+Phase 3 completion.
+
+The following CAP work lines have reached a "safe completion point" that does
+not touch runtime execution:
+
+| Work line | Safe completion point | Why this is the boundary |
+|---|---|---|
+| Run Observability | `logs` / `watch` / `inspect` / `ps` and read-only filters shipped | These surfaces read existing run directories and do not change provider invocation or step execution. |
+| Run Observability Phase 5 Later | stderr capture, background `run -d`, and TUI / dashboard are documented as deferred | The remaining items touch `cap-workflow-exec.sh`, process detaching, or UI framework scope. |
+| Karpathy shared → builtin | shared dogfood, 7-run evidence, builtin promote, and integration evidence are recorded | Further coverage should accumulate naturally; forced matrix completion would be costly and low signal. |
+| Role / Skill Registry | `kind: role\|skill`, user-imported role docs, examples, and resolver tests are shipped | The registry can describe roles and skills; actual role + advisory skill attachment would change binding semantics. |
+| User-imported roles | project/shared registration rules, source-policy tests, precedence tests, and forbidden provider-global paths are documented | A user role can be registered and discovered; the next step would require multi-skill attachment semantics. |
+| CLI UX / Help | shortcuts, help topics, observe section, and unknown-command handling are shipped | Remaining work is polish unless a concrete discoverability issue appears. |
+| CAP_HOME default | workflow dispatcher defaults `CAP_HOME=${HOME}/.cap` without overriding explicit user values | Generalising to every namespace should wait for a real non-workflow shared-layer case. |
+| Provider/global isolation | provider global files are explicitly user-owned and not CAP registry targets | Native provider installation would be a separate high-risk integration path. |
+
+Deferred runtime work should be opened only when a concrete use case appears:
+
+- `role + attached skills` — a real workflow needs one executable role plus one
+  or more advisory skills, and copying guidance into the role prompt becomes
+  visibly wrong or duplicative.
+- provider stdout/stderr capture — a real failed run cannot be diagnosed from
+  existing `logs` / `inspect` artifacts.
+- background `cap workflow run -d` — a real long workflow repeatedly blocks the
+  operator's shell and needs first-class detach semantics.
+- deeper harness / replay work — a real regression requires runtime-level
+  evidence beyond current resolver and artifact tests.
+
+Until one of those triggers occurs, the recommended state is natural dogfood:
+use the shipped registry path in real work, record friction, and avoid adding
+runtime abstractions proactively.
+
 ### Phase 4: Advisory Skill Attachment Design
 
 Goal: design, not yet implement, how one executable role can receive one or
