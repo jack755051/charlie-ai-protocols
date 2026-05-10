@@ -6,6 +6,36 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.26.2] - 2026-05-10
+
+> Patch release — **Round 3 dogfood-discovered bug #15** in the v0.26.1 write contract. v0.26.1 set `CAP_WORKFLOW_WRITE_DIR` and the writable provider flags (claude `--add-dir` + permission-mode acceptEdits + write tools; codex `--sandbox workspace-write --cd`) for **every** AI step regardless of capability. The Round 3 Phase D dogfood run (`run_20260510205453_dce8764e`) showed the consequence: the supervisor in step 1 (`task_constitution_planning`, NOT a code-emit capability) over-eager wrote 50 .NET Clean Architecture files into its own landing dir; the actual `backend` step in step 4 (genuine code-emit capability) then found nothing left to do, emitted `result: success` with an empty landing dir, and the v0.26.1 R2 emit-gate correctly halted with `ai_success_no_artifacts`. The gate worked; the upstream over-permissive write access did not.
+>
+> v0.26.2 closes the gap by gating writable landing dir setup on the same `capability-emits-code` whitelist the post-step gate uses. Non-emit AI steps (planning, BA spec, audit, archive) now run with a read-only claude tool whitelist (Read / Glob / Grep) and codex's default read-only sandbox; they cannot write anywhere. Only the four code-emit capabilities (backend / frontend / qa_testing / devops_delivery) get the writable landing dir.
+
+### Fixed
+
+- `scripts/cap-workflow-exec.sh` main loop pre-step setup: `STEP_WRITE_DIR` is set + `CAP_WORKFLOW_WRITE_DIR` exported + landing dir created **only when** `capability-emits-code` returns `true`. Non-emit AI steps explicitly `unset CAP_WORKFLOW_WRITE_DIR` so the env var doesn't leak from a previous step.
+- `scripts/cap-workflow-exec.sh run_step_claude`: when invoked without a write_dir, now passes `--allowed-tools "Read,Glob,Grep"` instead of falling back to claude's default permissive tool set. Defence in depth — even if the main-loop gating ever regresses, the AI cannot write because the tool whitelist excludes Edit / Write / Bash. Codex's behaviour is unchanged because codex defaults to `read-only` sandbox without an explicit `--sandbox` flag.
+- `scripts/cap-workflow-exec.sh` shell-to-AI fallback path: same gating applied. The fallback typically handles bookkeeping / handoff capabilities that are not in the code-emit whitelist, so the fallback AI now defaults to read-only.
+
+### Added
+
+- `tests/scripts/test-ai-write-contract.sh` Section 4 (4 new cases): regression for the v0.26.2 bug #15 fix. 4a confirms the main loop's `STEP_WRITE_DIR` setup is gated on the `capability-emits-code` CLI lookup. 4b confirms `run_step_claude`'s read-only tool fallback is wired (`--allowed-tools "Read,Glob,Grep"` in the else branch). 4c confirms the shell-to-AI fallback path also gates on the whitelist. 4d confirms `unset CAP_WORKFLOW_WRITE_DIR` appears in both call sites so a stale env from a previous step doesn't leak into a non-emit step's invocation.
+
+### Verified
+
+- `test-ai-write-contract.sh` **23 / 23** PASS (19 prior + 4 new for the v0.26.2 contract).
+- smoke-layer runtime **20 / 20** PASS — no regressions in v0.26.0 / v0.26.1 fixtures.
+- Bug #15 reverse-trace: re-running Phase D with the v0.26.2 fix is expected to keep the supervisor read-only (no 50 stray files), giving the backend / frontend / qa / devops steps actual work to do under their own writable landings.
+
+### Boundary
+
+- One-line behavioural change in shell. No schema bump, no provider surface change beyond the conditional flag set.
+- Pre-existing dogfood evidence preserved: `run_20260510205453_dce8764e` keeps its 50-file draft_task_constitution dir on disk so the bug #15 root cause stays inspectable. Future runs under v0.26.2 will not reproduce the misallocation.
+- Phase 5 role/skill attachment from v0.25.0 unchanged. Phase 6 builtin promotion still deferred. v0.26.x Round 3 Phase D re-validation continues after v0.26.2 lands.
+
+---
+
 ## [v0.26.1] - 2026-05-10
 
 > Patch release — **Round 2 of the bug #12 fix series ("AI Write Contract")**, building on v0.26.0's runtime perception fix. Round 1 (v0.26.0) made the workflow correctly halt when AI agents self-reported `blocked` / `failed` / `needs_data`. Round 2 (this release) closes the **counter** pathology — an AI agent emitting `result: success` while having produced no actual code files. v0.26.1 introduces a per-step landing directory under `<run_dir>/code/<step_id>/`, threads it into the AI provider CLI invocations as a writable workspace, and post-step verifies that code-emitting capabilities deposited at least one file there before crediting the step as success.

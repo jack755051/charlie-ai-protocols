@@ -162,6 +162,48 @@ case "${codex_block}" in
     fail_count=$((fail_count + 1)) ;;
 esac
 
+# ── Section 4 (v0.26.2): bug #15 fix — write access gated on
+# capability_emits_code; non-emit AI steps get read-only tool set ─
+echo ""
+echo "Section 4 (v0.26.2): write access gated on capability whitelist"
+
+# 4a — main loop sets STEP_WRITE_DIR ONLY when capability emits code
+case "$(awk '/STEP_WRITE_DIR=""/,/^  fi$/' "${EXEC_SH}" | head -20)" in
+  *'STEP_EMITS_CODE='*'capability-emits-code'*'if [ "${STEP_EMITS_CODE}" = "true" ]; then'*)
+    echo "  PASS: 4a STEP_WRITE_DIR gated on capability-emits-code"
+    pass_count=$((pass_count + 1)) ;;
+  *)
+    echo "  FAIL: 4a STEP_WRITE_DIR not gated on capability-emits-code"
+    fail_count=$((fail_count + 1)) ;;
+esac
+
+# 4b — read-only tool set for non-emit AI steps in run_step_claude
+claude_block_full="$(awk '/^run_step_claude\(\)/,/^}$/' "${EXEC_SH}")"
+case "${claude_block_full}" in
+  *'else'*'--allowed-tools "Read,Glob,Grep"'*)
+    echo "  PASS: 4b run_step_claude has read-only tools fallback (Read,Glob,Grep)"
+    pass_count=$((pass_count + 1)) ;;
+  *)
+    echo "  FAIL: 4b run_step_claude missing read-only fallback for non-emit steps"
+    fail_count=$((fail_count + 1)) ;;
+esac
+
+# 4c — fallback path also gated on capability-emits-code
+fallback_block="$(awk '/FALLBACK_WRITE_DIR=""/,/^      fi$/' "${EXEC_SH}" | head -10)"
+case "${fallback_block}" in
+  *'FALLBACK_EMITS_CODE='*'capability-emits-code'*)
+    echo "  PASS: 4c shell-to-AI fallback path also gated on capability-emits-code"
+    pass_count=$((pass_count + 1)) ;;
+  *)
+    echo "  FAIL: 4c shell-to-AI fallback path not gated"
+    fail_count=$((fail_count + 1)) ;;
+esac
+
+# 4d — explicit unset CAP_WORKFLOW_WRITE_DIR for non-emit branch
+hits_4d="$(grep -c 'unset CAP_WORKFLOW_WRITE_DIR' "${EXEC_SH}" || true)"
+[ "${hits_4d}" -ge 2 ] && c4d="yes" || c4d="no"
+assert_eq "4d unset CAP_WORKFLOW_WRITE_DIR present in main + fallback (>=2)" "yes" "${c4d}"
+
 echo ""
 total=$((pass_count + fail_count))
 echo "ai-write-contract: ${pass_count} passed, ${fail_count} failed (of ${total})"

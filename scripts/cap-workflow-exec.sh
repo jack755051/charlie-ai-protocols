@@ -193,6 +193,18 @@ run_step_claude() {
       --permission-mode acceptEdits
       --allowed-tools "Read,Edit,Write,Bash,Glob,Grep"
     )
+  else
+    # v0.26.2 bug #15 — defence-in-depth read-only tool set for AI
+    # steps whose capability is NOT in the code-emit whitelist.
+    # Without an explicit allowlist, claude --print defaults to a
+    # broad tool set that includes Edit / Write — even with no
+    # --add-dir, the agent can sometimes write to the current
+    # workspace. Restricting to Read / Glob / Grep keeps non-emit
+    # AI steps strictly markdown-only as the protocol intends, and
+    # protects against the bug #15 over-write pattern (supervisor
+    # wrote 50 production files in step 1) recurring after the
+    # main-loop gating fix.
+    args+=(--allowed-tools "Read,Glob,Grep")
   fi
   claude "${args[@]}" "${prompt}" 2>&1
 }
@@ -1569,19 +1581,32 @@ while [ "${step_idx}" -lt "${#STEP_ARRAY[@]}" ]; do
     "${STEP_PROMPT_SNAPSHOT_PATH}" \
     "${STEP_PROMPT_SIZE_BYTES}"
 
-  # v0.26.1 Round 2 — AI write contract landing dir setup. Each AI
-  # step gets its own ``<run_dir>/code/<step_id>/`` directory; the
-  # provider flags (claude --add-dir / codex --cd) plus the prompt
-  # body all reference this path so the AI knows where to land code
-  # artifacts. Markdown-only AI steps that have no need to write
-  # files simply ignore the dir; the post-AI emit gate (R2.3) only
-  # enforces non-emptiness for capabilities in the
-  # ``capability-emits-code`` whitelist.
+  # v0.26.1 Round 2 — AI write contract landing dir setup, refined
+  # in v0.26.2 to gate write access on capability_emits_code. Bug
+  # #15 from the Round 3 dogfood: when v0.26.1 unconditionally
+  # exported CAP_WORKFLOW_WRITE_DIR for every AI step, the supervisor
+  # in step 1 (planning, NOT a code-emit capability) over-eager wrote
+  # 50 .NET files into its own landing dir. Then the backend step in
+  # step 4 (genuine code-emit capability) found nothing left to do,
+  # emitted result: success with an empty landing dir, and the v0.26.1
+  # R2 emit-gate correctly halted with ai_success_no_artifacts. The
+  # gate worked; the upstream over-permissive write access did not.
+  #
+  # Fix: only set up the writable landing dir when the step's
+  # capability is in the code-emit whitelist. Non-emit AI steps run
+  # without --add-dir / --cd, with a read-only claude tool whitelist
+  # (codex defaults to read-only sandbox already), so the supervisor
+  # / spec / audit / archive agents cannot write anywhere — they
+  # remain markdown-only as the protocol intends.
   STEP_WRITE_DIR=""
+  unset CAP_WORKFLOW_WRITE_DIR
   if [ "${effective_executor}" != "shell" ]; then
-    STEP_WRITE_DIR="${WORKFLOW_OUTPUT_DIR}/code/${step_id}"
-    mkdir -p "${STEP_WRITE_DIR}" 2>/dev/null || true
-    export CAP_WORKFLOW_WRITE_DIR="${STEP_WRITE_DIR}"
+    STEP_EMITS_CODE="$("${PYTHON_BIN}" "${STEP_PY}" capability-emits-code "${capability}" 2>/dev/null)"
+    if [ "${STEP_EMITS_CODE}" = "true" ]; then
+      STEP_WRITE_DIR="${WORKFLOW_OUTPUT_DIR}/code/${step_id}"
+      mkdir -p "${STEP_WRITE_DIR}" 2>/dev/null || true
+      export CAP_WORKFLOW_WRITE_DIR="${STEP_WRITE_DIR}"
+    fi
   fi
 
   # Run step in background, show live output chunks plus watchdog state.
@@ -1691,14 +1716,21 @@ Release / governed-mode requirements:
 
       printf "  ${YELLOW}│ shell exit %s (%s); falling back to AI${RESET}\n" "${exit_code}" "${SHELL_CONDITION}"
       START_FALLBACK="$(date '+%s')"
-      # AI fallback to a shell step also needs the write contract
-      # landing dir so the fallback agent can produce code. The dir
-      # was prepared above for this step; create it lazily here in
-      # case the shell branch ran first and the AI dir hasn't been
-      # set up yet.
-      FALLBACK_WRITE_DIR="${WORKFLOW_OUTPUT_DIR}/code/${step_id}"
-      mkdir -p "${FALLBACK_WRITE_DIR}" 2>/dev/null || true
-      export CAP_WORKFLOW_WRITE_DIR="${FALLBACK_WRITE_DIR}"
+      # AI fallback to a shell step inherits the same v0.26.2 write
+      # access rule: only code-emit capabilities get a writable
+      # landing dir. The shell branch typically handles
+      # bookkeeping / handoff / archive capabilities (not code-emit),
+      # so the fallback should default to read-only AI; if the
+      # capability happens to be in the emit whitelist, the dir is
+      # set up lazily here.
+      FALLBACK_WRITE_DIR=""
+      unset CAP_WORKFLOW_WRITE_DIR
+      FALLBACK_EMITS_CODE="$("${PYTHON_BIN}" "${STEP_PY}" capability-emits-code "${capability}" 2>/dev/null)"
+      if [ "${FALLBACK_EMITS_CODE}" = "true" ]; then
+        FALLBACK_WRITE_DIR="${WORKFLOW_OUTPUT_DIR}/code/${step_id}"
+        mkdir -p "${FALLBACK_WRITE_DIR}" 2>/dev/null || true
+        export CAP_WORKFLOW_WRITE_DIR="${FALLBACK_WRITE_DIR}"
+      fi
       set +e
       run_step "${effective_cli}" "${FALLBACK_PROMPT}" "${FALLBACK_WRITE_DIR}" > "${FALLBACK_TMP}" 2>&1
       fallback_exit_code=$?
