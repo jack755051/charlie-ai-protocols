@@ -187,6 +187,54 @@ PY
 assert_eq "3. project_context_loader.base_dir == project_root.resolve()" \
   "MATCH" "${case3_out}"
 
+# ── Case 4: workflow_cli production path passes project_root=cwd ────
+# This is the call path that broke on the v0.25.0 dogfood run. The
+# pure RuntimeBinder constructor fix in v0.25.1 was necessary but not
+# sufficient — workflow_cli.py three call sites (cmd_plan / cmd_bind /
+# cmd_build_bound_plan) used to call RuntimeBinder(base_dir=base_dir)
+# only, which falls back to project_root=base_dir when base_dir is
+# explicit. Production-grade fix is to pass project_root=Path.cwd()
+# from those call sites; this test pins the contract by greping the
+# source file (cheap, no exec needed) plus running cmd_build_bound_plan
+# end-to-end in the sandbox so a future refactor that reverts to the
+# bare base_dir form fails immediately.
+echo "Case 4: workflow_cli production paths thread project_root=cwd"
+cli_path="${REPO_ROOT}/engine/workflow_cli.py"
+bare_calls="$(grep -c "RuntimeBinder(base_dir=base_dir)$" "${cli_path}" || true)"
+threaded_calls="$(grep -c "RuntimeBinder(base_dir=base_dir, project_root=Path.cwd())" "${cli_path}" || true)"
+assert_eq "4a. workflow_cli has zero bare RuntimeBinder(base_dir=base_dir) calls" \
+  "0" "${bare_calls}"
+assert_eq "4b. workflow_cli has three RuntimeBinder(...,project_root=Path.cwd()) calls" \
+  "3" "${threaded_calls}"
+
+# End-to-end: invoke cmd_build_bound_plan from the sandbox project_root
+# and confirm it does NOT raise ProjectIdCollisionError. Uses a
+# trivial workflow ref that exists in the install layer; the goal is
+# not to exercise the workflow itself, just to prove the binding path
+# loads project context without halting.
+set +e
+case4c_out="$(cd "${PROJECT_ROOT}" && CAP_HOME="${CAP_HOME}" PYTHONPATH="${REPO_ROOT}" "${PYTHON_BIN}" - "${REPO_ROOT}" 2>&1 <<'PY'
+import sys
+repo_root = sys.argv[1]
+sys.path.insert(0, repo_root)
+sys.path.insert(0, repo_root + "/engine")
+import io, contextlib
+from engine.workflow_cli import cmd_build_bound_plan
+buf = io.StringIO()
+try:
+    with contextlib.redirect_stdout(buf):
+        cmd_build_bound_plan(repo_root, "project-constitution")
+    print("HALT_FREE")
+except Exception as exc:
+    name = type(exc).__name__
+    print(f"HALTED:{name}")
+PY
+)"
+set -e 2>/dev/null || true
+case4c_status="$(printf '%s' "${case4c_out}" | grep -oE 'HALT_FREE|HALTED:[A-Za-z]+' | head -1)"
+assert_eq "4c. cmd_build_bound_plan does not raise ProjectIdCollisionError" \
+  "HALT_FREE" "${case4c_status}"
+
 echo ""
 total=$((pass_count + fail_count))
 echo "binder-project-context-origin: ${pass_count} passed, ${fail_count} failed (of ${total})"

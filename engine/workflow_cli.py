@@ -1585,7 +1585,14 @@ def cmd_plan(cap_root: str, workflow_ref: str) -> None:
     from engine.runtime_binder import RuntimeBinder  # noqa: E402
 
     loader = WorkflowLoader(base_dir=base_dir)
-    binder = RuntimeBinder(base_dir=base_dir)
+    # v0.25.1 follow-up: pass project_root=cwd explicitly. RuntimeBinder
+    # falls back to base_dir when only base_dir is given (intentional
+    # for test harnesses that pass an isolated single-dir world); for
+    # production CLI the user's CWD is the working repo, so we must
+    # name it explicitly to keep ProjectContextLoader anchored at the
+    # right place. Without this, project_id resolution and ledger
+    # origin tracking land on the cap install dir.
+    binder = RuntimeBinder(base_dir=base_dir, project_root=Path.cwd())
     semantic = loader.build_semantic_plan(workflow_ref)
     plan = binder.build_bound_execution_phases(workflow_ref)
     binding = plan["binding"]
@@ -1636,7 +1643,8 @@ def cmd_bind(cap_root: str, workflow_ref: str, registry_ref: str | None = None) 
     sys.path.insert(0, str(base_dir))
     from engine.runtime_binder import RuntimeBinder  # noqa: E402
 
-    binder = RuntimeBinder(base_dir=base_dir)
+    # See cmd_plan for the project_root=cwd rationale.
+    binder = RuntimeBinder(base_dir=base_dir, project_root=Path.cwd())
     report = binder.bind_capabilities(workflow_ref, registry_ref or None)
     print(json.dumps(report, ensure_ascii=False))
 
@@ -1651,7 +1659,8 @@ def cmd_build_bound_plan(cap_root: str, workflow_ref: str) -> None:
     sys.path.insert(0, str(base_dir))
     from engine.runtime_binder import RuntimeBinder  # noqa: E402
 
-    binder = RuntimeBinder(base_dir=base_dir)
+    # See cmd_plan for the project_root=cwd rationale.
+    binder = RuntimeBinder(base_dir=base_dir, project_root=Path.cwd())
     result = binder.build_bound_execution_phases(workflow_ref)
     print(json.dumps(result, ensure_ascii=False))
 

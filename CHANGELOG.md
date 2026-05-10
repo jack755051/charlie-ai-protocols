@@ -6,6 +6,30 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.25.2] - 2026-05-10
+
+> Patch release — **dogfood follow-up to v0.25.1**. The constructor-side fix in v0.25.1 was necessary but not sufficient. `RuntimeBinder.__init__` falls back to `project_root = base_dir` when only `base_dir` is provided (intentional for test harnesses that pass an isolated single-dir world). Production CLI paths in `workflow_cli.py` were calling `RuntimeBinder(base_dir=base_dir)` only, so the same `ProjectIdCollisionError` from the v0.25.1 issue still fired on `cap workflow run` from outside the install directory. This release pushes the project_root through to the three production call sites.
+
+### Fixed
+
+- `engine/workflow_cli.py cmd_plan` (line 1588), `cmd_bind` (1639), `cmd_build_bound_plan` (1654): all three now pass `project_root=Path.cwd()` explicitly to `RuntimeBinder`. The user's CWD is the working repo when CAP is invoked through the global wrapper, and we must name it explicitly because the binder constructor's `explicit_base_dir → project_root=base_dir` branch is meant for tests, not production.
+
+### Added
+
+- `tests/scripts/test-binder-project-context-origin.sh` Case 4 (3 sub-cases): regression for the production call path. 4a greps `workflow_cli.py` for any bare `RuntimeBinder(base_dir=base_dir)` call (must be 0) and 4b confirms the threaded form `RuntimeBinder(base_dir=base_dir, project_root=Path.cwd())` appears in all three production sites. 4c invokes `cmd_build_bound_plan` end-to-end from a sandboxed project_root and asserts it does not raise `ProjectIdCollisionError`. The grep checks act as a cheap structural lock so a future refactor reverting to the bare form fails immediately.
+
+### Verified
+
+- `test-binder-project-context-origin.sh` **8 / 8** PASS (5 prior + 3 new for Case 4).
+- smoke-layer contracts **7 / 7**, runtime **13 / 13**, project **8 / 8** PASS.
+
+### Boundary
+
+- Three-line behaviour change in `workflow_cli.py` only. No new defaults in `RuntimeBinder.__init__` — keeping the constructor backward-compatible for the one test (`tests/scripts/test-cap-config-namespace-readers.sh`) that passes only `base_dir` for skill registry isolation.
+- Phase 5 role/skill attachment from v0.25.0 unchanged. Phase 6 builtin promotion still deferred.
+
+---
+
 ## [v0.25.1] - 2026-05-10
 
 > Patch release — **dogfood-discovered** project_id collision fix. When the global `cap` wrapper at `~/.charlie-ai-protocols` was invoked from any working repo other than the dev clone, `RuntimeBinder.bind_semantic_plan` halted with `ProjectIdCollisionError` because `ProjectContextLoader` was anchored at the cap install dir (`base_dir`) rather than the user's working repo (`project_root`). The basename of the install dir collides with the dev repo clone of the same name and the ledger origin mismatch fires every time. Surfaced by attempting the first end-to-end Component Repo dogfood at `~/projects/cap-test/component-next-dotnet-stt`.
