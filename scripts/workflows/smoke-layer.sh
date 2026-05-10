@@ -103,6 +103,8 @@ fixture tests/scripts/test-cap-session-analyze.sh
 fixture tests/scripts/test-cap-artifact-inspect.sh
 fixture tests/scripts/test-handoff-route-back.sh
 fixture tests/scripts/test-gate-result-consumer.sh
+fixture tests/scripts/test-binder-phase5-attachment.sh
+fixture tests/scripts/test-step-runtime-attached-prompts.sh
 EOF
       ;;
     project) cat <<'EOF'
