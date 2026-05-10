@@ -826,7 +826,7 @@ WATCH_HELP
 
     WORKFLOW_PROJECT_ID_OVERRIDE=""
     if [ "${WORKFLOW_ID}" = "project-constitution" ]; then
-      WORKFLOW_PROJECT_ID_OVERRIDE="project-constitution-bootstrap"
+      WORKFLOW_PROJECT_ID_OVERRIDE="${CAP_PROJECT_ID_OVERRIDE:-project-constitution-bootstrap}"
     fi
     export CAP_PROJECT_ID_OVERRIDE="${WORKFLOW_PROJECT_ID_OVERRIDE}"
 
