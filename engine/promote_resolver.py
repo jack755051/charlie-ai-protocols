@@ -39,6 +39,7 @@ from typing import Any, Optional
 from engine.promote_candidate_producer import (
     detect_compiled_workflow_candidate_for,
     detect_constitution_candidate_for_task,
+    detect_spec_artifact_candidate_for_name,
 )
 
 
@@ -136,6 +137,20 @@ def resolve_promote(
     )
     if compiled is not None:
         return _build_resolved(compiled)
+
+    # 3) v0.25.7 — try as spec_artifact name (one of the six policy
+    # §3.3 mapping keys: prd_document / tech_plan_document / ba_spec /
+    # schema_ssot / api_contract / ui_spec). Latest validated
+    # project-spec-pipeline run wins; same candidate shape as the
+    # producer's _detect_spec_artifact_candidates so inspect output
+    # and result.md's promote_candidates section agree byte-for-byte.
+    spec = detect_spec_artifact_candidate_for_name(
+        artifact_id,
+        project_storage=project_storage,
+        project_root=project_root_path,
+    )
+    if spec is not None:
+        return _build_resolved(spec)
 
     return None
 

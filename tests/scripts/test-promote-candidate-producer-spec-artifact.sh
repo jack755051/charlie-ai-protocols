@@ -282,6 +282,102 @@ schema_rc="$(${PYTHON_BIN} "${REPO_ROOT}/engine/step_runtime.py" validate-jsonsc
   "${fixture6}" "${REPO_ROOT}/schemas/workflow-result.schema.yaml" >/dev/null 2>&1; echo $?)"
 assert_eq "6. schema validate-jsonschema accepts spec_artifact" "0" "${schema_rc}"
 
+# ── Case 7: detect_spec_artifact_candidate_for_name single-name lookup ─
+echo "Case 7: inspect-side helper resolves single artifact_name"
+write_runtime_state_full
+case7_target="$(WF_ID=project-spec-pipeline FS=completed TID="${TASK_ID}" RID="${RUN_ID}" \
+  PROJECT_ID="${PROJECT_ID}" PROJECT_ROOT="${PROJECT_ROOT}" CAP_HOME_DIR="${SANDBOX}/cap_home" \
+  PYTHONPATH="${REPO_ROOT}" "${PYTHON_BIN}" - <<'PY'
+import json, os, sys
+sys.path.insert(0, os.environ["PYTHONPATH"])
+from pathlib import Path
+from engine.promote_candidate_producer import detect_spec_artifact_candidate_for_name
+
+hit = detect_spec_artifact_candidate_for_name(
+    "prd_document",
+    project_storage=Path(os.environ["CAP_HOME_DIR"]) / "projects" / os.environ["PROJECT_ID"],
+    project_root=Path(os.environ["PROJECT_ROOT"]),
+)
+print(json.dumps(hit) if hit else "")
+PY
+)"
+case7_artifact_type="$(${PYTHON_BIN} -c '
+import json, sys
+data = json.loads(sys.argv[1])
+print(data.get("artifact_type") if data else "<none>")
+' "${case7_target}")"
+assert_eq "7a. detect_spec_artifact_candidate_for_name returns spec_artifact" \
+  "spec_artifact" "${case7_artifact_type}"
+
+# Inspect uses project_id basename when runtime-state has no task_id
+case7_target_filename="$(${PYTHON_BIN} -c '
+import json, sys
+data = json.loads(sys.argv[1])
+print(data["target_path"].rsplit("/", 1)[-1] if data else "")
+' "${case7_target}")"
+assert_eq "7b. target_filename uses project_id basename when state has no task_id" \
+  "bug6-promote-test-proj_PRD_v1.md" "${case7_target_filename}"
+
+# Negative leg — unknown name returns None
+case7_unknown="$(WF_ID=project-spec-pipeline FS=completed TID="${TASK_ID}" RID="${RUN_ID}" \
+  PROJECT_ID="${PROJECT_ID}" PROJECT_ROOT="${PROJECT_ROOT}" CAP_HOME_DIR="${SANDBOX}/cap_home" \
+  PYTHONPATH="${REPO_ROOT}" "${PYTHON_BIN}" - <<'PY'
+import json, os, sys
+sys.path.insert(0, os.environ["PYTHONPATH"])
+from pathlib import Path
+from engine.promote_candidate_producer import detect_spec_artifact_candidate_for_name
+
+hit = detect_spec_artifact_candidate_for_name(
+    "not_a_real_artifact_name",
+    project_storage=Path(os.environ["CAP_HOME_DIR"]) / "projects" / os.environ["PROJECT_ID"],
+    project_root=Path(os.environ["PROJECT_ROOT"]),
+)
+print("HIT" if hit else "NONE")
+PY
+)"
+assert_eq "7c. unknown artifact_name returns None" "NONE" "${case7_unknown}"
+
+# ── Case 8: resolve_promote (inspect data layer) finds spec_artifact ─
+echo "Case 8: resolve_promote inspect-side returns ResolvedPromote for spec_artifact"
+case8_resolved="$(PROJECT_ID="${PROJECT_ID}" PROJECT_ROOT="${PROJECT_ROOT}" CAP_HOME_DIR="${SANDBOX}/cap_home" \
+  PYTHONPATH="${REPO_ROOT}" "${PYTHON_BIN}" - <<'PY'
+import json, os, sys
+sys.path.insert(0, os.environ["PYTHONPATH"])
+from pathlib import Path
+from engine.promote_resolver import resolve_promote
+
+resolved = resolve_promote(
+    "ba_spec",
+    project_id=os.environ["PROJECT_ID"],
+    project_root=Path(os.environ["PROJECT_ROOT"]),
+    cap_home=Path(os.environ["CAP_HOME_DIR"]),
+)
+if resolved is None:
+    print("NONE")
+else:
+    print(json.dumps({
+        "artifact_type": resolved.candidate.get("artifact_type"),
+        "target_filename": resolved.candidate.get("target_path", "").rsplit("/", 1)[-1],
+        "conflict_kind": resolved.conflict_kind,
+        "validation_schema": resolved.validation_schema,
+    }))
+PY
+)"
+case8_artifact_type="$(${PYTHON_BIN} -c '
+import json, sys
+data = json.loads(sys.argv[1]) if sys.argv[1] != "NONE" else {}
+print(data.get("artifact_type", "<none>"))
+' "${case8_resolved}")"
+case8_filename="$(${PYTHON_BIN} -c '
+import json, sys
+data = json.loads(sys.argv[1]) if sys.argv[1] != "NONE" else {}
+print(data.get("target_filename", "<none>"))
+' "${case8_resolved}")"
+assert_eq "8a. resolve_promote returns spec_artifact for ba_spec" \
+  "spec_artifact" "${case8_artifact_type}"
+assert_eq "8b. resolve target uses project_id basename when state has no task_id" \
+  "bug6-promote-test-proj_BA_v1.md" "${case8_filename}"
+
 echo ""
 total=$((pass_count + fail_count))
 echo "promote-candidate-producer-spec-artifact: ${pass_count} passed, ${fail_count} failed (of ${total})"

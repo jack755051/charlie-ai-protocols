@@ -6,6 +6,29 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.25.8] - 2026-05-10
+
+> Patch release — **resolver-side wiring for v0.25.7 spec_artifact**. The producer-side fix in v0.25.7 made `workflow-result.json:promote_candidates` non-empty, but `cap promote inspect <artifact_name>` still answered "No promote candidate matches" because `engine/promote_resolver.py` only knew the two pre-existing artifact types. v0.25.8 adds the third lookup branch so inspect can resolve spec_artifact candidates by name, with the same target-path computation the producer uses.
+
+### Added
+
+- `engine/promote_candidate_producer.py detect_spec_artifact_candidate_for_name(artifact_name, *, project_storage, project_root)`: inspect-side helper mirroring `detect_constitution_candidate_for_task` / `detect_compiled_workflow_candidate_for`. Walks `<project_storage>/reports/workflows/project-spec-pipeline/run_*/runtime-state.json` (latest run wins by lexical max on the timestamped run id), filters to entries whose `source_step.execution_state == "validated"` and whose `source_path` exists on disk, returns one candidate dict matching the producer's shape contract. Module name slug derives from runtime-state's `task_id` (when present) → project_storage basename — same fallback chain as the producer so inspect and producer outputs agree byte-for-byte.
+- `engine/promote_resolver.py resolve_promote`: third lookup branch — after task_id (constitution) and workflow_id (compiled workflow) miss, try `artifact_id` as a spec_artifact name (one of the six policy §3.3 mapping keys: `prd_document` / `tech_plan_document` / `ba_spec` / `schema_ssot` / `api_contract` / `ui_spec`). Lookup remains read-only with the same `_build_resolved` enrichment for conflict / backup / validation classification.
+- `tests/scripts/test-promote-candidate-producer-spec-artifact.sh` Cases 7a–7c (3) + 8a–8b (2): regression for the v0.25.8 contract. 7a confirms the inspect-side helper returns a `spec_artifact` candidate. 7b locks the project_id-basename fallback when runtime-state.json has no `task_id`. 7c locks the unknown-name → None negative case. 8a runs `resolve_promote("ba_spec")` end-to-end and confirms the wired branch returns a `ResolvedPromote` with the right `artifact_type`. 8b confirms the resolved target uses the project_id-basename fallback consistently.
+
+### Verified
+
+- `test-promote-candidate-producer-spec-artifact.sh` **21 / 21** PASS (16 prior + 5 new for the resolver-wiring contract).
+- smoke-layer promote **5 / 5** PASS — existing 32 cap-promote-inspect cases keep passing under the resolver extension.
+
+### Boundary
+
+- Two read-only helpers added; no schema bump, no CLI surface change beyond `cap promote inspect <spec_artifact_name>` now returning a real result instead of the "No promote candidate matches" fallback.
+- `cap promote --apply` for `spec_artifact` is **not** wired in this release. The user-facing apply path uses the legacy `cap promote <local_rel> <repo_rel>` escape hatch (see policies/runtime-promote.md §1 footer); a typed `cap promote spec-artifact <name> --apply` command remains a deferred follow-up. Inspect surface is enough to close bug #6 / #8's "no signal" symptom.
+- Phase 5 role/skill attachment from v0.25.0 unchanged. Phase 6 builtin promotion still deferred.
+
+---
+
 ## [v0.25.7] - 2026-05-10
 
 > Patch release — **dogfood follow-up to v0.25.6**, closing bug #6 / #8 (the auto-promote bridge between project-spec-pipeline outputs and the project repo's `docs/`). After v0.25.6 unblocked Phase D end-to-end, the dogfood baseline still required **manual mirroring** of `<run_dir>/4-prd.md` etc. into `docs/architecture/<module>_PRD_v1.md` for the implementation pipeline's AI step to accept the spec layer as "齊備". Phase C ran fine and produced all 6 spec artifacts under `<run_dir>/`, but `workflow-result.json:promote_candidates: count 0` because the v0.25.6 producer only knew about `project_constitution` and `compiled_workflow`. There was no signal to either users or downstream consumers that anything was promotable.

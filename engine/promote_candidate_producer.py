@@ -307,6 +307,109 @@ def _detect_compiled_workflow_candidate(
     )
 
 
+def detect_spec_artifact_candidate_for_name(
+    artifact_name: Optional[str],
+    *,
+    project_storage: Path,
+    project_root: Path,
+) -> Optional[dict[str, Any]]:
+    """Return one spec_artifact candidate by artifact name, or None.
+
+    v0.25.7 inspect-side helper. Mirrors
+    ``detect_constitution_candidate_for_task`` /
+    ``detect_compiled_workflow_candidate_for`` so
+    ``promote_resolver.resolve_promote`` can extend its lookup chain
+    with a third branch (try as spec_artifact name) that shares
+    candidate-shape contract with the producer.
+
+    Lookup logic: scan
+    ``<project_storage>/reports/workflows/project-spec-pipeline/run_*/runtime-state.json``
+    for the latest run dir whose ``artifacts[artifact_name]`` is
+    ``execution_state == "validated"`` and whose ``source_path``
+    exists on disk. Latest wins by lexical max on the timestamped
+    run id (matches the v0.25.6 cross-pipeline resolver convention).
+
+    Module name slug: derived from the latest run's task_id when the
+    runtime-state.json embeds it, else falls back to project_storage
+    basename — both produce the same target_path the producer would
+    have emitted, so inspect and producer outputs agree byte-for-byte
+    when both succeed. Inspect cannot read run_result.task_id (no
+    run_result here, just project context), so the runtime-state's
+    own ``task_id`` field (if present) is the authoritative source.
+    """
+    if not artifact_name or artifact_name not in _SPEC_ARTIFACT_TARGET_MAP:
+        return None
+
+    runs_root = project_storage / "reports" / "workflows" / "project-spec-pipeline"
+    if not runs_root.is_dir():
+        return None
+
+    run_dirs = [
+        p for p in runs_root.iterdir()
+        if p.is_dir() and p.name.startswith("run_")
+    ]
+    if not run_dirs:
+        return None
+
+    # Latest run wins (lexical max on timestamped run id).
+    run_dirs.sort(key=lambda p: p.name, reverse=True)
+
+    target_subdir, filename_template = _SPEC_ARTIFACT_TARGET_MAP[artifact_name]
+    project_id = project_storage.name
+
+    for run_dir in run_dirs:
+        runtime_state_path = run_dir / "runtime-state.json"
+        if not runtime_state_path.is_file():
+            continue
+        try:
+            state = json.loads(runtime_state_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(state, dict):
+            continue
+
+        artifacts = state.get("artifacts") or {}
+        steps = state.get("steps") or {}
+        entry = artifacts.get(artifact_name)
+        if not isinstance(entry, dict):
+            continue
+
+        source_path_raw = entry.get("path")
+        if not source_path_raw:
+            continue
+        source_path = Path(source_path_raw)
+        if not source_path.is_file():
+            continue
+
+        source_step = entry.get("source_step")
+        source_step_state = (steps.get(source_step) or {}).get("execution_state")
+        if source_step_state != "validated":
+            continue
+
+        # task_id slug from the run's task constitution if available;
+        # otherwise fall back to the project_id (mirrors producer).
+        module_raw = state.get("task_id") or project_id or "module"
+        module_name = _slug_module_name(str(module_raw))
+
+        target_filename = filename_template.format(module=module_name)
+        target_path = project_root / target_subdir / target_filename
+
+        return {
+            "source_path": str(source_path.resolve()),
+            "target_path": str(target_path.resolve()),
+            "artifact_type": "spec_artifact",
+            "reason": (
+                f"project-spec-pipeline run produced {artifact_name}; ready to "
+                f"promote to repo SSOT under {target_subdir}/"
+            ),
+            "validation_schema": None,
+            "source_layer": None,
+            "source_revision": run_dir.name,
+        }
+
+    return None
+
+
 def _detect_spec_artifact_candidates(
     run_result: dict,
     project_storage: Path,
