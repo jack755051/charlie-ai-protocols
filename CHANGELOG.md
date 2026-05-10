@@ -6,6 +6,39 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.26.0] - 2026-05-10
+
+> Minor release — **Round 1 of the bug #12 fix series ("Honest Workflow Result")**, surfaced by the 2026-05-10 component-repo dogfood Phase F. Pre-v0.26.0, `cap-workflow-exec.sh` graded any AI step that exited 0 with non-empty stdout as `ok`, which meant a Phase D run whose AI agents universally self-reported `blocked_read_only` / `FAIL_BLOCKED_*` / `needs_data` inside their markdown bodies still rolled up to `final_state=completed / 15/15 PASS`. The runtime hallucinated success against a run that produced no actual implementation code. v0.26.0 closes the perception gap: a structured AI step result contract, a parser that normalizes the four canonical states, and a workflow runtime gate that halts on anything other than `success`.
+>
+> The Round 1 scope is deliberate: **fix the runtime's perception of step outcome**, leaving the AI write contract (where agents are allowed to land code, how the harness sandbox is configured) for Round 2. After v0.26.0 lands, Phase D-style runs will correctly halt at the first AI step that hits the read-only sandbox instead of completing as a phantom success.
+
+### Added
+
+- `docs/cap/AI-STEP-RESULT-CONTRACT.md` (new): normative spec for the `result:` line every AI sub-agent step must emit. Defines the four normalized states (`success` / `failed` / `blocked` / `needs_data`), the alias table (case-insensitive, substring-tolerant for the `blocked_*` / `FAIL_BLOCKED*` family), the line-level grammar (ASCII or fullwidth colon, optional bullet, optional bold/backticks, trailing comment ignored), the fence-isolation rules (`result:` inside `<<<...JSON...>>>` or ```` ``` ```` blocks is ignored), the `unknown` → `failed` fallback, and the per-state workflow runtime behaviour table.
+- `engine/ai_step_result_parser.py` (new): pure read-only parser. Walks step output line-by-line tracking fence depth so JSON / code-fence `result:` keys don't pollute the lookup; **last occurrence wins** so AI agents that quote upstream `result:` values in reasoning sections don't disturb the trailing handoff summary; normalizes raw values to one of the five enum states.
+- `engine/step_runtime.py parse-step-result <step_output_path>` subcommand: shell-friendly key=value emission (`state=` / `raw_value=` / `line_number=` / `reason=`) for `cap-workflow-exec.sh` consumption. Exits 0 even on `unknown` so the shell can branch on value rather than rc.
+- `scripts/cap-workflow-exec.sh AI_RESULT_HARD_FAIL` branch: post-step parser hook firing only when `effective_executor == ai` and the validator branch hasn't already hard-failed. Non-success states convert to a hard failure with `record_blocked_step` + `register_step_runtime_state blocked` + `SHOULD_HALT=1` (when the step is non-optional). Defence-in-depth gate on the success block: now requires both `VALIDATOR_HARD_FAIL == 0` AND `AI_RESULT_HARD_FAIL == 0`.
+- `agent-skills/00-core-protocol.md` §5.3.1 (new sub-section): locks the `result:` enum at the global protocol layer so every agent inherits the contract without per-agent edits. Documents the four allowed values + alias table, the fence rules, the discipline against false-positive `success` reporting, and pointers at the parser / CLI / workflow integration / regression test paths.
+- `tests/scripts/test-ai-step-result-parser.sh` (new, 40 cases): end-to-end coverage of the contract — primary spellings (4), alias normalization across all four states (16 sub-cases), line-level grammar (8 sub-cases including ASCII/fullwidth colons, dash/star bullets, bold markers, backticked values, trailing comments), last-occurrence wins, three fence-isolation cases (JSON fence, constitution fence, fenced-then-real outside), three failure modes (no result line, unparseable value, missing file), four CLI integration assertions.
+- `tests/scripts/test-ai-step-result-workflow-integration.sh` (new, 8 cases): structural lint that the parser is wired into `cap-workflow-exec.sh` — counts `AI_RESULT_HARD_FAIL` references, confirms the success block requires both hard-fail flags to be 0 (defence-in-depth gate), exercises the parser against a fixture mirroring the 4-backend.md `blocked_read_only` shape from the dogfood + a Phase D `FAIL_BLOCKED_*` shape, locks the AI-only branch (gate fires only when `effective_executor=ai`).
+- `scripts/workflows/smoke-layer.sh` runtime suite: append both new fixtures.
+
+### Verified
+
+- `test-ai-step-result-parser.sh` **40 / 40** PASS.
+- `test-ai-step-result-workflow-integration.sh` **8 / 8** PASS.
+- smoke-layer contracts **7 / 7**, runtime **19 / 19** (17 prior + 2 new), promote **6 / 6** PASS.
+- Reverse-validation: re-running the parser against the actual Phase D dogfood run dir fixtures (`run_20260510163740_9bea7f25/4-backend.md`, `4-frontend.md`, `6-qa_testing.md`, etc.) returns `state=blocked` for every step that self-reported `blocked_read_only` / `FAIL_BLOCKED_*` — matching the closeout's bug #12 ledger row exactly.
+
+### Boundary
+
+- **Round 1 only** of the v0.26.x series. The AI write contract (Round 2) is **not** in this release. After v0.26.0, an AI step that hits a read-only sandbox will correctly report `blocked` and halt the workflow; it still won't produce code. The "where can AI write" question is the next design item.
+- One behavioural change: workflows that previously rolled up to `final_state=completed` despite AI self-reports of failure will now correctly roll up to `final_state=failed`. This is the **fix** to bug #12, not a regression. Pre-fix runs whose AI agents emitted clean `result: success` keep working unchanged.
+- `unknown` values (any string outside the alias table) normalize to the `failed` state. Agents that emit non-conforming `result:` values today will surface as failures after upgrade — this is intentional per the contract's "unknown is failed" rule. Migration: agents emitting non-aliased values must update to one of the four normalized values; the alias table is permissive enough that most existing runs (which emit `success` / `成功` / `ok`) need no changes.
+- Phase 5 role/skill attachment from v0.25.0 unchanged. Phase 6 builtin promotion still deferred. v0.26.x Round 2 (AI write contract) and Round 3 (Phase D / F / E re-validation) remain to come.
+
+---
+
 ## [v0.25.9] - 2026-05-10
 
 > Patch release — **bug #11**, surfaced finishing the component-repo dogfood. After v0.25.7 + v0.25.8 wired the typed `cap promote inspect <spec_artifact_name>` surface, the user's natural follow-up was the legacy `cap promote <src> <dst>` escape hatch (the typed `--apply` path for spec_artifact remains deferred). The escape hatch silently copied artifacts into the cap install dir (`~/.charlie-ai-protocols/<repo_rel>`) instead of the user's working repo — same path-resolution bug family as v0.25.1 (RuntimeBinder), v0.25.2 (workflow_cli), v0.25.4 (persist-constitution.sh). Caught **after** the producer / resolver layers already shipped because no test exercised the legacy branch from outside the cap install dir.

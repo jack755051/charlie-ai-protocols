@@ -48,6 +48,39 @@
 - 各 Agent 的 `agent_id` 由其領域文件指定（如 `01-Supervisor`、`04-Frontend`）。若該角色有額外交接欄位（如 Figma 的 `figma_sync_mode`），在領域文件中補充。
 - 在 cap workflow / spawn 模式下，所有非 supervisor sub-agent 必須額外遵守 `policies/handoff-ticket-protocol.md`：依 ticket 的 `output_expectations.handoff_summary_path` 寫入 Type D 摘要、依 `acceptance_criteria` 自我驗收、依 `failure_routing` 回報失敗。
 
+#### 5.3.1 `result` 欄位 enum 鎖定（v0.26.0+）
+
+`result` 欄位是 workflow runtime 的硬閘門。pre-v0.26.0，runtime 只看 stdout 是否非空就判 step 成功；自 v0.26.0 起，`scripts/cap-workflow-exec.sh` 會在每一個 AI step 完成後呼叫 `engine/step_runtime.py parse-step-result` 解析交接摘要的 `result:` 行，**任何非 `success` 的狀態都會被歸類為 hard_fail 並讓 workflow halt**。SSOT：[`docs/cap/AI-STEP-RESULT-CONTRACT.md`](../docs/cap/AI-STEP-RESULT-CONTRACT.md)。
+
+**允許的 result 值（normalized）**：
+
+| Normalized | 你應該在什麼情況回這個值 | 接受的 alias |
+|---|---|---|
+| `success` | 已產出宣告的 deliverable，且滿足 `done_when` / `acceptance_criteria` | `success` / `ok` / `成功` / `completed` / `done` / `pass` / `passed` |
+| `failed` | 步驟過程中遇到不可恢復的執行錯誤 | `failed` / `failure` / `fail` / `error` |
+| `blocked` | 環境 / 契約 / 上游 artifact 缺漏導致無法執行（如 read-only filesystem、上游 step 沒產出、必要 schema fence 違反） | `blocked` / `blocked_*`（任何後綴）/ `[BLOCK] *` / `FAIL_BLOCKED*` / `read_only` / `read-only` |
+| `needs_data` | 你的 inputs 不足以開始實際工作（如 spec 未齊備、ticket 缺關鍵欄位） | `needs_data` / `needs-data` / `requires_data` / `incomplete` / `missing_inputs` |
+
+**輸出規則**：
+
+- 在 stdout 結尾的「交接摘要」段落中加上 `- result: <value>` 一行（ASCII `:` 或全形 `：` 皆可，可加 `-` / `*` markdown bullet）。
+- 不允許在 JSON / fenced code block 內擺 `result:`（parser 會忽略 fence 內的所有 `result:` 行）。
+- 多個 `result:` 行時，**最末出現的那一行**為準；推理段落引用上游報告的 `result: ...` 不會干擾終局判定。
+
+**執行紀律**：
+
+- 真的 blocked 就回 `blocked`，**禁止偽報** `success`。pre-v0.26.0 因為 runtime 不會抓 `blocked_read_only` 之類值，部分 agent 養成了「stdout 寫一段就算交差」的習慣，這在 v0.26.0+ 會被歸類為 `unknown` → `failed` → halt。
+- 不確定值該選哪個時優先選 `failed` / `blocked`，避免假性 success。
+- enum 值之外的其他字串（如 dogfood 期間出現的 `archive_completed_stdout_closed_with_blockers`）會被 normalize 成 `unknown`，runtime 視同 `failed`。
+
+**整合層位置**：
+
+- Parser 規格：`docs/cap/AI-STEP-RESULT-CONTRACT.md`
+- Parser 實作：`engine/ai_step_result_parser.py`
+- CLI：`engine/step_runtime.py parse-step-result <step_output_path>`
+- Workflow 整合：`scripts/cap-workflow-exec.sh` 的 `AI_RESULT_HARD_FAIL` 分支（v0.26.0 引入）
+- Regression test：`tests/scripts/test-ai-step-result-parser.sh`、`tests/scripts/test-ai-step-result-workflow-integration.sh`
+
 ### 5.4 Workflow 治理鐵則 (Workflow Governance)
 - 在 workflow 模式下，**不得**只靠口頭描述派工。所有正式派發都必須可追溯到：
   - `workflow_id / step_id / phase`

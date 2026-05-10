@@ -1731,7 +1731,47 @@ Release / governed-mode requirements:
           fi
         fi
       fi
-      if [ "${VALIDATOR_HARD_FAIL}" -eq 0 ]; then
+      # ── v0.26.0 #1 AI step result contract enforcement ──
+      # Bug #12 fix: pre-v0.26.0, an AI step that exited 0 with
+      # non-empty stdout was treated as success even when the AI
+      # itself reported ``result: blocked_*`` / ``FAIL_BLOCKED_*`` /
+      # ``needs_data`` inside its markdown body. The runtime now
+      # parses the trailing handoff summary's ``result:`` line
+      # against the docs/cap/AI-STEP-RESULT-CONTRACT.md enum and
+      # converts non-success states into hard failures so
+      # ``final_state`` reflects what the agent actually delivered.
+      # Shell steps are not in scope (their exit code already
+      # carries the failure signal); the gate fires only when the
+      # effective executor was AI and the validator branch above
+      # didn't already hard-fail the step.
+      AI_RESULT_HARD_FAIL=0
+      if [ "${VALIDATOR_HARD_FAIL}" -eq 0 ] \
+         && [ "${effective_executor:-${executor:-ai}}" = "ai" ]; then
+        AI_RESULT_OUT="$("${PYTHON_BIN}" "${STEP_PY}" parse-step-result "${STEP_OUTPUT_PATH}" 2>/dev/null)"
+        AI_RESULT_STATE="$(echo "${AI_RESULT_OUT}" | grep -oE '^state=[a-z_]+' | head -1 | cut -d= -f2)"
+        AI_RESULT_RAW="$(echo "${AI_RESULT_OUT}" | grep -oE '^raw_value=[^ ]+' | head -1 | cut -d= -f2)"
+        if [ -z "${AI_RESULT_STATE}" ] || [ "${AI_RESULT_STATE}" = "unknown" ] \
+           || [ "${AI_RESULT_STATE}" = "failed" ] || [ "${AI_RESULT_STATE}" = "blocked" ] \
+           || [ "${AI_RESULT_STATE}" = "needs_data" ]; then
+          AI_RESULT_HARD_FAIL=1
+          STEP_STATUS="ai_self_reported_${AI_RESULT_STATE:-unknown}"
+          FINAL_STEP_STATE="ai_${AI_RESULT_STATE:-unknown}"
+          step_status "fail" "${step_id}" "${DURATION}"
+          FAILED=$((FAILED + 1))
+          ERROR_TYPE="ai_step_result_${AI_RESULT_STATE:-unknown}"
+          ERROR_HINT="  AI step self-reported result=${AI_RESULT_STATE:-unknown} (raw='${AI_RESULT_RAW}'); executor classified as hard_fail per docs/cap/AI-STEP-RESULT-CONTRACT.md."
+          bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} capability:${capability} cli:${effective_cli} ai_result:${AI_RESULT_STATE:-unknown}" "失敗" >/dev/null 2>&1 || true
+          append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s error:${ERROR_TYPE} ai_result_raw:${AI_RESULT_RAW}" "失敗"
+          register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "${ERROR_TYPE}" "${OUTPUT_SOURCE}" "${STEP_OUTPUT_PATH}" "" 2>/dev/null || true
+          record_blocked_step "${WORKFLOW_LOG}" "${RUN_SUMMARY}" "${phase_num}" "${step_id}" "${capability}" "${ERROR_TYPE}" "ai_result:${AI_RESULT_STATE:-unknown} raw:${AI_RESULT_RAW}" 2>/dev/null || true
+          printf "%s\n" "${ERROR_HINT}"
+          if [ "${optional}" != "True" ]; then
+            SHOULD_HALT=1
+          fi
+        fi
+      fi
+
+      if [ "${VALIDATOR_HARD_FAIL}" -eq 0 ] && [ "${AI_RESULT_HARD_FAIL}" -eq 0 ]; then
         STEP_STATUS="ok"
         FINAL_STEP_STATE="validated"
         step_status "ok" "${step_id}" "${DURATION}"

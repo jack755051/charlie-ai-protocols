@@ -1187,6 +1187,39 @@ def attached_prompts(plan_json: str, step_id: str) -> None:
 
 
 # ─────────────────────────────────────────────────────────
+# 8c. parse-step-result (v0.26.0 — bug #12 fix)
+# ─────────────────────────────────────────────────────────
+
+def parse_step_result_cli(file_path: str) -> None:
+    """Emit shell-friendly state=... key=value lines for a step output file.
+
+    Output format (one key=value per line, no extra whitespace) so the
+    cap-workflow-exec.sh wrapper can ``read -r`` them directly:
+
+        state=success
+        raw_value=success
+        line_number=42
+        reason=normalized from raw value 'success' on line 42
+
+    State enum and parsing rules: docs/cap/AI-STEP-RESULT-CONTRACT.md.
+    Read-only; never writes anywhere. Exit 0 even when state=unknown
+    so the shell wrapper can branch on the value rather than rc.
+    """
+    try:
+        from .ai_step_result_parser import parse_step_result
+    except ImportError:  # pragma: no cover — direct-script fallback
+        from ai_step_result_parser import parse_step_result  # type: ignore[no-redef]
+    parsed = parse_step_result(file_path)
+    # Strip newlines from the reason so multi-line shell parsing stays
+    # robust; reasons today are always single-line but defence is cheap.
+    safe_reason = (parsed.get("reason") or "").replace("\n", " ").replace("\r", " ")
+    print(f"state={parsed['state']}")
+    print(f"raw_value={parsed.get('raw_value', '')}")
+    print(f"line_number={parsed.get('line_number', 0)}")
+    print(f"reason={safe_reason}")
+
+
+# ─────────────────────────────────────────────────────────
 # 9. plan-meta
 # ─────────────────────────────────────────────────────────
 
@@ -2071,6 +2104,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p_ap.add_argument("plan_json")
     p_ap.add_argument("step_id")
 
+    # 8c. parse-step-result (v0.26.0 — bug #12 fix)
+    p_psr = sub.add_parser(
+        "parse-step-result",
+        help="parse an AI step output file and emit normalized state/raw_value/line/reason",
+    )
+    p_psr.add_argument("step_output_path")
+
     # 9. plan-meta
     p_pm = sub.add_parser("plan-meta", help="抽 plan JSON 的 workflow_id / name / phase 數")
     p_pm.add_argument("plan_json")
@@ -2544,6 +2584,8 @@ def main(argv: list[str] | None = None) -> None:
             flatten_steps(args.plan_json)
         case "attached-prompts":
             attached_prompts(args.plan_json, args.step_id)
+        case "parse-step-result":
+            parse_step_result_cli(args.step_output_path)
         case "plan-meta":
             plan_meta(args.plan_json)
         case "parse-input-check":
