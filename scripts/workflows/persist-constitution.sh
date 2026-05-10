@@ -99,7 +99,15 @@ read_current_project_id() {
   # P0c batch 2.6 dual-path read: prefer .cap/project.yaml, fall back to
   # legacy .cap.project.yaml. Same precedence as scripts/cap-paths.sh
   # read_project_id_from_config.
-  "${PYTHON_BIN}" - "${CAP_ROOT}/.cap/project.yaml" "${CAP_ROOT}/.cap.project.yaml" <<'PY'
+  #
+  # v0.25.4 fix: read project.yaml from CAP_PROJECT_ROOT (the user's
+  # working repo) when set, falling back to CAP_ROOT (cap install dir)
+  # only for legacy in-place runs. Pre-fix the script always read
+  # CAP_ROOT/.cap/project.yaml, which is the cap install dir's own
+  # project.yaml — wrong target whenever the global cap wrapper drives
+  # the workflow from outside the install dir.
+  local pr_search="${CAP_PROJECT_ROOT:-${CAP_ROOT}}"
+  "${PYTHON_BIN}" - "${pr_search}/.cap/project.yaml" "${pr_search}/.cap.project.yaml" <<'PY'
 import sys
 from pathlib import Path
 
@@ -231,15 +239,35 @@ if [ -z "${project_id_from_json}" ]; then
 fi
 
 # 5. resolve target paths.
+#
+# v0.25.4 fix: when CAP_PROJECT_ROOT is set (the cap-workflow-exec
+# wrapper now exports it for every shell step), TARGET_PROJECT_ROOT
+# tracks the user's actual working repo. Pre-fix the script computed
+# TARGET_PROJECT_ROOT from CAP_ROOT (cap install dir) and a derived
+# scaffold root, which silently wrote the constitution to
+# `~/<project_id>/` for any user running the global cap wrapper from
+# outside the install dir — polluting the home directory and missing
+# the real repo. Legacy fallback path (no CAP_PROJECT_ROOT set) is
+# preserved for in-place test harnesses and the scaffold-style
+# self-mode runs.
 CURRENT_PROJECT_ID="$(read_current_project_id)"
 if [ -z "${CURRENT_PROJECT_ID}" ]; then
-  CURRENT_PROJECT_ID="$(basename "${CAP_ROOT}")"
+  CURRENT_PROJECT_ID="$(basename "${CAP_PROJECT_ROOT:-${CAP_ROOT}}")"
 fi
 
-SCaffold_ROOT="${CAP_PROJECT_SCAFFOLD_ROOT:-$(dirname "${CAP_ROOT}")}"
-TARGET_PROJECT_ROOT="${CAP_ROOT}"
-if [ "${CURRENT_PROJECT_ID}" != "${project_id_from_json}" ]; then
-  TARGET_PROJECT_ROOT="${SCaffold_ROOT}/${project_id_from_json}"
+if [ -n "${CAP_PROJECT_ROOT:-}" ]; then
+  # Modern path: cap-workflow-exec.sh exports CAP_PROJECT_ROOT pointing
+  # at the user's working repo. The persist script honours that
+  # directly so the constitution lands in the right .cap/ dir.
+  TARGET_PROJECT_ROOT="${CAP_PROJECT_ROOT}"
+else
+  # Legacy fallback: derive from CAP_ROOT scaffold (in-place runs and
+  # legacy harnesses that haven't been updated to set CAP_PROJECT_ROOT).
+  SCaffold_ROOT="${CAP_PROJECT_SCAFFOLD_ROOT:-$(dirname "${CAP_ROOT}")}"
+  TARGET_PROJECT_ROOT="${CAP_ROOT}"
+  if [ "${CURRENT_PROJECT_ID}" != "${project_id_from_json}" ]; then
+    TARGET_PROJECT_ROOT="${SCaffold_ROOT}/${project_id_from_json}"
+  fi
 fi
 
 # P0c batch 2.6 producer flip: write to .cap/constitution.yaml (new namespace)

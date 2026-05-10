@@ -290,6 +290,9 @@ run_shell_step() {
   CAP_WORKFLOW_SELECTED_MODE="${SELECTED_MODE}" \
   CAP_WORKFLOW_REQUESTED_STRATEGY="${REQUESTED_STRATEGY}" \
   CAP_WORKFLOW_SELECTED_STRATEGY="${SELECTED_STRATEGY}" \
+  CAP_PROJECT_ROOT="${PROJECT_ROOT}" \
+  CAP_PROJECT_ID="${CAP_PROJECT_ID:-$(bash "${PATH_HELPER}" get project_id 2>/dev/null || true)}" \
+  CAP_HOME="${CAP_HOME:-$(bash "${PATH_HELPER}" get cap_home 2>/dev/null || true)}" \
   bash "${script_path}" 2>&1
 }
 

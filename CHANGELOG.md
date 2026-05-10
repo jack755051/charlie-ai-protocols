@@ -6,6 +6,37 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.25.4] - 2026-05-10
+
+> Patch release — **dogfood follow-up to v0.25.3**, closing the remaining three bugs (#4, #5, #7) discovered while pushing the `cap-test/component-next-dotnet-stt` Component Repo baseline through Phase B (project-constitution) → Phase C (project-spec-pipeline) → Phase D (project-implementation-pipeline). After v0.25.1–v0.25.3, Phase B + Phase C ran end-to-end (16/16 spec artifacts produced) but constitution was persisted to `~/<project_id>/` instead of the user's repo, the next-pipeline run could not see the persisted constitution because the loader only read the legacy flat-file, and Phase D blocked at step 1 because `prior_spec_artifacts` had no resolver at all.
+
+### Fixed
+
+- **bug #4 — persist-constitution.sh writes to wrong project_root**: pre-fix, `TARGET_PROJECT_ROOT` was derived from `CAP_ROOT` (cap install dir) plus a scaffold-style join with `project_id_from_json`, so the constitution silently landed at `~/<project_id>/.cap/constitution.yaml` plus a full skeleton (docs/, schemas/, workspace/, README.md) on every run from outside the install dir. Fix: `scripts/workflows/persist-constitution.sh` now reads `CAP_PROJECT_ROOT` (which `scripts/cap-workflow-exec.sh run_shell_step` exports for every shell step) and writes there directly. Legacy scaffold-derivation path is preserved as a fallback for in-place test harnesses that haven't been updated. `read_current_project_id` likewise switched from CAP_ROOT to CAP_PROJECT_ROOT-rooted `.cap/project.yaml` lookup.
+- **bug #5 — ProjectContextLoader namespace mismatch**: pre-fix, `DEFAULT_PROJECT_CONSTITUTION` was the legacy flat-file `.cap.constitution.yaml`, but `persist-constitution.sh` writes the namespaced `.cap/constitution.yaml`, so a project that ran `project-constitution` and then `project-spec-pipeline` from the same repo would have the loader return `_bootstrap=True` and the binder would block every step with "project constitution is missing; run project-constitution workflow first". Fix: `engine/project_context_loader.py` adds `DEFAULT_PROJECT_CONSTITUTION_NAMESPACED` and prefers the namespaced path when no explicit `constitution_file` is set in `project.yaml`. Same dual-path fallback added to `engine/step_runtime.py validate_inputs._try_resolve` for the `project_constitution` intrinsic resolver.
+- **bug #7 — `prior_spec_artifacts` had no resolver**: pre-fix, `project-implementation-pipeline.yaml` declared `prior_spec_artifacts` as a required input on its first step but the runtime had no resolver — neither in `_INTRINSIC_ARTIFACTS` nor in the registry — so the workflow blocked at step 1 with `missing_input_artifact:prior_spec_artifacts`. Same gap for `prior_implementation_artifacts` in `project-qa-pipeline.yaml`. Fix: `engine/step_runtime.py _INTRINSIC_ARTIFACTS` adds both names; `_try_resolve` looks them up at `${CAP_HOME}/projects/<project_id>/reports/workflows/<pipeline>/run_*/artifact-index.md` (latest run wins, lexical max on the timestamp prefix), falling back to `result.md` if `artifact-index.md` is missing on older runs. `_read_project_id_from_cwd` helper supports the resolver when `CAP_PROJECT_ID` env is not set.
+
+### Added
+
+- `scripts/cap-workflow-exec.sh run_shell_step`: now threads `CAP_PROJECT_ROOT`, `CAP_PROJECT_ID`, and `CAP_HOME` into every shell step's environment so the workflow steps see the same project identity the binder resolved upstream. Pre-fix shell steps had to reconstruct project_root from `CAP_ROOT`, which is the cap install dir.
+- `tests/scripts/test-cross-pipeline-bridges.sh` (new, 14 cases): combined regression for #4 + #5 + #7. Bug #5 cases 5a–5d (namespaced loaded, constitution_id read, path resolves, explicit project.yaml override still wins). Bug #7 cases 7a–7f (latest run wins lexical max, source_step tagged `__prior_pipeline__`, missing when no prior run exists, mirror behaviour for `prior_implementation_artifacts`). Bug #4 cases 4a–4d (repo_target under CAP_PROJECT_ROOT, project_root reported verbatim, legacy scaffold path NOT polluted, correct path written). Sandbox sets `CAP_HOME` to a tmp dir.
+- `scripts/workflows/smoke-layer.sh` runtime suite: append the new fixture.
+
+### Verified
+
+- `test-cross-pipeline-bridges.sh` **14 / 14** PASS.
+- smoke-layer contracts **7 / 7**, runtime **15 / 15** (14 prior + 1 new), project **8 / 8** PASS.
+- Manual dogfood: cap-test/component-next-dotnet-stt baseline expected to advance through Phase D + Phase E + cap promote inspect after `cap update` to v0.25.4 (Phase B + C already validated under v0.25.3).
+
+### Boundary
+
+- Three behavioural changes in shell + Python. No schema bump. No new CLI flags.
+- `CAP_PROJECT_ROOT` env var becomes the authoritative project_root signal for shell-class workflow steps. Pre-fix shell steps that derived from `CAP_ROOT` keep working through the legacy fallback path; future shell steps should read `CAP_PROJECT_ROOT` first.
+- `prior_spec_artifacts` / `prior_implementation_artifacts` are now part of `_INTRINSIC_ARTIFACTS`, so any workflow declaring them resolves automatically. Workflows that wanted to fail when no prior run exists still get a clear missing-input error rather than a silent fallback.
+- Phase 5 role/skill attachment from v0.25.0 unchanged. Phase 6 builtin promotion still deferred.
+
+---
+
 ## [v0.25.3] - 2026-05-10
 
 > Patch release — **dogfood follow-up to v0.25.2**. Third bug surfaced by the same baseline run on `~/projects/cap-test/component-next-dotnet-stt`. This time `validate_constitution` halted with `missing_input_artifact missing:project_constitution` even though `draft_constitution` had successfully produced the artifact and registered it in `runtime-state.json`. Root cause: `step_runtime.validate_inputs._try_resolve` checked `_INTRINSIC_ARTIFACTS` first and returned `None` when the on-disk `.cap.constitution.yaml` was absent, never consulting the runtime artifact registry. Self-producing workflows like `project-constitution` were therefore unable to see their own draft output.

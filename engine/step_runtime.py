@@ -21,12 +21,43 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+
+def _read_project_id_from_cwd() -> str | None:
+    """Best-effort read of the current project's project_id from CWD config.
+
+    v0.25.4 — used by the cross-pipeline bridge resolvers
+    (``prior_spec_artifacts`` / ``prior_implementation_artifacts``)
+    when the ``CAP_PROJECT_ID`` env var is not set. Reads
+    ``.cap/project.yaml`` (namespaced, preferred) or
+    ``.cap.project.yaml`` (legacy) from ``Path.cwd()`` and pulls the
+    ``project_id`` key out with a one-line YAML scan — same precedence
+    cap-paths.sh's ``read_project_id_from_config`` follows but kept
+    inline so step_runtime.py doesn't take a yaml dependency just for
+    this one lookup. Returns ``None`` when neither file exists or no
+    ``project_id`` line is present; caller treats ``None`` as "no
+    cross-pipeline resolver target available".
+    """
+    for relative in (".cap/project.yaml", ".cap.project.yaml"):
+        config_path = Path.cwd() / relative
+        if not config_path.is_file():
+            continue
+        try:
+            for line in config_path.read_text(encoding="utf-8").splitlines():
+                if line.startswith("project_id:"):
+                    value = line.split(":", 1)[1].strip().strip('"').strip("'")
+                    if value:
+                        return value
+        except OSError:
+            continue
+    return None
 
 
 # ─────────────────────────────────────────────────────────
@@ -399,6 +430,14 @@ _INTRINSIC_ARTIFACTS = frozenset(
         "project_context",
         "commit_scope",
         "repo_files",
+        # v0.25.4 — cross-pipeline bridges. project-implementation-pipeline
+        # and project-qa-pipeline declare these as required inputs and
+        # expect them to resolve to the latest run dir of the upstream
+        # pipeline under the current project's CAP_HOME storage. Pre-fix
+        # there was no resolver for these names; the workflow always
+        # blocked at step 1 with missing_input_artifact:prior_spec_artifacts.
+        "prior_spec_artifacts",
+        "prior_implementation_artifacts",
     }
 )
 
@@ -563,15 +602,81 @@ def validate_inputs(
 
         # 2. Intrinsic — project-level disk / inline-request fallback.
         if artifact in _INTRINSIC_ARTIFACTS:
-            if artifact == "project_constitution" and not (Path.cwd() / ".cap.constitution.yaml").is_file():
-                return None
+            # v0.25.4 — cross-pipeline bridges. Resolve the latest run
+            # of the upstream pipeline under
+            # ``$CAP_HOME/projects/<project_id>/reports/workflows/<pipeline>/``
+            # and return its ``artifact-index.md`` so downstream steps
+            # can read the produced spec / implementation artifacts.
+            # Returns None when no prior run exists; caller treats
+            # absence as a missing required input (which surfaces as a
+            # clear "run the upstream pipeline first" error rather
+            # than a generic "missing artifact").
+            if artifact in ("prior_spec_artifacts", "prior_implementation_artifacts"):
+                pipeline_name = (
+                    "project-spec-pipeline"
+                    if artifact == "prior_spec_artifacts"
+                    else "project-implementation-pipeline"
+                )
+                project_id = (
+                    os.environ.get("CAP_PROJECT_ID")
+                    or _read_project_id_from_cwd()
+                )
+                if not project_id:
+                    return None
+                cap_home = Path(os.environ.get("CAP_HOME") or (Path.home() / ".cap"))
+                runs_dir = (
+                    cap_home / "projects" / project_id / "reports" / "workflows" / pipeline_name
+                )
+                if not runs_dir.is_dir():
+                    return None
+                run_dirs = [
+                    p for p in runs_dir.iterdir()
+                    if p.is_dir() and p.name.startswith("run_")
+                ]
+                if not run_dirs:
+                    return None
+                # run IDs are timestamped (`run_<timestamp>_<hash>`),
+                # so lexical max == chronological latest.
+                latest_run = max(run_dirs, key=lambda d: d.name)
+                # Prefer artifact-index.md as the entry point; fall
+                # back to result.md if the index is missing (older
+                # runs may have only result.md).
+                index_path = latest_run / "artifact-index.md"
+                if not index_path.is_file():
+                    index_path = latest_run / "result.md"
+                if not index_path.is_file():
+                    return None
+                return {
+                    "artifact": artifact,
+                    "source_step": "__prior_pipeline__",
+                    "path": str(index_path),
+                    "handoff_path": "",
+                }
+            constitution_path: Path | None = None
+            if artifact == "project_constitution":
+                # v0.25.4 namespace dual-path: prefer namespaced
+                # ``.cap/constitution.yaml`` (the path persist-
+                # constitution.sh writes to), fall back to legacy
+                # ``.cap.constitution.yaml`` flat-file. Pre-fix the
+                # resolver only checked the legacy path, so a project
+                # that only had the namespaced constitution looked
+                # like it had no constitution at all to validate-
+                # inputs and any consumer step blocked.
+                namespaced = Path.cwd() / ".cap" / "constitution.yaml"
+                legacy = Path.cwd() / ".cap.constitution.yaml"
+                if namespaced.is_file():
+                    constitution_path = namespaced
+                elif legacy.is_file():
+                    constitution_path = legacy
+                else:
+                    return None
             if artifact == "design_source" and not _design_source_path().is_dir():
                 return None
             return {
                 "artifact": artifact,
                 "source_step": "__request__",
                 "path": (
-                    str(Path.cwd() / ".cap.constitution.yaml")
+                    str(constitution_path)
                     if artifact == "project_constitution"
                     else str(_design_source_path())
                     if artifact == "design_source"

@@ -60,6 +60,7 @@ class ProjectContextLoader:
     DEFAULT_PROJECT_CONFIG = ".cap.project.yaml"
     DEFAULT_PROJECT_CONFIG_NAMESPACED = ".cap/project.yaml"
     DEFAULT_PROJECT_CONSTITUTION = ".cap.constitution.yaml"
+    DEFAULT_PROJECT_CONSTITUTION_NAMESPACED = ".cap/constitution.yaml"
 
     def __init__(self, base_dir: Path | None = None):
         self.base_dir = Path(base_dir) if base_dir else Path(__file__).resolve().parents[1]
@@ -81,10 +82,27 @@ class ProjectContextLoader:
         project_id, project_id_mode = self._resolve_project_id(project_config)
         self._verify_or_write_ledger(project_id, project_id_mode)
 
-        constitution_ref = project_config.get("constitution_file", self.DEFAULT_PROJECT_CONSTITUTION)
-        constitution_path = Path(constitution_ref)
-        if not constitution_path.is_absolute():
-            constitution_path = self.base_dir / constitution_path
+        # v0.25.4 namespace dual-path: when constitution_file is not
+        # explicitly set in project.yaml, prefer the namespaced
+        # `.cap/constitution.yaml` (the path persist-constitution.sh
+        # writes to) and fall back to the legacy
+        # `.cap.constitution.yaml` flat-file. Pre-fix the loader
+        # always defaulted to the legacy flat-file, so a project that
+        # only had the namespaced constitution looked like it had no
+        # constitution at all and any subsequent workflow ran in
+        # bootstrap mode (binding_status=blocked).
+        explicit_ref = project_config.get("constitution_file")
+        if explicit_ref:
+            constitution_path = Path(explicit_ref)
+            if not constitution_path.is_absolute():
+                constitution_path = self.base_dir / constitution_path
+        else:
+            namespaced = self.base_dir / self.DEFAULT_PROJECT_CONSTITUTION_NAMESPACED
+            legacy = self.base_dir / self.DEFAULT_PROJECT_CONSTITUTION
+            if namespaced.is_file():
+                constitution_path = namespaced
+            else:
+                constitution_path = legacy  # may not exist; loader returns empty config
         constitution_exists = constitution_path.exists()
         constitution = self._load_yaml(constitution_path)
 
