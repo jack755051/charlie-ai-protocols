@@ -14,6 +14,7 @@
 | 知道目前實作到哪、哪些待做 | [MISSING-IMPLEMENTATION-CHECKLIST.md](MISSING-IMPLEMENTATION-CHECKLIST.md) |
 | 看 release tag 對應的功能 | [RELEASE-NOTES.md](RELEASE-NOTES.md) |
 | 看開發路線圖（按 Phase / 階段） | [IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md) |
+| 決定實務 dogfood 要用哪種 repo / stack / 驗收範圍 | [DOGFOOD-PROFILES.md](DOGFOOD-PROFILES.md) |
 | 只跑某一層 smoke，不想每次跑完整 release gate | [`scripts/workflows/smoke-layer.sh`](../../scripts/workflows/smoke-layer.sh) |
 | 操作 / debug 一個正在跑或剛結束的 workflow run（logs / watch / inspect） | [RUN-OBSERVABILITY-GUIDE.md](RUN-OBSERVABILITY-GUIDE.md) |
 | 想知道 run observability 為什麼這樣設計（planning / phase roadmap） | [RUN-OBSERVABILITY-MEMO.md](RUN-OBSERVABILITY-MEMO.md) |

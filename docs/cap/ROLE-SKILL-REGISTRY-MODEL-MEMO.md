@@ -329,6 +329,26 @@ Mitigation already in place (v0.24.8):
 > Runtime attachment behaviour is unchanged (still single selected entry per
 > capability); advisory skill attachment remains deferred to Phase 5.
 
+## Post-v0.24.11 Safe Completion Boundary
+
+Before entering Phase 5 runtime attachment, CAP must first anchor practical
+dogfood scope in [`DOGFOOD-PROFILES.md`](DOGFOOD-PROFILES.md).
+
+Phase 5 may start only when the first vertical slice is tied to one profile:
+
+- Component Repo or Product Repo first
+- primary stack only: Next.js + C#/.NET + PostgreSQL + Docker Compose
+- binding shape: `capability -> selected_role -> attached_skills`
+- legacy binding fields preserved
+- no `agent-skills/` directory move
+- no builtin prompt rewrite
+
+Compatibility stacks (Nuxt + Node/NestJS, Angular + Java/Spring Boot) remain
+intake / diagnosis / planning targets until the primary stack path is stable.
+
+This boundary prevents Role / Skill attachment from becoming a proxy for
+solving every frontend/backend framework variation at once.
+
 Tasks:
 
 - Document how a user registers a shared role in `~/.cap/shared/skills.yaml`.
