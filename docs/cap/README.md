@@ -14,6 +14,7 @@
 | 知道目前實作到哪、哪些待做 | [MISSING-IMPLEMENTATION-CHECKLIST.md](MISSING-IMPLEMENTATION-CHECKLIST.md) |
 | 看 release tag 對應的功能 | [RELEASE-NOTES.md](RELEASE-NOTES.md) |
 | 看開發路線圖（按 Phase / 階段） | [IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md) |
+| 只跑某一層 smoke，不想每次跑完整 release gate | [`scripts/workflows/smoke-layer.sh`](../../scripts/workflows/smoke-layer.sh) |
 | 操作 / debug 一個正在跑或剛結束的 workflow run（logs / watch / inspect） | [RUN-OBSERVABILITY-GUIDE.md](RUN-OBSERVABILITY-GUIDE.md) |
 | 想知道 run observability 為什麼這樣設計（planning / phase roadmap） | [RUN-OBSERVABILITY-MEMO.md](RUN-OBSERVABILITY-MEMO.md) |
 | Phase 5 後三項（stderr capture / `run -d` / TUI）的 deferred 設計討論 | [RUN-OBSERVABILITY-PHASE-5-LATER-MEMO.md](RUN-OBSERVABILITY-PHASE-5-LATER-MEMO.md) |
@@ -63,5 +64,6 @@
 - **執行層 / runtime 架構說明**：歸到第三節 reference 區，更新 index。
 - **品質 / parity / 一次性 e2e 報告**：歸到第四節 quality reports 區，命名帶版本前綴。
 - **使用者導引**：寫進 root [README.md](../../README.md)，不要寫進 docs/cap。
+- **測試入口**：分層 smoke 入口維護在 [`scripts/workflows/smoke-layer.sh`](../../scripts/workflows/smoke-layer.sh)；完整 release gate 維持 [`scripts/workflows/smoke-per-stage.sh`](../../scripts/workflows/smoke-per-stage.sh)。
 
 文件互相連結時，盡量單向（e.g., README → docs/cap/X，而非 X → README → X）。本 index 是雙向 hub，是唯一允許的「指出去再指回來」節點。

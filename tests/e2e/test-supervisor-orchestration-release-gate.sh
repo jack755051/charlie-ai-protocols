@@ -349,7 +349,8 @@ assert_contains "case 3 compile surfaces phantom step" "phantom-step" "${compile
 
 # ── Case 4 ──────────────────────────────────────────────────────────────
 echo "Case 4: supervisor-orchestration workflow binding still ready"
-bind_out="$(bash "${CAP_WORKFLOW}" bind supervisor-orchestration 2>&1)"
+C4_HOME="${SANDBOX}/c4-cap"
+bind_out="$(CAP_HOME="${C4_HOME}" bash "${CAP_WORKFLOW}" bind supervisor-orchestration 2>&1)"
 bind_rc=$?
 assert_eq "case 4 bind exit 0" "0" "${bind_rc}"
 assert_contains "case 4 binding_status: ready" \

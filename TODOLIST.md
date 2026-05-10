@@ -84,19 +84,26 @@ CAP 的目標是一個本機 AI workflow runtime 平台，而不是單純的 age
 
 ### 尚未完成
 
-- [ ] Project Constitution schema 尚未接上正式 validator
-- [ ] `project-constitution.yaml` 尚未成為完整 Project Constitution runner
+- [x] Project Constitution schema validator 已接上 CLI / runner path
+  - 完成於 P2；`cap project constitution --from-file` / prompt-mode / promote 前皆會跑 jsonschema validation。仍開放的是 workflow YAML 直接輸出 Markdown + JSON 的契約收斂。
+- [ ] `project-constitution.yaml` 尚未直接成為完整 Project Constitution runner
+  - Runner 能力已在 `cap project constitution` CLI 落地；待收斂的是 workflow YAML output contract，避免 runner 再從自由文字抽 JSON。
 - [x] `cap workflow constitution` 目前較接近 task constitution 產生器，語意需拆清楚
   - 完成於 P2 #6 commit (current branch)；新增 `cap task constitution` 作為正式名稱，舊路徑加 deprecation warning（行為不變，可由 `CAP_DEPRECATION_SILENT=1` 抑制）。
-- [ ] Supervisor 尚未真正負責 structured orchestration
-- [ ] Supervisor 尚未輸出可驗證的 task constitution / capability graph / compiled workflow draft
-- [ ] sub-agent 尚未升級為完整 AgentSessionRunner
-- [ ] `agent-sessions.json` 尚未紀錄 provider-native session id / prompt snapshot
-- [ ] agent session lifecycle 尚未完整紀錄 `created / running / completed / failed / recycled`
+- [ ] Supervisor structured orchestration envelope 基礎已落地，但尚未成為 production runtime dispatcher（partial）
+  - 已完成 envelope schema / helpers / validation hook / snapshot writer / compile entry / release-gate e2e；仍缺 SupervisorOrchestrator producer、Envelope → Type C ticket、per-stage pipeline integration，以及 step failure 時實際 halt / retry / route_back / escalate 的 runtime 消費。
+- [ ] Supervisor 可驗證 task constitution / capability graph / compiled workflow draft 的資料路徑已具備，AI producer 尚未接通（partial）
+  - `compile_task_from_envelope()` 已消費 envelope；下一步是 supervisor prompt builder + structured output parser，而不是再新增 parallel contract。
+- [x] sub-agent 已有 AgentSessionRunner baseline
+  - P5 已落地 runner lifecycle、provider adapter baseline、session inspect / analyze 與 prompt snapshot wiring；後續缺口集中在更完整的 provider-native streaming / stall handling。
+- [ ] `agent-sessions.json` 已紀錄 prompt snapshot / lifecycle baseline，provider-native session id 仍視 provider adapter 能力補齊（partial）
+- [x] agent session lifecycle 已有狀態機與合法 transition enforcement
 - [ ] detached / background workflow run 尚未實作
-- [ ] repo-specific workflow / skill source resolver 尚未完整
+- [x] repo-specific workflow / skill source resolver 主體已完成
+  - P9 已落地 workflow / skill source metadata、allowed roots enforcement、layered resolver 與相關測試；後續只在 shared / imported role attachment 有真實需求時再擴。
 - [ ] 外部 skills 方法論尚未完成 CAP 化 intake（先轉為 strategy，不先做 Claude / Codex 原生 runtime 融合）
-- [ ] promote / publish 流程尚未閉環
+- [ ] promote surface 已閉環，publish / detached runtime 維持 deferred（partial）
+  - P10 已完成 promote candidate producer、inspect、project constitution / workflow apply、backup、validation、rollback；publish 是 cross-repo distribution 問題，等 promote surface 穩定與共享層 producer 需求出現再開。
 
 ## 完整實現流程摘要
 

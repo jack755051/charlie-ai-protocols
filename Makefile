@@ -1,4 +1,4 @@
-.PHONY: help setup sync run install uninstall update version release-check rollback list check-aliases workflow
+.PHONY: help setup sync run install uninstall update version release-check rollback list check-aliases workflow smoke smoke-contracts smoke-runtime smoke-project smoke-orchestration smoke-e2e smoke-promote smoke-replay
 
 VENV      := .venv
 PIP       := $(VENV)/bin/pip
@@ -116,3 +116,27 @@ workflow: ## 顯示 workflow 子指令用法（請改用 cap workflow <subcomman
 	@echo "  cap workflow bind <workflow_id> [registry]"
 	@echo "  cap workflow run --dry-run <workflow_id> [prompt]"
 	@echo "  cap workflow run <workflow_id> [prompt]"
+
+smoke: ## 執行完整 release gate smoke
+	@bash scripts/workflows/smoke-layer.sh full
+
+smoke-contracts: ## 執行 schema / contract smoke slice
+	@bash scripts/workflows/smoke-layer.sh contracts
+
+smoke-runtime: ## 執行 runtime / session / gate smoke slice
+	@bash scripts/workflows/smoke-layer.sh runtime
+
+smoke-project: ## 執行 project identity / constitution smoke slice
+	@bash scripts/workflows/smoke-layer.sh project
+
+smoke-orchestration: ## 執行 supervisor orchestration smoke slice
+	@bash scripts/workflows/smoke-layer.sh orchestration
+
+smoke-e2e: ## 執行 deterministic e2e smoke slice
+	@bash scripts/workflows/smoke-layer.sh e2e
+
+smoke-promote: ## 執行 promote surface smoke slice
+	@bash scripts/workflows/smoke-layer.sh promote
+
+smoke-replay: ## 執行 replay / drift harness smoke slice
+	@bash scripts/workflows/smoke-layer.sh replay
