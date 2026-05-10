@@ -106,6 +106,7 @@ fixture tests/scripts/test-gate-result-consumer.sh
 fixture tests/scripts/test-binder-phase5-attachment.sh
 fixture tests/scripts/test-step-runtime-attached-prompts.sh
 fixture tests/scripts/test-binder-project-context-origin.sh
+fixture tests/scripts/test-validate-inputs-intrinsic-vs-registry.sh
 EOF
       ;;
     project) cat <<'EOF'

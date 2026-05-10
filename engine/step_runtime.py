@@ -520,7 +520,48 @@ def validate_inputs(
     def _try_resolve(artifact: str) -> dict[str, Any] | None:
         """Return a resolved artifact descriptor if available; None when
         the artifact does not yet exist (caller decides whether to treat
-        absence as missing or as a graceful no-op)."""
+        absence as missing or as a graceful no-op).
+
+        Resolution order (v0.25.3+):
+          1. Registry first — when the current run has already
+             produced the artifact via a validated upstream step, that
+             output wins. Critical for self-producing workflows like
+             project-constitution where validate_constitution declares
+             ``project_constitution`` as input but the canonical
+             constitution is being drafted in this very run; the
+             intrinsic disk path (``.cap.constitution.yaml``) does not
+             exist yet, so falling through there too eagerly used to
+             mark the artifact missing and halt the workflow.
+          2. Intrinsic source second — when no upstream step produced
+             the artifact, fall back to the project-level on-disk /
+             inline-request source. This preserves the cross-workflow
+             contract where, e.g., project-spec-pipeline reads the
+             persisted ``.cap.constitution.yaml`` produced by an
+             earlier project-constitution run.
+
+        The previous order (intrinsic-then-registry) collapsed both
+        paths into the intrinsic branch as soon as the artifact name
+        appeared in ``_INTRINSIC_ARTIFACTS``, so any registry entry
+        for the same artifact name was unreachable. Same-run
+        production must beat disk fallback so a draft-and-validate
+        workflow can see its own draft.
+        """
+        # 1. Registry — validated upstream output wins.
+        entry = registry.get("artifacts", {}).get(artifact)
+        if entry:
+            source_step = entry.get("source_step")
+            source_state = (
+                registry.get("steps", {}).get(source_step, {}).get("execution_state")
+            )
+            if source_state == "validated":
+                return {
+                    "artifact": artifact,
+                    "source_step": source_step,
+                    "path": entry.get("path"),
+                    "handoff_path": entry.get("handoff_path"),
+                }
+
+        # 2. Intrinsic — project-level disk / inline-request fallback.
         if artifact in _INTRINSIC_ARTIFACTS:
             if artifact == "project_constitution" and not (Path.cwd() / ".cap.constitution.yaml").is_file():
                 return None
@@ -539,21 +580,9 @@ def validate_inputs(
                 "handoff_path": "",
             }
 
-        entry = registry.get("artifacts", {}).get(artifact)
-        if not entry:
-            return None
-        source_step = entry.get("source_step")
-        source_state = (
-            registry.get("steps", {}).get(source_step, {}).get("execution_state")
-        )
-        if source_state != "validated":
-            return None
-        return {
-            "artifact": artifact,
-            "source_step": source_step,
-            "path": entry.get("path"),
-            "handoff_path": entry.get("handoff_path"),
-        }
+        # 3. Neither registry nor intrinsic — caller decides if the
+        # absence is a missing required input or a graceful no-op.
+        return None
 
     # Required inputs — absence blocks the step.
     for artifact in target.get("inputs", []):

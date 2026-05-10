@@ -6,6 +6,32 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.25.3] - 2026-05-10
+
+> Patch release — **dogfood follow-up to v0.25.2**. Third bug surfaced by the same baseline run on `~/projects/cap-test/component-next-dotnet-stt`. This time `validate_constitution` halted with `missing_input_artifact missing:project_constitution` even though `draft_constitution` had successfully produced the artifact and registered it in `runtime-state.json`. Root cause: `step_runtime.validate_inputs._try_resolve` checked `_INTRINSIC_ARTIFACTS` first and returned `None` when the on-disk `.cap.constitution.yaml` was absent, never consulting the runtime artifact registry. Self-producing workflows like `project-constitution` were therefore unable to see their own draft output.
+
+### Fixed
+
+- `engine/step_runtime.py validate_inputs._try_resolve` resolution order swapped: registry first, intrinsic second. Validated upstream output now wins over the project-level on-disk fallback. Behaviour for cross-workflow consumers (e.g. `project-spec-pipeline` reading `.cap.constitution.yaml` produced by an earlier `project-constitution` run) is unchanged because those runs have no upstream registry entry — the intrinsic branch still fires.
+
+### Added
+
+- `tests/scripts/test-validate-inputs-intrinsic-vs-registry.sh` (new, 7 cases): regression for the v0.25.3 contract. Case 1 registry-only resolution (artifact validated, disk file absent → resolves from registry, source_step=draft_constitution). Case 2 intrinsic-only resolution (registry empty, disk file present → resolves from intrinsic, source_step=`__request__`). Case 3 both present → registry wins. Case 4 neither → missing. Sandbox uses runtime-state.json fixtures plus a synthetic flatten-plan so the test does not require a real workflow execution.
+- `scripts/workflows/smoke-layer.sh` runtime suite: append the new fixture.
+
+### Verified
+
+- `test-validate-inputs-intrinsic-vs-registry.sh` **7 / 7** PASS.
+- smoke-layer runtime **14 / 14** PASS (13 prior + 1 new).
+
+### Boundary
+
+- One-function behaviour change. No schema bump, no provider surface change.
+- `_INTRINSIC_ARTIFACTS` set unchanged — same names still recognised for fallback. Only the precedence between registry and intrinsic was inverted.
+- Phase 5 role/skill attachment from v0.25.0 unchanged. Phase 6 builtin promotion still deferred.
+
+---
+
 ## [v0.25.2] - 2026-05-10
 
 > Patch release — **dogfood follow-up to v0.25.1**. The constructor-side fix in v0.25.1 was necessary but not sufficient. `RuntimeBinder.__init__` falls back to `project_root = base_dir` when only `base_dir` is provided (intentional for test harnesses that pass an isolated single-dir world). Production CLI paths in `workflow_cli.py` were calling `RuntimeBinder(base_dir=base_dir)` only, so the same `ProjectIdCollisionError` from the v0.25.1 issue still fired on `cap workflow run` from outside the install directory. This release pushes the project_root through to the three production call sites.
