@@ -400,6 +400,118 @@ Until one of those triggers occurs, the recommended state is natural dogfood:
 use the shipped registry path in real work, record friction, and avoid adding
 runtime abstractions proactively.
 
+### ADR-style note: opening Phase 5 after v0.24.11
+
+> Status: decision recorded before code lands.
+> Trigger date: 2026-05-10.
+> Context: this section justifies leaving the post-v0.24.11 "natural dogfood"
+> state and entering Phase 4 + Phase 5 in a single coordinated change.
+
+**Why now (the trigger).** Two converging signals:
+
+1. The registry already carries `kind: role | skill` (v0.24.7) plus the
+   v0.24.11 user-imported role registration story, but `_find_candidates`
+   still treats every entry — including `kind: skill` — as a potential
+   executor. In practice this means an advisory skill (e.g. shared
+   Karpathy guardrails) **must** carry an `agent_alias` purely to
+   satisfy `_has_execution_metadata`, even though the entry's purpose
+   is guardrail-only. The `agent_alias` field is doing double duty and
+   the schema doc already flags this as a Phase 4 risk
+   (see §"Phase 2: Resolver Semantics — Risks (from v0.24.8 dogfood)").
+2. Operators who try to layer a guardrail on top of an existing
+   builtin role today have only two options: (a) duplicate the role
+   prompt and edit it (fragile, divergent from upstream), or (b) accept
+   that the guardrail entry replaces the role entirely (loses the
+   role's identity). Neither matches the model the memo already
+   describes (capability → role + advisory skills).
+
+The strict-mode attachment design (see decision below) is therefore
+not premature abstraction; it is the minimum coupling that lets
+`kind: skill` stop pretending to be a role.
+
+**What changes (scope).** This delivery folds Phase 4 design and Phase 5
+runtime implementation into one coordinated change rather than landing
+schema-only design first. Rationale: the binding report shape, binder
+selection, and prompt assembly form one closed loop — splitting them
+across releases would leave the registry expressive about something
+the runtime cannot honor, which is exactly the trap the memo's
+"Phase 5 only after Phase 4 is accepted" note was trying to avoid.
+
+The five concrete edits:
+
+- `schemas/binding-report.schema.yaml`: add optional `selected_role`
+  and `attached_skills[]` step fields; keep `selected_skill_id` /
+  `selected_agent_alias` / `selected_prompt_file` / `selected_cli`
+  writing for legacy consumers.
+- `engine/runtime_binder.py`: split candidate ranking into role-only
+  selection + a separate attached-skill selection step; enforce source
+  policy for both halves; emit both halves to the binding report.
+- `engine/step_runtime.py` + `scripts/cap-workflow-exec.sh`: extend
+  `flatten_steps` and `build_step_prompt` to mount attached skill
+  prompts after the role prompt; shell executors do not receive
+  attachments.
+- Tests: flip `tests/scripts/test-skill-registry-kind-field.sh` case 5
+  (kind=skill is no longer a standalone executor); add binder cases
+  for role-only happy path, role + attached skill, attach blocked
+  outside `attach_to_capabilities`, shared attached skill blocked
+  without `allowed_source_roots`.
+- Docs: update this memo (mark Phase 4 / 5 landed),
+  `docs/cap/AGENT-SKILLS-CUSTOMIZATION.md` (worked example for
+  `kind: skill` attach), and
+  `docs/cap/SKILL-RUNTIME-ARCHITECTURE.md` (capability → role +
+  attached skills picture).
+
+**Decision: strict attachment policy (not auto-fan-in).** A `kind: skill`
+entry is attached to a step only when:
+
+1. The skill explicitly lists the step's capability in
+   `attach_to_capabilities`, or lists the step's selected role's
+   `agent_alias` in `attach_to_roles`, **and**
+2. The skill's source layer is honored by the project constitution
+   (`allowed_source_roots` enforcement still applies, identical to the
+   role-side gate that v0.24.11 shipped).
+
+Auto-fan-in (every `kind: skill` whose `provided_capabilities`
+intersects the step capability gets attached) was considered and
+rejected: the failure mode is silent — a shared advisory skill could
+attach to every project that happens to share a capability name,
+without the project owner seeing the dependency. Strict mode forces
+the attaching skill to opt in, which makes the dependency reviewable
+in the registry diff. Roles are never auto-attached — they own task
+identity and cannot be silently demoted to advisory.
+
+Conflict rules (kept from the original Phase 4 task list):
+
+- Explicit user request wins (a step that names an attached skill in
+  the workflow YAML beats both registry attach declarations).
+- Project constitution wins (project layer can disable / replace an
+  attached skill via the v0.22.0+ override contract).
+- Role prompt owns task identity (the executor role's prompt is
+  rendered first and always; attached skills cannot relabel the role).
+- Advisory skill cannot override role boundaries (an attached skill
+  may add guardrails, but the binding report's `selected_role`,
+  `selected_provider`, and `selected_cli` are owned by the role).
+
+**Rollback strategy.** If the change breaks real runs:
+
+1. Revert at the binder level by toggling a single `_find_attached_skills`
+   call site to return `[]` — `selected_role` keeps writing,
+   `attached_skills` becomes empty, and prompt assembly falls back to
+   single-role behaviour without any schema change.
+2. The schema additions are optional, so old `binding-report.json`
+   files written before this change still validate after the change;
+   no migration needed.
+3. If the strict-attach contract proves too tight in practice, the
+   forward path is to add an opt-in `attachment_mode: capability_match`
+   field rather than reverting to auto-fan-in — it keeps the strict
+   default and lets specific projects relax case by case.
+
+**Out of scope for this delivery.** Phase 6 (builtin promotion policy
+for attached skills) is unchanged: a `kind: skill` entry in shared /
+project layer still goes through the same dogfood evidence bar before
+it can move into builtin. Phase 5 only changes how the runtime treats
+existing entries; it does not promote anything.
+
 ### Phase 4: Advisory Skill Attachment Design
 
 Goal: design, not yet implement, how one executable role can receive one or
