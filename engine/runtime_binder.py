@@ -200,7 +200,18 @@ class RuntimeBinder:
             project_root=self.project_root,
             cap_home=self.cap_home,
         )
-        self.project_context_loader = ProjectContextLoader(self.base_dir)
+        # ProjectContextLoader resolves project_id, ledger origin, and
+        # constitution path. It must point at the user's project_root
+        # (the CWD-derived working repo), NOT base_dir (the cap install
+        # directory). When cap is invoked via the global wrapper from
+        # outside the install dir, base_dir = ~/.charlie-ai-protocols
+        # whose basename collides with any local clone of the dev repo
+        # also named "charlie-ai-protocols", and current_origin lands on
+        # the install path while the ledger records the actual project
+        # path — _verify_or_write_ledger then halts with
+        # ProjectIdCollisionError. v0.25.1 fix: feed project_root so
+        # project identity always tracks the working repo.
+        self.project_context_loader = ProjectContextLoader(self.project_root)
 
     def load_skill_registry(self, registry_ref: str | None = None) -> dict:
         """Load the skill registry.

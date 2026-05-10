@@ -6,6 +6,32 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.25.1] - 2026-05-10
+
+> Patch release — **dogfood-discovered** project_id collision fix. When the global `cap` wrapper at `~/.charlie-ai-protocols` was invoked from any working repo other than the dev clone, `RuntimeBinder.bind_semantic_plan` halted with `ProjectIdCollisionError` because `ProjectContextLoader` was anchored at the cap install dir (`base_dir`) rather than the user's working repo (`project_root`). The basename of the install dir collides with the dev repo clone of the same name and the ledger origin mismatch fires every time. Surfaced by attempting the first end-to-end Component Repo dogfood at `~/projects/cap-test/component-next-dotnet-stt`.
+
+### Fixed
+
+- `engine/runtime_binder.py` line 203: `RuntimeBinder.__init__` now passes `self.project_root` to `ProjectContextLoader`, so project identity, ledger origin, and constitution path resolution all track the user's working repo instead of the cap install directory. The fix is one line plus comment; behaviour for in-repo invocations (where `project_root` defaults to `base_dir`) is unchanged.
+
+### Added
+
+- `tests/scripts/test-binder-project-context-origin.sh` (new, 5 cases): regression fixture for the v0.25.1 contract. Case 1 asserts `project_id` derives from the project_root basename, not the install dir's. Case 2 asserts the ledger writes `origin_path = project_root` and a re-verify call from a fresh binder does not raise `ProjectIdCollisionError`. Case 3 asserts the underlying `ProjectContextLoader.base_dir` is wired to `project_root.resolve()` so the wiring cannot silently regress. Sandbox sets `CAP_HOME` to a tmp dir so the test does not pollute the real `~/.cap/projects/`.
+- `scripts/workflows/smoke-layer.sh` runtime suite: append the new fixture so smoke-layer / smoke-per-stage cover it automatically.
+
+### Verified
+
+- New: `test-binder-project-context-origin.sh` **5 / 5** PASS.
+- Regression baseline (post one-line fix): smoke-layer contracts **7 / 7**, runtime **13 / 13** (12 prior + 1 new), project **8 / 8**. No legacy regressions.
+
+### Boundary
+
+- One-line behaviour change. No schema bump, no provider-side change, no role/skill registry change.
+- Pre-fix workarounds (`CAP_PROJECT_ID_OVERRIDE` env var, manual `~/.cap/projects/<id>/.identity.json` cleanup) are no longer required for the common dev-machine layout (cap installed at `~/.charlie-ai-protocols`, dev clone at `~/projects/charlie-ai-protocols`). Existing ledger files for projects already migrated to the bug-stable workaround keep working — the loader still reads them on re-entry, only the resolution path has tightened.
+- Phase 5 role/skill attachment behaviour from v0.25.0 remains unchanged. Phase 6 (builtin promotion of shared advisory skills) still deferred.
+
+---
+
 ## [v0.25.0] - 2026-05-10
 
 > Minor release — Role / Skill Registry **Phase 4 + Phase 5 land together**: `RuntimeBinder` now selects the executor role and advisory skill attachments through two independent paths, and AI step prompt assembly mounts advisory skills after the role prompt. The post-v0.24.11 "natural dogfood" boundary is closed for advisory attachment; Phase 6 (builtin promotion of shared advisory skills) remains deferred.
