@@ -1190,6 +1190,45 @@ def attached_prompts(plan_json: str, step_id: str) -> None:
 # 8c. parse-step-result (v0.26.0 — bug #12 fix)
 # ─────────────────────────────────────────────────────────
 
+# ─────────────────────────────────────────────────────────
+# 8d. capability emits-code whitelist (v0.26.1 — Round 2)
+# ─────────────────────────────────────────────────────────
+
+# Capabilities whose AI step is contractually required to emit at least
+# one file into the per-step landing directory
+# (``<run_dir>/code/<step_id>/``). When ``cap-workflow-exec.sh`` sees
+# an AI step whose capability appears here, the post-AI gate demotes
+# any ``result: success`` to ``ai_success_no_artifacts`` (hard fail) if
+# the landing dir is empty. Markdown-only AI capabilities (audits,
+# specs, archives, BA, supervisor planning) are NOT in this list and
+# stay subject only to the Round 1 result-contract gate.
+#
+# SSOT: ``docs/cap/AI-STEP-RESULT-CONTRACT.md`` Round 2 section +
+# ``agent-skills/00-core-protocol.md`` §5.3.2.
+_CODE_EMITTING_CAPABILITIES = frozenset({
+    "backend_implementation",
+    "frontend_implementation",
+    "qa_testing",
+    "devops_delivery",
+})
+
+
+def capability_emits_code_cli(capability: str) -> None:
+    """Emit ``true`` / ``false`` for a single capability lookup.
+
+    Shell-friendly so ``cap-workflow-exec.sh`` can branch with:
+
+        if [ "$(${PYTHON_BIN} ${STEP_PY} capability-emits-code ${capability})" = "true" ]; then ...
+
+    Returns ``true`` when the capability is in the code-emitting
+    whitelist; returns ``false`` for everything else (markdown-only
+    capabilities, unknown capabilities). Unknown defaults to false so
+    pipelines that introduce new AI capabilities don't accidentally
+    pick up enforcement they didn't opt into.
+    """
+    print("true" if capability in _CODE_EMITTING_CAPABILITIES else "false")
+
+
 def parse_step_result_cli(file_path: str) -> None:
     """Emit shell-friendly state=... key=value lines for a step output file.
 
@@ -2111,6 +2150,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_psr.add_argument("step_output_path")
 
+    # 8d. capability-emits-code (v0.26.1 — Round 2 write contract)
+    p_cec = sub.add_parser(
+        "capability-emits-code",
+        help="emit 'true' / 'false' for whether a capability is required to emit code artifacts",
+    )
+    p_cec.add_argument("capability")
+
     # 9. plan-meta
     p_pm = sub.add_parser("plan-meta", help="抽 plan JSON 的 workflow_id / name / phase 數")
     p_pm.add_argument("plan_json")
@@ -2586,6 +2632,8 @@ def main(argv: list[str] | None = None) -> None:
             attached_prompts(args.plan_json, args.step_id)
         case "parse-step-result":
             parse_step_result_cli(args.step_output_path)
+        case "capability-emits-code":
+            capability_emits_code_cli(args.capability)
         case "plan-meta":
             plan_meta(args.plan_json)
         case "parse-input-check":

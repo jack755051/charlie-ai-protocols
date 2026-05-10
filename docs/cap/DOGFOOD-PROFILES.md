@@ -20,6 +20,43 @@ Compatibility stack B:
 
 This does not mean CAP will never support other stacks. It means Phase-level runtime changes must first prove they work on the primary stack before adding framework-specific branches.
 
+## Primary Component Runtime Profile
+
+Component Repo dogfood defaults to a single golden path until the
+implementation pipeline can reliably produce code and tests:
+
+```yaml
+profile: component-repo
+stack: primary
+frontend:
+  framework: nextjs
+  version_floor: "14"
+backend:
+  framework: dotnet
+  version_floor: "8"
+database:
+  engine: postgresql
+  version_floor: "16"
+runtime:
+  orchestrator: docker-compose
+  compose_spec: "v2"
+```
+
+The default is intentionally narrow. Specification, implementation, QA,
+DevOps, and runtime-smoke prompts should assume this stack unless the task
+constitution explicitly selects a supported compatibility stack. A
+compatibility stack may be used for intake, diagnosis, or planning, but it
+does not replace the primary stack until it has equivalent dogfood evidence.
+
+Runtime validation for this profile must prove, at minimum:
+
+- `docker compose build` succeeds.
+- `docker compose up` launches PostgreSQL, backend, and frontend services.
+- Backend exposes a health endpoint that proves database reachability.
+- Backend exposes at least one API contract endpoint from the generated spec.
+- Frontend serves HTTP from the host and can reach the backend server-side.
+- A repo-local smoke script records the checks and exits non-zero on failure.
+
 ## Profiles
 
 ### 1. Component Repo
@@ -30,8 +67,9 @@ Initial stack:
 
 ```text
 Next.js frontend component
-C# backend package or small API module
-Docker / devcontainer optional, Docker Compose preferred when backend exists
+C#/.NET backend package or small API module
+PostgreSQL persistence when backend state exists
+Docker Compose runtime
 ```
 
 Acceptance:
@@ -43,8 +81,21 @@ Acceptance:
 - `cap workflow run project-implementation-pipeline`
 - `cap workflow run project-qa-pipeline`
 - `cap promote inspect`
+- repo-local runtime smoke for the Primary Component Runtime Profile
 
 Use this first because failures are easier to attribute.
+
+Current gate after the 2026-05-10 Component Repo closeout:
+
+- Do not advance a Component Repo run from Phase D to Phase E only because
+  `project-implementation-pipeline` reports `completed / success`.
+- Phase D must prove actual implementation artifacts exist on disk, not only
+  non-empty AI stdout. This depends on the AI step result contract and the
+  separate AI write contract.
+- Phase F runtime smoke may validate an operator-authored skeleton, but that
+  does not count as CAP-produced implementation evidence.
+- Re-run Phase E only after Phase D has produced real frontend, backend,
+  deployment, and test artifacts under the agreed write contract.
 
 ### 2. Maintenance Repo
 

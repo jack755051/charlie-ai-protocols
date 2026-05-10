@@ -81,6 +81,50 @@
 - Workflow 整合：`scripts/cap-workflow-exec.sh` 的 `AI_RESULT_HARD_FAIL` 分支（v0.26.0 引入）
 - Regression test：`tests/scripts/test-ai-step-result-parser.sh`、`tests/scripts/test-ai-step-result-workflow-integration.sh`
 
+#### 5.3.2 AI Write Contract（v0.26.1+）
+
+§5.3.1 解決了「runtime 知不知道你失敗」的問題；§5.3.2 解決配對的另一面：「runtime 給不給你寫檔」+「success 是不是真的有產出」。bug #12 dogfood 揭露 v0.25.x 時 AI agent 跑在 read-only sandbox 內，stdout 寫了交接摘要就被視為成功，但實際沒任何 code 落地。v0.26.1 引入結構化 landing dir 與 code-emit 強制。
+
+**Landing dir contract**：
+
+- 每個 AI step 開始前，`scripts/cap-workflow-exec.sh` 會建立 per-step 寫入目錄並 export `CAP_WORKFLOW_WRITE_DIR` 給 provider CLI：
+  - 路徑：`<run_dir>/code/<step_id>/`
+  - 例如：`~/.cap/projects/<id>/reports/workflows/project-implementation-pipeline/run_xxx/code/backend/`
+- Provider CLI 已被注入對應旗標，agent 不需自己處理權限：
+  - `claude -p`：加 `--add-dir <landing>` + `--permission-mode acceptEdits` + `--allowed-tools "Read,Edit,Write,Bash,Glob,Grep"`
+  - `codex exec`：加 `--sandbox workspace-write` + `--cd <landing>`
+- agent 的 cwd（codex）或 add-dir（claude）即 landing dir；project_root 仍可 read（用 absolute path），但**不可 write**（保留為 promote / scaffolding 階段才動的目標）。
+
+**Code-emitting capability 強制清單**（v0.26.1 起）：
+
+下列 capability 在 step 結束時 runtime 會掃描 landing dir，**若 result=success 但 landing dir 為空，自動 demote 為 `ai_success_no_artifacts` hard_fail，workflow halt**：
+
+| Capability | 預期產出 |
+|---|---|
+| `backend_implementation` | `.csproj` / `.cs` / migration / Dockerfile / unit tests 等 |
+| `frontend_implementation` | `package.json` / `*.tsx` / config / Dockerfile / unit tests 等 |
+| `qa_testing` | playwright / vitest / k6 等實際 test source |
+| `devops_delivery` | `docker-compose.yml` / CI workflow YAML / deployment manifests 等 |
+
+清單外的 capability（`prd_generation` / `business_analysis` / `database_api_design` / `ui_design` / `code_structure_audit` / `security_audit` / `technical_logging` 等）保留 markdown-only 性質：landing dir 仍會建立但不強制非空，markdown step output 是它們的主要交付。
+
+**Agent 操作守則**：
+
+- 收到 step prompt 時看「AI Write Contract」段落是否出現；出現代表你的 capability 是 code-emitting，必須真的寫檔。
+- **禁止**只在 stdout 列「我會寫這幾個檔案」就回 `success`；runtime 會抓出空 dir。
+- 你的 cwd（codex）/ writable add-dir（claude）就是 landing dir；不要嘗試 cd 或 chdir 到 project_root 寫檔，會被 sandbox 拒絕。
+- 若實在無法落地（e.g. 上游 contract 真的缺到不能開工），如實回 `result: blocked` 或 `result: needs_data`（§5.3.1）；runtime 會 halt，operator 處理過再續。
+- output_paths 的 result 該寫實際落地的檔案路徑（landing dir 內），別只寫期望路徑。
+
+**整合層位置**：
+
+- Capability whitelist：`engine/step_runtime.py` 的 `_CODE_EMITTING_CAPABILITIES`
+- CLI 查詢：`engine/step_runtime.py capability-emits-code <capability>` → `true`/`false`
+- Provider 旗標 wiring：`scripts/cap-workflow-exec.sh` `run_step_claude` / `run_step_codex`（v0.26.1）
+- Post-step gate：`scripts/cap-workflow-exec.sh` 的 `AI_EMIT_HARD_FAIL` 分支（v0.26.1）
+- Prompt 注入：`scripts/cap-workflow-exec.sh build_write_contract_section`（v0.26.1）
+- Regression test：`tests/scripts/test-ai-write-contract.sh`
+
 ### 5.4 Workflow 治理鐵則 (Workflow Governance)
 - 在 workflow 模式下，**不得**只靠口頭描述派工。所有正式派發都必須可追溯到：
   - `workflow_id / step_id / phase`

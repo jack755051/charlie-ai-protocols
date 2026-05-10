@@ -170,8 +170,31 @@ ensure_provider_cli() {
 
 run_step_claude() {
   local prompt="$1"
+  local write_dir="${2:-}"
   ensure_provider_cli claude || return 1
-  claude -p "${prompt}" 2>&1
+  local args=(-p)
+  # v0.26.1 Round 2 — AI write contract. When the per-step landing dir
+  # is set, give claude the tool whitelist + permission mode it needs
+  # to actually write code there. Read remains unchanged (claude can
+  # read absolute paths under the default permission mode); the new
+  # flags only widen Edit / Write to the landing dir.
+  #
+  # ``--add-dir`` extends the directories tools can touch beyond cwd.
+  # ``--permission-mode acceptEdits`` auto-accepts file edits so the
+  # headless run does not stall on permission dialogs. The
+  # ``--allowed-tools`` list is intentionally narrow: Read / Edit /
+  # Write / Bash / Glob / Grep is the minimum needed for an
+  # implementation step to scaffold a project, run a build, and emit
+  # markdown to stdout. No WebFetch / WebSearch / Task spawning so
+  # the AI cannot escape the sandbox via a sub-agent.
+  if [ -n "${write_dir}" ]; then
+    args+=(
+      --add-dir "${write_dir}"
+      --permission-mode acceptEdits
+      --allowed-tools "Read,Edit,Write,Bash,Glob,Grep"
+    )
+  fi
+  claude "${args[@]}" "${prompt}" 2>&1
 }
 
 # Codex stdout 包含 banner + prompt echo + response，需要清洗。
@@ -194,6 +217,7 @@ strip_codex_preamble() {
 
 run_step_codex() {
   local prompt="$1"
+  local write_dir="${2:-}"
   local raw
   local exit_code
   local last_message_file
@@ -201,6 +225,16 @@ run_step_codex() {
   ensure_provider_cli codex || return 1
   if [ "${CAP_CODEX_SKIP_GIT_REPO_CHECK:-1}" != "0" ]; then
     args+=(--skip-git-repo-check)
+  fi
+  # v0.26.1 Round 2 — AI write contract for codex. ``workspace-write``
+  # sandbox lets the agent write files under its working directory;
+  # ``--cd <write_dir>`` pins that working dir at the per-step landing
+  # path so writes land where promote / impl_audit can later inspect
+  # them. Reads from absolute paths outside the sandbox still work
+  # (workspace-write only restricts WRITES), so the agent can pull
+  # context from project_root + the run dir without further flags.
+  if [ -n "${write_dir}" ]; then
+    args+=(--sandbox workspace-write --cd "${write_dir}")
   fi
   # 用 --output-last-message 取單一 assistant 回覆，繞過 Codex CLI 在 stdout
   # 內出現多輪 turn / `tokens used` banner / 重複輸出（cf. v0.23 dogfood
@@ -228,9 +262,16 @@ run_step_codex() {
 run_step() {
   local cli="$1"
   local prompt="$2"
+  # v0.26.1 Round 2 — optional third arg ``write_dir`` carries the
+  # per-step landing directory. Empty means no write contract for
+  # this step (legacy behaviour: provider runs without --add-dir /
+  # --cd, no write tools enabled). Code-emitting steps must pass a
+  # non-empty path — the caller (main loop) prepares
+  # ``<run_dir>/code/<step_id>/`` before invoking run_step.
+  local write_dir="${3:-}"
   case "${cli}" in
-    claude) run_step_claude "${prompt}" ;;
-    codex)  run_step_codex "${prompt}" ;;
+    claude) run_step_claude "${prompt}" "${write_dir}" ;;
+    codex)  run_step_codex "${prompt}" "${write_dir}" ;;
     *)
       echo "Unsupported CLI: ${cli}" >&2
       return 1
@@ -868,9 +909,10 @@ build_step_prompt() {
   local project_docs_dir="${10}"
   local input_mode="${11}"
   local continue_reason="${12}"
-  local structured_sections attached_section
+  local structured_sections attached_section write_section
   structured_sections="$(structured_sections_for_capability "${capability}")"
   attached_section="$(build_attached_skills_section "${step_id}")"
+  write_section="$(build_write_contract_section "${capability}")"
 
   cat <<EOF
 你現在是 ${agent_alias} agent，正在執行 workflow step: ${step_id} (capability: ${capability})。
@@ -910,9 +952,43 @@ ${project_docs_dir}
 本步驟繼續執行的理由：
 ${continue_reason}
 
-${attached_section}${structured_sections}
+${write_section}${attached_section}${structured_sections}
 
 完成後，請輸出交接摘要（agent_id, task_summary, output_paths, result）。
+EOF
+}
+
+# v0.26.1 Round 2 — render the AI Write Contract section into AI step
+# prompts. For code-emitting capabilities (backend / frontend / qa /
+# devops), instructs the agent to land code under
+# ${CAP_WORKFLOW_WRITE_DIR} and reminds that the workflow runtime now
+# enforces non-empty landing dir for these capabilities. For
+# markdown-only capabilities the section is empty (no need to clutter
+# the prompt with write contract details that don't apply).
+build_write_contract_section() {
+  local capability="$1"
+  local emits_code
+  emits_code="$("${PYTHON_BIN}" "${STEP_PY}" capability-emits-code "${capability}" 2>/dev/null)"
+  if [ "${emits_code}" != "true" ]; then
+    return 0
+  fi
+  if [ -z "${CAP_WORKFLOW_WRITE_DIR:-}" ]; then
+    return 0
+  fi
+  cat <<EOF
+AI Write Contract (v0.26.1):
+本步驟的 capability「${capability}」屬於 code-emitting 類型，**必須**在 stdout 之外把實際程式碼 / Dockerfile / 測試檔等檔案寫入下列指定 landing dir：
+
+  ${CAP_WORKFLOW_WRITE_DIR}
+
+該 dir 已由 workflow executor 預先建立並設為可寫；provider CLI 已加上對應旗標（claude --add-dir / codex workspace-write --cd），不需要你自己處理權限。
+
+重要規則：
+1. 不要寫到 project_root（你目前的 cwd 不是 project_root；project_root 路徑只用於 read 上游規格）。
+2. 寫到 landing dir 之後，請在交接摘要的 output_paths 列出所有產出檔案（相對於 landing dir 或絕對路徑皆可）。
+3. workflow runtime 在你回 \`result: success\` 時會驗證 landing dir 至少含一個檔案；若 success 但 dir 為空，會被 demote 為 \`ai_success_no_artifacts\` hard fail（這是 v0.26.1 R2 強制契約，避免 v0.25.x 時代「step PASS 但沒有產出」的假性成功）。
+4. 若你判斷無法落地檔案（read-only / 上游缺漏），照舊回 \`result: blocked\` 或 \`result: needs_data\`，runtime 會正確 halt（v0.26.0 R1 已生效）。
+
 EOF
 }
 
@@ -1493,11 +1569,26 @@ while [ "${step_idx}" -lt "${#STEP_ARRAY[@]}" ]; do
     "${STEP_PROMPT_SNAPSHOT_PATH}" \
     "${STEP_PROMPT_SIZE_BYTES}"
 
+  # v0.26.1 Round 2 — AI write contract landing dir setup. Each AI
+  # step gets its own ``<run_dir>/code/<step_id>/`` directory; the
+  # provider flags (claude --add-dir / codex --cd) plus the prompt
+  # body all reference this path so the AI knows where to land code
+  # artifacts. Markdown-only AI steps that have no need to write
+  # files simply ignore the dir; the post-AI emit gate (R2.3) only
+  # enforces non-emptiness for capabilities in the
+  # ``capability-emits-code`` whitelist.
+  STEP_WRITE_DIR=""
+  if [ "${effective_executor}" != "shell" ]; then
+    STEP_WRITE_DIR="${WORKFLOW_OUTPUT_DIR}/code/${step_id}"
+    mkdir -p "${STEP_WRITE_DIR}" 2>/dev/null || true
+    export CAP_WORKFLOW_WRITE_DIR="${STEP_WRITE_DIR}"
+  fi
+
   # Run step in background, show live output chunks plus watchdog state.
   if [ "${effective_executor}" = "shell" ]; then
     run_shell_step "${script_ref}" "${step_id}" "${STEP_OUTPUT_PATH}" "${ARTIFACT_INDEX}" "${RESOLVED_INPUT_CONTEXT}" "${STEP_CONTRACT_CONTEXT}" "${USER_PROMPT}" > "${STEP_TMP}" 2>&1 &
   else
-    run_step "${effective_cli}" "${step_prompt}" > "${STEP_TMP}" 2>&1 &
+    run_step "${effective_cli}" "${step_prompt}" "${STEP_WRITE_DIR}" > "${STEP_TMP}" 2>&1 &
   fi
   STEP_PID=$!
 
@@ -1600,8 +1691,16 @@ Release / governed-mode requirements:
 
       printf "  ${YELLOW}│ shell exit %s (%s); falling back to AI${RESET}\n" "${exit_code}" "${SHELL_CONDITION}"
       START_FALLBACK="$(date '+%s')"
+      # AI fallback to a shell step also needs the write contract
+      # landing dir so the fallback agent can produce code. The dir
+      # was prepared above for this step; create it lazily here in
+      # case the shell branch ran first and the AI dir hasn't been
+      # set up yet.
+      FALLBACK_WRITE_DIR="${WORKFLOW_OUTPUT_DIR}/code/${step_id}"
+      mkdir -p "${FALLBACK_WRITE_DIR}" 2>/dev/null || true
+      export CAP_WORKFLOW_WRITE_DIR="${FALLBACK_WRITE_DIR}"
       set +e
-      run_step "${effective_cli}" "${FALLBACK_PROMPT}" > "${FALLBACK_TMP}" 2>&1
+      run_step "${effective_cli}" "${FALLBACK_PROMPT}" "${FALLBACK_WRITE_DIR}" > "${FALLBACK_TMP}" 2>&1
       fallback_exit_code=$?
       set -e
       fallback_output="$(cat "${FALLBACK_TMP}" 2>/dev/null || true)"
@@ -1771,7 +1870,50 @@ Release / governed-mode requirements:
         fi
       fi
 
-      if [ "${VALIDATOR_HARD_FAIL}" -eq 0 ] && [ "${AI_RESULT_HARD_FAIL}" -eq 0 ]; then
+      # ── v0.26.1 #2 AI write contract emit-required gate ──
+      # Round 2 of the bug #12 fix series. For capabilities in the
+      # code-emitting whitelist (step_runtime ``capability-emits-code``
+      # / ``_CODE_EMITTING_CAPABILITIES``: backend / frontend /
+      # qa_testing / devops_delivery), a successful AI step must
+      # actually deposit at least one file under the per-step landing
+      # dir. ``result: success`` with an empty landing dir is the
+      # exact pathology bug #12 surfaced: the AI thinks it succeeded
+      # (or hallucinated success) but produced no real artifact. The
+      # workflow now demotes this to ``ai_success_no_artifacts`` —
+      # a hard fail that surfaces the discrepancy at the right
+      # boundary.
+      AI_EMIT_HARD_FAIL=0
+      if [ "${VALIDATOR_HARD_FAIL}" -eq 0 ] \
+         && [ "${AI_RESULT_HARD_FAIL}" -eq 0 ] \
+         && [ "${effective_executor:-${executor:-ai}}" = "ai" ] \
+         && [ -n "${STEP_WRITE_DIR}" ]; then
+        EMITS_CODE="$("${PYTHON_BIN}" "${STEP_PY}" capability-emits-code "${capability}" 2>/dev/null)"
+        if [ "${EMITS_CODE}" = "true" ]; then
+          # Count any regular file under the landing dir, recursively.
+          # Empty / dot-only dirs are treated as missing; the Round 2
+          # contract requires a real artifact, not a placeholder.
+          EMITTED_COUNT="$(find "${STEP_WRITE_DIR}" -type f ! -name '.*' 2>/dev/null | wc -l | tr -d ' ')"
+          if [ -z "${EMITTED_COUNT}" ] || [ "${EMITTED_COUNT}" = "0" ]; then
+            AI_EMIT_HARD_FAIL=1
+            STEP_STATUS="ai_success_no_artifacts"
+            FINAL_STEP_STATE="ai_success_no_artifacts"
+            step_status "fail" "${step_id}" "${DURATION}"
+            FAILED=$((FAILED + 1))
+            ERROR_TYPE="ai_success_no_artifacts"
+            ERROR_HINT="  AI step claimed result=success but landing dir ${STEP_WRITE_DIR} is empty. Capability '${capability}' is in the code-emitting whitelist (docs/cap/AI-STEP-RESULT-CONTRACT.md §Round 2) and must deposit at least one file there; workflow halts to surface the discrepancy."
+            bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} capability:${capability} cli:${effective_cli} write_dir:${STEP_WRITE_DIR}" "失敗" >/dev/null 2>&1 || true
+            append_workflow_log "${WORKFLOW_LOG}" "${AGENT_SKILL}" "step:${step_id} duration:${DURATION}s error:${ERROR_TYPE} write_dir:${STEP_WRITE_DIR}" "失敗"
+            register_step_runtime_state "${PLAN_JSON}" "${RUNTIME_STATE_JSON}" "${step_id}" "blocked" "${ERROR_TYPE}" "${OUTPUT_SOURCE}" "${STEP_OUTPUT_PATH}" "" 2>/dev/null || true
+            record_blocked_step "${WORKFLOW_LOG}" "${RUN_SUMMARY}" "${phase_num}" "${step_id}" "${capability}" "${ERROR_TYPE}" "landing_dir:${STEP_WRITE_DIR} emitted_count:0" 2>/dev/null || true
+            printf "%s\n" "${ERROR_HINT}"
+            if [ "${optional}" != "True" ]; then
+              SHOULD_HALT=1
+            fi
+          fi
+        fi
+      fi
+
+      if [ "${VALIDATOR_HARD_FAIL}" -eq 0 ] && [ "${AI_RESULT_HARD_FAIL}" -eq 0 ] && [ "${AI_EMIT_HARD_FAIL}" -eq 0 ]; then
         STEP_STATUS="ok"
         FINAL_STEP_STATE="validated"
         step_status "ok" "${step_id}" "${DURATION}"

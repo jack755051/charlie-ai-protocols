@@ -112,6 +112,7 @@ fixture tests/scripts/test-persist-task-constitution-output-paths-norm.sh
 fixture tests/scripts/test-cross-pipeline-named-artifacts.sh
 fixture tests/scripts/test-ai-step-result-parser.sh
 fixture tests/scripts/test-ai-step-result-workflow-integration.sh
+fixture tests/scripts/test-ai-write-contract.sh
 EOF
       ;;
     project) cat <<'EOF'

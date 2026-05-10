@@ -6,6 +6,42 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.26.1] - 2026-05-10
+
+> Patch release — **Round 2 of the bug #12 fix series ("AI Write Contract")**, building on v0.26.0's runtime perception fix. Round 1 (v0.26.0) made the workflow correctly halt when AI agents self-reported `blocked` / `failed` / `needs_data`. Round 2 (this release) closes the **counter** pathology — an AI agent emitting `result: success` while having produced no actual code files. v0.26.1 introduces a per-step landing directory under `<run_dir>/code/<step_id>/`, threads it into the AI provider CLI invocations as a writable workspace, and post-step verifies that code-emitting capabilities deposited at least one file there before crediting the step as success.
+>
+> The Round 2 boundary stays tight: this release establishes the **infrastructure** for AI to write code (provider sandbox flags, env var, prompt section, post-step gate). It does **not** re-run any of the dogfood pipelines yet — that's Round 3. After v0.26.1, an implementation-pipeline AI step that reports `success` but writes no files will correctly halt with `ai_success_no_artifacts`.
+
+### Added
+
+- `engine/step_runtime.py _CODE_EMITTING_CAPABILITIES` constant + `capability-emits-code` CLI subcommand: locks the four capabilities (`backend_implementation`, `frontend_implementation`, `qa_testing`, `devops_delivery`) for which the post-step gate enforces non-empty landing dir. Markdown-only AI capabilities (PRD, BA, schema design, UI design, security audit, code structure audit, archive) are explicitly excluded; new capabilities default to `false` so opt-in is required.
+- `scripts/cap-workflow-exec.sh build_write_contract_section`: prompt-injection helper that adds an "AI Write Contract" block to the prompts of code-emitting AI steps. Tells the agent the writable landing dir path (`$CAP_WORKFLOW_WRITE_DIR`), names the four contract rules (write under landing dir, don't touch project_root, success requires non-empty landing dir, blocked / needs_data still escapes via the v0.26.0 result contract). Markdown-only capabilities get an empty section so their prompts stay unchanged.
+- `scripts/cap-workflow-exec.sh AI_EMIT_HARD_FAIL` gate: post-AI runtime check fires only when (validator hard-fail = 0) AND (ai_result hard-fail = 0) AND (effective executor = ai) AND (write_dir is non-empty) AND (capability-emits-code returns true). Demotes `result: success` to `ai_success_no_artifacts` when `find <write_dir> -type f ! -name '.*'` returns 0; surfaces `record_blocked_step` + `register_step_runtime_state blocked` and halts non-optional steps. Success block now requires all three hard-fail flags to be 0 — defence-in-depth gate updated.
+- `scripts/cap-workflow-exec.sh run_step_claude` accepts an optional `write_dir` second argument: when set, prepends `--add-dir <write_dir>` + `--permission-mode acceptEdits` + `--allowed-tools "Read,Edit,Write,Bash,Glob,Grep"` to the headless `claude -p` invocation. The narrow tools whitelist intentionally excludes WebFetch / WebSearch / Task spawning so the AI cannot escape the sandbox via a sub-agent. Empty write_dir preserves pre-v0.26.1 behaviour (no write tools).
+- `scripts/cap-workflow-exec.sh run_step_codex` accepts an optional `write_dir` second argument: when set, prepends `--sandbox workspace-write` + `--cd <write_dir>` to the `codex exec` invocation. Reads from absolute paths (project_root, run dir context) keep working — `workspace-write` only restricts WRITES.
+- `scripts/cap-workflow-exec.sh` main loop now creates `<WORKFLOW_OUTPUT_DIR>/code/<step_id>/` before each AI step, exports `CAP_WORKFLOW_WRITE_DIR` for shell context (so build_write_contract_section can reference it), and threads the path into `run_step` as the third argument. Shell steps and the AI fallback path inside shell steps both honour the same setup.
+- `agent-skills/00-core-protocol.md` §5.3.2 (new sub-section): documents the AI Write Contract at the protocol layer. Landing dir path, env var convention, provider flags wired into both claude and codex, capability-emit whitelist with worked-example expected outputs, agent operational rules, integration layer pointers (capability whitelist, CLI, provider flag wiring, post-step gate, prompt injection, regression tests).
+- `schemas/workflows/project-implementation-pipeline.yaml`: each of the four code-emitting steps (`frontend`, `backend`, `qa_testing`, `devops_packaging`) gains a `done_when` lead item — "實際檔案已落地" — calling out the v0.26.1 contract, plus a step `notes:` clarification that runtime demotes empty landing dirs to `ai_success_no_artifacts`. Existing `done_when` items unchanged so spec-layer expectations stay backward compatible.
+- `tests/scripts/test-ai-write-contract.sh` (new, 19 cases): structural lint + capability-whitelist coverage. Section 1 (9 cases) covers the four whitelisted capabilities, four explicitly-excluded markdown-only capabilities, and an unknown-capability default-false case. Section 2 (8 cases) lints `cap-workflow-exec.sh` for the wiring contract — claude flags present, codex flags present, env var exported, write_dir computed, dispatcher forwards write_dir, prompt section helper defined and called, hard-fail gate referenced ≥3 times, success block guarded on all three flags. Section 3 (2 cases) confirms provider flags are gated on non-empty write_dir.
+- `scripts/workflows/smoke-layer.sh` runtime suite: append the new fixture.
+
+### Verified
+
+- `test-ai-write-contract.sh` **19 / 19** PASS.
+- smoke-layer contracts **7 / 7**, runtime **20 / 20** (19 prior + 1 new) PASS.
+- `cap-workflow-exec.sh` shell syntax: `bash -n` clean.
+- Capability lookup CLI sanity: `capability-emits-code backend_implementation` → `true`, `capability-emits-code security_audit` → `false`, `capability-emits-code unknown_capability` → `false`.
+
+### Boundary
+
+- **Round 2 only** of the v0.26.x series. The infrastructure is in place — AI can write to a per-step sandboxed landing dir; the runtime now enforces non-empty emission for code-emitting capabilities — but no dogfood pipeline has been re-run yet. Round 3 will re-run Phase D against this contract to confirm that AI agents actually do produce code under the new sandbox flags (and to surface any provider-side restrictions that still block writes).
+- Code-emitting whitelist is conservative: only `backend_implementation`, `frontend_implementation`, `qa_testing`, `devops_delivery` are subject to the new gate. Adding new capabilities to the whitelist is a single-line edit in `_CODE_EMITTING_CAPABILITIES`.
+- The narrow `--allowed-tools` set on claude (Read,Edit,Write,Bash,Glob,Grep) is intentional: WebFetch / WebSearch / Task agent spawning are excluded so a misbehaving AI can't escape the sandbox.
+- `workspace-write` for codex permits writes only under cwd (set to landing dir via `--cd`); reads from absolute paths still work, so the agent can pull spec context from project_root and run dir context without further flags.
+- Phase 5 role/skill attachment from v0.25.0 unchanged. Phase 6 builtin promotion still deferred. v0.26.x Round 3 (re-run Phase D / Phase F / Phase E) remains the next milestone.
+
+---
+
 ## [v0.26.0] - 2026-05-10
 
 > Minor release — **Round 1 of the bug #12 fix series ("Honest Workflow Result")**, surfaced by the 2026-05-10 component-repo dogfood Phase F. Pre-v0.26.0, `cap-workflow-exec.sh` graded any AI step that exited 0 with non-empty stdout as `ok`, which meant a Phase D run whose AI agents universally self-reported `blocked_read_only` / `FAIL_BLOCKED_*` / `needs_data` inside their markdown bodies still rolled up to `final_state=completed / 15/15 PASS`. The runtime hallucinated success against a run that produced no actual implementation code. v0.26.0 closes the perception gap: a structured AI step result contract, a parser that normalizes the four canonical states, and a workflow runtime gate that halts on anything other than `success`.

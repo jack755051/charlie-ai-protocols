@@ -126,6 +126,7 @@ steps:
       - frontend_codebase
       - frontend_unit_tests
     done_when:
+      - 「實際檔案已落地」（v0.26.1+ AI write contract）：landing dir ${CAP_WORKFLOW_WRITE_DIR} 至少含 package.json / 框架入口 / 一個元件 / 一個測試共四類非空檔，runtime 會在 result=success 時驗證
       - 對應 spec layer 鎖定的框架（Tauri 殼 / Next.js / Angular / Nuxt 視 PRD 而定）已正確初始化專案結構
       - DTO / Mapper / Service / Facade 分層完整，UI 不直接消費 Raw DTO
       - 路由 / 頁面 / Section / Component 對齊 ui_spec 與 ui_design_assets（Tokens / Screens / Prototype）
@@ -141,6 +142,7 @@ steps:
     notes:
       - watcher milestone gate 在本 step 完成後觸發，重點稽核：分層邊界 / 設計資產對齊 / 單元測試存在性 / 框架特化合規。
       - 與 backend step 平行；兩者皆依賴 persist_task_constitution 但彼此無依賴。
+      - v0.26.1+ AI write contract：必須把實際前端原始碼寫到 ${CAP_WORKFLOW_WRITE_DIR}（per-step landing dir，runtime 已準備並注入 provider sandbox）；只在 stdout 列檔案計畫但 dir 為空，runtime 會 demote 為 ai_success_no_artifacts 強制失敗。
 
   - id: emit_backend_ticket
     name: Emit Handoff Ticket for backend
@@ -173,6 +175,7 @@ steps:
       - backend_codebase
       - backend_unit_tests
     done_when:
+      - 「實際檔案已落地」（v0.26.1+ AI write contract）：landing dir ${CAP_WORKFLOW_WRITE_DIR} 至少含 .csproj 或同等專案檔 / 一個 .cs / 一個 migration / 一個測試類，runtime 會在 result=success 時驗證
       - 對應 spec layer 鎖定的後端框架（.NET Core / NestJS 視 PRD 而定）已正確初始化 Clean Architecture 四層結構
       - Aggregate Root / Entity / Value Object 建模對齊 ba_spec 與 schema_ssot
       - Application Service 透過 Unit of Work 管理事務邊界；嚴禁 Service 內 try-catch 後回錯誤碼
@@ -190,6 +193,7 @@ steps:
     notes:
       - watcher milestone gate 在本 step 完成後觸發，重點稽核：DDD 邊界 / Unit of Work 邊界 / 樂觀併發 / 異常統一 / 單元測試 Mock 隔離。
       - 與 frontend step 平行。
+      - v0.26.1+ AI write contract：必須把實際後端原始碼寫到 ${CAP_WORKFLOW_WRITE_DIR}（per-step landing dir，runtime 已準備並注入 provider sandbox）；只在 stdout 列檔案計畫但 dir 為空，runtime 會 demote 為 ai_success_no_artifacts 強制失敗。
 
   - id: emit_qa_testing_ticket
     name: Emit Handoff Ticket for qa_testing
@@ -223,6 +227,7 @@ steps:
       - qa_test_suite
       - qa_report
     done_when:
+      - 「實際檔案已落地」（v0.26.1+ AI write contract）：landing dir ${CAP_WORKFLOW_WRITE_DIR} 至少含一個 Playwright / Vitest / xUnit / k6 等實際 test source 檔，runtime 會在 result=success 時驗證
       - API 整合測試：Response Body 欄位 100% 對齊 api_contract；ApiResponse 包裹格式驗證通過；Happy / 異常狀態碼覆蓋
       - E2E 測試：Playwright POM 模式，Locator 優先級 Role > TestId > Text，無 waitForTimeout，覆蓋 ba_spec 主要使用者流程
       - 性能壓測：k6 thresholds p(95)<500ms / error_rate<1%；含併發競爭模擬（如有 version 欄位）
@@ -239,6 +244,7 @@ steps:
       - 與 security_audit step 平行；兩者皆依賴 frontend + backend 但彼此無依賴。
       - 嚴禁修改業務邏輯代碼；僅產測試腳本與報告。
       - SRE_TRIGGER 標記後，devops_packaging 仍可繼續，但 impl_audit 必須將其列為 NON-BLOCKING NOTES 帶入下一階段優化。
+      - v0.26.1+ AI write contract：必須把實際 test 程式碼寫到 ${CAP_WORKFLOW_WRITE_DIR}（per-step landing dir，runtime 已準備並注入 provider sandbox）；只在 stdout 列計畫但 dir 為空，runtime 會 demote 為 ai_success_no_artifacts 強制失敗。
 
   - id: emit_security_audit_ticket
     name: Emit Handoff Ticket for security_audit
@@ -319,6 +325,7 @@ steps:
     outputs:
       - deployment_artifacts
     done_when:
+      - 「實際檔案已落地」（v0.26.1+ AI write contract）：landing dir ${CAP_WORKFLOW_WRITE_DIR} 至少含 Dockerfile + docker-compose.yml + 一個 CI pipeline YAML，runtime 會在 result=success 時驗證
       - 部署產物對齊 spec layer 拍板的部署模式（桌面 binary / Docker container / k8s 等）
       - Dockerfile 採多階段構建，最小化 production image，無 Build Tools 進 production
       - 容器以非 root 使用者執行（如適用）
@@ -333,6 +340,7 @@ steps:
     notes:
       - 本 step 為 sequential，必須等 qa + security 都過才啟動。
       - 若 qa_report 含 SRE_TRIGGER 但非 FAIL，devops 仍可進；僅在 impl_audit 帶入 NOTES。
+      - v0.26.1+ AI write contract：必須把實際 Dockerfile / compose / CI yaml 寫到 ${CAP_WORKFLOW_WRITE_DIR}（per-step landing dir，runtime 已準備並注入 provider sandbox）；只在 stdout 列計畫但 dir 為空，runtime 會 demote 為 ai_success_no_artifacts 強制失敗。
 
   - id: emit_impl_audit_ticket
     name: Emit Handoff Ticket for impl_audit
