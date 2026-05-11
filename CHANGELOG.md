@@ -6,6 +6,66 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.26.3] - 2026-05-11
+
+> Patch release — **Round 3 dogfood follow-up**: when reruns of the
+> `project-constitution` workflow were invoked with `CAP_PROJECT_ID_OVERRIDE`
+> already set (e.g. by `cap-project.sh` or test fixtures), the inbound override
+> was silently clobbered to the literal `project-constitution-bootstrap`. Each
+> retry therefore spawned a parallel bootstrap project instead of reusing the
+> caller-pinned identity. v0.26.3 makes the override env-aware so callers can
+> drive `project-constitution` against any project_id; behaviour when the env
+> var is unset is unchanged.
+>
+> Also catches up `repo.manifest.yaml` `cap_version` from `v0.24.2` (two minor
+> versions behind the actual `v0.26.2` tag) to `v0.26.3` in the same release,
+> per the manifest comment SSOT rule "Release workflow MUST bump this in
+> lock-step with git tag and CHANGELOG.md".
+
+### Fixed
+
+- `scripts/cap-workflow.sh`: `WORKFLOW_PROJECT_ID_OVERRIDE` assignment in the
+  `project-constitution` branch changed from hard-coded
+  `project-constitution-bootstrap` to
+  `"${CAP_PROJECT_ID_OVERRIDE:-project-constitution-bootstrap}"`. Backward-
+  compatible: unset env still resolves to the previous default (commit
+  `fc4753b`).
+
+### Changed
+
+- `repo.manifest.yaml` `cap_version: v0.24.2 → v0.26.3`. SSOT catch-up after
+  v0.25.x / v0.26.x bumps were not mirrored into the manifest. Consumers of
+  `scripts/cap-paths.sh get cap_version` and ledger-stamping CLIs will now
+  reflect the live tag. Existing identity ledgers preserve their historical
+  stamp by design (audit anchor, not stale UI artifact).
+
+### Verified
+
+- Focused regression: 6 suites / 163 cases — `test-cap-project-constitution`
+  (65) + `test-binder-project-context-origin` (8) +
+  `test-ai-step-result-parser` (40) + `test-ai-step-result-workflow-integration`
+  (8) + `test-ai-write-contract` (23) + `test-emit-handoff-ticket` (19), all
+  PASS. Covers the v0.26.3 change site and the v0.26.0–v0.26.2 contract
+  surfaces that must not regress.
+- `scripts/workflows/smoke-per-stage.sh`: **81 pass / 6 fail / 0 skipped** —
+  same pattern as v0.26.2 baseline (verified by `git checkout v0.26.2 &&
+  smoke-per-stage`). Zero regression from this tag.
+
+### Known boundaries
+
+- The 6 smoke fails are **pre-existing baseline drift, not v0.26.3 scope**.
+  They all surface as `not executable` because the smoke ledger references
+  test files that either do not exist in `tests/scripts/`
+  (`test-cap-entry-help.sh`, `test-cap-entry-unknown.sh`,
+  `test-cap-entry-namespace-shortcuts.sh`,
+  `test-cap-workflow-static-list-outside-project.sh`,
+  `test-cap-workflow-run-cli-fail-fast.sh`) or exist without an exec bit
+  (`test-cap-provider-doctor.sh`, `-rw-r--r--`). Tracked separately for a
+  future smoke baseline cleanup batch; v0.26.3 explicitly does not address
+  them to keep the patch surface minimal.
+
+---
+
 ## [v0.26.2] - 2026-05-10
 
 > Patch release — **Round 3 dogfood-discovered bug #15** in the v0.26.1 write contract. v0.26.1 set `CAP_WORKFLOW_WRITE_DIR` and the writable provider flags (claude `--add-dir` + permission-mode acceptEdits + write tools; codex `--sandbox workspace-write --cd`) for **every** AI step regardless of capability. The Round 3 Phase D dogfood run (`run_20260510205453_dce8764e`) showed the consequence: the supervisor in step 1 (`task_constitution_planning`, NOT a code-emit capability) over-eager wrote 50 .NET Clean Architecture files into its own landing dir; the actual `backend` step in step 4 (genuine code-emit capability) then found nothing left to do, emitted `result: success` with an empty landing dir, and the v0.26.1 R2 emit-gate correctly halted with `ai_success_no_artifacts`. The gate worked; the upstream over-permissive write access did not.
