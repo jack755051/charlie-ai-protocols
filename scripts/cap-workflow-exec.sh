@@ -206,7 +206,7 @@ run_step_claude() {
     # main-loop gating fix.
     args+=(--allowed-tools "Read,Glob,Grep")
   fi
-  claude "${args[@]}" "${prompt}" 2>&1
+  printf '%s' "${prompt}" | claude "${args[@]}" 2>&1
 }
 
 # Codex stdout 包含 banner + prompt echo + response，需要清洗。
