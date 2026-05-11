@@ -6,6 +6,34 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.26.4] - 2026-05-11
+
+> Patch release — moves the `claude -p` step prompt off argv and onto
+> stdin in `scripts/cap-workflow-exec.sh`. The previous form passed the
+> fully-rendered Type C ticket + task constitution + capability context
+> as a positional CLI argument; for large prompts this risks tripping
+> kernel `ARG_MAX` and forces every byte through bash argv / env
+> overhead. The fix uses `printf '%s' "${prompt}" | claude "${args[@]}"`
+> instead. `claude -p` reads stdin natively, so behaviour is identical
+> for short prompts and unblocked for long ones. No protocol surface
+> change, no flag added or removed.
+
+### Fixed
+
+- `scripts/cap-workflow-exec.sh` `run_step_claude`: prompt is now piped
+  through stdin via `printf '%s' "${prompt}" | claude "${args[@]}"`
+  instead of being appended as a positional CLI argument. Removes the
+  argv-size ceiling for long workflow step prompts; behaviour for
+  short prompts is unchanged.
+
+### Changed
+
+- `repo.manifest.yaml` `cap_version: v0.26.3 → v0.26.4`. SSOT lock-step
+  bump per the manifest comment "Release workflow MUST bump this in
+  lock-step with git tag and CHANGELOG.md".
+
+---
+
 ## [v0.26.3] - 2026-05-11
 
 > Patch release — **Round 3 dogfood follow-up**: when reruns of the
