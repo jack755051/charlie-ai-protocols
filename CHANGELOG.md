@@ -6,17 +6,30 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
-## [v0.26.4] - 2026-05-11
+## [v0.26.4] - 2026-05-12
 
-> Patch release — moves the `claude -p` step prompt off argv and onto
-> stdin in `scripts/cap-workflow-exec.sh`. The previous form passed the
-> fully-rendered Type C ticket + task constitution + capability context
-> as a positional CLI argument; for large prompts this risks tripping
-> kernel `ARG_MAX` and forces every byte through bash argv / env
-> overhead. The fix uses `printf '%s' "${prompt}" | claude "${args[@]}"`
-> instead. `claude -p` reads stdin natively, so behaviour is identical
-> for short prompts and unblocked for long ones. No protocol surface
-> change, no flag added or removed.
+> Patch release — three self-repair fixes that all surfaced during the
+> 2026-05-11 / 2026-05-12 ubuntu dogfood. **(1) `claude -p` prompt via
+> stdin**: `scripts/cap-workflow-exec.sh` previously passed the fully-
+> rendered Type C ticket + task constitution + capability context as a
+> positional CLI argument and risked tripping kernel `ARG_MAX`; fix uses
+> `printf '%s' "${prompt}" | claude "${args[@]}"` (claude -p reads stdin
+> natively, behaviour unchanged for short prompts). **(2) `install.sh`
+> surfaces failed step stderr**: three call sites that used
+> `> /dev/null 2>&1` (cap-release.sh prepare, `make sync`, `make
+> install`) made every fresh-install failure look like a silent abort;
+> a new `run_silently()` helper captures stdout+stderr to a tmp log,
+> returns silently on success, and on failure prints
+> `❌ <label> failed (exit <rc>). Captured output:` + the buffer +
+> propagates the real exit code. **(3) `install.sh` re-attaches HEAD
+> before pulling**: existing-install branch detects detached HEAD via
+> `git symbolic-ref --quiet HEAD` and re-attaches to
+> `${CAP_DEFAULT_BRANCH:-main}` before `git pull --ff-only`; this fixes
+> the self-inflicted state where a prior `cap-release.sh prepare` left
+> HEAD detached at a release tag and caused re-runs of
+> `curl ... | install.sh` to abort with `You are not currently on a
+> branch` at step [1/4]. No protocol surface change, no flag added or
+> removed.
 
 ### Fixed
 
@@ -25,6 +38,28 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
   instead of being appended as a positional CLI argument. Removes the
   argv-size ceiling for long workflow step prompts; behaviour for
   short prompts is unchanged.
+- `install.sh`: introduce `run_silently()` helper that captures
+  stdout+stderr to a tmp log, returns silently on success, and on
+  failure prints `❌ <label> failed (exit <rc>). Captured output:` +
+  the captured buffer + propagates the real exit code. Replaces three
+  call sites that previously used `> /dev/null 2>&1` (cap-release.sh
+  prepare, `make sync`, `make install`) and made root-cause discovery
+  impossible during fresh-install failures. The helper uses
+  `cmd || rc=$?` (not `if cmd; then ...; fi`) because the latter loses
+  the sub-command's real rc when no else branch executes — verified by
+  fixture: failure path with `exit 7` now propagates `rc=7` to the
+  outer script (previously reported `rc=0`).
+- `install.sh`: existing-install branch now detects detached HEAD via
+  `git symbolic-ref --quiet HEAD` and re-attaches to
+  `${CAP_DEFAULT_BRANCH:-main}` before `git pull --ff-only`. Previous
+  installer left HEAD detached at the latest release tag after the
+  inline `cap-release.sh prepare` step, so re-running
+  `curl ... | install.sh` on the same machine hit `You are not
+  currently on a branch` and aborted at step [1/4]. Backward-compatible:
+  when HEAD is already on a branch the re-attach step is a no-op.
+  Verified by reproducing on a fresh clone at `v0.26.2` (detached) and
+  watching the new logic checkout `main` then complete `pull --ff-only
+  origin main` without error.
 
 ### Changed
 
