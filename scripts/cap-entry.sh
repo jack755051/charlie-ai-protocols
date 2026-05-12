@@ -158,7 +158,7 @@ COMMAND                            DESCRIPTION
   cap setup                        Create the venv and install dependencies (usually handled by the installer)
   cap sync                         Rebuild local Agent Skills symlinks
   cap install                      Install Agent Skills globally and register the shell wrapper
-  cap uninstall                    Remove the global install and shell wrapper
+  cap uninstall [--purge] [-y]     Remove the global install (--purge: also wipe ~/.charlie-ai-protocols)
   cap release-check [--all|--recent N]  Check release metadata for low-signal entries
   cap paths                        Show CAP local storage paths (diagnostic)
 
@@ -377,6 +377,60 @@ case "${COMMAND}" in
   provider|prov)
     shift || true
     exec bash "${SCRIPT_DIR}/cap-provider.sh" "$@"
+    ;;
+  uninstall)
+    # cap-entry.sh dispatch for `cap uninstall` was missing before v0.26.5;
+    # this branch wires it through and adds --purge / -y for clean reinstall
+    # test loops. ~/.cap/ runtime data (traces, projects, designs) is never
+    # touched — purge only removes the cloned ~/.charlie-ai-protocols/.
+    # Sibling broken dispatches (setup / sync / install) are tracked as a
+    # known issue and not fixed here to keep this patch surgical.
+    shift || true
+    UNINSTALL_PURGE=0
+    UNINSTALL_ASSUME_YES=0
+    for uninstall_arg in "$@"; do
+      case "${uninstall_arg}" in
+        --purge) UNINSTALL_PURGE=1 ;;
+        -y|--yes) UNINSTALL_ASSUME_YES=1 ;;
+        *)
+          echo "Unknown cap uninstall flag: ${uninstall_arg}" >&2
+          echo "Usage: cap uninstall [--purge] [-y]" >&2
+          exit 1
+          ;;
+      esac
+    done
+    # Default uninstall: strip CAP entries from ~/.agents/skills,
+    # ~/.claude/rules, and the shell-rc block (via Makefile target).
+    if ! make -C "${CAP_ROOT}" uninstall; then
+      exit_rc=$?
+      exit "${exit_rc}"
+    fi
+    if [ "${UNINSTALL_PURGE}" -eq 1 ]; then
+      UNINSTALL_PURGE_DIR="${HOME}/.charlie-ai-protocols"
+      if [ -d "${UNINSTALL_PURGE_DIR}" ]; then
+        if [ "${UNINSTALL_ASSUME_YES}" -ne 1 ]; then
+          echo ""
+          echo "⚠ --purge will remove ${UNINSTALL_PURGE_DIR} (the cloned CAP repo)."
+          echo "   ~/.cap/ runtime data (traces, projects, designs) is preserved."
+          printf "   Continue? (y/N): "
+          if ! read -r uninstall_reply; then
+            uninstall_reply=""
+          fi
+          case "${uninstall_reply}" in
+            y|Y|yes|YES) ;;
+            *)
+              echo "   Aborted; ${UNINSTALL_PURGE_DIR} kept."
+              exit 0
+              ;;
+          esac
+        fi
+        rm -rf "${UNINSTALL_PURGE_DIR}"
+        echo "🗑  Removed ${UNINSTALL_PURGE_DIR}"
+      else
+        echo "ℹ ${UNINSTALL_PURGE_DIR} already absent; nothing to purge."
+      fi
+    fi
+    exit 0
     ;;
   *)
     if [ "${COMMAND}" = "paths" ]; then
