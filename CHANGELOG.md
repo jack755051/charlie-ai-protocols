@@ -6,6 +6,87 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Commit types fo
 
 ---
 
+## [v0.26.5] - 2026-05-12
+
+> Patch release — wire `cap uninstall` dispatch (it was silently broken
+> before; the help text and KNOWN_COMMANDS array listed it but
+> `cap-entry.sh` had no `uninstall)` branch in its case statement, so
+> running `cap uninstall` fell through to `unknown_command` and exited 1
+> with a misleading "Did you mean: cap uninstall?" fuzzy-match
+> suggestion). Now `cap uninstall` actually runs and gains `--purge` /
+> `-y` flags for clean reinstall test loops: `--purge` additionally
+> removes `~/.charlie-ai-protocols/` (the cloned CAP repo, the
+> `install.sh` clone target), and `-y` skips the confirmation prompt.
+> `~/.cap/` runtime storage (traces / projects / designs) is **never**
+> touched by `cap uninstall` regardless of flags — that data is the
+> user's working ledger, not an installer artifact.
+>
+> Sibling dispatch gaps: `cap setup` / `cap sync` / `cap install` share
+> the same root cause (listed in help + KNOWN_COMMANDS but no case
+> branch). Tracked as a known issue and deliberately **not** fixed in
+> this patch to keep the surface minimal. They will be addressed in a
+> follow-up tag together with regression tests covering all four
+> dispatch surfaces.
+>
+> Note on v0.26.4 tag drift: the v0.26.4 `CHANGELOG.md` entry above
+> describes three fixes (claude stdin piping + `install.sh` stderr
+> surfacing + `install.sh` detached-HEAD pull repair), but the v0.26.4
+> annotated tag itself points to commit `fa1836a` which only carries
+> the claude stdin fix. The two `install.sh` fixes landed on `main` in
+> commit `46f39aa` **after** the v0.26.4 tag was cut, so the v0.26.4
+> entry above is forward-describing what `main` looked like at the
+> time the entry was last edited, not what the v0.26.4 tag actually
+> ships. Consumers fetching by tag (`cap update v0.26.4`) get the
+> claude stdin fix only. v0.26.5 (this tag) is the first tag that
+> actually carries the `install.sh` fixes, alongside the new
+> `cap uninstall` wiring. This is a one-time historical drift —
+> future tags will not exhibit this pattern (we will cut the tag
+> from the same commit the CHANGELOG entry describes).
+
+### Added
+
+- `cap uninstall --purge`: in addition to the default uninstall
+  (stripping `~/.agents/skills/` entries, `~/.claude/rules/` entries,
+  and the CAP block from the user's shell rc), also `rm -rf
+  ~/.charlie-ai-protocols/`. By default prompts `Continue? (y/N)`
+  before deleting; pass `-y` / `--yes` to skip the prompt for
+  automated test cycles. `~/.cap/` is preserved by design.
+- `cap uninstall -y` (without `--purge`): same as the default
+  uninstall behaviour but pre-acknowledges any future confirmation
+  surfaces. Harmless today; reserved for forward-compat as more
+  destructive flags get added.
+
+### Fixed
+
+- `scripts/cap-entry.sh`: add the missing `uninstall)` case branch.
+  Before this patch, `cap uninstall` matched the default `*)` branch
+  and was treated as an unknown command by `unknown_command`, which
+  fuzzy-matched it back to itself and printed the misleading "Did
+  you mean: cap uninstall?" suggestion before exiting 1. Now the
+  dispatch branch exists, parses `--purge` and `-y` / `--yes`
+  flags, calls `make -C "${CAP_ROOT}" uninstall` for the default
+  cleanup, and conditionally removes `~/.charlie-ai-protocols/`
+  when `--purge` is set. Unknown flags are rejected with
+  `Unknown cap uninstall flag: <flag>` + usage line + exit 1.
+
+### Changed
+
+- `repo.manifest.yaml` `cap_version: v0.26.4 → v0.26.5`. SSOT
+  lock-step bump per the manifest comment "Release workflow MUST
+  bump this in lock-step with git tag and CHANGELOG.md".
+
+### Known issues (deferred)
+
+- `cap setup` / `cap sync` / `cap install` dispatch branches are
+  still missing in `cap-entry.sh`. Running any of them currently
+  falls through to `unknown_command` with the same misleading
+  fuzzy-match self-suggestion. Tracked for a follow-up tag with
+  regression coverage. As workarounds: `cap setup` / `cap sync` /
+  `cap install` can be reached today via `make setup` /
+  `make sync` / `make install` from within `~/.charlie-ai-protocols/`.
+
+---
+
 ## [v0.26.4] - 2026-05-12
 
 > Patch release — three self-repair fixes that all surfaced during the
