@@ -69,7 +69,7 @@
 | 路徑 | 增補 |
 |---|---|
 | [`agent-skills/00-core-protocol.md`](../../agent-skills/00-core-protocol.md) | §3 唯讀規則加 cross-ref，指向 baseline policy 與 customization guide |
-| [`docs/cap/P9-SOURCE-RESOLVER-DESIGN.md`](P9-SOURCE-RESOLVER-DESIGN.md) | 新增 §11 Binding Provenance Audit Checklist（A0 #3 收斂） |
+| [`docs/cap/P9-SOURCE-RESOLVER-DESIGN.md`](../../docs/cap/P9-SOURCE-RESOLVER-DESIGN.md) | 新增 §11 Binding Provenance Audit Checklist（A0 #3 收斂） |
 
 ## 4. 沒解決的部分（Deferred to H1+）
 
@@ -106,6 +106,6 @@ bash tests/scripts/test-agent-skills-snapshot.sh          # A0 #4: 16 assertions
 如果你是第一次看 A0 系列：
 
 1. 先讀 [`policies/agent-skills-baseline.md`](../../policies/agent-skills-baseline.md)（policy SSOT）— 5 分鐘掌握規則。
-2. 再讀 [`docs/cap/AGENT-SKILLS-CUSTOMIZATION.md`](AGENT-SKILLS-CUSTOMIZATION.md)（user guide）— 看四個情境範例。
-3. 對 binding 行為有興趣 → 讀 [`docs/cap/P9-SOURCE-RESOLVER-DESIGN.md`](P9-SOURCE-RESOLVER-DESIGN.md) §11 audit checklist。
+2. 再讀 [`docs/cap/AGENT-SKILLS-CUSTOMIZATION.md`](../../docs/cap/AGENT-SKILLS-CUSTOMIZATION.md)（user guide）— 看四個情境範例。
+3. 對 binding 行為有興趣 → 讀 [`docs/cap/P9-SOURCE-RESOLVER-DESIGN.md`](../../docs/cap/P9-SOURCE-RESOLVER-DESIGN.md) §11 audit checklist。
 4. 對 baseline replay 有興趣 → 等 H1 Replay Contract 落地（本文件 §4 deferred 列表）。

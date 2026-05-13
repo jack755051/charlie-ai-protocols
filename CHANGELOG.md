@@ -1053,7 +1053,7 @@ Runs #8 and #9 bracket the visibility range of the Phase 2 reference-mounted pat
 
 ## [v0.22.0] - 2026-05-06
 
-> v0.22.0 GA — promote `v0.22.0-rc18` to the canonical v0.22.0 release. v0.22 is the **Platform Closeout** major: P0-P10 platform-level capabilities all reach steady state across rc1-rc18. The full capability map, before/after diff, dogfood 7-step verification chain, deferred governance debt, and rc1-rc18 對照表 live in `docs/cap/PLATFORM-CLOSEOUT-v0.22.md`. GA = pure promotion of rc18; no commits between rc18 and this tag.
+> v0.22.0 GA — promote `v0.22.0-rc18` to the canonical v0.22.0 release. v0.22 is the **Platform Closeout** major: P0-P10 platform-level capabilities all reach steady state across rc1-rc18. The full capability map, before/after diff, dogfood 7-step verification chain, deferred governance debt, and rc1-rc18 對照表 live in `development-records/closeouts/platform-closeout-v0.22.md`. GA = pure promotion of rc18; no commits between rc18 and this tag.
 
 ### Highlights (P0-P10)
 
@@ -1132,7 +1132,7 @@ Runs #8 and #9 bracket the visibility range of the Phase 2 reference-mounted pat
 
 ## [v0.22.0-rc16] - 2026-05-06
 
-> Release candidate — close out P10 Detached Runtime and Promote / Publish AND deliver the v0.22 platform-level closeout review covering P0–P10 in one document. Aggregate 7 commits since rc15 (3× docs + 4× feat) into the typed promote surface (`cap promote inspect / project-constitution / workflow`) plus a single SSOT for "what CAP can do now" → `docs/cap/PLATFORM-CLOSEOUT-v0.22.md`. P10 全段 8/8 sub-items 完成；剩下 deferred items（detached runtime / publish / `--smoke` flag）明確列在 closeout review §3.
+> Release candidate — close out P10 Detached Runtime and Promote / Publish AND deliver the v0.22 platform-level closeout review covering P0–P10 in one document. Aggregate 7 commits since rc15 (3× docs + 4× feat) into the typed promote surface (`cap promote inspect / project-constitution / workflow`) plus a single SSOT for "what CAP can do now" → `development-records/closeouts/platform-closeout-v0.22.md`. P10 全段 8/8 sub-items 完成；剩下 deferred items（detached runtime / publish / `--smoke` flag）明確列在 closeout review §3.
 
 ### Added
 
@@ -1154,7 +1154,7 @@ Runs #8 and #9 bracket the visibility range of the Phase 2 reference-mounted pat
 
 - **P10 #8 smoke wiring + chmod 修復**（同 `b32bdee`）：`scripts/workflows/smoke-per-stage.sh` step 37-40 接 4 個 P10-specific test（test-workflow-result-schema 早在 step 18 P0 #5 已接，不重複）；順手 chmod +x 修 21 個 git tracked 但 working-tree 缺 `+x` 的 pre-existing test files（純 file-mode 修復，無功能變動）。修補前 smoke 43 pass / 29 fail，修補後 **61 pass / 11 fail**（+18 全是 chmod 修出的 fixture）；剩 11 fail 為 P1/P2/P3/P6/P8 環境依賴 e2e 與 P10 無關。
 
-- **v0.22 Platform Closeout Review**（本 commit）：新增 `docs/cap/PLATFORM-CLOSEOUT-v0.22.md` — P0-P10 platform-level 收斂文件，回答三件事：(1) 現在 CAP 能做什麼（capability map by phase）；(2) P1-P10 帶來什麼提升（before / after diff table）；(3) 還剩哪些治理債（deferred items / escape hatches / 文件重複來源 / smoke suite 變肥）。包含 dogfood 7-step verification chain（token-free 部分由 17 個 focused suite 共 ~454 assertions 嚴格覆蓋；live AI run 由使用者選擇是否花 token 跑 step 3）+ 關鍵 SSOT 索引（policies / schemas / docs/cap）+ rc1-rc16 對照表。`TODOLIST.md` / `docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md` 「更新日期」同步 cross-reference 本 closeout 文件。
+- **v0.22 Platform Closeout Review**（本 commit）：新增 `development-records/closeouts/platform-closeout-v0.22.md` — P0-P10 platform-level 收斂文件，回答三件事：(1) 現在 CAP 能做什麼（capability map by phase）；(2) P1-P10 帶來什麼提升（before / after diff table）；(3) 還剩哪些治理債（deferred items / escape hatches / 文件重複來源 / smoke suite 變肥）。包含 dogfood 7-step verification chain（token-free 部分由 17 個 focused suite 共 ~454 assertions 嚴格覆蓋；live AI run 由使用者選擇是否花 token 跑 step 3）+ 關鍵 SSOT 索引（policies / schemas / docs/cap）+ rc1-rc16 對照表。`TODOLIST.md` / `docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md` 「更新日期」同步 cross-reference 本 closeout 文件。
 
 ### Notes
 
@@ -1476,7 +1476,7 @@ Runs #8 and #9 bracket the visibility range of the Phase 2 reference-mounted pat
 
 ### Added
 - `tests/scripts/test-persist-task-constitution.sh` 新增 Case 7（risk_profile object form → schema enum string）與 Case 8（missing non_goals → `[]`），unit smoke 從 18/18 升為 22/22。`smoke-per-stage.sh` 整體 136 → 140 assertions，10 step 全綠。
-- `docs/cap/PROVIDER-PARITY-FINDINGS-v0.21.2.md` 新增 baseline → resolution 治理紀錄，凍結 2026-05-01 v0.21.2 跑 claude `project-spec-pipeline` 撞 phase 3 `ingest_design_source` blocked 的觀察與根因（R1 規格 vs runtime 偏差、R2 治理信號斷裂、R3 雙 project_id 解析、R4 schema drift）；R1/R2/R4 closeout 摘要 + cross-provider e2e 結果 + deferred 清單。
+- `development-records/findings/provider-parity-findings-v0.21.2.md` 新增 baseline → resolution 治理紀錄，凍結 2026-05-01 v0.21.2 跑 claude `project-spec-pipeline` 撞 phase 3 `ingest_design_source` blocked 的觀察與根因（R1 規格 vs runtime 偏差、R2 治理信號斷裂、R3 雙 project_id 解析、R4 schema drift）；R1/R2/R4 closeout 摘要 + cross-provider e2e 結果 + deferred 清單。
 
 ### Verified
 - E2E claude `project-spec-pipeline` 重跑（self-hosting `charlie-ai-protocols`，run_id `run_20260501020621_b27b155f`）：v0.21.2 baseline 3/16 step_failed 推到 16/16 completed；duration 1217s；provider-parity-check 22 PASS / 16 FAIL → **42 PASS / 1 FAIL**（剩 1 FAIL 為 supervisor draft 寫 `non_goals: []` 觸發 §4.2 嚴格判定，標 deferred）。

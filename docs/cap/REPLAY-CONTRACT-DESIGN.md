@@ -247,7 +247,7 @@ properties:
 - [ ] **H1 #2** — `schemas/replay-verdict.schema.yaml` 落地；fixture-based jsonschema test 全綠。
 - [ ] **H1 #3** — `engine/replay_verifier.py` + 純函式 unit test + CLI test。
 - [ ] **H1 #4** — `scripts/cap-replay.sh` + `cap replay verify` 在 `scripts/cap-entry.sh` 註冊；端到端 e2e 寫 snapshot + verdict 並驗 exit code。
-- [ ] **H1 #5** — `policies/replay-contract.md` SSOT、`docs/cap/REPLAY-USER-GUIDE.md` user guide、`docs/cap/H1-CLOSEOUT.md`、TODOLIST 加 H1 章節。
+- [ ] **H1 #5** — `policies/replay-contract.md` SSOT、`docs/cap/REPLAY-USER-GUIDE.md` user guide、`development-records/closeouts/h1-closeout.md`、TODOLIST 加 H1 章節。
 
 ## 10. 實作順序（Implementation Sequencing）
 

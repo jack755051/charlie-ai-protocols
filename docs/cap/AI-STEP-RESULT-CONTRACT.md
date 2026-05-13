@@ -16,7 +16,7 @@ deliverable (read-only filesystem, missing upstream artifact, schema fence
 violations) would gracefully self-report a blocked / failed state inside their
 markdown body, but the runtime did not parse that report — `final_state`
 rolled up to `completed / success` regardless. See bug #12 in
-`docs/cap/COMPONENT-REPO-DOGFOOD-2026-05-10.md`.
+`development-records/dogfood/component-repo-dogfood-2026-05-10.md`.
 
 This contract closes that gap: AI agents emit one machine-readable line; the
 parser maps it to a normalized state enum; the workflow halts on anything

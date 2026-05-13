@@ -56,8 +56,8 @@ H4 一次解決這兩件。**沒做的事比做的事更重要** — H4 design m
 
 | 路徑 | 角色 |
 |---|---|
-| [`docs/cap/H4-SCOPE-SPLIT-DESIGN.md`](H4-SCOPE-SPLIT-DESIGN.md) | H4 design memo (DRAFT) — Q1–Q4 locked = A，full-H4 worst-case 列在 §8 供未來參考 |
-| [`docs/cap/REPLAY-USER-GUIDE.md`](REPLAY-USER-GUIDE.md) §10 | 使用者導向 H4 章節：`--strict-unverifiable` 場景、單軸 unverifiable_axis 不被升級的設計理由 |
+| [`docs/cap/H4-SCOPE-SPLIT-DESIGN.md`](../../docs/cap/H4-SCOPE-SPLIT-DESIGN.md) | H4 design memo (DRAFT) — Q1–Q4 locked = A，full-H4 worst-case 列在 §8 供未來參考 |
+| [`docs/cap/REPLAY-USER-GUIDE.md`](../../docs/cap/REPLAY-USER-GUIDE.md) §10 | 使用者導向 H4 章節：`--strict-unverifiable` 場景、單軸 unverifiable_axis 不被升級的設計理由 |
 
 ## 4. 設計裁定（locked, Q1–Q4 = A）
 
@@ -106,7 +106,7 @@ bash tests/e2e/test-cap-replay-verify.sh
 
 ## 8. 後續閱讀順序建議
 
-1. 先讀 [`docs/cap/REPLAY-USER-GUIDE.md`](REPLAY-USER-GUIDE.md) §10 — 5 分鐘掌握 `--strict-unverifiable` 用法。
+1. 先讀 [`docs/cap/REPLAY-USER-GUIDE.md`](../../docs/cap/REPLAY-USER-GUIDE.md) §10 — 5 分鐘掌握 `--strict-unverifiable` 用法。
 2. 再讀 [`policies/replay-contract.md`](../../policies/replay-contract.md) v1.3 — exit code mapping + forward look。
-3. 對 design rationale 有興趣 → [`docs/cap/H4-SCOPE-SPLIT-DESIGN.md`](H4-SCOPE-SPLIT-DESIGN.md)（Q1–Q4 locked、為什麼 H4 不該做 real replay 的 §8 worst-case）。
+3. 對 design rationale 有興趣 → [`docs/cap/H4-SCOPE-SPLIT-DESIGN.md`](../../docs/cap/H4-SCOPE-SPLIT-DESIGN.md)（Q1–Q4 locked、為什麼 H4 不該做 real replay 的 §8 worst-case）。
 4. 對下一步（H5 per-axis / H6 shared / H7 real replay）有興趣 → 等對應 design memo 開啟。

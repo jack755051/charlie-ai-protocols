@@ -1,10 +1,10 @@
 # CAP Missing Implementation Checklist
 
-更新日期：2026-05-06（**v0.22 P0-P10 全段 closeout** — P10 Detached Runtime and Promote / Publish 8/8 sub-items 完成（policy `b99b201` / schema migration `e8054a5` / producer `7ea621d` / inspect `3d8f352` / project-constitution apply `7361ebe` / workflow apply `7506cea` / docs + smoke + chmod fix `b32bdee`），共 7 個 commit；17 個 P10/P9/P7 dedicated suite 共 454 cases pass。完整 platform-level 收斂見 **[`docs/cap/PLATFORM-CLOSEOUT-v0.22.md`](PLATFORM-CLOSEOUT-v0.22.md)**：回答「現在 CAP 能做什麼」+「P1-P10 帶來什麼提升」+「還剩哪些治理債」三件事，附 dogfood 7-step verification chain。本 closeout tagged `v0.22.0-rc16`。Phase 12（detached runtime）/ 13（CLI final shape）/ 14（test matrix）仍 deferred；等使用者真實 dogfood 反饋再開。）
+更新日期：2026-05-06（**v0.22 P0-P10 全段 closeout** — P10 Detached Runtime and Promote / Publish 8/8 sub-items 完成（policy `b99b201` / schema migration `e8054a5` / producer `7ea621d` / inspect `3d8f352` / project-constitution apply `7361ebe` / workflow apply `7506cea` / docs + smoke + chmod fix），共 7 個 commit；17 個 P10/P9/P7 dedicated suite 共 454 cases pass。完整 platform-level 收斂見 **[`platform-closeout-v0.22.md`](../../development-records/closeouts/platform-closeout-v0.22.md)**：回答「現在 CAP 能做什麼」+「P1-P10 帶來什麼提升」+「還剩哪些治理債」三件事，附 dogfood 7-step verification chain。本 closeout tagged `v0.22.0-rc16`。Phase 12（detached runtime）/ 13（CLI final shape）/ 14（test matrix）仍 deferred；等使用者真實 dogfood 反饋再開。）
 
 本清單承接 `TODOLIST.md` 與 `docs/cap/IMPLEMENTATION-ROADMAP.md` 的「尚未完成」項目，整理成可執行的工程工作清單。原則是先補 runtime contract 與 validator，再補 runner、orchestration、session、gate 與 promote/publish 閉環。
 
-> **v0.21.6 baseline**：本清單以 `v0.21.6` tag 為起點。R3（雙 project_id 解析）由 v0.21.5 `1425fa9` 收斂；nested task constitution JSON fence 由 v0.21.5 `55038dd` 處理；`non_goals=[]` 於 parity-check §4.2 拆 nonempty vs present-only 後合法（v0.21.5 `2492913`）；v0.21.6 完成 P0a 6 個 schema-class executor exit 41 對齊與 fresh provider parity baseline 驗證（Claude / Codex 各 16/16 / 43 PASS / 0 FAIL）。詳見 `docs/cap/RELEASE-NOTES.md`、`docs/cap/PROVIDER-PARITY-FRESH-E2E-V0.21.5.md` 與 `docs/cap/PROVIDER-PARITY-FINDINGS-v0.21.2.md`。
+> **v0.21.6 baseline**：本清單以 `v0.21.6` tag 為起點。R3（雙 project_id 解析）由 v0.21.5 `1425fa9` 收斂；nested task constitution JSON fence 由 v0.21.5 `55038dd` 處理；`non_goals=[]` 於 parity-check §4.2 拆 nonempty vs present-only 後合法（v0.21.5 `2492913`）；v0.21.6 完成 P0a 6 個 schema-class executor exit 41 對齊與 fresh provider parity baseline 驗證（Claude / Codex 各 16/16 / 43 PASS / 0 FAIL）。詳見 `docs/cap/RELEASE-NOTES.md`、`development-records/dogfood/provider-parity-fresh-e2e-v0.21.5.md` 與 `development-records/findings/provider-parity-findings-v0.21.2.md`。
 
 進度標記規則：
 
@@ -71,7 +71,7 @@
 
 ## P0a：Schema-Class Executors Exit Code 政策 ✓ resolved in v0.21.6
 
-> 承接 v0.21.3 把 `persist-task-constitution.sh` 從 exit 40 改為 exit 41 的拆分（`schema_validation_failed` 與 `git_operation_failed` 分流），把同類 executor 的 exit code 語意統一。詳見 `docs/cap/PROVIDER-PARITY-FINDINGS-v0.21.2.md` deferred 段。
+> 承接 v0.21.3 把 `persist-task-constitution.sh` 從 exit 40 改為 exit 41 的拆分（`schema_validation_failed` 與 `git_operation_failed` 分流），把同類 executor 的 exit code 語意統一。詳見 `development-records/findings/provider-parity-findings-v0.21.2.md` deferred 段。
 
 - [x] 建立 `policies/workflow-executor-exit-codes.md` SSOT
   - 交付物：exit code 政策文件
@@ -612,5 +612,5 @@
 - [ ] 至少一條 deterministic e2e 覆蓋 Supervisor structured orchestration
 - [ ] 至少一條 deterministic e2e 覆蓋 AgentSessionRunner lifecycle
 - [ ] provider parity checker 可驗證最新 run artifact
-- [x] fresh Claude + Codex provider parity full run 在 v0.21.5 修補（`1425fa9` / `55038dd` / `2492913`）後重跑無 regression（同建議執行順序步驟 2）—— done in `v0.21.6`：Claude `run_20260501192422_033a65f8`（duration 1363s / 16/16 / parity 43 PASS / 0 FAIL）、Codex `run_20260501234931_27dddbce`（duration 1346s / 16/16 / parity 43 PASS / 0 FAIL），跨 provider duration 差 17s，無 provider-specific regression。runbook：`docs/cap/PROVIDER-PARITY-FRESH-E2E-V0.21.5.md`。
+- [x] fresh Claude + Codex provider parity full run 在 v0.21.5 修補（`1425fa9` / `55038dd` / `2492913`）後重跑無 regression（同建議執行順序步驟 2）—— done in `v0.21.6`：Claude `run_20260501192422_033a65f8`（duration 1363s / 16/16 / parity 43 PASS / 0 FAIL）、Codex `run_20260501234931_27dddbce`（duration 1346s / 16/16 / parity 43 PASS / 0 FAIL），跨 provider duration 差 17s，無 provider-specific regression。runbook：`development-records/dogfood/provider-parity-fresh-e2e-v0.21.5.md`。
 - [ ] README / TODOLIST / IMPLEMENTATION-ROADMAP 連結到本清單

@@ -47,5 +47,39 @@ output="$("${CAP_WORKFLOW}" list 2>&1)" || {
 assert_contains "${output}" "WORKFLOW LIST" "workflow list header"
 assert_contains "${output}" "workflow-smoke-test.yaml" "builtin workflow visible"
 
+mkdir -p "${tmpdir}/dogfood-repo"
+cd "${tmpdir}/dogfood-repo"
+git init >/dev/null 2>&1
+
+mkdir -p "${tmpdir}/cap_home/projects/project-constitution-bootstrap"
+cat > "${tmpdir}/cap_home/projects/project-constitution-bootstrap/.identity.json" <<EOF
+{
+  "schema_version": 2,
+  "project_id": "project-constitution-bootstrap",
+  "resolved_mode": "override",
+  "origin_path": "${REPO_ROOT}",
+  "created_at": "2026-05-13T00:00:00Z",
+  "last_resolved_at": "2026-05-13T00:00:00Z",
+  "migrated_at": null,
+  "cap_version": null,
+  "previous_versions": []
+}
+EOF
+
+unset CAP_PROJECT_ID_OVERRIDE
+output="$(CAP_HOME="${tmpdir}/cap_home" "${CAP_WORKFLOW}" run --dry-run project-constitution "bootstrap dogfood repo" 2>&1)" || {
+  rc=$?
+  fail "project-constitution dry-run should use dogfood repo id instead of colliding bootstrap id (rc=${rc}); output=${output}"
+  echo "Summary: $((checks - failures)) passed, ${failures} failed"
+  exit 1
+}
+
+assert_contains "${output}" "WORKFLOW DRY RUN" "project-constitution dry-run header"
+if [ -d "${tmpdir}/cap_home/projects/dogfood-repo/bindings/project-constitution" ]; then
+  pass
+else
+  fail "project-constitution dry-run should persist binding under dogfood-repo project id"
+fi
+
 echo "Summary: $((checks - failures)) passed, ${failures} failed"
 [ "${failures}" -eq 0 ]

@@ -250,7 +250,7 @@ cap replay: drifted_incompatible — /Users/.../run_xxx
 - [ ] **H2 #3** — `replay-verdict.schema.yaml` `project_skill_diff` 從 null 升 object；schema test fixture 加 H2 cases。
 - [ ] **H2 #4** — `cap-workflow-exec.sh` runtime attach（project skill baseline + binding summary）；`engine/replay_verifier.py` 雙軸聚合；`<run_dir>/snapshots/project-skills.json` + `binding-summary.json` mirror。
 - [ ] **H2 #5** — verifier dual-axis tests（4 個聚合場景）+ shell wrapper e2e drift simulation。
-- [ ] **H2 #6** — `policies/replay-contract.md` 升版、`docs/cap/REPLAY-USER-GUIDE.md` 補 project drift 場景、`docs/cap/H2-CLOSEOUT.md`、TODOLIST 章節。
+- [ ] **H2 #6** — `policies/replay-contract.md` 升版、`docs/cap/REPLAY-USER-GUIDE.md` 補 project drift 場景、`development-records/closeouts/h2-closeout.md`、TODOLIST 章節。
 
 ## 11. Implementation Sequencing
 

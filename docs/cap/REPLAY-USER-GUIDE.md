@@ -319,4 +319,4 @@ stdout 是 raw envelope，符合 `schemas/replay-verdict.schema.yaml`。
 - [Replay design memo](REPLAY-CONTRACT-DESIGN.md)
 - [Agent-skills baseline policy（A0 #1）](../../policies/agent-skills-baseline.md)
 - [Agent-skills customization guide（A0 #5）](AGENT-SKILLS-CUSTOMIZATION.md)
-- [A0 closeout](A0-CLOSEOUT.md)
+- [A0 closeout](../../development-records/closeouts/a0-closeout.md)

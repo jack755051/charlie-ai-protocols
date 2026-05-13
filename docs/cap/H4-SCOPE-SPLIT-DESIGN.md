@@ -46,7 +46,7 @@
 |---|---|---|
 | **H4 #1** | 本 memo（doc-only） | doc |
 | **H4 #2** | source_layer fix + `--strict-unverifiable` flag + 加 e2e | 1–2 commits / ~50 行 |
-| **H4 #3** | docs / closeout（policy v1.3 + user guide §10 + H4-CLOSEOUT + TODOLIST） | doc-only |
+| **H4 #3** | docs / closeout（policy v1.3 + user guide §10 + closeout record + TODOLIST） | doc-only |
 
 > H4 minimal **不**碰 schema、不開新 axis、不擴 binding_summary。Cost ~ H2.5 polish 等級。
 
@@ -98,7 +98,7 @@
 
 - [ ] **H4 #1** — 本 memo doc-only（本 commit）
 - [ ] **H4 #2** — source_layer fix + `--strict-unverifiable` flag + e2e
-- [ ] **H4 #3** — policy v1.3 + user guide § 10 + H4-CLOSEOUT + TODOLIST
+- [ ] **H4 #3** — policy v1.3 + user guide § 10 + closeout record + TODOLIST
 
 ## 7. 待拍板問題（Q1–Q4）
 

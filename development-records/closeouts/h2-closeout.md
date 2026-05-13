@@ -65,8 +65,8 @@ H2 把這個 gap 填上。每次 run 完，verdict 帶兩軸結果：builtin axi
 
 | 路徑 | 角色 |
 |---|---|
-| [`docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md`](H2-PROJECT-SKILL-DRIFT-DESIGN.md) | H2 design memo（rationale / Q1-Q5 locked / aggregation cross-table） |
-| [`docs/cap/REPLAY-USER-GUIDE.md`](REPLAY-USER-GUIDE.md) §8 | 使用者導向 H2 章節：dual-axis 範例、was_recorded 三種狀態、pre-H2 run 補救流程 |
+| [`docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md`](../../docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md) | H2 design memo（rationale / Q1-Q5 locked / aggregation cross-table） |
+| [`docs/cap/REPLAY-USER-GUIDE.md`](../../docs/cap/REPLAY-USER-GUIDE.md) §8 | 使用者導向 H2 章節：dual-axis 範例、was_recorded 三種狀態、pre-H2 run 補救流程 |
 
 ## 4. 設計裁定（locked，不再重議）
 
@@ -126,7 +126,7 @@ bash tests/scripts/test-replay-verifier-dual-axis.sh         # H2 #5: 17 asserti
 
 如果你是第一次看 H2：
 
-1. 先讀 [`docs/cap/REPLAY-USER-GUIDE.md`](REPLAY-USER-GUIDE.md) §8 — 5 分鐘掌握 dual-axis 用法。
+1. 先讀 [`docs/cap/REPLAY-USER-GUIDE.md`](../../docs/cap/REPLAY-USER-GUIDE.md) §8 — 5 分鐘掌握 dual-axis 用法。
 2. 再讀 [`policies/replay-contract.md`](../../policies/replay-contract.md) v1.1 — verdict 雙軸聚合 normative + was_recorded 規則。
-3. 對 design rationale 有興趣 → [`docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md`](H2-PROJECT-SKILL-DRIFT-DESIGN.md)（Q1-Q5 locked、aggregation cross-table、deferred 列表）。
+3. 對 design rationale 有興趣 → [`docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md`](../../docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md)（Q1-Q5 locked、aggregation cross-table、deferred 列表）。
 4. 對下一步（H3 workflow / capability / constitution drift）有興趣 → 等 H3 design memo。

@@ -4,7 +4,7 @@
 >
 > v0.21.5 是用「既有 run + 新版 checker 重跑」驗證，**沒跑過 fresh run**。在 P0（runtime contracts）動 schema 前，必須跑 fresh e2e 確認三件 fix（`1425fa9` / `55038dd` / `2492913`）在新跑的 Claude + Codex 真實執行下無 regression。
 >
-> 通用 parity e2e checklist 見 [PROVIDER-PARITY-E2E.md](PROVIDER-PARITY-E2E.md)。本文件只列 v0.21.5 特定的執行步驟、預期觀察、與通過條件。
+> 通用 parity e2e checklist 見 [PROVIDER-PARITY-E2E.md](../../docs/cap/PROVIDER-PARITY-E2E.md)。本文件只列 v0.21.5 特定的執行步驟、預期觀察、與通過條件。
 
 ---
 

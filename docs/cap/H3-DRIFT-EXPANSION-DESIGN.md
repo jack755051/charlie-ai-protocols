@@ -47,7 +47,7 @@ H3 minimal 把這三個 input axis 補上，**但只做 whole-file hash**：
 | **H3 #2** | `engine/workflow_yaml_snapshot.py` + `engine/constitution_snapshot.py` + `engine/capability_schema_snapshot.py` 三模組 + 共用 helper + combined unit test | 中 |
 | **H3 #3** | `replay-verdict.schema.yaml` widening（3 新 nullable 欄位） + verifier multi-axis aggregation + schema fixture upgrade | 中 |
 | **H3 #4** | `cap-workflow-exec.sh` 3 attach hooks + `cap-replay.sh` per-axis output + e2e multi-axis case | 中 |
-| **H3 #5** | policy v1.2 + user guide + H3-CLOSEOUT + TODOLIST | 小 |
+| **H3 #5** | policy v1.2 + user guide + closeout record + TODOLIST | 小 |
 
 > 估規模：約 H1 + H2 加總的 **35–40%**（whole-file hash 排除了 selection 邏輯與 binding_summary 擴展，每個 snapshot module 規模僅 50–80 行）。
 

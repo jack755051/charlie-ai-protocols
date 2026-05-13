@@ -11,7 +11,7 @@
 > | **H7+** real replay execution | 真的需要重跑舊 run | 1 次 real reproduce 需求就值得啟動 |
 >
 > SSOT：本檔。每次重要 workflow run 後手動補一筆。
-> 相關文件：[`docs/cap/H4-CLOSEOUT.md`](H4-CLOSEOUT.md) §5、[`policies/replay-contract.md`](../../policies/replay-contract.md) §9。
+> 相關文件：[`h4-closeout.md`](../closeouts/h4-closeout.md) §5、[`policies/replay-contract.md`](../../policies/replay-contract.md) §9。
 
 ## 1. 欄位模板（給後續 run 填）
 

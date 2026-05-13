@@ -68,8 +68,8 @@ H1 把這四個 gap 填上。每次 run 完，可以跑 `cap replay verify <run_
 
 | 路徑 | 角色 |
 |---|---|
-| [`docs/cap/REPLAY-CONTRACT-DESIGN.md`](REPLAY-CONTRACT-DESIGN.md) | H1 design memo（rationale / Q&A locked） |
-| [`docs/cap/REPLAY-USER-GUIDE.md`](REPLAY-USER-GUIDE.md) | user guide（場景範例 / 進階用法 / FAQ） |
+| [`docs/cap/REPLAY-CONTRACT-DESIGN.md`](../../docs/cap/REPLAY-CONTRACT-DESIGN.md) | H1 design memo（rationale / Q&A locked） |
+| [`docs/cap/REPLAY-USER-GUIDE.md`](../../docs/cap/REPLAY-USER-GUIDE.md) | user guide（場景範例 / 進階用法 / FAQ） |
 
 ## 4. 設計裁定（locked，不再重議）
 
@@ -127,7 +127,7 @@ bash tests/e2e/test-cap-replay-verify.sh            # H1 #4: 18 assertions
 
 如果你是第一次看 H1：
 
-1. 先讀 [`docs/cap/REPLAY-USER-GUIDE.md`](REPLAY-USER-GUIDE.md) — 5 分鐘掌握「怎麼用」。
+1. 先讀 [`docs/cap/REPLAY-USER-GUIDE.md`](../../docs/cap/REPLAY-USER-GUIDE.md) — 5 分鐘掌握「怎麼用」。
 2. 再讀 [`policies/replay-contract.md`](../../policies/replay-contract.md) — 深入規則 / verdict 語意 / consumer 義務。
-3. 對 design rationale 有興趣 → [`docs/cap/REPLAY-CONTRACT-DESIGN.md`](REPLAY-CONTRACT-DESIGN.md)。
+3. 對 design rationale 有興趣 → [`docs/cap/REPLAY-CONTRACT-DESIGN.md`](../../docs/cap/REPLAY-CONTRACT-DESIGN.md)。
 4. 對下一步（H2 project skill drift）有興趣 → 等 H2 design memo。

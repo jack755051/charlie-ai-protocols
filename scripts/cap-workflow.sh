@@ -117,6 +117,44 @@ ensure_status_store() {
   bash "${PATH_HELPER}" ensure >/dev/null
 }
 
+resolve_run_project_id_override() {
+  local workflow_id="$1"
+  local resolved_id="" rc=0
+
+  if [ "${workflow_id}" != "project-constitution" ]; then
+    printf '%s\n' "${CAP_PROJECT_ID_OVERRIDE:-}"
+    return 0
+  fi
+
+  if [ -n "${CAP_PROJECT_ID_OVERRIDE:-}" ]; then
+    printf '%s\n' "${CAP_PROJECT_ID_OVERRIDE}"
+    return 0
+  fi
+
+  # Project-constitution historically used a synthetic bootstrap project id
+  # so the workflow could run before a repo had a CAP identity. In a real git
+  # repo, though, cap-paths can already resolve a stable project id from the
+  # repo basename (or .cap/project.yaml), and forcing the bootstrap id causes
+  # identity collisions across dogfood repos. Only fall back to the bootstrap
+  # id when the current cwd truly has no resolvable identity source.
+  set +e
+  resolved_id="$(bash "${PATH_HELPER}" get project_id 2>/dev/null)"
+  rc=$?
+  set -e
+
+  case "${rc}" in
+    0)
+      printf '%s\n' "${resolved_id}"
+      ;;
+    52)
+      printf '%s\n' "project-constitution-bootstrap"
+      ;;
+    *)
+      return "${rc}"
+      ;;
+  esac
+}
+
 # Print a unified "workflow not found" message that doubles as a hint
 # when the user's input is actually a typo of a subcommand. The shorthand
 # fallback (`cap workflow <id>` -> show <id> / run <id>) means typos
@@ -824,10 +862,7 @@ WATCH_HELP
     BINDING_JSON="$(printf '%s' "${PLAN_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["binding"], ensure_ascii=False))')"
     BINDING_STATUS="$(printf '%s' "${BINDING_JSON}" | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["binding_status"])')"
 
-    WORKFLOW_PROJECT_ID_OVERRIDE=""
-    if [ "${WORKFLOW_ID}" = "project-constitution" ]; then
-      WORKFLOW_PROJECT_ID_OVERRIDE="${CAP_PROJECT_ID_OVERRIDE:-project-constitution-bootstrap}"
-    fi
+    WORKFLOW_PROJECT_ID_OVERRIDE="$(resolve_run_project_id_override "${WORKFLOW_ID}")"
     export CAP_PROJECT_ID_OVERRIDE="${WORKFLOW_PROJECT_ID_OVERRIDE}"
 
     BINDING_SNAPSHOT_JSON="$(persist_binding_snapshot "${BINDING_JSON}" "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "${WORKFLOW_REF}" "run")"

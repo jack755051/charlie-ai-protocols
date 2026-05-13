@@ -50,13 +50,13 @@
 
 ## 四、品質報告（Provider parity）
 
-歷史 fresh-run 對照報告，作為 release gate baseline 紀錄。一般開發不需讀；做 cross-provider regression 比對時才看。
+歷史 fresh-run 對照報告，作為 release gate baseline 紀錄。一次性 findings / runbook 已移到 `development-records/`，一般開發不需讀；做 cross-provider regression 比對時才看。
 
 | 主題 | 文件 |
 |---|---|
 | Provider parity e2e 範本 | [PROVIDER-PARITY-E2E.md](PROVIDER-PARITY-E2E.md) |
-| v0.21.2 parity findings | [PROVIDER-PARITY-FINDINGS-v0.21.2.md](PROVIDER-PARITY-FINDINGS-v0.21.2.md) |
-| v0.21.5 fresh provider e2e baseline | [PROVIDER-PARITY-FRESH-E2E-V0.21.5.md](PROVIDER-PARITY-FRESH-E2E-V0.21.5.md) |
+| v0.21.2 parity findings | [provider-parity-findings-v0.21.2.md](../../development-records/findings/provider-parity-findings-v0.21.2.md) |
+| v0.21.5 fresh provider e2e baseline | [provider-parity-fresh-e2e-v0.21.5.md](../../development-records/dogfood/provider-parity-fresh-e2e-v0.21.5.md) |
 
 ## 五、新增文件規則
 
@@ -65,7 +65,7 @@
 - **某次 release 的歷史紀錄**：直接寫進 [RELEASE-NOTES.md](RELEASE-NOTES.md) 對應 tag 段落，不開新檔。
 - **跨模組責任邊界**：開新的 `*-BOUNDARY.md`，並更新本 index 第二節。
 - **執行層 / runtime 架構說明**：歸到第三節 reference 區，更新 index。
-- **品質 / parity / 一次性 e2e 報告**：歸到第四節 quality reports 區，命名帶版本前綴。
+- **品質 / parity / 一次性 e2e 報告**：歸到 [`development-records/`](../../development-records/)，必要時只在本 index 第四節保留連結。
 - **使用者導引**：寫進 root [README.md](../../README.md)，不要寫進 docs/cap。
 - **測試入口**：分層 smoke 入口維護在 [`scripts/workflows/smoke-layer.sh`](../../scripts/workflows/smoke-layer.sh)；完整 release gate 維持 [`scripts/workflows/smoke-per-stage.sh`](../../scripts/workflows/smoke-per-stage.sh)。
 

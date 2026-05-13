@@ -1,6 +1,6 @@
 # Round 3 Closeout — 2026-05-10
 
-> Direct response to bug #12 from `COMPONENT-REPO-DOGFOOD-2026-05-10.md`
+> Direct response to bug #12 from [`component-repo-dogfood-2026-05-10.md`](../dogfood/component-repo-dogfood-2026-05-10.md)
 > Phase F addendum: "workflow runtime needs structured AI-result parsing +
 > an AI write contract". This document records the three patches that
 > shipped (v0.26.0, v0.26.1, v0.26.2), the Phase F runtime validation

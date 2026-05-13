@@ -68,8 +68,8 @@ H3 minimal 把這三個 input axis 補上，**但只做 whole-file hash**。哲�
 
 | 路徑 | 角色 |
 |---|---|
-| [`docs/cap/H3-DRIFT-EXPANSION-DESIGN.md`](H3-DRIFT-EXPANSION-DESIGN.md) | H3 design memo (ACCEPTED, Cost-Aware Minimal) |
-| [`docs/cap/REPLAY-USER-GUIDE.md`](REPLAY-USER-GUIDE.md) §9 | 使用者導向 H3 章節：5 軸範例、whole-file hash 精度限制、6 個 mirror 檔列表 |
+| [`docs/cap/H3-DRIFT-EXPANSION-DESIGN.md`](../../docs/cap/H3-DRIFT-EXPANSION-DESIGN.md) | H3 design memo (ACCEPTED, Cost-Aware Minimal) |
+| [`docs/cap/REPLAY-USER-GUIDE.md`](../../docs/cap/REPLAY-USER-GUIDE.md) §9 | 使用者導向 H3 章節：5 軸範例、whole-file hash 精度限制、6 個 mirror 檔列表 |
 
 ## 4. 設計裁定（locked, Q1–Q6 = A）
 
@@ -141,7 +141,7 @@ H1+H2+H3 累計 attach overhead per workflow run-start：
 
 ## 9. 後續閱讀順序建議
 
-1. 先讀 [`docs/cap/REPLAY-USER-GUIDE.md`](REPLAY-USER-GUIDE.md) §9 — 5 分鐘掌握 5-axis 用法。
+1. 先讀 [`docs/cap/REPLAY-USER-GUIDE.md`](../../docs/cap/REPLAY-USER-GUIDE.md) §9 — 5 分鐘掌握 5-axis 用法。
 2. 再讀 [`policies/replay-contract.md`](../../policies/replay-contract.md) v1.2 — verdict 5 軸聚合 normative + whole-file hash 精度規則 + 6 mirror 檔。
-3. 對 design rationale 有興趣 → [`docs/cap/H3-DRIFT-EXPANSION-DESIGN.md`](H3-DRIFT-EXPANSION-DESIGN.md)（Q1-Q6 locked、deferred 列表）。
+3. 對 design rationale 有興趣 → [`docs/cap/H3-DRIFT-EXPANSION-DESIGN.md`](../../docs/cap/H3-DRIFT-EXPANSION-DESIGN.md)（Q1-Q6 locked、deferred 列表）。
 4. 對下一步（H4+ per-axis 精度 / shared layer / real replay execution）有興趣 → 等 H4 design memo。
