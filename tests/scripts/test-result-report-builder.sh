@@ -964,6 +964,142 @@ else
   pass_count=$((pass_count + 1))
 fi
 
+# ── Case 15: session result enum normalization ─────────────────────────
+#
+# Reproduces the 2026-05-13 component-feedback-widget dogfood failure
+# (run run_20260513110312_2052b7a8) where the workflow-result fallback
+# emitted ``sessions/1/result: 'failed' is not one of ['success',
+# 'failure', 'partial', None]``. The agent-sessions ledger writes
+# ``"failed"`` / ``"passed"`` (mirroring agent-session schema +
+# gate-result projection) but the workflow-result schema enum is
+# [success, failure, partial, null]. ``_project_sessions`` must
+# normalize the ledger value to the workflow-result enum or set
+# ``None`` for unknown inputs.
+echo "Case 15: session result enum normalized for workflow-result schema"
+RUN15="$(stage_run_dir resultenum)"
+cat > "${RUN15}/runtime-state.json" <<'EOF'
+{
+  "artifacts": {},
+  "steps": {
+    "s_failed": {
+      "phase": "1",
+      "capability": "x",
+      "execution_state": "failed",
+      "blocked_reason": "",
+      "output_source": "captured_stdout",
+      "output_path": "/tmp/x.md",
+      "handoff_path": "/tmp/x.handoff.md"
+    },
+    "s_passed": {
+      "phase": "2",
+      "capability": "x",
+      "execution_state": "validated",
+      "blocked_reason": "",
+      "output_source": "captured_stdout",
+      "output_path": "/tmp/y.md",
+      "handoff_path": "/tmp/y.handoff.md"
+    },
+    "s_unknown": {
+      "phase": "3",
+      "capability": "x",
+      "execution_state": "validated",
+      "blocked_reason": "",
+      "output_source": "captured_stdout",
+      "output_path": "/tmp/z.md",
+      "handoff_path": "/tmp/z.handoff.md"
+    }
+  }
+}
+EOF
+cat > "${RUN15}/agent-sessions.json" <<'EOF'
+{
+  "version": 1,
+  "run_id": "run_resultenum",
+  "workflow_id": "test-wf",
+  "sessions": [
+    {
+      "session_id": "run_resultenum.1.s_failed",
+      "step_id": "s_failed",
+      "role": "ba",
+      "capability": "x",
+      "executor": "ai",
+      "provider": "claude",
+      "lifecycle": "failed",
+      "result": "failed",
+      "duration_seconds": 30
+    },
+    {
+      "session_id": "run_resultenum.2.s_passed",
+      "step_id": "s_passed",
+      "role": "watcher",
+      "capability": "x",
+      "executor": "ai",
+      "provider": "codex",
+      "lifecycle": "completed",
+      "result": "passed",
+      "duration_seconds": 25
+    },
+    {
+      "session_id": "run_resultenum.3.s_unknown",
+      "step_id": "s_unknown",
+      "role": "qa",
+      "capability": "x",
+      "executor": "ai",
+      "provider": "claude",
+      "lifecycle": "completed",
+      "result": "archive_completed_stdout_closed_with_blockers",
+      "duration_seconds": 15
+    }
+  ]
+}
+EOF
+cat > "${RUN15}/run-summary.md" <<'EOF'
+# Workflow Run Summary
+
+- workflow_id: test-wf
+- run_id: run_resultenum
+- started_at: 2026-05-13 11:03:00
+
+## Steps
+
+### s_failed
+
+- status: failed
+- duration_seconds: 30
+- output: /tmp/x.md
+
+### s_passed
+
+- status: ok
+- duration_seconds: 25
+- output: /tmp/y.md
+
+### s_unknown
+
+- status: ok
+- duration_seconds: 15
+- output: /tmp/z.md
+
+## Finished
+
+- finished_at: 2026-05-13 11:04:10
+- total_duration_seconds: 70
+- completed: 2
+- failed: 1
+- skipped: 0
+EOF
+
+OUT15="${SANDBOX}/resultenum.json"
+build_to_json "${RUN15}" "${OUT15}" "$(cap_home_for resultenum)"
+assert_eq "resultenum sessions_count=3" "3" "$(json_field "${OUT15}" 'len(data["sessions"])')"
+assert_eq "resultenum sessions[0].result=failure (was 'failed')" "failure" \
+  "$(json_field "${OUT15}" 'data["sessions"][0]["result"]')"
+assert_eq "resultenum sessions[1].result=success (was 'passed')" "success" \
+  "$(json_field "${OUT15}" 'data["sessions"][1]["result"]')"
+assert_eq "resultenum sessions[2].result=None (unknown alias collapses)" "None" \
+  "$(json_field "${OUT15}" 'data["sessions"][2]["result"]')"
+assert_schema_ok "resultenum passes workflow-result schema (no 'failed' leak)" "${OUT15}"
+
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"
 [ "${fail_count}" -eq 0 ]

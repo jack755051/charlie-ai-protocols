@@ -558,6 +558,49 @@ def _derive_final_result(final_state: str, summary: dict[str, int]) -> Optional[
 # ─────────────────────────────────────────────────────────────────────────
 
 
+# Maps raw agent-sessions ledger ``result`` values to the workflow-result
+# schema's ``sessions[*].result`` enum [success, failure, partial, null].
+# Two ledger sources diverge from this enum and must be normalized here:
+#   * ``agent_session_runner.py`` writes ``"failed"`` (mirrors the
+#     agent-session schema enum [success, blocked, failed]).
+#   * ``agent_session_runner.py:234`` writes ``"passed"`` in the
+#     gate-result projection path, which is in neither schema.
+# Unknown / unrecognized values collapse to ``None`` (schema accepts null)
+# so the workflow-result envelope never trips schema validation on a
+# stale ledger entry. Tracked in dogfood log
+# ``development-records/dogfood/component-feedback-widget-2026-05-13.md``
+# row #4 ("workflow-result fallback still emitted 'failed' is not one of
+# ['success', 'failure', 'partial', None]").
+_SESSION_RESULT_ALIASES: dict[str, str | None] = {
+    "success": "success",
+    "passed": "success",
+    "ok": "success",
+    "failure": "failure",
+    "failed": "failure",
+    "fail": "failure",
+    "error": "failure",
+    "partial": "partial",
+}
+
+
+def _normalize_session_result(raw: Any) -> str | None:
+    """Map an arbitrary ledger ``result`` value to the workflow-result
+    schema enum [success, failure, partial, null].
+
+    Returns ``None`` for empty/null inputs and for values that do not
+    map to a schema enum member (the schema accepts ``null``, so the
+    envelope still validates).
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        return None
+    key = raw.strip().lower()
+    if not key:
+        return None
+    return _SESSION_RESULT_ALIASES.get(key)
+
+
 def _project_sessions(raw: list[Any]) -> list[dict[str, Any]]:
     """Project agent-sessions ledger entries to the schema's
     ``sessions[*]`` shape.
@@ -566,6 +609,10 @@ def _project_sessions(raw: list[Any]) -> list[dict[str, Any]]:
     ``executor="shell"`` / ``lifecycle="completed"``) when the source
     entry is incomplete. Optional fields are passed through only when
     present so the projection stays close to the source ledger.
+
+    ``result`` is normalized via ``_normalize_session_result`` because
+    the source ledger enum diverges from the workflow-result schema
+    enum (see ``_SESSION_RESULT_ALIASES``).
     """
     out: list[dict[str, Any]] = []
     for item in raw or []:
@@ -579,9 +626,11 @@ def _project_sessions(raw: list[Any]) -> list[dict[str, Any]]:
             "executor": _safe_str(item.get("executor")) or "shell",
             "lifecycle": _safe_str(item.get("lifecycle")) or "completed",
         }
-        for key in ("provider", "provider_cli", "result", "duration_seconds", "failure_reason"):
+        for key in ("provider", "provider_cli", "duration_seconds", "failure_reason"):
             if key in item:
                 entry[key] = item[key]
+        if "result" in item:
+            entry["result"] = _normalize_session_result(item["result"])
         out.append(entry)
     return out
 
