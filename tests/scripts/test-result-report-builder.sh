@@ -173,7 +173,23 @@ cat > "${RUN1}/agent-sessions.json" <<'EOF'
       "provider_cli": "claude",
       "lifecycle": "completed",
       "result": "success",
-      "duration_seconds": 30
+      "duration_seconds": 30,
+      "usage": {
+        "available": true,
+        "source": "provider_cli",
+        "provider": "claude",
+        "provider_cli": "claude",
+        "model": "test-model",
+        "input_tokens": 100,
+        "output_tokens": 50,
+        "cache_read_tokens": 10,
+        "cache_write_tokens": 0,
+        "total_tokens": 160,
+        "prompt_size_bytes": 1000,
+        "output_size_bytes": 500,
+        "quota_pressure": null,
+        "reason": null
+      }
     },
     {
       "session_id": "run_happy.2.review_step",
@@ -185,7 +201,23 @@ cat > "${RUN1}/agent-sessions.json" <<'EOF'
       "provider_cli": "codex",
       "lifecycle": "completed",
       "result": "success",
-      "duration_seconds": 25
+      "duration_seconds": 25,
+      "usage": {
+        "available": false,
+        "source": "runtime_byte_counts",
+        "provider": "codex",
+        "provider_cli": "codex",
+        "model": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "cache_read_tokens": null,
+        "cache_write_tokens": null,
+        "total_tokens": null,
+        "prompt_size_bytes": 800,
+        "output_size_bytes": 300,
+        "quota_pressure": null,
+        "reason": "provider did not expose token usage; byte counts recorded"
+      }
     }
   ]
 }
@@ -242,6 +274,10 @@ assert_eq "happy summary.completed=2" "2" "$(json_field "${OUT1}" 'data["summary
 assert_eq "happy summary.failed=0"    "0" "$(json_field "${OUT1}" 'data["summary"]["failed"]')"
 assert_eq "happy steps_count=2"       "2" "$(json_field "${OUT1}" 'len(data["steps"])')"
 assert_eq "happy sessions_count=2"    "2" "$(json_field "${OUT1}" 'len(data["sessions"])')"
+assert_eq "happy usage available count" "1" "$(json_field "${OUT1}" 'data["usage_summary"]["available_sessions"]')"
+assert_eq "happy usage unavailable count" "1" "$(json_field "${OUT1}" 'data["usage_summary"]["unavailable_sessions"]')"
+assert_eq "happy total_tokens projected" "160" "$(json_field "${OUT1}" 'data["usage_summary"]["total_tokens"]')"
+assert_eq "happy prompt bytes aggregated" "1800" "$(json_field "${OUT1}" 'data["usage_summary"]["prompt_size_bytes"]')"
 assert_eq "happy artifacts_count=1"   "1" "$(json_field "${OUT1}" 'len(data["artifacts"])')"
 assert_eq "happy failures=[]"         "0" "$(json_field "${OUT1}" 'len(data["failures"])')"
 assert_eq "happy promote_candidates=[]" "0" "$(json_field "${OUT1}" 'len(data["promote_candidates"])')"
@@ -863,6 +899,9 @@ assert_md_contains "render: project_id field" "${RENDERED_MD}" "- project_id: te
 assert_md_contains "render: final_state field" "${RENDERED_MD}" "- final_state: completed"
 assert_md_contains "render: final_result field" "${RENDERED_MD}" "- final_result: success"
 assert_md_contains "render: Summary section" "${RENDERED_MD}" "## Summary"
+assert_md_contains "render: Usage section" "${RENDERED_MD}" "## Usage"
+assert_md_contains "render: usage availability" "${RENDERED_MD}" "- provider_token_telemetry_available: 1/2"
+assert_md_contains "render: total tokens" "${RENDERED_MD}" "- total_tokens: 160"
 assert_md_contains "render: Steps section" "${RENDERED_MD}" "## Steps"
 assert_md_contains "render: spec_step bullet" "${RENDERED_MD}" "- spec_step [ok]"
 assert_md_contains "render: review_step bullet" "${RENDERED_MD}" "- review_step [ok]"

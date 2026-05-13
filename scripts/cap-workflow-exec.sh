@@ -524,11 +524,14 @@ step_status() {
   local status="$1"
   local step_id="$2"
   local duration="$3"
+  local usage_note="${4:-${STEP_USAGE_LABEL:-}}"
+  local duration_note="${duration}s"
+  [ -n "${usage_note}" ] && duration_note="${duration}s · ${usage_note}"
   case "${status}" in
-    ok)   printf "  ${GREEN}✓${RESET} %s ${DIM}(%ss)${RESET}\n" "${step_id}" "${duration}" ;;
-    fail) printf "  ${RED}✗${RESET} %s ${DIM}(%ss)${RESET}\n" "${step_id}" "${duration}" ;;
+    ok)   printf "  ${GREEN}✓${RESET} %s ${DIM}(%s)${RESET}\n" "${step_id}" "${duration_note}" ;;
+    fail) printf "  ${RED}✗${RESET} %s ${DIM}(%s)${RESET}\n" "${step_id}" "${duration_note}" ;;
     skip) printf "  ${YELLOW}⊘${RESET} %s ${DIM}(skipped)${RESET}\n" "${step_id}" ;;
-    stop) printf "  ${RED}■${RESET} %s ${DIM}(%ss)${RESET}\n" "${step_id}" "${duration}" ;;
+    stop) printf "  ${RED}■${RESET} %s ${DIM}(%s)${RESET}\n" "${step_id}" "${duration_note}" ;;
     block) printf "  ${RED}■${RESET} %s ${DIM}(blocked)${RESET}\n" "${step_id}" ;;
   esac
 }
@@ -1750,6 +1753,7 @@ Release / governed-mode requirements:
   OUTPUT_SOURCE=""
   FINAL_STEP_STATE="running"
   STEP_VALIDATOR_DETAIL=""
+  STEP_USAGE_LABEL=""
 
   if ! OUTPUT_SOURCE="$(materialize_step_output "${step_id}" "${STEP_OUTPUT_PATH}" "${output}")"; then
     STEP_STATUS="write_failed"
@@ -1762,6 +1766,16 @@ Release / governed-mode requirements:
     bash "${TRACE_LOG}" append "Workflow-Exec" "step:${step_id} error_type:${ERROR_TYPE} output:${STEP_OUTPUT_PATH}" "失敗" >/dev/null 2>&1 || true
     printf "%s\n" "${ERROR_HINT}"
     SHOULD_HALT=1
+  fi
+
+  STEP_OUTPUT_SIZE_BYTES=""
+  if [ -f "${STEP_OUTPUT_PATH}" ]; then
+    STEP_OUTPUT_SIZE_BYTES="$(wc -c < "${STEP_OUTPUT_PATH}" 2>/dev/null | tr -d ' ' || true)"
+  fi
+  if [ -n "${STEP_PROMPT_SIZE_BYTES}" ] || [ -n "${STEP_OUTPUT_SIZE_BYTES}" ]; then
+    STEP_USAGE_LABEL="tokens unavailable"
+    [ -n "${STEP_PROMPT_SIZE_BYTES}" ] && STEP_USAGE_LABEL="${STEP_USAGE_LABEL} · prompt ${STEP_PROMPT_SIZE_BYTES}B"
+    [ -n "${STEP_OUTPUT_SIZE_BYTES}" ] && STEP_USAGE_LABEL="${STEP_USAGE_LABEL} · out ${STEP_OUTPUT_SIZE_BYTES}B"
   fi
 
   if [ "${SHOULD_HALT}" -eq 0 ]; then

@@ -202,6 +202,7 @@ class AgentSessionRunner:
             parent_session_id=context.parent_session_id,
             root_session_id=root_session_id,
             spawn_reason=context.spawn_reason,
+            usage=None,
         )
 
         try:
@@ -256,6 +257,7 @@ class AgentSessionRunner:
             parent_session_id=context.parent_session_id,
             root_session_id=root_session_id,
             spawn_reason=context.spawn_reason,
+            usage=result.usage,
         )
 
         return RunStepOutcome(
@@ -280,6 +282,7 @@ class AgentSessionRunner:
         parent_session_id: str | None = None,
         root_session_id: str | None = None,
         spawn_reason: str | None = None,
+        usage: dict | None = None,
     ) -> None:
         step_runtime.upsert_session(
             context.sessions_path,
@@ -303,6 +306,7 @@ class AgentSessionRunner:
             prompt_hash=snapshot.hash if snapshot else None,
             prompt_snapshot_path=snapshot.path if snapshot else None,
             prompt_size_bytes=snapshot.size_bytes if snapshot else None,
+            usage=usage,
             parent_session_id=parent_session_id,
             root_session_id=root_session_id,
             spawn_reason=spawn_reason,

@@ -136,6 +136,7 @@ def build_workflow_result(
     final_result = _derive_final_result(final_state, summary)
 
     sessions = _project_sessions(agent_sessions.get("sessions", []))
+    usage_summary = _build_usage_summary(sessions)
     artifacts = _flatten_artifacts(runtime_state.get("artifacts", {}))
 
     handoff_tickets = _load_handoff_tickets(cap_home, project_id)
@@ -164,6 +165,7 @@ def build_workflow_result(
     result["total_duration_seconds"] = total_duration
     result["final_result"] = final_result
     result["failures"] = failures
+    result["usage_summary"] = usage_summary
     # P10 #2.2 — promote_candidates was hard-coded ``[]`` from P0
     # through rc15. Now produced by promote_candidate_producer
     # against the partially-assembled result dict (everything except
@@ -248,6 +250,21 @@ def render_result_md(result: dict[str, Any]) -> str:
     lines.append(f"- failed: {summary.get('failed', 0)}")
     lines.append(f"- skipped: {summary.get('skipped', 0)}")
     lines.append(f"- blocked: {summary.get('blocked', 0)}")
+
+    usage_summary = result.get("usage_summary") or {}
+    if isinstance(usage_summary, dict):
+        lines.append("")
+        lines.append("## Usage")
+        lines.append("")
+        lines.append(f"- provider_token_telemetry_available: {usage_summary.get('available_sessions', 0)}/{usage_summary.get('total_sessions', 0)}")
+        total_tokens = usage_summary.get("total_tokens")
+        lines.append(f"- total_tokens: {total_tokens if total_tokens is not None else 'null'}")
+        prompt_bytes = usage_summary.get("prompt_size_bytes")
+        output_bytes = usage_summary.get("output_size_bytes")
+        lines.append(f"- prompt_size_bytes: {prompt_bytes if prompt_bytes is not None else 'null'}")
+        lines.append(f"- output_size_bytes: {output_bytes if output_bytes is not None else 'null'}")
+        if usage_summary.get("unavailable_sessions"):
+            lines.append(f"- unavailable_sessions: {usage_summary['unavailable_sessions']}")
 
     inputs = result.get("inputs") or {}
     if isinstance(inputs, dict) and any(
@@ -629,9 +646,69 @@ def _project_sessions(raw: list[Any]) -> list[dict[str, Any]]:
         for key in ("provider", "provider_cli", "duration_seconds", "failure_reason"):
             if key in item:
                 entry[key] = item[key]
+        for key in ("prompt_hash", "prompt_snapshot_path", "prompt_size_bytes", "usage"):
+            if key in item:
+                entry[key] = item[key]
         if "result" in item:
             entry["result"] = _normalize_session_result(item["result"])
         out.append(entry)
+    return out
+
+
+def _build_usage_summary(sessions: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate normalized provider usage telemetry.
+
+    ``usage.available=false`` entries still contribute byte-count proxy
+    fields (prompt/output size) so cost analysis can rank pressure even
+    before a provider exposes real token counts.
+    """
+    total_sessions = len(sessions)
+    available_sessions = 0
+    unavailable_sessions = 0
+    token_totals = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "total_tokens": 0,
+    }
+    saw_tokens = {key: False for key in token_totals}
+    prompt_size_bytes = 0
+    output_size_bytes = 0
+    saw_prompt_bytes = False
+    saw_output_bytes = False
+
+    for session in sessions:
+        usage = session.get("usage")
+        if not isinstance(usage, dict):
+            continue
+        if usage.get("available") is True:
+            available_sessions += 1
+        else:
+            unavailable_sessions += 1
+        for key in token_totals:
+            value = usage.get(key)
+            if isinstance(value, int):
+                token_totals[key] += value
+                saw_tokens[key] = True
+        value = usage.get("prompt_size_bytes")
+        if isinstance(value, int):
+            prompt_size_bytes += value
+            saw_prompt_bytes = True
+        value = usage.get("output_size_bytes")
+        if isinstance(value, int):
+            output_size_bytes += value
+            saw_output_bytes = True
+
+    out: dict[str, Any] = {
+        "total_sessions": total_sessions,
+        "available_sessions": available_sessions,
+        "unavailable_sessions": unavailable_sessions,
+        "prompt_size_bytes": prompt_size_bytes if saw_prompt_bytes else None,
+        "output_size_bytes": output_size_bytes if saw_output_bytes else None,
+    }
+    for key, value in token_totals.items():
+        out[key] = value if saw_tokens[key] else None
     return out
 
 

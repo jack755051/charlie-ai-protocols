@@ -961,6 +961,7 @@ def upsert_session(
     prompt_hash: str | None = None,
     prompt_snapshot_path: str | None = None,
     prompt_size_bytes: int | None = None,
+    usage: dict[str, Any] | None = None,
     parent_session_id: str | None = None,
     root_session_id: str | None = None,
     spawn_reason: str | None = None,
@@ -1074,6 +1075,37 @@ def upsert_session(
         existing["prompt_snapshot_path"] = prompt_snapshot_path
     if prompt_size_bytes is not None:
         existing["prompt_size_bytes"] = prompt_size_bytes
+
+    if usage is not None:
+        existing["usage"] = usage
+    elif prompt_size_bytes is not None or output_path:
+        output_size_bytes = None
+        if output_path:
+            try:
+                output_size_bytes = Path(output_path).stat().st_size
+            except OSError:
+                output_size_bytes = None
+        reason = (
+            "provider did not expose token usage; byte counts recorded"
+            if executor == "ai"
+            else "shell executor does not expose provider token usage"
+        )
+        existing["usage"] = {
+            "available": False,
+            "source": "runtime_byte_counts",
+            "provider": _provider_from_cli(provider_cli, executor),
+            "provider_cli": provider_cli,
+            "model": None,
+            "input_tokens": None,
+            "output_tokens": None,
+            "cache_read_tokens": None,
+            "cache_write_tokens": None,
+            "total_tokens": None,
+            "prompt_size_bytes": prompt_size_bytes,
+            "output_size_bytes": output_size_bytes,
+            "quota_pressure": None,
+            "reason": reason,
+        }
 
     # P5 #7 parent / child / root session relation. Same opt-in pattern.
     # Note: parent_session_id was already initialized to None on first
@@ -2127,6 +2159,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p_usess.add_argument("--prompt-hash", default=None)
     p_usess.add_argument("--prompt-snapshot-path", default=None)
     p_usess.add_argument("--prompt-size-bytes", type=int, default=None)
+    p_usess.add_argument(
+        "--usage-json",
+        default=None,
+        help="Optional provider usage telemetry JSON object. When omitted, runtime byte-count telemetry is recorded.",
+    )
 
     # 8. flatten-steps
     p_fs = sub.add_parser("flatten-steps", help="展平 plan JSON 為 pipe-delimited 記錄")
@@ -2603,6 +2640,9 @@ def main(argv: list[str] | None = None) -> None:
                 args.handoff_path,
             )
         case "upsert-session":
+            usage = None
+            if args.usage_json:
+                usage = json.loads(args.usage_json)
             upsert_session(
                 args.sessions_path,
                 args.run_id,
@@ -2625,6 +2665,7 @@ def main(argv: list[str] | None = None) -> None:
                 prompt_hash=args.prompt_hash,
                 prompt_snapshot_path=args.prompt_snapshot_path,
                 prompt_size_bytes=args.prompt_size_bytes,
+                usage=usage,
             )
         case "flatten-steps":
             flatten_steps(args.plan_json)

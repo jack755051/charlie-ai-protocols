@@ -135,6 +135,33 @@ properties:
         type: integer
         description: Steps with status=blocked (R2 record_blocked_step path; required_unresolved / unsupported_executor / etc.).
 
+  usage_summary:
+    type: object
+    description: Aggregate provider usage telemetry projected from agent-sessions.json. Token fields are null when no provider exposed token counts; byte fields remain useful as runtime proxies.
+    properties:
+      total_sessions:
+        type: integer
+      available_sessions:
+        type: integer
+        description: Sessions whose usage.available=true.
+      unavailable_sessions:
+        type: integer
+        description: Sessions with usage telemetry present but provider token counts unavailable.
+      input_tokens:
+        type: [integer, "null"]
+      output_tokens:
+        type: [integer, "null"]
+      cache_read_tokens:
+        type: [integer, "null"]
+      cache_write_tokens:
+        type: [integer, "null"]
+      total_tokens:
+        type: [integer, "null"]
+      prompt_size_bytes:
+        type: [integer, "null"]
+      output_size_bytes:
+        type: [integer, "null"]
+
   steps:
     type: array
     description: Per-step runtime outcome; aligned with cap-workflow-exec.sh write order. Empty array allowed for runs that halted before any step executed.
@@ -233,6 +260,43 @@ properties:
           type: [integer, "null"]
         failure_reason:
           type: [string, "null"]
+        prompt_hash:
+          type: [string, "null"]
+        prompt_snapshot_path:
+          type: [string, "null"]
+        prompt_size_bytes:
+          type: [integer, "null"]
+        usage:
+          type: ["object", "null"]
+          properties:
+            available:
+              type: boolean
+            source:
+              type: [string, "null"]
+            provider:
+              type: [string, "null"]
+            provider_cli:
+              type: [string, "null"]
+            model:
+              type: [string, "null"]
+            input_tokens:
+              type: [integer, "null"]
+            output_tokens:
+              type: [integer, "null"]
+            cache_read_tokens:
+              type: [integer, "null"]
+            cache_write_tokens:
+              type: [integer, "null"]
+            total_tokens:
+              type: [integer, "null"]
+            prompt_size_bytes:
+              type: [integer, "null"]
+            output_size_bytes:
+              type: [integer, "null"]
+            quota_pressure:
+              type: [number, "null"]
+            reason:
+              type: [string, "null"]
 
   artifacts:
     type: array

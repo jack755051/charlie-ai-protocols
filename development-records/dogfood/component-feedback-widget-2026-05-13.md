@@ -1,6 +1,6 @@
 # Component Feedback Widget Dogfood Log — 2026-05-13
 
-> Status: live dogfood log.
+> Status: implementation dogfood test completed on 2026-05-13; follow-up cost/performance fixes remain open.
 > Subject: `~/Desktop/01_private/cap-test/component-feedback-widget`.
 > Goal: exercise CAP project-constitution and follow-on component repo workflows against a reusable feedback widget component.
 
@@ -38,6 +38,10 @@ The intended project constitution should preserve these inputs:
 |---:|---|---|---|---|---|---|
 | 1 | 2026-05-13 10:04 Asia/Taipei | `project-constitution` / `run_20260513100402_3e05ca3b` | success, 5/5 phases | 183s | Constitution generation succeeded, but even the smallest component-repo bootstrap requires multiple AI phases. This is acceptable for governance quality, but too expensive as the default path for a simple reusable component. | Add a lightweight component constitution path or cached template bootstrap path that avoids full multi-agent expansion when the prompt maps cleanly to a known component template. |
 | 2 | 2026-05-13 10:13 Asia/Taipei | `project-spec-pipeline` / `run_20260513101332_d9a8da60` | success, 16/16 effective steps reported under 13 phases | 1743s; roughly half of a 5x-max Claude usage budget by user observation | Full spec pipeline is too heavy for a simple component. The 11 required upstream artifacts make sense for product-scale work, but they create excessive wall time and token burn for small component repos. | Introduce a component fast path: collapse BA/schema/API/UI/spec audit into a deterministic template-driven package where possible, and reserve full spec pipeline for novel or ambiguous systems. |
+| 3 | 2026-05-13 22:09 Asia/Taipei | `project-implementation-pipeline` rerun after result-parser / task-constitution fixes | completed by operator report | Claude usage reached 87% of the rolling 5-hour limit | Even after correctness fixes allowed the dogfood to complete, the implementation path is still too expensive for a small reusable component. The cost issue is now a product/runtime concern, not only a failure-recovery concern. | Treat component fast path as required before broad dogfood: template or deterministic generation should cover known Component Repo structures, with AI reserved for ambiguous deltas, review, and repairs. Track quota percentage alongside wall time for future live runs. |
+
+Cost breakdown and follow-up decisions were promoted to `docs/cap/COST-OPTIMIZATION-MEMO.md` so the optimization plan is no longer trapped inside this one dogfood log.
+
 
 ## Historical Findings To Fold Into Fix Plan
 

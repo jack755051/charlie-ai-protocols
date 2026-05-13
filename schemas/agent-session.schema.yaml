@@ -186,3 +186,54 @@ properties:
     type: integer
     nullable: true
     description: Byte length of the rendered prompt text as encoded in UTF-8 (P5 #6). Optional, populated by AgentSessionRunner.
+  usage:
+    type: object
+    nullable: true
+    description: |
+      Provider usage telemetry for this session. Provider-specific adapters
+      should normalize token counts into this object when available. When
+      the provider does not expose usage, producers should still write
+      available=false plus prompt/output byte counts as a stable proxy for
+      cost analysis.
+    properties:
+      available:
+        type: boolean
+      source:
+        type: string
+        description: Telemetry source, e.g. provider_cli, provider_api, runtime_byte_counts.
+      provider:
+        type: string
+        nullable: true
+      provider_cli:
+        type: string
+        nullable: true
+      model:
+        type: string
+        nullable: true
+      input_tokens:
+        type: integer
+        nullable: true
+      output_tokens:
+        type: integer
+        nullable: true
+      cache_read_tokens:
+        type: integer
+        nullable: true
+      cache_write_tokens:
+        type: integer
+        nullable: true
+      total_tokens:
+        type: integer
+        nullable: true
+      prompt_size_bytes:
+        type: integer
+        nullable: true
+      output_size_bytes:
+        type: integer
+        nullable: true
+      quota_pressure:
+        type: number
+        nullable: true
+      reason:
+        type: string
+        nullable: true

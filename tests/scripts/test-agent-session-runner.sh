@@ -96,6 +96,8 @@ with tempfile.TemporaryDirectory() as td:
     print('ledger_lifecycle=' + data['sessions'][0]['lifecycle'])
     print('ledger_result=' + data['sessions'][0]['result'])
     print('ledger_provider_cli=' + data['sessions'][0]['provider_cli'])
+    print('ledger_usage_available=' + str(data['sessions'][0]['usage']['available']))
+    print('ledger_usage_prompt_bytes=' + str(data['sessions'][0]['usage']['prompt_size_bytes']))
 ")"
 assert_contains "outcome lifecycle completed"  "outcome_lifecycle=completed"  "${out1}"
 assert_contains "outcome status completed"     "outcome_result_status=completed" "${out1}"
@@ -103,6 +105,8 @@ assert_contains "ledger has 1 session"         "ledger_count=1"                 
 assert_contains "ledger lifecycle completed"   "ledger_lifecycle=completed"     "${out1}"
 assert_contains "ledger result passed"          "ledger_result=passed"           "${out1}"
 assert_contains "ledger provider_cli=fake"     "ledger_provider_cli=fake"       "${out1}"
+assert_contains "ledger usage unavailable fallback" "ledger_usage_available=False" "${out1}"
+assert_contains "ledger usage prompt bytes"     "ledger_usage_prompt_bytes=2"    "${out1}"
 
 # ── Case 2 ──────────────────────────────────────────────────────────────
 echo "Case 2: FakeAdapter callable receives request"

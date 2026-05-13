@@ -84,6 +84,7 @@ class ProviderResult:
     stderr: str
     duration_seconds: float
     provider_session_id: str | None = None
+    usage: dict[str, Any] | None = None
     artifacts: list[dict] = field(default_factory=list)
     failure_reason: str | None = None
 
