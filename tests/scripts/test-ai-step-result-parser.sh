@@ -42,6 +42,7 @@
 #     5c result: outside fences after fenced ones still wins
 #     5d result: inside YAML handoff fence is accepted as compatibility fallback
 #     5e result: inside non-handoff YAML fence remains ignored
+#     5f result: inside plain handoff fence is accepted as compatibility fallback
 #
 #   Section 6 — failure modes
 #     6a no result: line at all → state=unknown
@@ -221,6 +222,16 @@ result: success
 ```
 '
 assert_eq "5e-non-handoff-yaml-fence-ignored" "unknown" "$(state_for s5e "${yaml_non_handoff_fence}")"
+
+plain_handoff_fence='## 交接摘要
+
+```
+agent_id: 04-Frontend
+task_summary: implemented frontend
+result: success
+```
+'
+assert_eq "5f-plain-handoff-fence-fallback" "success" "$(state_for s5f "${plain_handoff_fence}")"
 
 # ── Section 6: failure modes ───────────────────────────────────────
 echo ""

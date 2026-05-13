@@ -64,7 +64,7 @@
 **輸出規則**：
 
 - 在 stdout 結尾的「交接摘要」段落中加上 `- result: <value>` 一行（ASCII `:` 或全形 `：` 皆可，可加 `-` / `*` markdown bullet）。
-- 建議把 `result:` 放在 fenced code block 外；runtime 會忽略一般 JSON / code fence 內的 `result:`。相容例外：若最後「交接摘要 / handoff summary」整段以 ```yaml fenced block 輸出，parser 可讀取其中的 `result:`。
+- 建議把 `result:` 放在 fenced code block 外；runtime 會忽略一般 JSON / code fence 內的 `result:`。相容例外：若最後「交接摘要 / handoff summary」整段以 ```yaml 或無語言標記的 fenced block 輸出，parser 可讀取其中的 `result:`。
 - 多個 `result:` 行時，**最末出現的那一行**為準；推理段落引用上游報告的 `result: ...` 不會干擾終局判定。
 
 **執行紀律**：

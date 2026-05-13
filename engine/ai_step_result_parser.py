@@ -23,9 +23,9 @@ Invariants:
 * **Outside-fence first**: ``result:`` lines inside JSON / generic
   fenced code blocks are skipped — the constitution / task constitution
   fences legitimately carry result-shaped fields. As a compatibility
-  fallback, the parser accepts ``result:`` inside a final YAML handoff
-  block only when it appears after a handoff-summary heading and no
-  outside-fence result line exists.
+  fallback, the parser accepts ``result:`` inside a final YAML or
+  plain fenced handoff block only when it appears after a handoff-summary
+  heading and no outside-fence result line exists.
 * **Unknown is failed**: any value that does not match the declared
   alias table (case-insensitive, substring-tolerant for the
   ``blocked_*`` family) normalizes to ``unknown``, which the workflow
@@ -172,9 +172,10 @@ def parse_step_result(file_path: str | Path) -> dict:
 
     # Walk lines tracking fence depth so result: inside JSON / generic
     # code fences is skipped. Last match outside fences wins. A narrowly
-    # scoped compatibility path captures result: from YAML handoff
-    # fences after a "handoff summary" heading, because dogfood showed
-    # Claude/Codex often format the entire Type D handoff as fenced YAML.
+    # scoped compatibility path captures result: from YAML/plain
+    # handoff fences after a "handoff summary" heading, because dogfood
+    # showed Claude/Codex often format the entire Type D handoff as a
+    # fenced block.
     fence_depth = 0
     fence_lang = ""
     seen_handoff_heading = False
@@ -187,7 +188,7 @@ def parse_step_result(file_path: str | Path) -> dict:
             if (
                 seen_handoff_heading
                 and fence_depth == 1
-                and fence_lang in {"yaml", "yml"}
+                and fence_lang in {"", "yaml", "yml"}
             ):
                 m = _RESULT_LINE.match(line)
                 if m:
@@ -222,7 +223,7 @@ def parse_step_result(file_path: str | Path) -> dict:
                 "reason": "no result: line found outside JSON / code fences",
             }
         last_match = last_handoff_yaml_match
-        match_source = "fenced YAML handoff block"
+        match_source = "fenced handoff block"
     else:
         match_source = "outside code fences"
 
