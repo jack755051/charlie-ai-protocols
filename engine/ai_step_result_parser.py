@@ -78,6 +78,7 @@ _RESULT_LINE = re.compile(
     (?:[-*]\s+)?                                # optional bullet
     \s*\**\s*                                   # optional bold markers
     result                                      # literal keyword
+    \s*\**\s*                                   # optional bold close markers
     \s*[:：]\s*                                 # ASCII or CJK colon
     \*?\*?                                      # optional bold start
     `?                                          # optional backtick

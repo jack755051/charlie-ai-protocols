@@ -30,6 +30,7 @@
 #     3f bold markers around value
 #     3g backticked value
 #     3h trailing comment after value
+#     3i bold markers around label
 #
 #   Section 4 — last-occurrence wins
 #     4a multiple result: lines, the LAST one is authoritative
@@ -147,6 +148,7 @@ PY
 )"
 assert_eq "3g-backticked"    "success" "${state_3g}"
 assert_eq "3h-trailing-comment" "success" "$(state_for s3h 'result: success (auto-generated)')"
+assert_eq "3i-bold-label"    "success" "$(state_for s3i '- **result**: 成功')"
 
 # ── Section 4: last occurrence wins ────────────────────────────────
 echo ""
