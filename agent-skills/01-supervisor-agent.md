@@ -92,6 +92,23 @@
 
 `bound_to` / `needs` / `on_fail` / `route_back_to` / `timeout_seconds` / `acceptance_criteria` / `done_when` / `objective` / `output_paths`。
 
+**固定 workflow step id 不可漂移**：
+當你在 per-stage workflow 的 `draft_task_constitution` step 產出 Task Constitution 時，`execution_plan[].step_id` 必須對齊該 workflow YAML 後續實際會執行的固定 step id；Task Constitution 不是自由編排 DSL。
+
+`project-implementation-pipeline` 的合法實作期 step id 為：
+
+```text
+frontend
+backend
+qa_testing
+security_audit
+devops_packaging
+impl_audit
+archive
+```
+
+不得輸出 `step_02_backend_module`、`step_03_frontend_core`、`step_05_runtime_infra` 這類自創 id。若你需要保留垂直切片細節，請寫進對應固定 step 的 `objective`、`acceptance_criteria`、`done_when` 或 `output_paths`，不要改 `step_id`。
+
 **`on_fail` 必須是 enum 單值，不得內嵌 step id**：
 `schemas/task-constitution.schema.yaml` 限制 `execution_plan[*].on_fail` 為 `[halt, route_back_to, retry, escalate_user]` 四個 enum 之一。**回流目標必須寫在 sibling 欄位 `route_back_to`**，不得寫成 `on_fail: "route_back_to:<step_id>"` 這種 compound 字串。
 

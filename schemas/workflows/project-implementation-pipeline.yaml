@@ -61,6 +61,7 @@ steps:
       - 已驗證 project-spec-pipeline 11 個正式產出齊備（缺任一即 halt 並回報 needs_data）
       - goal_stage 已選定為 implementation_and_verification 並對應展開 execution_plan
       - execution_plan 中每個 step 已指定 step_id / target_capability / bound_to / needs（依賴關係）
+      - "execution_plan.step_id 必須對齊本 workflow 的固定 runtime step id：frontend / backend / qa_testing / security_audit / devops_packaging / impl_audit / archive；不得自創 step_02_backend_module、step_03_frontend_core 之類動態 id，否則 emit_<step>_ticket 會找不到對應 entry。"
       - budget 已估算（建議 8-10 sub-agent sessions，archive 由 supervisor in-line 不消耗）
       - 草稿以 markdown + 內嵌 <<<TASK_CONSTITUTION_JSON_BEGIN>>> ... <<<TASK_CONSTITUTION_JSON_END>>> fence 方式輸出供下游 persist step 抓取
       - 若 spec_audit 留有 NON-BLOCKING NOTES，已在 task constitution 中標記為「實作期應對齊或忽略」並指明處置方式
@@ -71,6 +72,7 @@ steps:
     notes:
       - 本 step 不允許在 spec layer 缺漏的情況下啟動；若 spec-pipeline 未完成或 spec_audit 為 FAIL，必須先回 spec-pipeline 修復。
       - cap promote 應於本 step 啟動前完成（spec 產出已升級至 repo SSOT），確保下游實作步驟讀的是 repo 真理而非 runtime 快照。
+      - Task Constitution 是固定 workflow 的派工資料，不是自由編排 DSL；若需要垂直切片細節，請放在 objective / acceptance_criteria / output_paths 內，step_id 仍必須使用 workflow YAML 已定義的固定 id。
 
   - id: persist_task_constitution
     name: Persist Implementation Task Constitution

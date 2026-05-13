@@ -260,6 +260,17 @@ def string_list(value):
         return [value.strip()]
     return []
 
+def object_list(value):
+    if not isinstance(value, list):
+        return []
+    normalized = []
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            normalized.append({"path": item.strip()})
+        elif isinstance(item, dict):
+            normalized.append(item)
+    return normalized
+
 def slug(value):
     value = re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-")
     return value or "task"
@@ -445,6 +456,105 @@ if is_project_spec_pipeline:
                 "objective": source.get("objective") or f"Produce {step_id} artifact for project-spec-pipeline.",
                 "acceptance_criteria": string_list(source.get("acceptance_criteria") or source.get("done_when")),
                 "done_when": string_list(source.get("done_when") or source.get("acceptance_criteria")),
+            })
+        data["execution_plan"] = canonical
+
+is_project_implementation_pipeline = (
+    data.get("workflow_id") == "project-implementation-pipeline"
+    or (
+        data.get("goal_stage") == "implementation_and_verification"
+        and isinstance(data.get("execution_plan"), list)
+    )
+)
+
+if is_project_implementation_pipeline:
+    # project-implementation-pipeline has a fixed runtime graph. Downstream
+    # emit_<step>_ticket steps derive target ids like "backend" from their
+    # own workflow step names. Supervisor drafts may emit dynamic vertical
+    # slice ids such as step_02_backend_module, which are semantically useful
+    # but not consumable by the fixed runtime graph.
+    expected = [
+        ("frontend", "frontend_implementation", "04-Frontend", ["frontend_implementation"], "halt", ""),
+        ("backend", "backend_implementation", "05-Backend", ["backend_implementation"], "halt", ""),
+        ("qa_testing", "qa_testing", "07-QA", ["qa_testing", "qa_audit"], "route_back_to", "backend"),
+        ("security_audit", "security_audit", "08-Security", ["security_audit"], "route_back_to", "backend"),
+        ("devops_packaging", "devops_delivery", "06-DevOps", ["devops_delivery", "devops_setup"], "halt", ""),
+        ("impl_audit", "code_structure_audit", "90-Watcher", ["code_structure_audit", "impl_audit"], "route_back_to", "backend"),
+        ("archive", "technical_logging", "99-Logger", ["technical_logging"], "halt", ""),
+    ]
+    plan_entries = [
+        entry for entry in data.get("execution_plan", [])
+        if isinstance(entry, dict)
+    ]
+    by_id = {
+        entry.get("step_id"): entry
+        for entry in plan_entries
+        if entry.get("step_id")
+    }
+
+    def sources_for(step_id, aliases):
+        exact = by_id.get(step_id)
+        if exact:
+            return [exact]
+        return [
+            entry for entry in plan_entries
+            if entry.get("capability") in aliases
+        ]
+
+    def merge_strings(sources, field, fallback):
+        for source in sources:
+            value = first_string(source.get(field))
+            if value:
+                return value
+        return fallback
+
+    def merge_string_lists(sources, *fields):
+        merged = []
+        seen = set()
+        for source in sources:
+            for field in fields:
+                for item in string_list(source.get(field)):
+                    if item not in seen:
+                        merged.append(item)
+                        seen.add(item)
+        return merged
+
+    def merge_output_paths(sources):
+        merged = []
+        seen = set()
+        for source in sources:
+            for item in object_list(source.get("output_paths")):
+                key = json.dumps(item, ensure_ascii=False, sort_keys=True)
+                if key not in seen:
+                    merged.append(item)
+                    seen.add(key)
+        return merged
+
+    dynamic_id_to_canonical = {}
+    for step_id, _capability, _bound_to, aliases, _default_on_fail, _default_route_back_to in expected:
+        for source in sources_for(step_id, aliases):
+            source_id = source.get("step_id")
+            if source_id:
+                dynamic_id_to_canonical[source_id] = step_id
+
+    if any(step_id not in by_id for step_id, _, _, _, _, _ in expected):
+        canonical = []
+        for step_id, capability, bound_to, aliases, default_on_fail, default_route_back_to in expected:
+            sources = sources_for(step_id, aliases)
+            primary = sources[0] if sources else {}
+            route_back_to = first_string(primary.get("route_back_to"), default_route_back_to)
+            route_back_to = dynamic_id_to_canonical.get(route_back_to, route_back_to)
+            canonical.append({
+                "step_id": step_id,
+                "capability": capability,
+                "bound_to": first_string(primary.get("bound_to"), bound_to),
+                "needs": primary.get("needs") if isinstance(primary.get("needs"), list) else [],
+                "on_fail": first_string(primary.get("on_fail"), default_on_fail),
+                "route_back_to": route_back_to,
+                "objective": merge_strings(sources, "objective", f"Execute {step_id} for project-implementation-pipeline."),
+                "acceptance_criteria": merge_string_lists(sources, "acceptance_criteria", "done_when"),
+                "done_when": merge_string_lists(sources, "done_when", "acceptance_criteria"),
+                "output_paths": merge_output_paths(sources),
             })
         data["execution_plan"] = canonical
 

@@ -326,10 +326,85 @@ assert_eq "exit code 0 with compound on_fail split" "0" "${rc}"
 persisted="${SANDBOX}/cap/projects/compound-proj/constitutions/compound-on-fail.json"
 [ -f "${persisted}" ]
 assert_eq "persisted file exists for compound on_fail case" "0" "$?"
-on_fail_value="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d['execution_plan'][1].get('on_fail',''))" "${persisted}")"
+on_fail_value="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print([e for e in d['execution_plan'] if e.get('step_id')=='frontend'][0].get('on_fail',''))" "${persisted}")"
 assert_eq "on_fail split to enum value" "route_back_to" "${on_fail_value}"
-route_back_value="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d['execution_plan'][1].get('route_back_to',''))" "${persisted}")"
-assert_eq "route_back_to lifted to sibling field" "step_03_backend_impl" "${route_back_value}"
+route_back_value="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print([e for e in d['execution_plan'] if e.get('step_id')=='frontend'][0].get('route_back_to',''))" "${persisted}")"
+assert_eq "route_back_to lifted and canonicalized to sibling field" "backend" "${route_back_value}"
+
+# Case 12: implementation pipeline dynamic step ids canonicalize to fixed
+# workflow step ids. Dogfood run run_20260513114937_febc776f passed
+# persist, then emit_backend_ticket halted with
+# step_not_in_execution_plan:backend because the drafted plan used
+# step_02_backend_module / step_03_frontend_core instead of backend /
+# frontend.
+echo "Case 12: implementation execution_plan canonicalizes to fixed workflow ids"
+cat > "${SANDBOX}/draft-implementation-canonical.md" <<'EOF'
+<<<TASK_CONSTITUTION_JSON_BEGIN>>>
+{
+  "task_id": "impl-canonical",
+  "project_id": "impl-canonical-proj",
+  "source_request": "implement a component repo",
+  "goal": "Implement a component repo.",
+  "goal_stage": "implementation_and_verification",
+  "success_criteria": ["implementation pipeline can emit tickets"],
+  "execution_plan": [
+    {
+      "step_id": "step_02_backend_module",
+      "capability": "backend_implementation",
+      "objective": "Implement backend/Feedback with IFeedbackStore.",
+      "acceptance_criteria": ["backend/Feedback exists"],
+      "output_paths": ["backend/Feedback/"]
+    },
+    {
+      "step_id": "step_03_frontend_core",
+      "capability": "frontend_implementation",
+      "objective": "Implement frontend/lib/feedback core.",
+      "acceptance_criteria": ["frontend/lib/feedback exists"],
+      "output_paths": ["frontend/lib/feedback/"]
+    },
+    {
+      "step_id": "step_04_frontend_components",
+      "capability": "frontend_implementation",
+      "objective": "Implement frontend/components/feedback adapter.",
+      "acceptance_criteria": ["frontend/components/feedback exists"],
+      "output_paths": ["frontend/components/feedback/"]
+    },
+    {
+      "step_id": "step_05_runtime_infra",
+      "capability": "devops_setup",
+      "objective": "Produce docker-compose and runtime smoke.",
+      "output_paths": ["docker-compose.yml", "scripts/runtime-smoke.sh"]
+    },
+    {
+      "step_id": "step_06_impl_audit",
+      "capability": "impl_audit",
+      "objective": "Audit implementation structure."
+    },
+    {
+      "step_id": "step_07_security_audit",
+      "capability": "security_audit",
+      "objective": "Audit implementation security."
+    },
+    {
+      "step_id": "step_08_qa_smoke",
+      "capability": "qa_audit",
+      "objective": "Run runtime smoke QA."
+    }
+  ]
+}
+<<<TASK_CONSTITUTION_JSON_END>>>
+EOF
+out="$(run_persist "${SANDBOX}/draft-implementation-canonical.md" "impl-canonical-proj")"
+rc=$?
+assert_eq "exit code 0 with implementation canonicalization" "0" "${rc}"
+persisted="${SANDBOX}/cap/projects/impl-canonical-proj/constitutions/impl-canonical.json"
+ids_csv="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(','.join(e.get('step_id','') for e in d['execution_plan']))" "${persisted}")"
+assert_eq "canonical implementation step ids" "frontend,backend,qa_testing,security_audit,devops_packaging,impl_audit,archive" "${ids_csv}"
+frontend_outputs="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(','.join(i.get('path','') for e in d['execution_plan'] if e.get('step_id')=='frontend' for i in e.get('output_paths',[])))" "${persisted}")"
+assert_contains "frontend canonical entry merges core output" "frontend/lib/feedback/" "${frontend_outputs}"
+assert_contains "frontend canonical entry merges component output" "frontend/components/feedback/" "${frontend_outputs}"
+devops_capability="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print([e for e in d['execution_plan'] if e.get('step_id')=='devops_packaging'][0].get('capability',''))" "${persisted}")"
+assert_eq "devops_setup alias canonicalized to devops_delivery" "devops_delivery" "${devops_capability}"
 
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"

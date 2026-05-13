@@ -27,6 +27,7 @@ The intended project constitution should preserve these inputs:
 | 2 | 2026-05-13 09:19 Asia/Taipei | Phase 2 `normalize_outline` | Claude step was killed after 241s with `step exceeded the hard execution limit of 240s` | Workflow step timeout is too tight for long component-constitution prompts under Claude. This is a runtime tuning / workflow contract issue, not a project_id or constitution-content issue. | Open follow-up: raise `normalize_outline.timeout_seconds` for `project-constitution`, or run dogfood with `CAP_WORKFLOW_STEP_TIMEOUT_SECONDS=600` until the workflow default is tuned. |
 | 3 | 2026-05-13 10:51 Asia/Taipei | `project-implementation-pipeline` / `run_20260513105154_6eec0c36` phase 1 `draft_task_constitution` | The run produced only `1-draft_task_constitution.md` and its handoff, did not create `persist_task_constitution` output, and did not persist `component-feedback-widget-impl-2026-05-13.json`. `runtime-state.json` stayed empty. | The AI handoff used localized result text (`- **result**: 成功`). `engine/step_runtime.py parse-step-result` returns `state=unknown` for this artifact because it only accepts the machine-readable result contract outside JSON/code fences. This blocks the pipeline before downstream shell persistence. The missing final failure log is a separate observability gap. | Fix needed: enforce/normalize AI handoff result to `result: success` (English enum) or teach `parse-step-result` to accept localized/markdown-bold result labels. Also make workflow logs record the hard-fail path before halt. |
 | 4 | 2026-05-13 11:03 Asia/Taipei | `project-implementation-pipeline` / `run_20260513110312_2052b7a8` phase 2 `persist_task_constitution` | Phase 1 passed after 228s, but phase 2 halted after 1s with `reason: schema_validation_failed`. No task constitution was persisted. | The drafted Task Constitution JSON used invalid `execution_plan[*].on_fail` values such as `route_back_to:step_03_backend_impl` and `route_back_to:step_04_frontend_impl`. `schemas/task-constitution.schema.yaml` only allows `on_fail` enum values `halt`, `route_back_to`, `retry`, `escalate_user`; the target step must be expressed separately as `route_back_to`. Secondary observability issue: workflow-result fallback still emitted `sessions/1/result: 'failed' is not one of ['success', 'failure', 'partial', None]`. | Fix needed: strengthen `task_constitution_planning` prompt/validator examples so route-back is emitted as `on_fail: route_back_to` + `route_back_to: <step_id>`, and add regression for persist rejecting/normalizing compound on_fail values. Also fix workflow-result enum drift from `failed` to `failure`. |
+| 5 | 2026-05-13 11:49 Asia/Taipei | `project-implementation-pipeline` / `run_20260513114937_febc776f` phase 3 `emit_backend_ticket` | Phase 1 and phase 2 passed, but phase 3 halted immediately with `ERROR:step_not_in_execution_plan:backend`. | The persisted Task Constitution used dynamic vertical-slice step ids (`step_02_backend_module`, `step_03_frontend_core`, etc.) while the fixed workflow runtime derives target ids from `emit_<step>_ticket`, e.g. `backend` and `frontend`. `emit-handoff-ticket.sh` requires `execution_plan[].step_id == backend`, so it could not find a matching entry. This exposes a contract gap: Task Constitution is being treated as a free orchestration DSL, but `project-implementation-pipeline` is a fixed workflow graph. | Fixed locally after this run: `persist-task-constitution.sh` canonicalizes implementation plans to fixed workflow step ids (`frontend`, `backend`, `qa_testing`, `security_audit`, `devops_packaging`, `impl_audit`, `archive`) and merges dynamic same-capability details into those entries. Added regression Case 12 and verified replay of this run's draft can emit `backend.ticket.json`. |
 
 ## Performance Observations
 
@@ -81,6 +82,12 @@ Committed and pushed in `3e1dd2e` (`fix(workflow): patch cap-workflow dogfood id
   - Replaces the stale supervisor handoff example `result: [成功 | 失敗 | 待確認]` with the machine-readable contract `result: success` / `failed` / `blocked` / `needs_data`.
 - `tests/scripts/test-ai-step-result-parser.sh`
   - Adds regression coverage for `- **result**: 成功`.
+- `scripts/workflows/persist-task-constitution.sh`
+  - Canonicalizes implementation-stage dynamic execution plans to the fixed `project-implementation-pipeline` runtime step ids so `emit_backend_ticket` / `emit_frontend_ticket` can resolve their target entries.
+- `schemas/workflows/project-implementation-pipeline.yaml`
+  - Documents that Task Constitution `execution_plan.step_id` must use the workflow's fixed ids, not arbitrary vertical-slice ids.
+- `tests/scripts/test-persist-task-constitution.sh`
+  - Adds regression Case 12 for dynamic implementation step ids canonicalizing to fixed workflow ids.
 
 Validation already run:
 
@@ -90,6 +97,16 @@ bash tests/scripts/test-ai-step-result-parser.sh
 
 bash tests/scripts/test-ai-step-result-workflow-integration.sh
 # ai-step-result-workflow-integration: 8 passed, 0 failed
+
+bash tests/scripts/test-persist-task-constitution.sh
+# Summary: 39 passed, 0 failed
+
+bash tests/scripts/test-emit-handoff-ticket.sh
+# Summary: 19 passed, 0 failed
+
+Replay against run_20260513114937_febc776f/1-draft_task_constitution.md
+# persist_task_constitution: condition ok
+# emit_backend_ticket: condition ok, backend.ticket.json emitted
 ```
 
 ## Dogfood Policy
