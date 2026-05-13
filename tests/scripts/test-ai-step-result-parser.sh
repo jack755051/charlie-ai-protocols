@@ -39,6 +39,8 @@
 #     5a result: inside ```json fence is ignored
 #     5b result: inside <<<TASK_CONSTITUTION_JSON_BEGIN>>> fence is ignored
 #     5c result: outside fences after fenced ones still wins
+#     5d result: inside YAML handoff fence is accepted as compatibility fallback
+#     5e result: inside non-handoff YAML fence remains ignored
 #
 #   Section 6 — failure modes
 #     6a no result: line at all → state=unknown
@@ -195,6 +197,28 @@ result: blocked
 result: success
 '
 assert_eq "5c-outside-fence-wins" "success" "$(state_for s5c "${fence_then_real}")"
+
+yaml_handoff_fence='## work summary
+files were written.
+
+## 交接摘要
+
+```yaml
+agent_id: 05-Backend
+task_summary: implemented backend
+result: success
+```
+'
+assert_eq "5d-yaml-handoff-fence-fallback" "success" "$(state_for s5d "${yaml_handoff_fence}")"
+
+yaml_non_handoff_fence='## body
+
+```yaml
+agent_id: 05-Backend
+result: success
+```
+'
+assert_eq "5e-non-handoff-yaml-fence-ignored" "unknown" "$(state_for s5e "${yaml_non_handoff_fence}")"
 
 # ── Section 6: failure modes ───────────────────────────────────────
 echo ""

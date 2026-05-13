@@ -66,6 +66,13 @@ occurrence (some agents emit `result:` keys inside upstream-artifact tables in
 their reasoning section; only the trailing handoff summary's `result:` is
 authoritative).
 
+The preferred form is a plain markdown line outside fenced blocks. As a
+compatibility fallback, when no outside-fence `result:` line exists, the parser
+may read `result:` from a fenced `yaml` / `yml` block that appears after a
+handoff-summary heading such as `## 交接摘要` or `## Handoff Summary`. Generic
+code fences and JSON / constitution fences remain ignored so upstream
+structured artifacts cannot accidentally decide the step result.
+
 ### Examples
 
 All of these parse to `success`:
@@ -177,6 +184,8 @@ pre-fix `completed`.
 - Multi-line files: only the last `result:` occurrence wins.
 - Files with `result:` inside `<<<...JSON...>>>` fences are not picked
   up by the parser (parser scans outside JSON fences).
+- Files with a final YAML handoff block after a handoff-summary heading
+  are accepted as a compatibility fallback.
 - Files with no `result:` line return `state=unknown`.
 - Trailing comments after the value are ignored.
 - Workflow integration smoke: a sandboxed `cap workflow run` whose AI

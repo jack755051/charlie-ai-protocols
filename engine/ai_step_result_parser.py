@@ -20,9 +20,12 @@ Invariants:
 * **Last occurrence wins**: agents may mention ``result:`` in upstream
   reasoning tables earlier in the file; only the final handoff-summary
   occurrence is authoritative.
-* **Outside-fence only**: ``result:`` lines inside JSON / fenced code
-  blocks are skipped — the constitution / task constitution fences
-  legitimately carry result-shaped fields.
+* **Outside-fence first**: ``result:`` lines inside JSON / generic
+  fenced code blocks are skipped — the constitution / task constitution
+  fences legitimately carry result-shaped fields. As a compatibility
+  fallback, the parser accepts ``result:`` inside a final YAML handoff
+  block only when it appears after a handoff-summary heading and no
+  outside-fence result line exists.
 * **Unknown is failed**: any value that does not match the declared
   alias table (case-insensitive, substring-tolerant for the
   ``blocked_*`` family) normalizes to ``unknown``, which the workflow
@@ -95,6 +98,11 @@ _FENCE_OPEN = re.compile(
 _FENCE_CLOSE = re.compile(
     r"^(?:<<<[A-Z_]+_END>>>|```)\s*$"
 )
+_MARKDOWN_CODE_FENCE_OPEN = re.compile(r"^```(?P<lang>[a-zA-Z0-9_-]*)\s*$")
+_HANDOFF_HEADING = re.compile(
+    r"^\s*#{1,6}\s+.*(?:交接摘要|handoff(?:\s+summary)?)",
+    re.IGNORECASE,
+)
 
 
 def normalize_value(raw: str) -> str:
@@ -162,32 +170,61 @@ def parse_step_result(file_path: str | Path) -> dict:
             "reason": f"could not read step output file: {exc.__class__.__name__}",
         }
 
-    # Walk lines tracking fence depth so result: inside JSON / code fences
-    # is skipped. Last match outside fences wins.
+    # Walk lines tracking fence depth so result: inside JSON / generic
+    # code fences is skipped. Last match outside fences wins. A narrowly
+    # scoped compatibility path captures result: from YAML handoff
+    # fences after a "handoff summary" heading, because dogfood showed
+    # Claude/Codex often format the entire Type D handoff as fenced YAML.
     fence_depth = 0
+    fence_lang = ""
+    seen_handoff_heading = False
     last_match: tuple[int, str] | None = None  # (line_number, raw_value)
+    last_handoff_yaml_match: tuple[int, str] | None = None
 
     for idx, line in enumerate(text.splitlines(), start=1):
         stripped = line.strip()
         if fence_depth > 0:
+            if (
+                seen_handoff_heading
+                and fence_depth == 1
+                and fence_lang in {"yaml", "yml"}
+            ):
+                m = _RESULT_LINE.match(line)
+                if m:
+                    last_handoff_yaml_match = (idx, m.group("value"))
             if _FENCE_CLOSE.match(stripped):
                 fence_depth -= 1
+                if fence_depth == 0:
+                    fence_lang = ""
+            continue
+        code_fence = _MARKDOWN_CODE_FENCE_OPEN.match(stripped)
+        if code_fence:
+            fence_depth += 1
+            fence_lang = code_fence.group("lang").lower()
             continue
         if _FENCE_OPEN.match(stripped):
             fence_depth += 1
+            fence_lang = ""
             continue
+        if _HANDOFF_HEADING.match(line):
+            seen_handoff_heading = True
 
         m = _RESULT_LINE.match(line)
         if m:
             last_match = (idx, m.group("value"))
 
     if last_match is None:
-        return {
-            "state": STATE_UNKNOWN,
-            "raw_value": "",
-            "line_number": 0,
-            "reason": "no result: line found outside JSON / code fences",
-        }
+        if last_handoff_yaml_match is None:
+            return {
+                "state": STATE_UNKNOWN,
+                "raw_value": "",
+                "line_number": 0,
+                "reason": "no result: line found outside JSON / code fences",
+            }
+        last_match = last_handoff_yaml_match
+        match_source = "fenced YAML handoff block"
+    else:
+        match_source = "outside code fences"
 
     line_number, raw = last_match
     state = normalize_value(raw)
@@ -197,7 +234,10 @@ def parse_step_result(file_path: str | Path) -> dict:
             "alias in docs/cap/AI-STEP-RESULT-CONTRACT.md; treating as failed"
         )
     else:
-        reason = f"normalized from raw value '{raw}' on line {line_number}"
+        reason = (
+            f"normalized from raw value '{raw}' on line {line_number} "
+            f"({match_source})"
+        )
 
     return {
         "state": state,
