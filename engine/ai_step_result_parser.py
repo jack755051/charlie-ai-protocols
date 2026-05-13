@@ -79,9 +79,9 @@ _RESULT_LINE = re.compile(
     r"""^
     \s*                                         # leading whitespace
     (?:[-*]\s+)?                                # optional bullet
-    \s*\**\s*                                   # optional bold markers
+    \s*(?:\**|`)?\s*                            # optional bold/backtick markers
     result                                      # literal keyword
-    \s*\**\s*                                   # optional bold close markers
+    \s*(?:\**|`)?\s*                            # optional bold/backtick close markers
     \s*[:：]\s*                                 # ASCII or CJK colon
     \*?\*?                                      # optional bold start
     `?                                          # optional backtick
