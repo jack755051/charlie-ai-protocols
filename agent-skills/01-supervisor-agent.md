@@ -92,6 +92,27 @@
 
 `bound_to` / `needs` / `on_fail` / `route_back_to` / `timeout_seconds` / `acceptance_criteria` / `done_when` / `objective` / `output_paths`。
 
+**`on_fail` 必須是 enum 單值，不得內嵌 step id**：
+`schemas/task-constitution.schema.yaml` 限制 `execution_plan[*].on_fail` 為 `[halt, route_back_to, retry, escalate_user]` 四個 enum 之一。**回流目標必須寫在 sibling 欄位 `route_back_to`**，不得寫成 `on_fail: "route_back_to:<step_id>"` 這種 compound 字串。
+
+```jsonc
+// ✅ 正確：on_fail 是 enum，route_back_to 是 sibling step_id
+{
+  "step_id": "step_04_frontend_impl",
+  "capability": "frontend_implementation",
+  "on_fail": "route_back_to",
+  "route_back_to": "step_03_backend_impl"
+}
+
+// ❌ 錯誤：compound 字串會被 persist 以 schema_validation_failed halt
+{
+  "step_id": "step_04_frontend_impl",
+  "on_fail": "route_back_to:step_03_backend_impl"
+}
+```
+
+2026-05-13 component-feedback-widget dogfood（run `run_20260513110312_2052b7a8`）即因 compound 形式被 halt；`persist-task-constitution.sh:normalize_task_constitution_json` 現會把已知 compound 形式拆解為合法 shape，但這是補洞層，你應直接輸出正確結構。
+
 #### 推薦頂層欄位（強烈建議）
 
 `constraints` / `stop_conditions` / `governance` / `risk_profile` / `inferred_context` — 缺漏時下游 watcher gate 較難落地，但不阻擋 persist。
@@ -335,4 +356,4 @@ step-id cross-reference 由 envelope schema 故意**不**驗（schema envelope-o
 - `agent_id: 01-Supervisor`
 - `task_summary: [本次任務簡述，如 PRD 產出、模組派發、結案判定等]`
 - `output_paths: [PRD 路徑、交接單路徑或相關產出檔案]`
-- `result: [成功 | 失敗 | 待確認]`
+- `result: success`（若失敗只能使用 `failed` / `blocked` / `needs_data`；不得輸出中文標籤或自造 enum）

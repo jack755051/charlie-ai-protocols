@@ -351,6 +351,26 @@ if isinstance(plan, list):
             entry["on_fail"] = routing.get("on_fail")
         if "route_back_to" not in entry and routing.get("route_back_to_step"):
             entry["route_back_to"] = routing.get("route_back_to_step")
+        # v0.26.6 fix: schemas/task-constitution.schema.yaml restricts
+        # execution_plan[*].on_fail to enum [halt, route_back_to, retry,
+        # escalate_user]; the target step must live in the sibling
+        # ``route_back_to`` field. Supervisor drafts occasionally emit
+        # the compound form ``on_fail: "route_back_to:<step_id>"`` which
+        # tripped persist with ``schema_validation_failed`` during the
+        # 2026-05-13 component-feedback-widget dogfood (run
+        # run_20260513110312_2052b7a8). Split the compound here so the
+        # schema gate downstream sees the canonical shape; an already-
+        # populated ``route_back_to`` takes precedence over the split
+        # value (the supervisor was explicit).
+        on_fail = entry.get("on_fail")
+        if isinstance(on_fail, str) and ":" in on_fail:
+            head, _, tail = on_fail.partition(":")
+            head = head.strip()
+            tail = tail.strip()
+            if head == "route_back_to" and tail:
+                entry["on_fail"] = head
+                if not entry.get("route_back_to"):
+                    entry["route_back_to"] = tail
         if "done_when" not in entry and entry.get("acceptance_criteria"):
             entry["done_when"] = entry.get("acceptance_criteria")
         if "output_paths" not in entry and entry.get("outputs"):

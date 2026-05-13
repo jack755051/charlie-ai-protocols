@@ -283,6 +283,54 @@ assert_eq "persisted file exists for nested fence case" "0" "$?"
 goal_value="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('goal',''))" "${persisted}")"
 assert_eq "nested fence JSON parsed" "Verify nested markdown json fence is accepted." "${goal_value}"
 
+# Case 11: normalize splits compound on_fail "route_back_to:<step_id>".
+#
+# Reproduces the 2026-05-13 component-feedback-widget dogfood failure
+# (run run_20260513110312_2052b7a8) where the supervisor emitted
+# ``on_fail: "route_back_to:step_03_backend_impl"`` instead of the
+# canonical split form. Without the normalize split, persist halts with
+# schema_validation_failed because schemas/task-constitution.schema.yaml
+# restricts on_fail to enum [halt, route_back_to, retry, escalate_user].
+#
+# Expected: normalize splits the compound into on_fail="route_back_to" +
+# route_back_to="step_03_backend_impl", persist exits 0, and the
+# persisted JSON carries the canonical shape.
+echo "Case 11: normalize splits compound on_fail route_back_to:<step_id>"
+cat > "${SANDBOX}/draft-compound-on-fail.md" <<'EOF'
+<<<TASK_CONSTITUTION_JSON_BEGIN>>>
+{
+  "task_id": "compound-on-fail",
+  "project_id": "compound-proj",
+  "source_request": "ship a feature with backend then frontend",
+  "goal": "Ship the feature with the canonical backend-then-frontend slice.",
+  "goal_stage": "implementation_and_verification",
+  "success_criteria": ["both impl steps pass watcher"],
+  "non_goals": [],
+  "execution_plan": [
+    {
+      "step_id": "step_03_backend_impl",
+      "capability": "backend_implementation"
+    },
+    {
+      "step_id": "step_04_frontend_impl",
+      "capability": "frontend_implementation",
+      "on_fail": "route_back_to:step_03_backend_impl"
+    }
+  ]
+}
+<<<TASK_CONSTITUTION_JSON_END>>>
+EOF
+out="$(run_persist "${SANDBOX}/draft-compound-on-fail.md" "compound-proj")"
+rc=$?
+assert_eq "exit code 0 with compound on_fail split" "0" "${rc}"
+persisted="${SANDBOX}/cap/projects/compound-proj/constitutions/compound-on-fail.json"
+[ -f "${persisted}" ]
+assert_eq "persisted file exists for compound on_fail case" "0" "$?"
+on_fail_value="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d['execution_plan'][1].get('on_fail',''))" "${persisted}")"
+assert_eq "on_fail split to enum value" "route_back_to" "${on_fail_value}"
+route_back_value="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d['execution_plan'][1].get('route_back_to',''))" "${persisted}")"
+assert_eq "route_back_to lifted to sibling field" "step_03_backend_impl" "${route_back_value}"
+
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"
 [ ${fail_count} -eq 0 ]
