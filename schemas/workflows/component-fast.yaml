@@ -1,0 +1,219 @@
+workflow_id: component-fast
+version: 1
+name: Component Fast Path
+summary: |
+  Deterministic Component Repo bootstrap with at most two AI steps.
+  Replaces project-spec-pipeline + project-implementation-pipeline as
+  the default loop for known component types (currently feedback-widget).
+  See docs/cap/COMPONENT-FAST-PATH-MEMO.md for inputs, deterministic
+  catalog, AI scope, compressed governance, and the five success
+  thresholds (< 10 min wall / <= 2 AI steps / <= 30% prompt bytes /
+  100% catalog files / smoke exit 0).
+  Pipeline shape:
+    resolve_inputs (shell)
+      → render_skeleton (shell, code-emit)
+        → deterministic_audit (shell)
+          → smoke_runtime (shell)
+            → compact_review (ai)
+              → fix_or_polish (ai, code-emit; gated)
+                → archive (shell)
+owner: supervisor
+triggers:
+  - manual
+  - component-fast
+
+artifacts:
+  component_fast_args: |
+    Caller-provided fast-path arguments: component_type / project_id /
+    project_root / optional stack_preset / ui_adapter / storage_default /
+    exclusions. Read by resolve_inputs.
+  component_fast_resolved: |
+    Same arguments after registry validation. Confirms hard_exclusions
+    are present and that any optional flag value matches the registry
+    default for slice 5.
+  component_fast_rendered_tree: |
+    On-disk project skeleton under <project_root> after deterministic
+    scaffold. Every required catalog target landed; executable: true
+    targets carry +x; ${TOKEN} substitutions are complete.
+  component_fast_audit_report: |
+    Five-check compliance report from component-fast-audit.sh — file
+    existence + forbidden_terms + forbidden_core_import_patterns +
+    env_driven_runtime contract + secret pattern guard.
+  component_fast_smoke_report: |
+    docker compose up / probe / down log from the rendered
+    scripts/runtime-smoke.sh. Non-zero exit halts the workflow before
+    any AI step runs.
+  component_review_verdict: |
+    AI compact_review output: pass | repairs_needed plus the repair
+    list (file path + contract gap) when not pass.
+  component_repair_changeset: |
+    AI fix_or_polish edit summary: list of files modified plus the
+    matching repair_list entry from compact_review.
+  task_archive: |
+    Deterministic result emit by archive step: workflow-result.json +
+    rendered result.md (P7 result_report_builder library reused).
+
+governance:
+  watcher_mode: final_only
+  watcher_checkpoints: [deterministic_audit]
+  logger_mode: milestone_log
+  logger_checkpoints:
+    - render_skeleton
+    - deterministic_audit
+    - smoke_runtime
+    - archive
+  context_mode: summary_first
+  goal_stage: implementation_and_verification
+  halt_on_missing_handoff: true
+
+steps:
+  - id: resolve_inputs
+    name: Resolve Component Fast Path Inputs
+    capability: component_fast_inputs
+    executor: shell
+    script: scripts/workflows/component-fast-resolve.sh
+    needs: []
+    inputs:
+      - component_fast_args
+    outputs:
+      - component_fast_resolved
+    done_when:
+      - 必填三項已存在：component_type / project_id / project_root
+      - 各 optional flag 與 registry default 對齊（slice 5 僅接受 default）
+      - registry hard_exclusions 完整出現在 caller --exclude 集合
+    on_fail: halt
+    timeout_seconds: 60
+    input_mode: full
+    output_tier: machine_metadata
+    notes:
+      - 此 step 早於任何 file write 執行；輸入錯誤導致的失敗不會留下半完成 tree。
+
+  - id: render_skeleton
+    name: Render Component Skeleton from Registry
+    capability: deterministic_scaffold
+    executor: shell
+    script: scripts/workflows/component-fast-render.sh
+    needs: [resolve_inputs]
+    inputs:
+      - component_fast_resolved
+    outputs:
+      - component_fast_rendered_tree
+    done_when:
+      - registry catalog 每個 required entry 已寫入 <project_root>/<target_path>
+      - executable: true 的 target 已 chmod +x
+      - 五個 CAP substitution token (PROJECT_ID / PROJECT_NAME_PASCAL / COMPONENT_TYPE / STORE_DEFAULT / API_BASE_URL) 已全替換，rendered tree 無 ${TOKEN} 殘留
+    on_fail: halt
+    timeout_seconds: 120
+    input_mode: full
+    output_tier: full_artifact
+    notes:
+      - 為 code-emit capability，runtime 會檢核 landing dir 不為空（agent-skills/00-core-protocol.md §5.3.2）。
+
+  - id: deterministic_audit
+    name: Deterministic Compliance Audit on Rendered Tree
+    capability: deterministic_compliance_checklist
+    executor: shell
+    script: scripts/workflows/component-fast-audit.sh
+    needs: [render_skeleton]
+    inputs:
+      - component_fast_rendered_tree
+    outputs:
+      - component_fast_audit_report
+    done_when:
+      - 五道 check (file existence / forbidden_terms / forbidden_core_import_patterns / env_driven_runtime / secret_pattern_guard) 0 violation
+      - rendered_files_checked 等於 catalog required entry count
+    on_fail: halt
+    timeout_seconds: 60
+    input_mode: full
+    output_tier: governance_report
+    notes:
+      - 此 step 是 watcher_checkpoints 唯一節點；governance.watcher_mode=final_only 表示稽核軌只在這裡介入。
+
+  - id: smoke_runtime
+    name: Runtime Smoke (compose up + probes + tear down)
+    capability: runtime_smoke
+    executor: shell
+    script: scripts/workflows/component-fast-smoke.sh
+    needs: [deterministic_audit]
+    inputs:
+      - component_fast_rendered_tree
+    outputs:
+      - component_fast_smoke_report
+    done_when:
+      - docker compose backend + frontend health probe 皆 2xx
+      - sample POST /api/feedback 成功寫入 InMemoryFeedbackStore
+      - compose down 已完成（trap 觸發即可）
+    on_fail: halt
+    timeout_seconds: 300
+    input_mode: summary
+    output_tier: machine_metadata
+    notes:
+      - smoke script 由 render step 從 templates/.../scripts/runtime-smoke.sh copy 過去並 chmod +x；本 workflow-level wrapper 只負責 cd 進 project_root 並轉發 exit code。
+
+  - id: compact_review
+    name: AI Compact Review of Rendered Component Repo
+    capability: component_repo_compact_review
+    executor: ai
+    needs: [smoke_runtime]
+    inputs:
+      - component_fast_rendered_tree
+      - component_fast_audit_report
+      - project_constitution
+    outputs:
+      - component_review_verdict
+    done_when:
+      - 已產出 verdict 結論：pass / repairs_needed
+      - 若 repairs_needed，repair_list 每項含 file_path + 契約差異摘要
+      - 不重做 implementation；超出小幅範圍應回 needs_data
+    on_fail: halt
+    timeout_seconds: 240
+    input_mode: summary
+    output_tier: governance_report
+
+  - id: fix_or_polish
+    name: AI Fix or Polish Based on Compact Review
+    capability: component_repo_repair
+    executor: ai
+    needs: [compact_review]
+    inputs:
+      - component_review_verdict
+      - component_fast_rendered_tree
+    outputs:
+      - component_repair_changeset
+    done_when:
+      - compact_review repair_list 每項已處理或回 needs_data
+      - 修改僅限 repair_list 列出的檔案
+      - 完成後 rendered tree 仍通過 deterministic_compliance_checklist 五道檢查
+    on_fail: halt
+    timeout_seconds: 240
+    input_mode: summary
+    output_tier: full_artifact
+    notes:
+      - 當 compact_review 回 pass 時此 step 視為 skip（無 repair 可做）。
+      - code-emit capability — runtime 強制檢核 landing dir 有寫檔。
+
+  - id: archive
+    name: Emit Deterministic Result Report
+    capability: technical_logging
+    executor: shell
+    script: scripts/cap-result-emit.sh
+    needs: [fix_or_polish]
+    inputs:
+      - component_fast_rendered_tree
+      - component_fast_audit_report
+      - component_fast_smoke_report
+      - component_review_verdict
+      - component_repair_changeset
+    outputs:
+      - task_archive
+    done_when:
+      - workflow-result.json 已寫入 run_dir（reuse P7 result_report_builder）
+      - result.md 已渲染並指向 catalog target list
+    on_fail: halt
+    timeout_seconds: 60
+    input_mode: summary
+    output_tier: machine_metadata
+    notes:
+      - archive 不消耗 AI sub-agent budget；走既有 P7 deterministic emit。
+      - capability 沿用 technical_logging，但 workflow 層 override executor=shell；
+        與 project-implementation-pipeline 的 AI archive 形成對比。

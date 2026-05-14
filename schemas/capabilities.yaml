@@ -581,6 +581,129 @@ capabilities:
       - 已確認交付資訊完整度
       - 已指出缺漏與風險
 
+  # ── Component Fast Path (P1b) ──
+  # Deterministic Component Repo bootstrap. 4 shell capabilities cover
+  # input resolve / scaffold render / compliance audit / runtime smoke;
+  # 2 AI capabilities cover compact review and small-scope repair.
+  # See docs/cap/COMPONENT-FAST-PATH-MEMO.md (P1a) and
+  # schemas/workflows/component-fast.yaml for the pipeline shape.
+
+  component_fast_inputs:
+    description: |
+      Pre-flight argument resolver for the Component Fast Path workflow.
+      Validates project_id / component_type / stack_preset / ui_adapter /
+      storage_default / exclusions against the registry under
+      schemas/component-types/<type>.yaml. Halts before any file is
+      written so a typo in the operator's inputs surfaces immediately.
+    default_agent: shell
+    allowed_agents: [shell]
+    inputs:
+      - component_fast_args
+    outputs:
+      - component_fast_resolved
+    done_when:
+      - 必填三項已存在：component_type / project_id / project_root
+      - 各 optional flag 與 registry default 對齊（slice 5 僅接受 default）
+      - registry hard_exclusions 完整出現在 caller --exclude 集合
+
+  deterministic_scaffold:
+    description: |
+      Read schemas/component-types/<type>.yaml and render every
+      catalog entry's source_template_path into
+      <project_root>/<target_path> with the registry's substitution
+      table. Code-emitting (writes 20 files for feedback-widget);
+      runtime enforces a non-empty landing dir at step end per the
+      AI Write Contract (agent-skills/00-core-protocol.md §5.3.2).
+    default_agent: shell
+    allowed_agents: [shell]
+    inputs:
+      - component_fast_resolved
+    outputs:
+      - component_fast_rendered_tree
+    done_when:
+      - registry catalog 每個 required entry 已寫入 <project_root>/<target_path>
+      - executable: true 的 target 已 chmod +x
+      - 五個 CAP substitution token 已替換完畢，rendered tree 無 ${TOKEN} 殘留
+
+  deterministic_compliance_checklist:
+    description: |
+      Five-check audit over a rendered Component Repo tree:
+      (1) catalog file existence + executable bit;
+      (2) audit_rules.forbidden_terms substring scan;
+      (3) audit_rules.forbidden_core_import_patterns;
+      (4) env_driven_runtime contract (.env.example + compose);
+      (5) secret pattern guard with placeholder allowlist.
+      Hard-fail only — there is no AI repair fallback at this layer.
+    default_agent: shell
+    allowed_agents: [shell]
+    inputs:
+      - component_fast_rendered_tree
+    outputs:
+      - component_fast_audit_report
+    done_when:
+      - 五道 check 全部 0 violation
+      - rendered_files_checked 等於 catalog required entry count
+      - failure_count == 0 (machine-readable summary)
+
+  runtime_smoke:
+    description: |
+      Execute the rendered scripts/runtime-smoke.sh inside the project
+      root: docker compose up backend + frontend, curl /api/health and
+      a sample POST /api/feedback, tear the stack down. Exit non-zero
+      halts the workflow before the AI compact_review step runs.
+    default_agent: shell
+    allowed_agents: [shell]
+    inputs:
+      - component_fast_rendered_tree
+    outputs:
+      - component_fast_smoke_report
+    done_when:
+      - backend + frontend service health probes 皆回 2xx
+      - sample POST /api/feedback 已成功寫入 InMemoryFeedbackStore
+      - compose down 已執行（trap-driven cleanup）
+
+  component_repo_compact_review:
+    description: |
+      AI sanity gate over the rendered Component Repo. Compares the
+      deterministic skeleton against the registry contract and the
+      caller's project_constitution excerpt; reports verdict=pass or
+      repairs_needed plus a per-file repair list. This is a review,
+      not a re-implementation — repair scope larger than small edits
+      should bubble back as needs_data so the operator can choose
+      component-governed (full pipeline) instead.
+    default_agent: watcher
+    allowed_agents: [watcher, qa, supervisor]
+    inputs:
+      - component_fast_rendered_tree
+      - component_fast_audit_report
+      - project_constitution
+    outputs:
+      - component_review_verdict
+    done_when:
+      - 已輸出 verdict (pass | repairs_needed)
+      - 若 repairs_needed，每條目含 file_path + 契約差異敘述
+      - review scope 在小幅修補範圍內；超出即回 needs_data
+
+  component_repo_repair:
+    description: |
+      AI applies the repair_list produced by component_repo_compact_review.
+      Code-emitting (small file edits only); runtime enforces a
+      non-empty landing dir at step end. Scope is bounded by the
+      compact_review repair_list — full module rewrites are out of
+      scope for this capability. After repair the rendered tree must
+      still pass deterministic_compliance_checklist.
+    default_agent: backend
+    allowed_agents: [backend, frontend, supervisor]
+    inputs:
+      - component_review_verdict
+      - component_fast_rendered_tree
+    outputs:
+      - component_repair_changeset
+    done_when:
+      - repair_list 每項已處理或回 needs_data
+      - 修改僅限 repair_list 列出的檔案
+      - 完成後 rendered tree 仍通過 deterministic_compliance_checklist
+
   # ── Guardrails (Karpathy LLM-coding rules; advisory layer) ──
   # Provided by shared-layer skill `shared-karpathy-guidelines` (see
   # ~/.cap/shared/skills.yaml). Distinct from agent role prompts:

@@ -1242,6 +1242,13 @@ _CODE_EMITTING_CAPABILITIES = frozenset({
     "frontend_implementation",
     "qa_testing",
     "devops_delivery",
+    # Component Fast Path (P1b slice 5):
+    # deterministic_scaffold writes 20 catalog files from registry templates;
+    # component_repo_repair applies small AI edits from compact_review's
+    # repair list. Both touch project_root and must be gated by the
+    # AI Write Contract landing-dir check (00-core-protocol.md §5.3.2).
+    "deterministic_scaffold",
+    "component_repo_repair",
 })
 
 
