@@ -133,6 +133,16 @@ catalog:
     target_path: frontend/components/feedback/index.ts
     required: true
     artifact_group: frontend_ui
+  - name: frontend_dockerfile
+    source_template_path: templates/component-fast/feedback-widget/frontend/Dockerfile
+    target_path: frontend/Dockerfile
+    required: true
+    artifact_group: frontend_ui
+  - name: frontend_index_html
+    source_template_path: templates/component-fast/feedback-widget/frontend/index.html
+    target_path: frontend/index.html
+    required: true
+    artifact_group: frontend_ui
   - name: design_tokens
     source_template_path: templates/component-fast/feedback-widget/design/tokens.json
     target_path: design/tokens.json
@@ -176,6 +186,11 @@ catalog:
   - name: backend_controller
     source_template_path: templates/component-fast/feedback-widget/backend/Feedback/Api/FeedbackController.cs
     target_path: backend/Feedback/Api/FeedbackController.cs
+    required: true
+    artifact_group: backend
+  - name: backend_dockerfile
+    source_template_path: templates/component-fast/feedback-widget/backend/Feedback/Dockerfile
+    target_path: backend/Feedback/Dockerfile
     required: true
     artifact_group: backend
   - name: compose

@@ -68,7 +68,7 @@ out1="$(bash "${AUDIT}" \
 rc1=$?
 assert_eq        "audit exit 0 on happy path"   "0"                          "${rc1}"
 assert_contains "summary condition: ok"          "${out1}"  "condition: ok"
-assert_contains "summary rendered_files_checked" "${out1}"  "rendered_files_checked: 20"
+assert_contains "summary rendered_files_checked" "${out1}"  "rendered_files_checked: 23"
 assert_contains "summary result: success"        "${out1}"  "result: success"
 
 # ── Case 2: missing required file ────────────────────────────────────

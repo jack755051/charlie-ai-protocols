@@ -73,7 +73,7 @@ render_out="$(bash "${RENDER}" \
 render_rc=$?
 assert_eq        "render exit 0"                "0"                                "${render_rc}"
 assert_contains "summary result line"          "${render_out}"                     "result: success"
-assert_contains "summary rendered_count line"  "${render_out}"                     "rendered_count: 20"
+assert_contains "summary rendered_count line"  "${render_out}"                     "rendered_count: 23"
 assert_contains "summary project_root line"    "${render_out}"                     "project_root: ${PROJECT_ROOT}"
 
 # ── Case 2: every catalog target exists in sandbox ────────────────────

@@ -82,7 +82,7 @@ assert_contains "resolve derives PROJECT_NAME_PASCAL"       "${out2}"  "project_
 assert_contains "resolve derives STORE_DEFAULT"             "${out2}"  "store_default: InMemoryFeedbackStore"
 assert_contains "resolve emits api_base_url default"        "${out2}"  "api_base_url: http://localhost:8080"
 assert_contains "resolve echoes hard_exclusions"            "${out2}"  "hard_exclusions: redis"
-assert_contains "resolve echoes catalog_count"              "${out2}"  "catalog_count: 20"
+assert_contains "resolve echoes catalog_count"              "${out2}"  "catalog_count: 23"
 
 # ── Case 3: resolve rejects unknown component type with exit 3 ───────
 echo ""
