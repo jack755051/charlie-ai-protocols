@@ -50,6 +50,21 @@ Interpretation:
 4. **P2: Keep full governance as an explicit strict mode.**
    The current full workflow is still useful for product-scale or ambiguous systems, but it should not be the default dogfood loop for a small component. Profiles should be explicit: `component-fast`, `component-governed`, and `product-strict`.
 
+## Prioritized Follow-up Roadmap
+
+This roadmap orders the next repair stream after the 2026-05-13 dogfood.
+Broad live dogfood should pause until P0 and the first P1 fast path are usable.
+
+| Priority | Track | Why it comes here | Required outcome |
+|---|---|---|---|
+| P0 | Usage telemetry and cost visibility | The completed component implementation consumed 87% of the Claude 5-hour quota, but CAP still cannot rank true token hotspots. Optimizing without telemetry is guesswork. | Every AI step persists normalized usage in `agent-sessions.json` and `workflow-result.json`; `result.md` shows prompt bytes, output bytes, provider/model, token values when available, and explicit "tokens unavailable" when not available. |
+| P1 | Component fast path / deterministic template path | A small reusable Component Repo should not pay the full project constitution + spec pipeline + implementation pipeline cost. | Add a `component-fast` or equivalent workflow/profile that generates known Component Repo structures deterministically, then uses AI only for compact review, repair, or ambiguous deltas. |
+| P1 | Stop using product-strict as default dogfood path | The current workflow treats component work like a full product lifecycle. That makes every regression test expensive. | Component dogfood defaults to the fast path; full governance remains available only when explicitly requested. |
+| P2 | Workflow profile split | CAP needs clear operator intent rather than one heavy path for every task. | Define and document at least `component-fast`, `component-governed`, and `product-strict`, including which steps are deterministic, AI-backed, skipped, or audit-only. |
+| P2 | Handoff/result materialization normalization | Dogfood repeatedly failed on markdown formatting variants of `result: success`. Parser tolerance helped, but relying on AI markdown shape is brittle. | Runtime should normalize or materialize the final handoff result into a machine-readable form before gating; parser fallbacks remain compatibility, not the main contract. |
+| P2 | Open CAP correctness / UX bugs from dogfood | Known bugs still create noisy failures unrelated to component quality. | Fix or issue-track nested `cap-paths.sh` project resolution, prompt/project-id/bootstrap alignment, provider readiness/onboarding, and safer long-prompt input (`--prompt-file` / prompt capture). |
+| P3 | Resume broad dogfood | More large live runs before P0/P1 will burn quota while mostly rediscovering known cost problems. | Resume multi-provider dogfood only after telemetry can explain cost and a component fast path can serve as the default regression target. |
+
 ## Telemetry Contract
 
 Every session should carry a normalized `usage` object. Provider-specific adapters may populate exact token counts; when a provider does not expose usage, the runtime must still persist byte-count proxies.
