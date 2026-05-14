@@ -62,6 +62,139 @@ def _safe_int(value: Any) -> int:
         return 0
 
 
+def _humanize_duration(seconds: int) -> str:
+    """Convert int seconds to a human-readable HH? MM SS form.
+
+    Examples: 45 -> "45s", 1498 -> "24m 58s", 2665 -> "44m 25s",
+    7325 -> "2h 02m 05s". Used by the Summary header so operators can
+    read total duration without converting seconds in their head; the
+    raw int still appears in parentheses for precise comparisons.
+    """
+    if not isinstance(seconds, int) or seconds < 0:
+        return "0s"
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, secs = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {secs:02d}s"
+    hours, mins = divmod(minutes, 60)
+    return f"{hours}h {mins:02d}m {secs:02d}s"
+
+
+def _build_unique_identifiers(sessions: list[dict]) -> dict[str, list[str]]:
+    """Aggregate unique non-empty run_id / workflow_id strings.
+
+    Used by the Summary section so a single-run aggregation shows the
+    one id (``run_id: run_20260513...``) while a multi-run scan shows
+    the set (``run_id: multi (run_A, run_B)``).
+    """
+    run_ids: set[str] = set()
+    workflow_ids: set[str] = set()
+    for session in sessions:
+        rid = session.get("run_id")
+        if isinstance(rid, str) and rid:
+            run_ids.add(rid)
+        wid = session.get("workflow_id")
+        if isinstance(wid, str) and wid:
+            workflow_ids.add(wid)
+    return {
+        "run_ids": sorted(run_ids),
+        "workflow_ids": sorted(workflow_ids),
+    }
+
+
+def _build_decision_signals(
+    sessions: list[dict], total_duration_seconds: int
+) -> dict[str, Any]:
+    """Compute the four operator-facing decision signals.
+
+    1. top_2_steps_share_pct — wall-time share captured by the two
+       longest steps. Answers "is the cost concentrated in 1-2 steps
+       (good optimization target) or evenly spread (refactor unlikely
+       to help)?"
+    2. ai_implementation_share_pct — share consumed by AI sessions
+       whose capability contains ``implementation`` (covers
+       ``backend_implementation`` / ``frontend_implementation``).
+       Answers "is most of the budget actually code-emit vs
+       planning / audit / ticket scaffolding?"
+    3. failed_longest_step — the longest step whose lifecycle=failed.
+       Answers "what failure cost the most before we noticed?"
+    4. largest_prompt_step — session with the biggest prompt size in
+       bytes. Answers "where does the prompt context bloat live?"
+
+    Returns a dict with the four signals; nested step objects are
+    ``None`` when no qualifying session exists.
+    """
+    enriched: list[dict[str, Any]] = []
+    for session in sessions:
+        usage = session.get("usage") if isinstance(session.get("usage"), dict) else None
+        prompt_bytes: int | None = None
+        if usage and isinstance(usage.get("prompt_size_bytes"), int):
+            prompt_bytes = usage["prompt_size_bytes"]
+        elif isinstance(session.get("prompt_size_bytes"), int):
+            prompt_bytes = session["prompt_size_bytes"]
+        enriched.append({
+            "step_id": session.get("step_id") or "",
+            "capability": session.get("capability") or "",
+            "executor": session.get("executor") or "",
+            "lifecycle": session.get("lifecycle") or "",
+            "duration_seconds": _safe_int(session.get("duration_seconds")),
+            "prompt_size_bytes": prompt_bytes,
+        })
+
+    by_duration = sorted(
+        enriched, key=lambda e: e["duration_seconds"], reverse=True
+    )
+
+    top_2 = by_duration[:2]
+    top_2_duration = sum(e["duration_seconds"] for e in top_2)
+    top_2_share = (
+        (top_2_duration / total_duration_seconds * 100)
+        if total_duration_seconds > 0
+        else 0.0
+    )
+
+    impl_duration = sum(
+        e["duration_seconds"]
+        for e in enriched
+        if e["executor"] == "ai" and "implementation" in e["capability"]
+    )
+    ai_impl_share = (
+        (impl_duration / total_duration_seconds * 100)
+        if total_duration_seconds > 0
+        else 0.0
+    )
+
+    failed_longest = next(
+        (e for e in by_duration if e["lifecycle"] == "failed"), None
+    )
+
+    sized = [e for e in by_duration if isinstance(e["prompt_size_bytes"], int)]
+    largest_prompt = (
+        max(sized, key=lambda e: e["prompt_size_bytes"]) if sized else None
+    )
+
+    def _project_step(entry: dict[str, Any] | None) -> dict[str, Any] | None:
+        if entry is None:
+            return None
+        return {
+            "step_id": entry["step_id"],
+            "capability": entry["capability"],
+            "duration_seconds": entry["duration_seconds"],
+            "prompt_size_bytes": entry["prompt_size_bytes"],
+            "lifecycle": entry["lifecycle"],
+        }
+
+    return {
+        "top_2_steps_share_pct": round(top_2_share, 1),
+        "top_2_steps": [_project_step(e) for e in top_2],
+        "ai_implementation_share_pct": round(ai_impl_share, 1),
+        "ai_implementation_duration_seconds": impl_duration,
+        "failed_longest_step": _project_step(failed_longest),
+        "largest_prompt_step": _project_step(largest_prompt),
+    }
+
+
 def _build_usage_totals(sessions: list[dict]) -> dict[str, Any]:
     """Aggregate per-run usage totals over the ledger.
 
@@ -290,14 +423,172 @@ def analyze(sessions: list[dict], *, top_n: int = 5) -> dict:
         "usage_totals": _build_usage_totals(sessions),
         "unavailable_reasons": _build_unavailable_reasons(sessions),
         "cost_hotspot": build_cost_hotspot(sessions),
+        # P0b-2 readability keys (additive). Summary header pulls
+        # run/workflow identity; decision_signals answers four
+        # operator questions (cost concentration, AI-implementation
+        # share, failure cost, prompt bloat) without re-walking the
+        # ledger.
+        "unique_run_ids": _build_unique_identifiers(sessions)["run_ids"],
+        "unique_workflow_ids": _build_unique_identifiers(sessions)["workflow_ids"],
+        "decision_signals": _build_decision_signals(sessions, total_duration),
     }
 
 
-def render_text(report: dict, *, top_n: int = 5) -> str:
-    """Human-readable text rendering."""
+def render_text(report: dict, *, top_n: int = 5, verbose: bool = False) -> str:
+    """Human-readable text rendering.
+
+    Default output is a sparse three-section view designed for at-a-
+    glance cost triage:
+
+      1. **Summary** — run/workflow identity + provider + humanized
+         duration + sessions count + token availability. The first
+         thing the operator sees when they run ``cap session analyze
+         --run-id <id>``.
+      2. **Hotspots** — top N steps by wall time with percentage
+         share, per-step prompt/output bytes, and an ``[FAILED]``
+         marker so expensive failures jump out.
+      3. **Decision Signals** — four numbers that drive the next
+         optimization decision (top-2 share, AI implementation
+         share, failed longest step, largest prompt step).
+
+    Pass ``verbose=True`` to also render the previously-default
+    detailed tables (lifecycle / by_provider / by_capability /
+    Largest Prompt Snapshots / duplicate_prompts / longest_sessions /
+    failures / Usage Summary / tokens_unavailable_reasons / Top
+    Steps By X / Top Capabilities By Prompt Bytes). The JSON
+    envelope is unchanged regardless of this flag — machine consumers
+    keep the full data.
+    """
     lines: list[str] = []
-    lines.append(f"total_sessions: {report['total_sessions']}")
-    lines.append(f"total_duration_seconds: {report['total_duration_seconds']}")
+
+    def _fmt_bytes(value: Any) -> str:
+        return f"{value}B" if isinstance(value, int) else "null"
+
+    def _fmt_int(value: Any) -> str:
+        return str(value) if isinstance(value, int) else "null"
+
+    def _fmt_set(values: list[str]) -> str:
+        if not values:
+            return "unknown"
+        if len(values) == 1:
+            return values[0]
+        return "multi (" + ", ".join(values) + ")"
+
+    total_sessions = report.get("total_sessions", 0)
+    total_duration = report.get("total_duration_seconds", 0)
+    usage_totals = report.get("usage_totals") or {}
+    providers = usage_totals.get("providers") or []
+    avail = usage_totals.get("available_sessions", 0)
+    unavail = usage_totals.get("unavailable_sessions", 0)
+    run_ids = report.get("unique_run_ids") or []
+    workflow_ids = report.get("unique_workflow_ids") or []
+
+    # ── Section 1: Summary ─────────────────────────────────────────────
+    lines.append("Summary:")
+    lines.append(f"  run_id: {_fmt_set(run_ids)}")
+    lines.append(f"  workflow_id: {_fmt_set(workflow_ids)}")
+    lines.append(f"  provider: {_fmt_set(providers)}")
+    lines.append(
+        f"  duration: {_humanize_duration(total_duration)} ({total_duration}s)"
+    )
+    lines.append(f"  sessions: {total_sessions}")
+    total_telemetry = avail + unavail
+    if total_telemetry == 0:
+        tokens_state = "unavailable (no telemetry recorded)"
+    elif avail == 0:
+        tokens_state = f"unavailable ({avail}/{total_telemetry} sessions exposed token counts)"
+    elif unavail == 0:
+        tokens_state = f"available ({avail}/{total_telemetry} sessions)"
+    else:
+        tokens_state = f"partial ({avail}/{total_telemetry} sessions exposed token counts)"
+    lines.append(f"  tokens: {tokens_state}")
+
+    # ── Section 2: Hotspots ────────────────────────────────────────────
+    longest = report.get("longest_sessions") or []
+    if longest:
+        lines.append("")
+        lines.append(f"Hotspots (top {top_n} by duration):")
+        hotspot_payload = report.get("cost_hotspot") or {}
+        by_step_lookup: dict[str, dict[str, Any]] = {}
+        for step_entry in hotspot_payload.get("by_step") or []:
+            sid_key = step_entry.get("step_id")
+            if isinstance(sid_key, str) and sid_key:
+                by_step_lookup[sid_key] = step_entry
+        for idx, entry in enumerate(longest[:top_n], start=1):
+            dur = entry.get("duration_seconds") or 0
+            pct = (dur / total_duration * 100) if total_duration > 0 else 0.0
+            sid = entry.get("step_id") or entry.get("session_id") or "-"
+            cap = entry.get("capability") or "-"
+            lifecycle = entry.get("lifecycle") or ""
+            marker = "  [FAILED]" if lifecycle == "failed" else ""
+            step_metrics = by_step_lookup.get(sid) if isinstance(sid, str) else None
+            byte_part = ""
+            if step_metrics:
+                pb = step_metrics.get("prompt_size_bytes")
+                ob = step_metrics.get("output_size_bytes")
+                if isinstance(pb, int) or isinstance(ob, int):
+                    byte_part = (
+                        f"  prompt={_fmt_bytes(pb)} out={_fmt_bytes(ob)}"
+                    )
+            lines.append(
+                f"  {idx}. {sid:<24} "
+                f"{_humanize_duration(dur):>11} "
+                f"({pct:>5.1f}%)  "
+                f"cap={cap}{byte_part}{marker}"
+            )
+
+    # ── Section 3: Decision Signals ────────────────────────────────────
+    signals = report.get("decision_signals") or {}
+    if signals:
+        lines.append("")
+        lines.append("Decision Signals:")
+        top2 = signals.get("top_2_steps") or []
+        top2_share = signals.get("top_2_steps_share_pct", 0)
+        if top2 and all(e for e in top2):
+            top2_detail = " + ".join(
+                f"{e['step_id']} {_humanize_duration(e['duration_seconds'])}"
+                for e in top2
+            )
+            lines.append(f"  top 2 steps share: {top2_share}% ({top2_detail})")
+        else:
+            lines.append(f"  top 2 steps share: {top2_share}% (no qualifying steps)")
+        impl_share = signals.get("ai_implementation_share_pct", 0)
+        impl_dur = signals.get("ai_implementation_duration_seconds", 0)
+        lines.append(
+            f"  AI implementation share: {impl_share}% "
+            f"({_humanize_duration(impl_dur)} of {_humanize_duration(total_duration)})"
+        )
+        fls = signals.get("failed_longest_step")
+        if fls:
+            lines.append(
+                f"  failed longest step: {fls['step_id']} "
+                f"({_humanize_duration(fls['duration_seconds'])}, cap={fls['capability']})"
+            )
+        else:
+            lines.append("  failed longest step: (none)")
+        lps = signals.get("largest_prompt_step")
+        if lps and isinstance(lps.get("prompt_size_bytes"), int):
+            lines.append(
+                f"  largest prompt step: {lps['step_id']} "
+                f"({lps['prompt_size_bytes']}B, cap={lps['capability']})"
+            )
+        else:
+            lines.append("  largest prompt step: (none recorded)")
+
+    if not verbose:
+        lines.append("")
+        lines.append(
+            "(re-run with --verbose for full lifecycle / by_provider / "
+            "by_capability / hotspot tables)"
+        )
+        return "\n".join(lines)
+
+    # ── Verbose tables (previously the default) ────────────────────────
+    lines.append("")
+    lines.append("──── Detailed Tables (--verbose) ────")
+    lines.append("")
+    lines.append(f"total_sessions: {total_sessions}")
+    lines.append(f"total_duration_seconds: {total_duration}")
 
     lines.append("")
     lines.append("lifecycle:")
@@ -382,33 +673,12 @@ def render_text(report: dict, *, top_n: int = 5) -> str:
         ):
             lines.append(f"    {cap}: {count}")
 
-    # P0b-1: usage telemetry sections — totals, provider parity reasons,
-    # and per-step ranking pulled from build_cost_hotspot.
-    def _fmt_bytes(value: Any) -> str:
-        return f"{value}B" if isinstance(value, int) else "null"
-
-    def _fmt_int(value: Any) -> str:
-        return str(value) if isinstance(value, int) else "null"
-
-    usage_totals = report.get("usage_totals") or {}
     if usage_totals:
-        avail = usage_totals.get("available_sessions", 0)
-        unavail = usage_totals.get("unavailable_sessions", 0)
-        providers = usage_totals.get("providers") or []
         token_sources = usage_totals.get("token_sources") or []
-
-        def _fmt_set(values: list[str]) -> str:
-            if not values:
-                return "unknown"
-            if len(values) == 1:
-                return values[0]
-            return "multi (" + ", ".join(values) + ")"
-
         total_tokens = usage_totals.get("total_tokens")
         token_display = (
             str(total_tokens) if isinstance(total_tokens, int) else "unavailable"
         )
-
         lines.append("")
         lines.append("Usage Summary:")
         lines.append(f"  provider: {_fmt_set(providers)}")
@@ -416,7 +686,7 @@ def render_text(report: dict, *, top_n: int = 5) -> str:
         lines.append(
             f"  provider_token_telemetry_available: {avail}/{avail + unavail}"
         )
-        lines.append(f"  total_duration_seconds: {report['total_duration_seconds']}")
+        lines.append(f"  total_duration_seconds: {total_duration}")
         lines.append(
             f"  total_prompt_bytes: {_fmt_bytes(usage_totals.get('total_prompt_bytes'))}"
         )
@@ -435,7 +705,6 @@ def render_text(report: dict, *, top_n: int = 5) -> str:
     hotspot = report.get("cost_hotspot") or {}
     by_step = hotspot.get("by_step") or []
     if by_step:
-        # Top N by prompt bytes (already sorted by build_cost_hotspot).
         lines.append("")
         lines.append(f"Top Steps By Prompt Bytes (top {top_n}):")
         for entry in by_step[:top_n]:
@@ -449,7 +718,6 @@ def render_text(report: dict, *, top_n: int = 5) -> str:
                 f"dur={_fmt_int(entry.get('duration_seconds'))}s"
             )
 
-        # Top N by output bytes — same source list, re-sorted.
         by_output = sorted(
             by_step,
             key=lambda s: (
@@ -474,8 +742,7 @@ def render_text(report: dict, *, top_n: int = 5) -> str:
                     f"dur={_fmt_int(entry.get('duration_seconds'))}s"
                 )
 
-        # Top N by duration — same source list, re-sorted.
-        by_duration = sorted(
+        by_duration_full = sorted(
             by_step,
             key=lambda s: (
                 s["duration_seconds"]
@@ -484,10 +751,10 @@ def render_text(report: dict, *, top_n: int = 5) -> str:
             ),
             reverse=True,
         )
-        if any(isinstance(s.get("duration_seconds"), int) for s in by_duration):
+        if any(isinstance(s.get("duration_seconds"), int) for s in by_duration_full):
             lines.append("")
             lines.append(f"Top Steps By Duration (top {top_n}):")
-            for entry in by_duration[:top_n]:
+            for entry in by_duration_full[:top_n]:
                 if not isinstance(entry.get("duration_seconds"), int):
                     continue
                 sid = entry.get("step_id") or "-"
@@ -535,6 +802,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="Emit JSON envelope instead of text."
     )
     parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help=(
+            "Render the full detailed tables (lifecycle / by_provider / "
+            "by_capability / hotspot / Largest Prompt Snapshots / etc.) "
+            "after the sparse Summary + Hotspots + Decision Signals view. "
+            "Default output stays sparse for at-a-glance triage."
+        ),
+    )
+    parser.add_argument(
         "--sessions-path",
         default=None,
         help="Read from a specific agent-sessions.json file (overrides default scan).",
@@ -572,7 +850,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         print(json.dumps({"ok": True, **report}, ensure_ascii=False))
     else:
-        print(render_text(report, top_n=args.top))
+        print(render_text(report, top_n=args.top, verbose=args.verbose))
     return 0
 
 

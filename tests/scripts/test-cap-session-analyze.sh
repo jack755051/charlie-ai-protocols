@@ -112,8 +112,8 @@ assert_eq() {
 }
 
 # ── Case 1 ──────────────────────────────────────────────────────────────
-echo "Case 1: text-mode rendering covers all sections"
-out1="$(bash "${CAP_SESSION}" analyze --sessions-path "${FIXTURE}" 2>&1)"
+echo "Case 1: --verbose rendering covers all detailed sections"
+out1="$(bash "${CAP_SESSION}" analyze --sessions-path "${FIXTURE}" --verbose 2>&1)"
 exit1=$?
 assert_eq        "exit 0 happy path"          "0"                            "${exit1}"
 assert_contains "total_sessions header"      "total_sessions: 5"             "${out1}"
@@ -368,22 +368,84 @@ assert_contains "duplicate_prompts length=1"                     "dup_len=1"    
 assert_contains "duplicate hash=hash_shared_aaa"                 "dup_hash=hash_shared_aaa"                               "${parsed12}"
 assert_contains "duplicate occurrences=2"                        "dup_occ=2"                                              "${parsed12}"
 
-# Text rendering should expose the new spec-aligned sections.
-text12="$(bash "${CAP_SESSION}" analyze --run-id run-p0b1 --sessions-path "${P0B1_FIXTURE}" 2>&1)"
-assert_contains "text: Usage Summary header"            "Usage Summary:"                                 "${text12}"
-assert_contains "text: provider line (multi)"           "provider: multi (claude, codex)"                "${text12}"
-assert_contains "text: token_source line (multi)"       "token_source: multi (provider_cli, runtime_byte_counts)" "${text12}"
-assert_contains "text: provider parity ratio"           "provider_token_telemetry_available: 2/3"        "${text12}"
-assert_contains "text: total_duration_seconds in summary" "total_duration_seconds: 1250"                 "${text12}"
-assert_contains "text: total_prompt_bytes line"         "total_prompt_bytes: 22000B"                     "${text12}"
-assert_contains "text: total_output_bytes line"         "total_output_bytes: 6500B"                      "${text12}"
-assert_contains "text: tokens line shows int (not unavailable)" "tokens: 12800"                          "${text12}"
-assert_contains "text: tokens_unavailable_reasons hdr"  "tokens_unavailable_reasons:"                    "${text12}"
-assert_contains "text: Top Steps By Prompt Bytes"       "Top Steps By Prompt Bytes (top 5):"             "${text12}"
-assert_contains "text: Top Steps By Output Bytes"       "Top Steps By Output Bytes (top 5):"             "${text12}"
-assert_contains "text: Top Steps By Duration"           "Top Steps By Duration (top 5):"                 "${text12}"
-assert_contains "text: Top Capabilities header"         "Top Capabilities By Prompt Bytes"               "${text12}"
-assert_contains "text: Largest Prompt Snapshots hdr"    "Largest Prompt Snapshots"                       "${text12}"
+# Text rendering — spec-aligned sections live in --verbose mode after the
+# P0b-2 sparse default landed. JSON envelope is unchanged regardless of
+# flag, so the parsed12 block above already covered the data model.
+text12="$(bash "${CAP_SESSION}" analyze --run-id run-p0b1 --sessions-path "${P0B1_FIXTURE}" --verbose 2>&1)"
+assert_contains "verbose: Usage Summary header"            "Usage Summary:"                                 "${text12}"
+assert_contains "verbose: provider line (multi)"           "provider: multi (claude, codex)"                "${text12}"
+assert_contains "verbose: token_source line (multi)"       "token_source: multi (provider_cli, runtime_byte_counts)" "${text12}"
+assert_contains "verbose: provider parity ratio"           "provider_token_telemetry_available: 2/3"        "${text12}"
+assert_contains "verbose: total_duration_seconds in summary" "total_duration_seconds: 1250"                 "${text12}"
+assert_contains "verbose: total_prompt_bytes line"         "total_prompt_bytes: 22000B"                     "${text12}"
+assert_contains "verbose: total_output_bytes line"         "total_output_bytes: 6500B"                      "${text12}"
+assert_contains "verbose: tokens line shows int (not unavailable)" "tokens: 12800"                          "${text12}"
+assert_contains "verbose: tokens_unavailable_reasons hdr"  "tokens_unavailable_reasons:"                    "${text12}"
+assert_contains "verbose: Top Steps By Prompt Bytes"       "Top Steps By Prompt Bytes (top 5):"             "${text12}"
+assert_contains "verbose: Top Steps By Output Bytes"       "Top Steps By Output Bytes (top 5):"             "${text12}"
+assert_contains "verbose: Top Steps By Duration"           "Top Steps By Duration (top 5):"                 "${text12}"
+assert_contains "verbose: Top Capabilities header"         "Top Capabilities By Prompt Bytes"               "${text12}"
+assert_contains "verbose: Largest Prompt Snapshots hdr"    "Largest Prompt Snapshots"                       "${text12}"
+
+# ── Case 13: P0b-2 sparse default rendering ───────────────────────────
+#
+# Backs the P0b-2 readability deliverable: default `cap session analyze`
+# output is now a three-section sparse view (Summary / Hotspots /
+# Decision Signals) instead of a long table dump. Detailed tables are
+# gated behind --verbose. JSON envelope (--json) carries every key so
+# machine consumers are unaffected.
+echo "Case 13: default (no --verbose) renders Summary / Hotspots / Decision Signals"
+text13="$(bash "${CAP_SESSION}" analyze --run-id run-p0b1 --sessions-path "${P0B1_FIXTURE}" 2>&1)"
+assert_contains "default: Summary header"               "Summary:"                                  "${text13}"
+assert_contains "default: run_id in Summary"            "run_id: run-p0b1"                          "${text13}"
+assert_contains "default: workflow_id in Summary"       "workflow_id: wf-p0b1"                      "${text13}"
+assert_contains "default: provider in Summary"          "provider: multi (claude, codex)"           "${text13}"
+assert_contains "default: humanized duration"           "duration: 20m 50s"                         "${text13}"
+assert_contains "default: sessions count"               "sessions: 3"                               "${text13}"
+assert_contains "default: tokens partial state"         "tokens: partial (2/3"                      "${text13}"
+assert_contains "default: Hotspots header"              "Hotspots (top"                             "${text13}"
+assert_contains "default: backend hotspot first"        "1. backend"                                "${text13}"
+assert_contains "default: Decision Signals header"      "Decision Signals:"                         "${text13}"
+assert_contains "default: top 2 steps share"            "top 2 steps share:"                        "${text13}"
+assert_contains "default: AI implementation share"      "AI implementation share:"                  "${text13}"
+assert_contains "default: failed longest step"          "failed longest step:"                      "${text13}"
+assert_contains "default: largest prompt step"          "largest prompt step:"                      "${text13}"
+assert_contains "default: verbose hint"                 "re-run with --verbose"                     "${text13}"
+
+# Default mode MUST NOT include the detailed table headers — those gate
+# behind --verbose to keep the at-a-glance view sparse.
+default_has_verbose_hdr=0
+if grep -qF "Top Steps By Prompt Bytes" <<<"${text13}"; then
+  default_has_verbose_hdr=1
+fi
+assert_eq "default: verbose-only tables suppressed" "0" "${default_has_verbose_hdr}"
+
+# ── Case 14: JSON envelope carries P0b-2 keys ─────────────────────────
+echo "Case 14: JSON envelope carries unique_run_ids / unique_workflow_ids / decision_signals"
+parsed14="$(bash "${CAP_SESSION}" analyze --run-id run-p0b1 --sessions-path "${P0B1_FIXTURE}" --json 2>&1 | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print('run_ids=' + ','.join(d.get('unique_run_ids') or []))
+print('workflow_ids=' + ','.join(d.get('unique_workflow_ids') or []))
+sig = d.get('decision_signals') or {}
+print('top2_share=' + str(sig.get('top_2_steps_share_pct')))
+print('top2_first=' + (sig['top_2_steps'][0]['step_id'] if sig.get('top_2_steps') else ''))
+print('impl_share=' + str(sig.get('ai_implementation_share_pct')))
+print('failed_longest=' + str(sig.get('failed_longest_step')))
+lps = sig.get('largest_prompt_step') or {}
+print('largest_prompt_step=' + str(lps.get('step_id')))
+")"
+assert_contains "JSON: unique_run_ids"               "run_ids=run-p0b1"                       "${parsed14}"
+assert_contains "JSON: unique_workflow_ids"          "workflow_ids=wf-p0b1"                   "${parsed14}"
+# top 2 = backend (600s) + frontend (400s) = 1000s of 1250s = 80.0%.
+assert_contains "JSON: top_2_steps_share_pct=80.0"   "top2_share=80.0"                        "${parsed14}"
+assert_contains "JSON: top2_first is backend"        "top2_first=backend"                     "${parsed14}"
+# AI implementation share = backend (600) + frontend (400) = 1000s / 1250s = 80.0%.
+assert_contains "JSON: ai_implementation_share=80.0" "impl_share=80.0"                        "${parsed14}"
+# No failed sessions in fixture (all lifecycle=completed).
+assert_contains "JSON: failed_longest_step is None"  "failed_longest=None"                    "${parsed14}"
+# Largest prompt: backend (8000B) ties with qa_testing (8000B); deterministic max() picks the first encountered.
+assert_contains "JSON: largest_prompt_step populated" "largest_prompt_step=backend"           "${parsed14}"
 
 # ── Summary ─────────────────────────────────────────────────────────────
 echo ""
