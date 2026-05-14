@@ -25,6 +25,11 @@ try:
 except ImportError:  # pragma: no cover
     from session_inspector import _iter_sessions_files, _load_sessions  # type: ignore[no-redef]
 
+try:
+    from .cost_hotspot_report import build_cost_hotspot
+except ImportError:  # pragma: no cover
+    from cost_hotspot_report import build_cost_hotspot  # type: ignore[no-redef]
+
 
 def collect_sessions(
     *,
@@ -55,6 +60,90 @@ def _safe_int(value: Any) -> int:
         return int(value)
     except (TypeError, ValueError):
         return 0
+
+
+def _build_usage_totals(sessions: list[dict]) -> dict[str, Any]:
+    """Aggregate per-run usage totals over the ledger.
+
+    Pulls metric values out of ``session["usage"]`` (the normalized
+    telemetry shape persisted since 9fd8355). Falls back to the
+    session-level ``prompt_size_bytes`` first-class field for sessions
+    that pre-date that commit so legacy runs still get partial coverage.
+
+    None / 0 telemetry sessions are tracked separately via
+    ``available_sessions`` / ``unavailable_sessions`` so operators can
+    see provider parity at a glance (P0d will eventually push this to
+    100% available across both Claude and Codex).
+    """
+    available = 0
+    unavailable = 0
+    total_prompt_bytes = 0
+    total_output_bytes = 0
+    total_tokens = 0
+    saw_prompt_bytes = False
+    saw_output_bytes = False
+    saw_tokens = False
+
+    for session in sessions:
+        usage = session.get("usage") if isinstance(session.get("usage"), dict) else None
+        if usage and usage.get("available") is True:
+            available += 1
+        elif usage is not None:
+            unavailable += 1
+
+        # Prompt bytes — prefer usage.prompt_size_bytes, fall back to legacy top-level.
+        pb = None
+        if usage and isinstance(usage.get("prompt_size_bytes"), int):
+            pb = usage["prompt_size_bytes"]
+        elif isinstance(session.get("prompt_size_bytes"), int):
+            pb = session["prompt_size_bytes"]
+        if pb is not None:
+            total_prompt_bytes += pb
+            saw_prompt_bytes = True
+
+        if usage and isinstance(usage.get("output_size_bytes"), int):
+            total_output_bytes += usage["output_size_bytes"]
+            saw_output_bytes = True
+
+        if usage and isinstance(usage.get("total_tokens"), int):
+            total_tokens += usage["total_tokens"]
+            saw_tokens = True
+
+    return {
+        "available_sessions": available,
+        "unavailable_sessions": unavailable,
+        "total_prompt_bytes": total_prompt_bytes if saw_prompt_bytes else None,
+        "total_output_bytes": total_output_bytes if saw_output_bytes else None,
+        "total_tokens": total_tokens if saw_tokens else None,
+    }
+
+
+def _build_unavailable_reasons(sessions: list[dict]) -> list[dict[str, Any]]:
+    """Aggregate ``usage.reason`` strings for sessions whose provider
+    did not expose token counts.
+
+    Returns a list of ``{reason, count}`` entries sorted by count desc.
+    Empty list when all sessions are either ``available=true`` or have
+    no usage object at all. Surfaces provider-specific gaps (e.g.
+    ``"provider did not expose token usage; byte counts recorded"``)
+    so the operator can see *why* tokens are null instead of guessing.
+    """
+    reasons: Counter[str] = Counter()
+    for session in sessions:
+        usage = session.get("usage")
+        if not isinstance(usage, dict):
+            continue
+        if usage.get("available") is True:
+            continue
+        reason = usage.get("reason")
+        if isinstance(reason, str) and reason:
+            reasons[reason] += 1
+        else:
+            reasons["(no reason recorded)"] += 1
+    return [
+        {"reason": reason, "count": count}
+        for reason, count in reasons.most_common()
+    ]
 
 
 def analyze(sessions: list[dict], *, top_n: int = 5) -> dict:
@@ -175,6 +264,15 @@ def analyze(sessions: list[dict], *, top_n: int = 5) -> dict:
             "timeout": len(timeout_failures),
             "by_capability": dict(failures_by_capability),
         },
+        # P0b-1: per-step usage telemetry projection. Built from
+        # session.usage objects (post-9fd8355) plus the legacy
+        # session.prompt_size_bytes fallback for older ledgers. Sourced
+        # via the same build_cost_hotspot library that result_report_
+        # builder uses, so per-run result.md and `cap session analyze
+        # --run-id` show the same shape.
+        "usage_totals": _build_usage_totals(sessions),
+        "unavailable_reasons": _build_unavailable_reasons(sessions),
+        "cost_hotspot": build_cost_hotspot(sessions),
     }
 
 
@@ -266,6 +364,119 @@ def render_text(report: dict, *, top_n: int = 5) -> str:
             failures["by_capability"].items(), key=lambda kv: kv[1], reverse=True
         ):
             lines.append(f"    {cap}: {count}")
+
+    # P0b-1: usage telemetry sections — totals, provider parity reasons,
+    # and per-step ranking pulled from build_cost_hotspot.
+    def _fmt_bytes(value: Any) -> str:
+        return f"{value}B" if isinstance(value, int) else "null"
+
+    def _fmt_int(value: Any) -> str:
+        return str(value) if isinstance(value, int) else "null"
+
+    usage_totals = report.get("usage_totals") or {}
+    if usage_totals:
+        avail = usage_totals.get("available_sessions", 0)
+        unavail = usage_totals.get("unavailable_sessions", 0)
+        total_seen = avail + unavail
+        lines.append("")
+        lines.append("usage_totals:")
+        lines.append(
+            f"  provider_token_telemetry_available: {avail}/{total_seen}"
+        )
+        lines.append(
+            f"  total_prompt_bytes:  {_fmt_bytes(usage_totals.get('total_prompt_bytes'))}"
+        )
+        lines.append(
+            f"  total_output_bytes:  {_fmt_bytes(usage_totals.get('total_output_bytes'))}"
+        )
+        lines.append(
+            f"  total_tokens:        {_fmt_int(usage_totals.get('total_tokens'))}"
+        )
+
+    unavailable_reasons = report.get("unavailable_reasons") or []
+    if unavailable_reasons:
+        lines.append("")
+        lines.append("tokens_unavailable_reasons:")
+        for entry in unavailable_reasons:
+            lines.append(f"  {entry['count']}x  {entry['reason']}")
+
+    hotspot = report.get("cost_hotspot") or {}
+    by_step = hotspot.get("by_step") or []
+    if by_step:
+        # Top N by prompt bytes (already sorted by build_cost_hotspot).
+        lines.append("")
+        lines.append(f"cost_hotspot.by_step (top {top_n} by prompt bytes):")
+        for entry in by_step[:top_n]:
+            sid = entry.get("step_id") or "-"
+            cap = entry.get("capability") or "-"
+            lines.append(
+                f"  {sid:<28} cap={cap:<28} "
+                f"prompt={_fmt_bytes(entry.get('prompt_size_bytes')):<10} "
+                f"out={_fmt_bytes(entry.get('output_size_bytes')):<10} "
+                f"tokens={_fmt_int(entry.get('total_tokens')):<8} "
+                f"dur={_fmt_int(entry.get('duration_seconds'))}s"
+            )
+
+        # Top N by output bytes — same source list, re-sorted.
+        by_output = sorted(
+            by_step,
+            key=lambda s: (
+                s["output_size_bytes"]
+                if isinstance(s.get("output_size_bytes"), int)
+                else -1
+            ),
+            reverse=True,
+        )
+        if any(isinstance(s.get("output_size_bytes"), int) for s in by_output):
+            lines.append("")
+            lines.append(f"cost_hotspot.by_step (top {top_n} by output bytes):")
+            for entry in by_output[:top_n]:
+                if not isinstance(entry.get("output_size_bytes"), int):
+                    continue
+                sid = entry.get("step_id") or "-"
+                cap = entry.get("capability") or "-"
+                lines.append(
+                    f"  {sid:<28} cap={cap:<28} "
+                    f"out={_fmt_bytes(entry.get('output_size_bytes')):<10} "
+                    f"prompt={_fmt_bytes(entry.get('prompt_size_bytes')):<10} "
+                    f"dur={_fmt_int(entry.get('duration_seconds'))}s"
+                )
+
+        # Top N by duration — same source list, re-sorted.
+        by_duration = sorted(
+            by_step,
+            key=lambda s: (
+                s["duration_seconds"]
+                if isinstance(s.get("duration_seconds"), int)
+                else -1
+            ),
+            reverse=True,
+        )
+        if any(isinstance(s.get("duration_seconds"), int) for s in by_duration):
+            lines.append("")
+            lines.append(f"cost_hotspot.by_step (top {top_n} by duration):")
+            for entry in by_duration[:top_n]:
+                if not isinstance(entry.get("duration_seconds"), int):
+                    continue
+                sid = entry.get("step_id") or "-"
+                cap = entry.get("capability") or "-"
+                lines.append(
+                    f"  {entry['duration_seconds']:>5}s  {sid:<28} cap={cap}"
+                )
+
+    by_capability_hotspot = hotspot.get("by_capability") or []
+    if by_capability_hotspot:
+        lines.append("")
+        lines.append(f"cost_hotspot.by_capability (top {top_n} by prompt bytes):")
+        for entry in by_capability_hotspot[:top_n]:
+            cap = entry.get("capability") or "-"
+            sess = entry.get("sessions") or 0
+            lines.append(
+                f"  {cap:<32} sessions={sess:<4} "
+                f"prompt={_fmt_bytes(entry.get('prompt_size_bytes')):<10} "
+                f"out={_fmt_bytes(entry.get('output_size_bytes')):<10} "
+                f"tokens={_fmt_int(entry.get('total_tokens'))}"
+            )
 
     return "\n".join(lines)
 

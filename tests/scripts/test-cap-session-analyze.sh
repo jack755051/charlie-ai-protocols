@@ -266,6 +266,118 @@ print('total=' + str(d['total_sessions']))
 assert_contains "cap-entry json ok"   "ok=True"  "${parsed11}"
 assert_contains "cap-entry total=5"   "total=5"  "${parsed11}"
 
+# ── Case 12: P0b-1 usage telemetry surfacing ──────────────────────────
+#
+# Backs the P0b-1 deliverable in docs/cap/COST-OPTIMIZATION-MEMO.md:
+# `cap session analyze --run-id <id>` should expose usage_totals,
+# tokens_unavailable_reasons, and cost_hotspot (per-step ranking) from
+# the existing usage telemetry written since 9fd8355. Stages a fixture
+# with mixed provider parity: one session with usage.available=true
+# (claude with full token counts), one with usage.available=false
+# (codex byte-fallback with a reason string), and one with shared
+# prompt_hash for the within-run duplicate detector.
+echo "Case 12: --run-id surfaces usage_totals / unavailable_reasons / cost_hotspot"
+P0B1_FIXTURE="${SANDBOX}/p0b1-usage.json"
+cat > "${P0B1_FIXTURE}" <<'EOF'
+{
+  "version": 1,
+  "run_id": "run-p0b1",
+  "workflow_id": "wf-p0b1",
+  "sessions": [
+    {"session_id":"sP1","run_id":"run-p0b1","workflow_id":"wf-p0b1","step_id":"backend",
+     "role":"backend","capability":"backend_implementation","executor":"ai",
+     "provider":"claude","provider_cli":"claude","lifecycle":"completed",
+     "duration_seconds":600,"prompt_hash":"hash_shared_aaa","prompt_size_bytes":8000,
+     "usage":{"available":true,"source":"provider_cli","provider":"claude",
+              "provider_cli":"claude","model":"claude-test",
+              "input_tokens":5000,"output_tokens":2000,
+              "cache_read_tokens":500,"cache_write_tokens":100,
+              "total_tokens":7600,
+              "prompt_size_bytes":8000,"output_size_bytes":3000,
+              "quota_pressure":null,"reason":null}},
+    {"session_id":"sP2","run_id":"run-p0b1","workflow_id":"wf-p0b1","step_id":"frontend",
+     "role":"frontend","capability":"frontend_implementation","executor":"ai",
+     "provider":"codex","provider_cli":"codex","lifecycle":"completed",
+     "duration_seconds":400,"prompt_hash":"hash_unique_bbb","prompt_size_bytes":6000,
+     "usage":{"available":false,"source":"runtime_byte_counts","provider":"codex",
+              "provider_cli":"codex","model":null,
+              "input_tokens":null,"output_tokens":null,
+              "cache_read_tokens":null,"cache_write_tokens":null,
+              "total_tokens":null,
+              "prompt_size_bytes":6000,"output_size_bytes":1500,
+              "quota_pressure":null,
+              "reason":"provider did not expose token usage; byte counts recorded"}},
+    {"session_id":"sP3","run_id":"run-p0b1","workflow_id":"wf-p0b1","step_id":"qa_testing",
+     "role":"qa","capability":"qa_testing","executor":"ai",
+     "provider":"claude","provider_cli":"claude","lifecycle":"completed",
+     "duration_seconds":250,"prompt_hash":"hash_shared_aaa","prompt_size_bytes":8000,
+     "usage":{"available":true,"source":"provider_cli","provider":"claude",
+              "provider_cli":"claude","model":"claude-test",
+              "input_tokens":4000,"output_tokens":1000,
+              "cache_read_tokens":200,"cache_write_tokens":0,
+              "total_tokens":5200,
+              "prompt_size_bytes":8000,"output_size_bytes":2000,
+              "quota_pressure":null,"reason":null}}
+  ]
+}
+EOF
+
+parsed12="$(bash "${CAP_SESSION}" analyze --run-id run-p0b1 --sessions-path "${P0B1_FIXTURE}" --json 2>&1 | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+ut = d.get('usage_totals') or {}
+ur = d.get('unavailable_reasons') or []
+ch = d.get('cost_hotspot') or {}
+by_step = ch.get('by_step') or []
+by_cap = ch.get('by_capability') or []
+dupes = ch.get('duplicate_prompts') or []
+print('ok=' + str(d['ok']))
+print('total=' + str(d['total_sessions']))
+print('avail=' + str(ut.get('available_sessions')))
+print('unavail=' + str(ut.get('unavailable_sessions')))
+print('prompt_bytes=' + str(ut.get('total_prompt_bytes')))
+print('output_bytes=' + str(ut.get('total_output_bytes')))
+print('total_tokens=' + str(ut.get('total_tokens')))
+print('reason_count=' + str(len(ur)))
+if ur:
+    print('reason_text=' + (ur[0].get('reason') or ''))
+print('by_step_len=' + str(len(by_step)))
+print('by_step_last_step=' + str(by_step[-1].get('step_id') if by_step else ''))
+print('by_step_last_prompt=' + str(by_step[-1].get('prompt_size_bytes') if by_step else ''))
+print('by_cap_len=' + str(len(by_cap)))
+print('dup_len=' + str(len(dupes)))
+if dupes:
+    print('dup_hash=' + str(dupes[0].get('prompt_hash')))
+    print('dup_occ=' + str(dupes[0].get('occurrences')))
+")"
+
+assert_contains "P0b-1 json ok"                                  "ok=True"                                                "${parsed12}"
+assert_contains "P0b-1 total=3"                                  "total=3"                                                "${parsed12}"
+assert_contains "usage_totals.available_sessions=2"              "avail=2"                                                "${parsed12}"
+assert_contains "usage_totals.unavailable_sessions=1"            "unavail=1"                                              "${parsed12}"
+assert_contains "usage_totals.total_prompt_bytes=22000"          "prompt_bytes=22000"                                     "${parsed12}"
+assert_contains "usage_totals.total_output_bytes=6500"           "output_bytes=6500"                                      "${parsed12}"
+assert_contains "usage_totals.total_tokens=12800 (skip unavail)" "total_tokens=12800"                                     "${parsed12}"
+assert_contains "unavailable_reasons count=1"                    "reason_count=1"                                         "${parsed12}"
+assert_contains "unavailable_reasons text matches codex"         "reason_text=provider did not expose token usage"        "${parsed12}"
+assert_contains "cost_hotspot.by_step length=3"                  "by_step_len=3"                                          "${parsed12}"
+assert_contains "by_step lowest is frontend (6000B)"             "by_step_last_step=frontend"                             "${parsed12}"
+assert_contains "by_step lowest prompt=6000"                     "by_step_last_prompt=6000"                               "${parsed12}"
+assert_contains "cost_hotspot.by_capability length=3"            "by_cap_len=3"                                           "${parsed12}"
+assert_contains "duplicate_prompts length=1"                     "dup_len=1"                                              "${parsed12}"
+assert_contains "duplicate hash=hash_shared_aaa"                 "dup_hash=hash_shared_aaa"                               "${parsed12}"
+assert_contains "duplicate occurrences=2"                        "dup_occ=2"                                              "${parsed12}"
+
+# Text rendering should expose the new sections.
+text12="$(bash "${CAP_SESSION}" analyze --run-id run-p0b1 --sessions-path "${P0B1_FIXTURE}" 2>&1)"
+assert_contains "text: usage_totals header"             "usage_totals:"                                  "${text12}"
+assert_contains "text: provider parity ratio"           "provider_token_telemetry_available: 2/3"        "${text12}"
+assert_contains "text: tokens_unavailable_reasons hdr"  "tokens_unavailable_reasons:"                    "${text12}"
+assert_contains "text: by_step by prompt bytes header"  "cost_hotspot.by_step (top 5 by prompt bytes)"   "${text12}"
+assert_contains "text: by_step by output bytes header"  "cost_hotspot.by_step (top 5 by output bytes)"   "${text12}"
+assert_contains "text: by_step by duration header"      "cost_hotspot.by_step (top 5 by duration)"       "${text12}"
+assert_contains "text: by_capability header"            "cost_hotspot.by_capability"                     "${text12}"
+
 # ── Summary ─────────────────────────────────────────────────────────────
 echo ""
 echo "cap-session-analyze: ${pass_count} passed, ${fail_count} failed"
