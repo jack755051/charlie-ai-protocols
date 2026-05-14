@@ -132,6 +132,16 @@ binding_policy:
     # see ~/.cap/shared/skills/karpathy-guidelines.md for the explicit
     # priority order (user > constitution > role > strategy > guardrail).
     - engineering_guardrails
+    # Component Fast Path (P1b slice 5). Required so
+    # `cap workflow bind component-fast` resolves all 7 steps
+    # (otherwise the project constitution blocks them as
+    # capability_not_allowed). See docs/cap/COMPONENT-FAST-PATH-MEMO.md.
+    - component_fast_inputs
+    - deterministic_scaffold
+    - deterministic_compliance_checklist
+    - runtime_smoke
+    - component_repo_compact_review
+    - component_repo_repair
     - code_review_guardrails
 
 workflow_policy:
