@@ -74,6 +74,11 @@ def _build_usage_totals(sessions: list[dict]) -> dict[str, Any]:
     ``available_sessions`` / ``unavailable_sessions`` so operators can
     see provider parity at a glance (P0d will eventually push this to
     100% available across both Claude and Codex).
+
+    Also collects unique ``usage.provider`` / ``usage.source`` strings
+    so the rendered Usage Summary can show one provider/source line
+    (single-provider run) or ``multi (a, b)`` (multi-provider run)
+    without re-walking the session list at render time.
     """
     available = 0
     unavailable = 0
@@ -83,6 +88,8 @@ def _build_usage_totals(sessions: list[dict]) -> dict[str, Any]:
     saw_prompt_bytes = False
     saw_output_bytes = False
     saw_tokens = False
+    providers: set[str] = set()
+    token_sources: set[str] = set()
 
     for session in sessions:
         usage = session.get("usage") if isinstance(session.get("usage"), dict) else None
@@ -109,12 +116,22 @@ def _build_usage_totals(sessions: list[dict]) -> dict[str, Any]:
             total_tokens += usage["total_tokens"]
             saw_tokens = True
 
+        if usage:
+            prov = usage.get("provider") or session.get("provider_cli") or session.get("provider")
+            if isinstance(prov, str) and prov:
+                providers.add(prov)
+            src = usage.get("source")
+            if isinstance(src, str) and src:
+                token_sources.add(src)
+
     return {
         "available_sessions": available,
         "unavailable_sessions": unavailable,
         "total_prompt_bytes": total_prompt_bytes if saw_prompt_bytes else None,
         "total_output_bytes": total_output_bytes if saw_output_bytes else None,
         "total_tokens": total_tokens if saw_tokens else None,
+        "providers": sorted(providers),
+        "token_sources": sorted(token_sources),
     }
 
 
@@ -319,7 +336,7 @@ def render_text(report: dict, *, top_n: int = 5) -> str:
         lines.append("  (none)")
 
     lines.append("")
-    lines.append(f"largest_prompts (top {top_n} by size):")
+    lines.append(f"Largest Prompt Snapshots (top {top_n} by size):")
     if report["largest_prompts"]:
         for entry in report["largest_prompts"]:
             cap = entry.get("capability") or "-"
@@ -377,21 +394,36 @@ def render_text(report: dict, *, top_n: int = 5) -> str:
     if usage_totals:
         avail = usage_totals.get("available_sessions", 0)
         unavail = usage_totals.get("unavailable_sessions", 0)
-        total_seen = avail + unavail
+        providers = usage_totals.get("providers") or []
+        token_sources = usage_totals.get("token_sources") or []
+
+        def _fmt_set(values: list[str]) -> str:
+            if not values:
+                return "unknown"
+            if len(values) == 1:
+                return values[0]
+            return "multi (" + ", ".join(values) + ")"
+
+        total_tokens = usage_totals.get("total_tokens")
+        token_display = (
+            str(total_tokens) if isinstance(total_tokens, int) else "unavailable"
+        )
+
         lines.append("")
-        lines.append("usage_totals:")
+        lines.append("Usage Summary:")
+        lines.append(f"  provider: {_fmt_set(providers)}")
+        lines.append(f"  token_source: {_fmt_set(token_sources)}")
         lines.append(
-            f"  provider_token_telemetry_available: {avail}/{total_seen}"
+            f"  provider_token_telemetry_available: {avail}/{avail + unavail}"
+        )
+        lines.append(f"  total_duration_seconds: {report['total_duration_seconds']}")
+        lines.append(
+            f"  total_prompt_bytes: {_fmt_bytes(usage_totals.get('total_prompt_bytes'))}"
         )
         lines.append(
-            f"  total_prompt_bytes:  {_fmt_bytes(usage_totals.get('total_prompt_bytes'))}"
+            f"  total_output_bytes: {_fmt_bytes(usage_totals.get('total_output_bytes'))}"
         )
-        lines.append(
-            f"  total_output_bytes:  {_fmt_bytes(usage_totals.get('total_output_bytes'))}"
-        )
-        lines.append(
-            f"  total_tokens:        {_fmt_int(usage_totals.get('total_tokens'))}"
-        )
+        lines.append(f"  tokens: {token_display}")
 
     unavailable_reasons = report.get("unavailable_reasons") or []
     if unavailable_reasons:
@@ -405,7 +437,7 @@ def render_text(report: dict, *, top_n: int = 5) -> str:
     if by_step:
         # Top N by prompt bytes (already sorted by build_cost_hotspot).
         lines.append("")
-        lines.append(f"cost_hotspot.by_step (top {top_n} by prompt bytes):")
+        lines.append(f"Top Steps By Prompt Bytes (top {top_n}):")
         for entry in by_step[:top_n]:
             sid = entry.get("step_id") or "-"
             cap = entry.get("capability") or "-"
@@ -429,7 +461,7 @@ def render_text(report: dict, *, top_n: int = 5) -> str:
         )
         if any(isinstance(s.get("output_size_bytes"), int) for s in by_output):
             lines.append("")
-            lines.append(f"cost_hotspot.by_step (top {top_n} by output bytes):")
+            lines.append(f"Top Steps By Output Bytes (top {top_n}):")
             for entry in by_output[:top_n]:
                 if not isinstance(entry.get("output_size_bytes"), int):
                     continue
@@ -454,7 +486,7 @@ def render_text(report: dict, *, top_n: int = 5) -> str:
         )
         if any(isinstance(s.get("duration_seconds"), int) for s in by_duration):
             lines.append("")
-            lines.append(f"cost_hotspot.by_step (top {top_n} by duration):")
+            lines.append(f"Top Steps By Duration (top {top_n}):")
             for entry in by_duration[:top_n]:
                 if not isinstance(entry.get("duration_seconds"), int):
                     continue
@@ -467,7 +499,7 @@ def render_text(report: dict, *, top_n: int = 5) -> str:
     by_capability_hotspot = hotspot.get("by_capability") or []
     if by_capability_hotspot:
         lines.append("")
-        lines.append(f"cost_hotspot.by_capability (top {top_n} by prompt bytes):")
+        lines.append(f"Top Capabilities By Prompt Bytes (top {top_n}):")
         for entry in by_capability_hotspot[:top_n]:
             cap = entry.get("capability") or "-"
             sess = entry.get("sessions") or 0
