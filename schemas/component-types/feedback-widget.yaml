@@ -1,0 +1,206 @@
+schema_version: 1
+component_type: feedback-widget
+contract_version: 2026-05-14.p1b1
+summary: |
+  Canonical Component Fast Path catalog entry for a reusable feedback
+  widget component. This registry is the deterministic SSOT consumed by
+  component-fast render and audit scripts.
+
+supported_stack_presets:
+  - nextjs14_dotnet8_postgres16
+
+defaults:
+  stack_preset: nextjs14_dotnet8_postgres16
+  ui_adapter: shadcn_ui
+  storage_default: in_memory
+  integration_runtime: docker_compose
+
+required_inputs:
+  project_id:
+    type: kebab-case-string
+    example: component-feedback-widget
+  stack_preset:
+    enum:
+      - nextjs14_dotnet8_postgres16
+  ui_adapter:
+    enum:
+      - shadcn_ui
+  storage_default:
+    enum:
+      - in_memory
+  exclusions:
+    type: string-array
+    required_values:
+      - redis
+
+substitutions:
+  PROJECT_ID:
+    source: project_id
+    transform: identity
+  PROJECT_NAME_PASCAL:
+    source: project_id
+    transform: kebab_to_pascal
+  COMPONENT_TYPE:
+    source: component_type
+    transform: identity
+  STORE_DEFAULT:
+    source: storage_default
+    transform: in_memory_store_class
+  API_BASE_URL:
+    source: env
+    default: http://localhost:8080
+
+env_vars:
+  - name: BACKEND_PORT
+    default: "8080"
+    required: true
+    secret: false
+  - name: FRONTEND_PORT
+    default: "3000"
+    required: true
+    secret: false
+  - name: NEXT_PUBLIC_API_BASE_URL
+    default: http://localhost:8080
+    required: true
+    secret: false
+  - name: FEEDBACK_ADMIN_BEARER
+    default: change-me
+    required: true
+    secret: true
+  - name: FEEDBACK_USE_POSTGRES
+    default: "false"
+    required: false
+    secret: false
+  - name: POSTGRES_DB
+    default: feedback
+    required: false
+    secret: false
+  - name: POSTGRES_USER
+    default: feedback
+    required: false
+    secret: false
+  - name: POSTGRES_PASSWORD
+    default: change-me
+    required: false
+    secret: true
+
+hard_exclusions:
+  - redis
+
+catalog:
+  - name: env_example
+    source_template_path: templates/component-fast/feedback-widget/.env.example
+    target_path: .env.example
+    required: true
+    artifact_group: root_config
+  - name: frontend_core_types
+    source_template_path: templates/component-fast/feedback-widget/frontend/lib/feedback/types.ts
+    target_path: frontend/lib/feedback/types.ts
+    required: true
+    artifact_group: frontend_core
+  - name: frontend_core_errors
+    source_template_path: templates/component-fast/feedback-widget/frontend/lib/feedback/errors.ts
+    target_path: frontend/lib/feedback/errors.ts
+    required: true
+    artifact_group: frontend_core
+  - name: frontend_core_mapper
+    source_template_path: templates/component-fast/feedback-widget/frontend/lib/feedback/mapper.ts
+    target_path: frontend/lib/feedback/mapper.ts
+    required: true
+    artifact_group: frontend_core
+  - name: frontend_core_api_client
+    source_template_path: templates/component-fast/feedback-widget/frontend/lib/feedback/api-client.ts
+    target_path: frontend/lib/feedback/api-client.ts
+    required: true
+    artifact_group: frontend_core
+  - name: frontend_core_index
+    source_template_path: templates/component-fast/feedback-widget/frontend/lib/feedback/index.ts
+    target_path: frontend/lib/feedback/index.ts
+    required: true
+    artifact_group: frontend_core
+  - name: frontend_ui_form
+    source_template_path: templates/component-fast/feedback-widget/frontend/components/feedback/FeedbackForm.tsx
+    target_path: frontend/components/feedback/FeedbackForm.tsx
+    required: true
+    artifact_group: frontend_ui
+  - name: frontend_ui_rating
+    source_template_path: templates/component-fast/feedback-widget/frontend/components/feedback/RatingControl.tsx
+    target_path: frontend/components/feedback/RatingControl.tsx
+    required: true
+    artifact_group: frontend_ui
+  - name: frontend_ui_index
+    source_template_path: templates/component-fast/feedback-widget/frontend/components/feedback/index.ts
+    target_path: frontend/components/feedback/index.ts
+    required: true
+    artifact_group: frontend_ui
+  - name: design_tokens
+    source_template_path: templates/component-fast/feedback-widget/design/tokens.json
+    target_path: design/tokens.json
+    required: true
+    artifact_group: design
+  - name: design_theme
+    source_template_path: templates/component-fast/feedback-widget/design/theme.css
+    target_path: design/theme.css
+    required: true
+    artifact_group: design
+  - name: design_screens
+    source_template_path: templates/component-fast/feedback-widget/design/screens.json
+    target_path: design/screens.json
+    required: true
+    artifact_group: design
+  - name: design_components
+    source_template_path: templates/component-fast/feedback-widget/design/components.md
+    target_path: design/components.md
+    required: true
+    artifact_group: design
+  - name: backend_project
+    source_template_path: templates/component-fast/feedback-widget/backend/Feedback/Feedback.csproj
+    target_path: backend/Feedback/Feedback.csproj
+    required: true
+    artifact_group: backend
+  - name: backend_store_interface
+    source_template_path: templates/component-fast/feedback-widget/backend/Feedback/Application/IFeedbackStore.cs
+    target_path: backend/Feedback/Application/IFeedbackStore.cs
+    required: true
+    artifact_group: backend
+  - name: backend_inmemory_store
+    source_template_path: templates/component-fast/feedback-widget/backend/Feedback/Infrastructure/InMemoryFeedbackStore.cs
+    target_path: backend/Feedback/Infrastructure/InMemoryFeedbackStore.cs
+    required: true
+    artifact_group: backend
+  - name: backend_program
+    source_template_path: templates/component-fast/feedback-widget/backend/Feedback/Program.cs
+    target_path: backend/Feedback/Program.cs
+    required: true
+    artifact_group: backend
+  - name: backend_controller
+    source_template_path: templates/component-fast/feedback-widget/backend/Feedback/Api/FeedbackController.cs
+    target_path: backend/Feedback/Api/FeedbackController.cs
+    required: true
+    artifact_group: backend
+  - name: compose
+    source_template_path: templates/component-fast/feedback-widget/docker-compose.yml
+    target_path: docker-compose.yml
+    required: true
+    artifact_group: integration_runtime
+  - name: runtime_smoke
+    source_template_path: templates/component-fast/feedback-widget/scripts/runtime-smoke.sh
+    target_path: scripts/runtime-smoke.sh
+    required: true
+    executable: true
+    artifact_group: integration_runtime
+
+audit_rules:
+  required_target_paths: catalog
+  forbidden_terms:
+    - redis
+  forbidden_core_import_patterns:
+    - "frontend/lib/feedback/**:shadcn"
+    - "frontend/lib/feedback/**:tailwind"
+    - "frontend/lib/feedback/**:lucide"
+    - "backend/Feedback/Domain/**:Npgsql"
+    - "backend/Feedback/Application/**:Npgsql"
+  env_driven_runtime:
+    - BACKEND_PORT
+    - FRONTEND_PORT
+    - NEXT_PUBLIC_API_BASE_URL
