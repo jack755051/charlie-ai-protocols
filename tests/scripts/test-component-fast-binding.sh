@@ -80,30 +80,64 @@ for phase_id in resolve_inputs render_skeleton deterministic_audit smoke_runtime
   assert_contains "plan lists step ${phase_id}"   "${plan_out}"  "${phase_id} =>"
 done
 
-# ── Case 3: cap workflow bind resolves all REQUIRED steps ────────────
+# ── Case 3: cap workflow bind resolves ALL steps (status=ready) ──────
 #
-# After the .cap.constitution.yaml amendment that whitelists the six
-# P1b capabilities, `cap workflow bind component-fast` must report:
-#   required_unresolved=0
-# The binding_status itself may still be `degraded` because the AI
-# steps fall back to builtin-dba (no explicit skill-registry entry
-# for compact_review / repair yet) — that is a quality-of-binding
-# concern for a later slice, not a gate for 6b-0.
+# Slice 6b-0 accepted `binding_status: degraded` because the AI steps
+# fell back to builtin-dba (no explicit skill registry entry for
+# compact_review / repair). Slice 6b-1 tightened the registry so
+# both AI capabilities now resolve to their `default_agent` skills
+# (watcher / backend). Bind must therefore report:
+#   binding_status: ready
+#   total=7, resolved=7, fallback=0, required_unresolved=0
 echo ""
-echo "Case 3: cap workflow bind component-fast — required_unresolved=0"
+echo "Case 3: cap workflow bind component-fast — binding_status=ready"
 bind_out="$(bash "${CAP}" workflow bind component-fast 2>/dev/null)"
 bind_rc=$?
 assert_eq        "bind exit 0"                                "0"                                  "${bind_rc}"
 assert_contains "bind reports workflow_id"                     "${bind_out}"  "workflow_id: component-fast"
+assert_contains "bind binding_status: ready"                   "${bind_out}"  "binding_status: ready"
 assert_contains "bind summary total=7"                         "${bind_out}"  "total=7"
+assert_contains "bind summary resolved=7"                      "${bind_out}"  "resolved=7"
+assert_contains "bind summary fallback=0"                      "${bind_out}"  "fallback=0"
 assert_contains "bind summary required_unresolved=0"           "${bind_out}"  "required_unresolved=0"
 
-# Each step appears in the report, and no step is blocked_by_constitution.
+# Each step appears in the report, and no step is blocked_by_constitution
+# or fallback_available.
 for step_id in resolve_inputs render_skeleton deterministic_audit smoke_runtime compact_review fix_or_polish archive; do
   assert_contains "bind lists step ${step_id}"  "${bind_out}"  "${step_id}"
 done
 blocked_hits="$(grep -c 'blocked_by_constitution' <<<"${bind_out}" || true)"
 assert_eq "no step blocked_by_constitution"   "0"   "${blocked_hits}"
+fallback_hits="$(grep -c 'fallback_available' <<<"${bind_out}" || true)"
+assert_eq "no step fallback_available"        "0"   "${fallback_hits}"
+
+# ── Case 3b: AI steps resolve to their default_agent skills ──────────
+#
+# Pin the exact skill mapping so a future skill-registry refactor
+# can't silently route the AI steps back to builtin-dba (or any
+# other shape that breaks the capabilities.yaml default_agent
+# contract).
+echo ""
+echo "Case 3b: AI step skill mapping matches capabilities.yaml default_agent"
+assert_contains "compact_review resolves to builtin-watcher"  "${bind_out}"  "compact_review (phase 5) => resolved / capability=component_repo_compact_review / skill=builtin-watcher"
+assert_contains "fix_or_polish resolves to builtin-backend"   "${bind_out}"  "fix_or_polish (phase 6) => resolved / capability=component_repo_repair / skill=builtin-backend"
+
+# ── Case 3c: shell steps resolve to builtin-shell ────────────────────
+for step_pair in \
+  "resolve_inputs|component_fast_inputs" \
+  "render_skeleton|deterministic_scaffold" \
+  "deterministic_audit|deterministic_compliance_checklist" \
+  "smoke_runtime|runtime_smoke"
+do
+  step_id="${step_pair%|*}"
+  cap_name="${step_pair#*|}"
+  assert_contains "shell step ${step_id} resolves to builtin-shell" \
+    "${bind_out}" \
+    "${step_id} (phase $(case "${step_id}" in
+      resolve_inputs) echo 1 ;; render_skeleton) echo 2 ;;
+      deterministic_audit) echo 3 ;; smoke_runtime) echo 4 ;;
+    esac)) => resolved / capability=${cap_name} / skill=builtin-shell"
+done
 
 # ── Case 4: every workflow capability is declared in schemas/capabilities.yaml ─
 echo ""

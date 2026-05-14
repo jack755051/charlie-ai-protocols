@@ -138,6 +138,11 @@ skills:
     compatible_workflow_versions: [1, 2, 3]
     provided_capabilities:
       - backend_implementation
+      # Component Fast Path (P1b slice 6b-1). Backend agent owns
+      # small-scope repair of rendered Component Repo skeletons —
+      # default_agent in schemas/capabilities.yaml is `backend`;
+      # this mapping pulls the binder out of builtin-dba fallback.
+      - component_repo_repair
     fallback_roles:
       - implementer
 
@@ -153,6 +158,11 @@ skills:
     provided_capabilities:
       - code_structure_audit
       - tool_spec_audit
+      # Component Fast Path (P1b slice 6b-1). Watcher owns the
+      # compact review of rendered Component Repos — default_agent
+      # in schemas/capabilities.yaml is `watcher`. Listing it here
+      # promotes the binding from fallback_available to resolved.
+      - component_repo_compact_review
     fallback_roles:
       - reviewer
 
