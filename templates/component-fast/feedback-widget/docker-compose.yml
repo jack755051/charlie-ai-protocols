@@ -1,0 +1,54 @@
+# ${PROJECT_ID} integration runtime (docker compose).
+# All host ports / db credentials are env-driven; never edit this
+# file to hardcode a port. .env.example documents the contract.
+#
+# Postgres service is optional: backend's IFeedbackStore defaults to
+# InMemoryFeedbackStore. Set FEEDBACK_USE_POSTGRES=true to wire the
+# Postgres adapter at the application layer.
+
+services:
+  postgres:
+    image: postgres:16
+    profiles: [postgres]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-feedback}
+      POSTGRES_USER: ${POSTGRES_USER:-feedback}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-feedback}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend/Feedback
+      dockerfile: Dockerfile
+    image: ${PROJECT_ID}-backend:dev
+    environment:
+      BACKEND_PORT: ${BACKEND_PORT:-8080}
+      FEEDBACK_USE_POSTGRES: ${FEEDBACK_USE_POSTGRES:-false}
+      FEEDBACK_ADMIN_BEARER: ${FEEDBACK_ADMIN_BEARER:-change-me}
+    ports:
+      - "${BACKEND_PORT:-8080}:${BACKEND_PORT:-8080}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${BACKEND_PORT:-8080}/api/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ${PROJECT_ID}-frontend:dev
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}
+      FRONTEND_PORT: ${FRONTEND_PORT:-3000}
+    ports:
+      - "${FRONTEND_PORT:-3000}:${FRONTEND_PORT:-3000}"
+    depends_on:
+      backend:
+        condition: service_healthy
