@@ -1139,6 +1139,257 @@ assert_eq "resultenum sessions[2].result=None (unknown alias collapses)" "None" 
   "$(json_field "${OUT15}" 'data["sessions"][2]["result"]')"
 assert_schema_ok "resultenum passes workflow-result schema (no 'failed' leak)" "${OUT15}"
 
+# ── Case 16: cost hotspot aggregation ────────────────────────────────
+#
+# Backs the P0b "workflow cost/hotspot report from existing usage
+# telemetry" deliverable (docs/cap/COST-OPTIMIZATION-MEMO.md).
+# Stages three sessions: two backend_implementation sessions with
+# different prompt sizes (one with full usage incl. tokens, one with
+# byte-only fallback), plus one frontend_implementation session that
+# shares prompt_hash with the first backend session to exercise the
+# within-run duplicate detector.
+#
+# Asserts:
+#   - by_capability aggregates per capability with summed metrics
+#   - by_step ranks sessions by prompt_size_bytes desc
+#   - duplicate_prompts surfaces the shared prompt_hash
+#   - largest_prompts caps at top 5 and excludes null-size sessions
+#   - result.md renders ## Cost Hotspot with the three sub-sections
+#   - workflow-result schema accepts the new usage_hotspot object
+echo "Case 16: cost hotspot aggregates by_step/by_capability/duplicates"
+RUN16="$(stage_run_dir hotspot)"
+cat > "${RUN16}/runtime-state.json" <<'EOF'
+{
+  "artifacts": {},
+  "steps": {
+    "backend_a": {
+      "phase": "1",
+      "capability": "backend_implementation",
+      "execution_state": "validated",
+      "blocked_reason": "",
+      "output_source": "captured_stdout",
+      "output_path": "/tmp/a.md",
+      "handoff_path": "/tmp/a.handoff.md"
+    },
+    "backend_b": {
+      "phase": "2",
+      "capability": "backend_implementation",
+      "execution_state": "validated",
+      "blocked_reason": "",
+      "output_source": "captured_stdout",
+      "output_path": "/tmp/b.md",
+      "handoff_path": "/tmp/b.handoff.md"
+    },
+    "frontend_a": {
+      "phase": "3",
+      "capability": "frontend_implementation",
+      "execution_state": "validated",
+      "blocked_reason": "",
+      "output_source": "captured_stdout",
+      "output_path": "/tmp/c.md",
+      "handoff_path": "/tmp/c.handoff.md"
+    }
+  }
+}
+EOF
+cat > "${RUN16}/agent-sessions.json" <<'EOF'
+{
+  "version": 1,
+  "run_id": "run_hotspot",
+  "workflow_id": "test-wf",
+  "sessions": [
+    {
+      "session_id": "run_hotspot.1.backend_a",
+      "step_id": "backend_a",
+      "role": "backend",
+      "capability": "backend_implementation",
+      "executor": "ai",
+      "provider": "claude",
+      "lifecycle": "completed",
+      "result": "success",
+      "duration_seconds": 600,
+      "prompt_hash": "shared_hash_aaa",
+      "prompt_size_bytes": 8000,
+      "usage": {
+        "available": true,
+        "source": "provider_cli",
+        "provider": "claude",
+        "model": "test-model",
+        "input_tokens": 5000,
+        "output_tokens": 2000,
+        "cache_read_tokens": 500,
+        "cache_write_tokens": 100,
+        "total_tokens": 7600,
+        "prompt_size_bytes": 8000,
+        "output_size_bytes": 3000,
+        "quota_pressure": null,
+        "reason": null
+      }
+    },
+    {
+      "session_id": "run_hotspot.2.backend_b",
+      "step_id": "backend_b",
+      "role": "backend",
+      "capability": "backend_implementation",
+      "executor": "ai",
+      "provider": "codex",
+      "lifecycle": "completed",
+      "result": "success",
+      "duration_seconds": 400,
+      "prompt_hash": "unique_hash_bbb",
+      "prompt_size_bytes": 6000,
+      "usage": {
+        "available": false,
+        "source": "runtime_byte_counts",
+        "provider": "codex",
+        "model": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "cache_read_tokens": null,
+        "cache_write_tokens": null,
+        "total_tokens": null,
+        "prompt_size_bytes": 6000,
+        "output_size_bytes": 1500,
+        "quota_pressure": null,
+        "reason": "provider did not expose token usage; byte counts recorded"
+      }
+    },
+    {
+      "session_id": "run_hotspot.3.frontend_a",
+      "step_id": "frontend_a",
+      "role": "frontend",
+      "capability": "frontend_implementation",
+      "executor": "ai",
+      "provider": "claude",
+      "lifecycle": "completed",
+      "result": "success",
+      "duration_seconds": 500,
+      "prompt_hash": "shared_hash_aaa",
+      "prompt_size_bytes": 8000,
+      "usage": {
+        "available": true,
+        "source": "provider_cli",
+        "provider": "claude",
+        "model": "test-model",
+        "input_tokens": 4000,
+        "output_tokens": 1500,
+        "cache_read_tokens": 200,
+        "cache_write_tokens": 0,
+        "total_tokens": 5700,
+        "prompt_size_bytes": 8000,
+        "output_size_bytes": 2500,
+        "quota_pressure": null,
+        "reason": null
+      }
+    }
+  ]
+}
+EOF
+cat > "${RUN16}/run-summary.md" <<'EOF'
+# Workflow Run Summary
+
+- workflow_id: test-wf
+- run_id: run_hotspot
+- started_at: 2026-05-14 09:00:00
+
+## Steps
+
+### backend_a
+
+- status: ok
+- duration_seconds: 600
+
+### backend_b
+
+- status: ok
+- duration_seconds: 400
+
+### frontend_a
+
+- status: ok
+- duration_seconds: 500
+
+## Finished
+
+- finished_at: 2026-05-14 09:25:00
+- total_duration_seconds: 1500
+- completed: 3
+- failed: 0
+- skipped: 0
+EOF
+
+OUT16="${SANDBOX}/hotspot.json"
+build_to_json "${RUN16}" "${OUT16}" "$(cap_home_for hotspot)"
+
+# by_capability assertions: backend_implementation should aggregate two
+# sessions (8000 + 6000 = 14000 prompt bytes), frontend_implementation
+# should have one session (8000 prompt bytes). backend_implementation
+# total_tokens should be 7600 (only backend_a contributed real tokens;
+# backend_b's usage.available=false leaves token sum at 7600).
+assert_eq "hotspot by_capability[0].capability=backend_implementation" "backend_implementation" \
+  "$(json_field "${OUT16}" 'data["usage_hotspot"]["by_capability"][0]["capability"]')"
+assert_eq "hotspot by_capability[0].sessions=2" "2" \
+  "$(json_field "${OUT16}" 'data["usage_hotspot"]["by_capability"][0]["sessions"]')"
+assert_eq "hotspot by_capability[0].prompt_size_bytes=14000" "14000" \
+  "$(json_field "${OUT16}" 'data["usage_hotspot"]["by_capability"][0]["prompt_size_bytes"]')"
+assert_eq "hotspot by_capability[0].total_tokens=7600 (backend_b skipped)" "7600" \
+  "$(json_field "${OUT16}" 'data["usage_hotspot"]["by_capability"][0]["total_tokens"]')"
+assert_eq "hotspot by_capability[1].capability=frontend_implementation" "frontend_implementation" \
+  "$(json_field "${OUT16}" 'data["usage_hotspot"]["by_capability"][1]["capability"]')"
+
+# by_step: backend_a (8000) and frontend_a (8000) tied at top, then
+# backend_b (6000). Order between the tied 8000B entries is sort-stable
+# so backend_a (came first in input) wins. The point of the test is the
+# ranking shape, not the precise tie-breaking, so only assert the
+# lowest-ranked entry.
+assert_eq "hotspot by_step length=3" "3" \
+  "$(json_field "${OUT16}" 'len(data["usage_hotspot"]["by_step"])')"
+assert_eq "hotspot by_step[2].step_id=backend_b (lowest prompt bytes)" "backend_b" \
+  "$(json_field "${OUT16}" 'data["usage_hotspot"]["by_step"][2]["step_id"]')"
+assert_eq "hotspot by_step[2].prompt_size_bytes=6000" "6000" \
+  "$(json_field "${OUT16}" 'data["usage_hotspot"]["by_step"][2]["prompt_size_bytes"]')"
+
+# duplicate_prompts: shared_hash_aaa appears 2× across backend_a + frontend_a.
+assert_eq "hotspot duplicate_prompts length=1" "1" \
+  "$(json_field "${OUT16}" 'len(data["usage_hotspot"]["duplicate_prompts"])')"
+assert_eq "hotspot duplicate_prompts[0].occurrences=2" "2" \
+  "$(json_field "${OUT16}" 'data["usage_hotspot"]["duplicate_prompts"][0]["occurrences"]')"
+assert_eq "hotspot duplicate_prompts[0].prompt_hash=shared_hash_aaa" "shared_hash_aaa" \
+  "$(json_field "${OUT16}" 'data["usage_hotspot"]["duplicate_prompts"][0]["prompt_hash"]')"
+
+# largest_prompts: top 5 by size, includes only sessions with non-null prompt_size_bytes.
+assert_eq "hotspot largest_prompts length=3 (all have sizes)" "3" \
+  "$(json_field "${OUT16}" 'len(data["usage_hotspot"]["largest_prompts"])')"
+
+# Schema must accept the new usage_hotspot field.
+assert_schema_ok "hotspot passes workflow-result schema (usage_hotspot optional field)" "${OUT16}"
+
+# result.md should render the ## Cost Hotspot section + 3 sub-sections.
+RENDERED_HOTSPOT_MD="${SANDBOX}/hotspot.result.md"
+PYTHONPATH="${REPO_ROOT}" "${PYTHON_BIN}" - "${OUT16}" "${RENDERED_HOTSPOT_MD}" <<'PY'
+import json, sys
+from pathlib import Path
+from engine.result_report_builder import render_result_md
+result = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+Path(sys.argv[2]).write_text(render_result_md(result), encoding="utf-8")
+PY
+for needle in \
+  "## Cost Hotspot" \
+  "### by_capability" \
+  "### by_step" \
+  "### duplicate_prompts" \
+  "shared_hash_" \
+  "backend_implementation:"
+do
+  if grep -qF -- "${needle}" "${RENDERED_HOTSPOT_MD}"; then
+    echo "  PASS: render(hotspot) contains '${needle}'"
+    pass_count=$((pass_count + 1))
+  else
+    echo "  FAIL: render(hotspot) missing '${needle}'"
+    fail_count=$((fail_count + 1))
+  fi
+done
+
 echo ""
 echo "Summary: ${pass_count} passed, ${fail_count} failed"
 [ "${fail_count}" -eq 0 ]

@@ -50,6 +50,8 @@ import re
 from pathlib import Path
 from typing import Any, Optional
 
+from engine.cost_hotspot_report import build_cost_hotspot
+
 SCHEMA_VERSION = 1
 
 _FINAL_STATE_VALUES = {"running", "completed", "failed", "cancelled", "blocked"}
@@ -137,6 +139,7 @@ def build_workflow_result(
 
     sessions = _project_sessions(agent_sessions.get("sessions", []))
     usage_summary = _build_usage_summary(sessions)
+    usage_hotspot = build_cost_hotspot(sessions)
     artifacts = _flatten_artifacts(runtime_state.get("artifacts", {}))
 
     handoff_tickets = _load_handoff_tickets(cap_home, project_id)
@@ -166,6 +169,7 @@ def build_workflow_result(
     result["final_result"] = final_result
     result["failures"] = failures
     result["usage_summary"] = usage_summary
+    result["usage_hotspot"] = usage_hotspot
     # P10 #2.2 — promote_candidates was hard-coded ``[]`` from P0
     # through rc15. Now produced by promote_candidate_producer
     # against the partially-assembled result dict (everything except
@@ -265,6 +269,71 @@ def render_result_md(result: dict[str, Any]) -> str:
         lines.append(f"- output_size_bytes: {output_bytes if output_bytes is not None else 'null'}")
         if usage_summary.get("unavailable_sessions"):
             lines.append(f"- unavailable_sessions: {usage_summary['unavailable_sessions']}")
+
+    # Cost Hotspot section — only render when there's meaningful content
+    # (at least one capability bucket or one duplicate prompt). by_step
+    # alone is not enough because every session lands there even when
+    # usage is fully null; the goal is to surface signal, not noise.
+    hotspot = result.get("usage_hotspot") or {}
+    if isinstance(hotspot, dict) and (
+        hotspot.get("by_capability") or hotspot.get("duplicate_prompts")
+    ):
+        lines.append("")
+        lines.append("## Cost Hotspot")
+
+        def _fmt_bytes(value: Any) -> str:
+            return str(value) + "B" if isinstance(value, int) else "null"
+
+        def _fmt_int(value: Any) -> str:
+            return str(value) if isinstance(value, int) else "null"
+
+        by_capability = hotspot.get("by_capability") or []
+        if by_capability:
+            lines.append("")
+            lines.append("### by_capability (sorted by prompt bytes desc)")
+            lines.append("")
+            for entry in by_capability[:10]:
+                cap = entry.get("capability") or "(unknown)"
+                sess = entry.get("sessions") or 0
+                lines.append(
+                    f"- {cap}: {sess} session{'s' if sess != 1 else ''} · "
+                    f"{_fmt_int(entry.get('duration_seconds'))}s · "
+                    f"prompt {_fmt_bytes(entry.get('prompt_size_bytes'))} · "
+                    f"out {_fmt_bytes(entry.get('output_size_bytes'))} · "
+                    f"tokens {_fmt_int(entry.get('total_tokens'))}"
+                )
+
+        by_step = hotspot.get("by_step") or []
+        if by_step:
+            lines.append("")
+            lines.append("### by_step (sorted by prompt bytes desc, top 10)")
+            lines.append("")
+            for entry in by_step[:10]:
+                sid = entry.get("step_id") or "(unknown)"
+                cap = entry.get("capability") or ""
+                cap_suffix = f" [{cap}]" if cap else ""
+                lines.append(
+                    f"- {sid}{cap_suffix}: "
+                    f"{_fmt_int(entry.get('duration_seconds'))}s · "
+                    f"prompt {_fmt_bytes(entry.get('prompt_size_bytes'))} · "
+                    f"out {_fmt_bytes(entry.get('output_size_bytes'))} · "
+                    f"tokens {_fmt_int(entry.get('total_tokens'))}"
+                )
+
+        duplicate_prompts = hotspot.get("duplicate_prompts") or []
+        if duplicate_prompts:
+            lines.append("")
+            lines.append("### duplicate_prompts (same prompt_hash reused within this run)")
+            lines.append("")
+            for entry in duplicate_prompts[:10]:
+                occ = entry.get("occurrences", 0)
+                steps = ", ".join(entry.get("step_ids") or [])
+                ph = entry.get("prompt_hash") or ""
+                short_hash = ph[:12] if isinstance(ph, str) and ph else "(no-hash)"
+                lines.append(
+                    f"- {short_hash}: {occ}× across [{steps}] "
+                    f"(prompt {_fmt_bytes(entry.get('prompt_size_bytes'))})"
+                )
 
     inputs = result.get("inputs") or {}
     if isinstance(inputs, dict) and any(

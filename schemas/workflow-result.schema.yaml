@@ -162,6 +162,93 @@ properties:
       output_size_bytes:
         type: [integer, "null"]
 
+  usage_hotspot:
+    type: object
+    description: |
+      Per-run cost hotspot view aggregated from sessions[*].usage and
+      sessions[*].prompt_hash. Optional field — adding it does not bump
+      schema_version per the schema header's forward-compat rule.
+      Produced by engine/cost_hotspot_report.build_cost_hotspot and
+      surfaced in result.md's ``## Cost Hotspot`` section. Answers
+      three operator questions documented in docs/cap/COST-OPTIMIZATION-MEMO.md:
+      which step's context is heaviest, which capability class is most
+      expensive, and which prompts repeat within this run.
+    properties:
+      by_step:
+        type: array
+        description: |
+          Per-step usage projection sorted by prompt_size_bytes desc.
+          Includes every session even when usage data is null (null
+          metrics rank last via -1 sort key).
+        items:
+          type: object
+          properties:
+            step_id:
+              type: string
+            capability:
+              type: string
+            duration_seconds:
+              type: [integer, "null"]
+            prompt_size_bytes:
+              type: [integer, "null"]
+            output_size_bytes:
+              type: [integer, "null"]
+            total_tokens:
+              type: [integer, "null"]
+      by_capability:
+        type: array
+        description: |
+          Capability-level aggregate (sessions count + summed metrics)
+          sorted by prompt_size_bytes desc. A capability column is null
+          when no session under that capability exposed the metric.
+        items:
+          type: object
+          properties:
+            capability:
+              type: string
+            sessions:
+              type: integer
+            duration_seconds:
+              type: [integer, "null"]
+            prompt_size_bytes:
+              type: [integer, "null"]
+            output_size_bytes:
+              type: [integer, "null"]
+            total_tokens:
+              type: [integer, "null"]
+      duplicate_prompts:
+        type: array
+        description: |
+          prompt_hash collisions occurring 2+ times within this run.
+          Each entry lists the offending step_ids and a representative
+          prompt_size_bytes (first session's value with a known size).
+          Sorted by occurrences desc.
+        items:
+          type: object
+          properties:
+            prompt_hash:
+              type: string
+            occurrences:
+              type: integer
+            step_ids:
+              type: array
+              items:
+                type: string
+            prompt_size_bytes:
+              type: [integer, "null"]
+      largest_prompts:
+        type: array
+        description: Top 5 sessions by prompt_size_bytes (across all capabilities).
+        items:
+          type: object
+          properties:
+            step_id:
+              type: string
+            capability:
+              type: string
+            prompt_size_bytes:
+              type: integer
+
   steps:
     type: array
     description: Per-step runtime outcome; aligned with cap-workflow-exec.sh write order. Empty array allowed for runs that halted before any step executed.
