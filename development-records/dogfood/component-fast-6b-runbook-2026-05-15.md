@@ -74,7 +74,7 @@ cd ~/Desktop/01_private/charlie-ai-protocols
 bash tests/scripts/test-component-fast-binding.sh
 ```
 
-should still print `45 passed, 0 failed`.
+should still print `44 passed, 0 failed`.
 
 ### 2.2 Dry-run path stays zero-token
 
@@ -149,7 +149,7 @@ Expected: working tree clean, HEAD at `3d64abd` (or later) so
 slice 6b-prep templates are present.
 
 ```bash
-bash tests/scripts/test-component-fast-binding.sh   # 45/45
+bash tests/scripts/test-component-fast-binding.sh   # 44/44
 bash tests/scripts/test-component-fast-dry-run.sh   # 28/28
 ```
 

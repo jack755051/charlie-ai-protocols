@@ -48,8 +48,8 @@ landed deterministic substrate; slice 6b dogfood **did not run**.
 | Slice 4 — audit | `2fcc36a` | `scripts/workflows/component-fast-audit.sh` | shipped, 27/27 test |
 | Slice 5 — workflow + caps | `06966ac` | `schemas/workflows/component-fast.yaml` + 6 new caps in `schemas/capabilities.yaml` + `_CODE_EMITTING_CAPABILITIES` patch | shipped, 21/21 test |
 | Slice 6a — wrappers | `59be764` | `component-fast-resolve.sh` + `component-fast-smoke.sh` | shipped, 37/37 test |
-| Slice 6b-0 — bind sanity | `18aba59` + constitution allowlist patch | binding regression guard | shipped, 35→45/45 test |
-| Slice 6b-1 — skill mapping | `6117bfd` | `.cap/skills.yaml` + legacy `.cap.skills.yaml` | shipped, 45/45 test |
+| Slice 6b-0 — bind sanity | `18aba59` + constitution allowlist patch | binding regression guard | shipped, 35→44/44 test |
+| Slice 6b-1 — skill mapping | `6117bfd` | `.cap/skills.yaml` + legacy `.cap.skills.yaml` | shipped, 44/44 test |
 | Slice 6b-2 — dry-run | `5208c6a` | `tests/scripts/test-component-fast-dry-run.sh` | shipped, 28/28 test |
 | Slice 6b-prep — smoke Dockerfiles | `3d64abd` | 3 new templates (frontend Dockerfile, frontend index.html, backend Dockerfile) | shipped, all regression tests still green |
 | Slice 6b-plan — runbook | `a0f711a` + `bc1f14d` | live-run runbook + cwd discipline patch | shipped |
