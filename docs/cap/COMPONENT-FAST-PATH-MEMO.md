@@ -49,6 +49,55 @@ Validation contract: any input outside the registry rejects with
 `project-spec-pipeline` from inside fast path — operator must
 explicitly switch profiles.
 
+### P1b-input-1 structured args schema
+
+The fields above are formalized in
+[`schemas/component-fast-args.schema.yaml`](../../schemas/component-fast-args.schema.yaml).
+The schema is the **single artifact contract** the workflow's
+`resolve_inputs` step requires; per
+[ADR-2 (CAP Input Boundary: Prompt vs Structured Args)](../../development-records/decisions/cap-input-boundary-prompt-vs-structured-2026-05-15.md)
+the runtime never accepts a free-form prose prompt as a
+substitute. Validate any candidate args file with:
+
+```bash
+python3 engine/step_runtime.py validate-jsonschema \
+  /path/to/args.json \
+  schemas/component-fast-args.schema.yaml
+```
+
+Returns `{"ok": true, "errors": []}` on a passing args file and
+`{"ok": false, "errors": [...]}` (exit 1) on a failing one. The
+regression matrix lives in
+[`tests/scripts/test-component-fast-args-schema.sh`](../../tests/scripts/test-component-fast-args-schema.sh)
+(10 cases, 21 assertions).
+
+Canonical minimum-required payload:
+
+```json
+{
+  "schema_version": 1,
+  "project_id": "component-feedback-widget",
+  "component_type": "feedback-widget",
+  "stack_preset": "nextjs14_dotnet8_postgres16",
+  "ui_adapter": "shadcn_ui",
+  "storage_default": "in_memory",
+  "exclusions": ["redis"]
+}
+```
+
+Optional fields (`target_root`, `api_base_url`, `env`) may be set
+when a fixture or dogfood scenario needs to override registry
+defaults. Anything else is rejected by `additionalProperties:
+false`.
+
+**Out of scope for this slice (P1b-input-1):** no CLI surface
+consumes the args file yet. `cap workflow run component-fast`
+still expects the upstream `component_fast_args` artifact to be
+produced through some operator-controlled mechanism; defining
+that mechanism is a later slice and must respect ADR-2
+("wrappers may produce structured args; runtime never interprets
+prose").
+
 ## P1a deterministic file catalog
 
 The first first-class component_type is `feedback-widget` (because it

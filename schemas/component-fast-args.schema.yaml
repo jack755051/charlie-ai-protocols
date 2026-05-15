@@ -1,0 +1,155 @@
+# Component Fast Path Args Schema (v1)
+#
+# Structured input contract for the Component Fast Path workflow.
+# Ratified by:
+#   - development-records/decisions/cap-input-boundary-prompt-vs-structured-2026-05-15.md
+#     (structured-first; prose prompts may NOT satisfy workflow inputs)
+#   - development-records/decisions/component-fast-core-vs-profile-2026-05-15.md
+#     (component-fast is a reference profile)
+#   - development-records/closeouts/component-fast-6b-closeout-2026-05-15.md
+#     (one-shot evidence run halted at Phase 1 missing this artifact)
+#
+# What this schema is:
+#   - The structural contract every component_fast_args artifact must
+#     satisfy before the resolve_inputs step is allowed to proceed.
+#   - JSON-Schema-style YAML; validates via
+#     `engine/step_runtime.py validate-jsonschema <args.json> <this>`.
+#
+# What this schema is NOT (out of scope per ADR-2):
+#   - It does not define how operators *pass* args (no CLI surface).
+#   - It does not define how prose prompts become args (no wrapper).
+#   - It does not authorize a retry of the 2026-05-15 evidence run.
+#   - It does not relax any of the five P1a thresholds.
+#
+# Conservative-first scope: the v1 enum surface covers exactly what
+# slice 5's component-fast workflow + slice 1's feedback-widget
+# registry already accept. Adding a second component_type / stack /
+# adapter / store will require extending the enums here AND in the
+# registry.
+
+schema_version: 1
+title: CAP Component Fast Path Args Schema
+description: |
+  Structured arguments consumed by the component-fast workflow's
+  resolve_inputs step (capability: component_fast_inputs). Every
+  field shape here mirrors a registry value at
+  schemas/component-types/<component_type>.yaml so drift is
+  catchable.
+
+type: object
+additionalProperties: false
+
+required:
+  - schema_version
+  - project_id
+  - component_type
+  - stack_preset
+  - ui_adapter
+  - storage_default
+  - exclusions
+
+properties:
+
+  schema_version:
+    type: integer
+    enum: [1]
+    description: |
+      Locks the args file to this schema version. Bump only on
+      breaking changes; additive fields may be introduced without a
+      version bump as long as they remain optional.
+
+  project_id:
+    type: string
+    pattern: "^[a-z][a-z0-9-]*$"
+    description: |
+      Kebab-case project identifier; must match
+      `^[a-z][a-z0-9-]*$`. Same shape enforced by
+      component-fast-resolve.sh and component-fast-render.sh. The
+      registry's PROJECT_ID and PROJECT_NAME_PASCAL substitution
+      tokens derive from this value.
+
+  component_type:
+    type: string
+    enum:
+      - feedback-widget
+    description: |
+      Selects the registry under
+      schemas/component-types/<component_type>.yaml. v1 surfaces
+      exactly the one type currently shipped as a reference profile
+      (per ADR-1). Adding new types here requires shipping the
+      registry + templates + audit rules in the same slice.
+
+  stack_preset:
+    type: string
+    enum:
+      - nextjs14_dotnet8_postgres16
+    description: |
+      Locked to the single preset slice 5 supports. The registry's
+      supported_stack_presets list MUST stay aligned with this enum.
+
+  ui_adapter:
+    type: string
+    enum:
+      - shadcn_ui
+    description: |
+      UI adapter. Per Component Repo profile, shadcn_ui is the only
+      accepted v1 value. core-frontend templates MUST NOT import
+      shadcn / Tailwind / Lucide; that constraint lives in the
+      registry's forbidden_core_import_patterns.
+
+  storage_default:
+    type: string
+    enum:
+      - in_memory
+    description: |
+      Default Backend storage adapter. Maps to the
+      `in_memory_store_class` substitution transform → e.g.
+      `InMemoryFeedbackStore`. PostgreSQL (and any other adapter)
+      lives in integration-runtime only.
+
+  exclusions:
+    type: array
+    minItems: 1
+    items:
+      type: string
+      enum:
+        - redis
+    description: |
+      Hard-exclusion list. v1 requires every element to be `redis`
+      (locked via items.enum); minItems 1 guarantees the entry is
+      present. Mirrors the registry's hard_exclusions + the project
+      constitution's "Redis is forbidden" stop condition.
+      Conservative shape: future exclusion targets must be added to
+      this enum AND to the registry's hard_exclusions list together.
+
+  target_root:
+    type: string
+    description: |
+      Optional. Filesystem path the render step treats as the
+      project root. Defaults to "." (the cwd `cap workflow run` was
+      invoked from). Resolution semantics are owned by
+      component-fast-resolve.sh / component-fast-render.sh; the
+      schema only constrains the shape.
+
+  api_base_url:
+    type: string
+    pattern: "^https?://"
+    description: |
+      Optional. Overrides the registry's API_BASE_URL substitution
+      default (`http://localhost:8080`). Must start with `http://`
+      or `https://`. Operators SHOULD prefer environment-driven
+      configuration; this field exists for fixture / dogfood
+      scenarios where overriding the default is simpler than
+      authoring an env file.
+
+  env:
+    type: object
+    additionalProperties:
+      type: string
+    description: |
+      Optional. Free-form string key→string value map injected as
+      extra env when the render step substitutes
+      `${BACKEND_PORT:-8080}` / `${FRONTEND_PORT:-3000}` etc. The
+      registry's env_vars list is the authoritative inventory; this
+      field is operator override only. Keys not declared in the
+      registry's env_vars SHOULD NOT be relied on.
