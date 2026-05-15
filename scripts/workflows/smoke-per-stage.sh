@@ -129,7 +129,6 @@ fixture|tests/scripts/test-emit-handoff-ticket.sh|emit-handoff-ticket unit smoke
 fixture|tests/scripts/test-design-source-resolution.sh|design source resolution unit smoke
 fixture|tests/scripts/test-cap-workflow-design-package-forwarding.sh|cap-workflow design-package forwarding smoke
 fixture|tests/scripts/test-design-source-ingest.sh|design-source ingest smoke
-fixture|tests/scripts/test-provider-parity-check.sh|provider parity checker smoke
 fixture|tests/scripts/test-validate-constitution-exit-code.sh|validate-constitution exit-41 gate (P0a)
 fixture|tests/scripts/test-bootstrap-constitution-defaults-exit-code.sh|bootstrap-constitution-defaults exit-41 gate (P0a)
 fixture|tests/scripts/test-persist-constitution-exit-code.sh|persist-constitution exit-41 gate (P0a)

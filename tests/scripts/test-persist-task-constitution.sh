@@ -200,9 +200,9 @@ risk_value="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).ge
 assert_eq "risk_profile collapsed to level string" "medium" "${risk_value}"
 
 # Case 8: normalize ensures non_goals is always an array even when omitted.
-# parity-check (PROVIDER-PARITY-E2E §4.2) treats missing non_goals as a real
-# FAIL. The normalizer should default it to [] so downstream gates see a
-# schema-valid array rather than null/absent.
+# schemas/task-constitution.schema.yaml declares non_goals as a required
+# array; the normalizer should default missing/null to [] so downstream
+# schema validation sees a conforming array rather than null/absent.
 echo "Case 8: normalize defaults missing non_goals to []"
 cat > "${SANDBOX}/draft-no-non-goals.md" <<'EOF'
 <<<TASK_CONSTITUTION_JSON_BEGIN>>>

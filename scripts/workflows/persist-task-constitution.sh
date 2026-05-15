@@ -330,9 +330,9 @@ if "stop_conditions" not in data:
 
 # Coerce non_goals into the schema-required array<string> shape. Supervisor
 # drafts sometimes leave the field as null, a string, or omit it entirely;
-# parity-check (PROVIDER-PARITY-E2E §4.2) treats absent/empty as a real FAIL,
-# so we collapse those drift forms into an empty list rather than re-fighting
-# the schema gate downstream.
+# schemas/task-constitution.schema.yaml declares non_goals as a required
+# array, so we collapse those drift forms into an empty list rather than
+# re-fighting the schema gate downstream.
 data["non_goals"] = string_list(data.get("non_goals"))
 
 # Coerce risk_profile object-form into the schema enum string. Supervisors

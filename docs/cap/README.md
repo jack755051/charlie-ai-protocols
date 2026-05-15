@@ -42,7 +42,6 @@
 |---|---|
 | [COMPONENT-FAST-PATH-MEMO.md](COMPONENT-FAST-PATH-MEMO.md) | runtime removed; evidence memo retained |
 | [COMPONENT-REPO-TEMPLATE-CONTRACT.md](COMPONENT-REPO-TEMPLATE-CONTRACT.md) | profile-specific contract; not CAP core |
-| [PROVIDER-PARITY-E2E.md](PROVIDER-PARITY-E2E.md) | historical release gate pattern; not active default dogfood |
 | [KARPATHY-GUIDELINES-INTEGRATION-MEMO.md](KARPATHY-GUIDELINES-INTEGRATION-MEMO.md) | deferred advisory skill expansion |
 
 ## 三、邊界備忘錄（Boundary memos）
@@ -69,17 +68,7 @@
 |---|---|
 | Shell fixture 撰寫與 `pipefail + grep -q` 陷阱 | [policies/test-fixture-authoring.md](../../policies/test-fixture-authoring.md) |
 
-## 六、品質報告（Provider parity）
-
-歷史 fresh-run 對照報告，作為 release gate baseline 紀錄。一次性 findings / runbook 已移到 `development-records/`，一般開發不需讀；做 cross-provider regression 比對時才看。
-
-| 主題 | 文件 |
-|---|---|
-| Provider parity e2e 範本 | [PROVIDER-PARITY-E2E.md](PROVIDER-PARITY-E2E.md) |
-| v0.21.2 parity findings | [provider-parity-findings-v0.21.2.md](../../development-records/findings/provider-parity-findings-v0.21.2.md) |
-| v0.21.5 fresh provider e2e baseline | [provider-parity-fresh-e2e-v0.21.5.md](../../development-records/dogfood/provider-parity-fresh-e2e-v0.21.5.md) |
-
-## 七、新增文件規則
+## 六、新增文件規則
 
 收斂後請避免重新發散。新增文件前先評估：
 

@@ -614,7 +614,7 @@ append_workflow_log() {
 # unresolved binding, unsupported executor, missing agent, invalid shell
 # script, detached HEAD). Without this, blocked steps leave no trace in
 # workflow.log or the run-summary `## Steps` section, and governance layers
-# (provider-parity-check, watcher, post-mortem) read a partial picture.
+# (watcher, post-mortem) read a partial picture.
 # Inherits agent_alias / prompt_file / script_ref from the surrounding
 # while-loop scope; falls back to safe placeholders when those are unset.
 record_blocked_step() {

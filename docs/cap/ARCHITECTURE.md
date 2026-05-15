@@ -548,7 +548,7 @@ type cap                      # shell function from ~/.zshrc CAP block
 | **batch 1（已完成 v0.22.x）** | resolver 雙路徑讀（4 reader）+ tests + docs | 極低 — 純加讀取相容，不搬檔、不改 default producer |
 | **batch 2（已完成 v0.22.x）** | `cap project migrate-config` helper：non-destructive copy / `--dry-run` / `--force` / `--remove-legacy`；`cap project init` producer 改寫 deferred 至 batch 2.5 | 低 — 純新增 helper，預設 copy + keep；不動 init / mapper / installer |
 | **batch 2.5（已完成 v0.22.x）** | `cap project init` 寫 `.cap/project.yaml` 為預設 + skills / agents / constitution 4 個 reader 雙路徑（`engine/runtime_binder.py` / `engine/workflow_loader.py` / `scripts/cap-registry.sh` / `engine/step_runtime.py:_read_constitution_design_source`）；P2-tested constitution 寫入 workflow（persist-constitution.sh / bootstrap-defaults / 4 個 ingest workflow）保留舊路徑，移到 batch 2.6 | 低 — producer flip + reader 雙路徑都新→legacy fallback；不動 P2 workflow 寫入 |
-| **batch 2.6（pending）** | P2-tested constitution 寫入 workflow 改寫新路徑：`scripts/workflows/persist-constitution.sh` / `bootstrap-constitution-defaults.sh` template strings；`load-constitution-reconcile-inputs.sh` / `emit-handoff-ticket.sh` / `provider-parity-check.sh` / `ingest-design-source.sh` reader 加雙路徑 | 中 — 動 P2 workflow，需 promote / e2e 都跑過 |
+| **batch 2.6（pending）** | P2-tested constitution 寫入 workflow 改寫新路徑：`scripts/workflows/persist-constitution.sh` / `bootstrap-constitution-defaults.sh` template strings；`load-constitution-reconcile-inputs.sh` / `emit-handoff-ticket.sh` / `ingest-design-source.sh` reader 加雙路徑 | 中 — 動 P2 workflow，需 promote / e2e 都跑過 |
 | **batch 3（pending）** | 本 repo 自身遷移（`.cap.*` → `.cap/*`），跑全 smoke 驗證後 commit | 低 — 若前兩批正確，搬檔只是把現實對齊既有 resolver |
 
 ### Runtime storage 不在本節範圍
