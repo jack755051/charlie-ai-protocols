@@ -694,14 +694,12 @@ WATCH_HELP
   run-task)
     shift || true
 
-    DETACH=0
     DRY_RUN=0
     RUN_CLI="${CAP_DEFAULT_AGENT_CLI:-auto}"
     CLI_OVERRIDE=0
     REGISTRY_REF=""
     while [ "$#" -gt 0 ]; do
       case "$1" in
-        -d) DETACH=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         --cli) RUN_CLI="$2"; CLI_OVERRIDE=1; shift 2 ;;
         --registry) REGISTRY_REF="$2"; shift 2 ;;
@@ -710,7 +708,7 @@ WATCH_HELP
     done
 
     [ "$#" -ge 1 ] || {
-      echo "Usage: cap workflow run-task [--dry-run] [-d] [--cli codex|claude] [--registry path] <request...>" >&2
+      echo "Usage: cap workflow run-task [--dry-run] [--cli codex|claude] [--registry path] <request...>" >&2
       exit 1
     }
 
@@ -755,13 +753,6 @@ WATCH_HELP
       echo ""
     fi
 
-    if [ "${DETACH}" -eq 1 ]; then
-      RUN_ID="$(create_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "detached" "background_start" "detached" "${RUN_CLI}" "${USER_PROMPT}")"
-      echo "Background mode is not yet implemented."
-      echo "RUN ID: ${RUN_ID}"
-      exit 0
-    fi
-
     validate_run_cli_choice "${RUN_CLI}" || exit 1
 
     RUN_ID="$(create_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "executing" "foreground_start" "foreground" "${RUN_CLI}" "${USER_PROMPT}")"
@@ -775,7 +766,6 @@ WATCH_HELP
   run)
     shift || true
 
-    DETACH=0
     DRY_RUN=0
     RUN_CLI="${CAP_DEFAULT_AGENT_CLI:-auto}"
     CLI_OVERRIDE=0
@@ -789,7 +779,6 @@ WATCH_HELP
     DESIGN_NO=0
     while [ "$#" -gt 0 ]; do
       case "$1" in
-        -d)       DETACH=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         --cli)    RUN_CLI="$2"; CLI_OVERRIDE=1; shift 2 ;;
         --strategy) EXECUTION_STRATEGY="$2"; shift 2 ;;
@@ -806,7 +795,7 @@ WATCH_HELP
     done
 
     [ "$#" -ge 1 ] || {
-      echo "Usage: cap workflow run [--dry-run] [-d] [--cli codex|claude] [--strategy fast|governed|strict|auto] [--design-source TYPE] [--design-url URL] [--design-path PATH] [--design-package NAME] [--design-figma-target NAME] [--design-script PATH] [--no-design] <workflow> [prompt...]" >&2
+      echo "Usage: cap workflow run [--dry-run] [--cli codex|claude] [--strategy fast|governed|strict|auto] [--design-source TYPE] [--design-url URL] [--design-path PATH] [--design-package NAME] [--design-figma-target NAME] [--design-script PATH] [--no-design] <workflow> [prompt...]" >&2
       exit 1
     }
     case "${EXECUTION_STRATEGY}" in
@@ -998,15 +987,6 @@ WATCH_HELP
           ;;
       esac
       unset _PREFLIGHT_DOCTOR_JSON _PREFLIGHT_RESULT_LINE _PREFLIGHT_RC
-    fi
-
-    if [ "${DETACH}" -eq 1 ]; then
-      RUN_ID="$(create_workflow_run "${WORKFLOW_ID}" "${WORKFLOW_NAME}" "detached" "background_start" "detached" "${RUN_CLI}" "${USER_PROMPT}")"
-      bash "${SCRIPT_DIR}/trace-log.sh" append "Workflow" "workflow:${WORKFLOW_ID} run:${RUN_ID} 啟動背景執行 (${WORKFLOW_NAME})" "成功" >/dev/null 2>&1 || true
-      echo "Background mode is not yet implemented."
-      echo "RUN ID: ${RUN_ID}"
-      echo "Use foreground: cap workflow run ${WORKFLOW_ID} \"<prompt>\""
-      exit 0
     fi
 
     validate_run_cli_choice "${RUN_CLI}" || exit 1

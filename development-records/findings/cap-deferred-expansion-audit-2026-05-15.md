@@ -219,14 +219,19 @@ orchestration concern. Governance + observability do not need
 their executor to fork.
 **Q4** Tiny. The flag is parsed but immediately short-circuits;
 no test exercises the detached branch end-to-end.
-**Q5** → **remove (low-risk).** Concrete slice: delete the
-4 `-d` / `--detach` flag-parse cases + the no-op `if [
-"${DETACH}" -eq 1 ]; then ...` blocks in `cap-workflow.sh`,
-and remove any help-text mention. This is a 20-line cleanup.
-**Action item:** can be folded into the design/Karpathy
-removal slice OR done first as a standalone `chore(workflow):
-remove detached run stub` micro-slice. Recommend doing it
-**first** because the blast radius is essentially zero.
+**Q5** → **remove (low-risk). DONE** by the
+`chore(workflow): remove detached run stub` slice.
+Cleaned up: 2× `DETACH=0` initializers, 2× `-d) DETACH=1`
+case branches, 2× `if [ "${DETACH}" -eq 1 ]; then …` stub
+blocks (including the no-op `Background mode is not yet
+implemented.` print), 2× `[-d]` usage-string mentions in the
+run / run-task help. Production behavior identical — the stub
+never executed real work; removing it just stops advertising
+an unimplemented mode. Historical mentions in deferred /
+"Phase 5 Later" memos (RUN-OBSERVABILITY-PHASE-5-LATER-MEMO,
+ROLE-SKILL-REGISTRY-MODEL-MEMO, MISSING-IMPLEMENTATION-
+CHECKLIST) intentionally left alone; they correctly classify
+detached / background as deferred-not-implemented.
 
 ### 3.6 marketplace / publish
 
