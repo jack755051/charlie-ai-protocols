@@ -84,7 +84,7 @@ Goal: remove product ambiguity before adding more code.
 - [x] Rewrite README around governance / observability.
 - [x] Add `docs/cap/CAP-POSITIONING.md`.
 - [x] Reset `docs/cap/PLATFORM-GOAL.md`.
-- [x] Reset `docs/cap/IMPLEMENTATION-ROADMAP.md`.
+- [x] Reset `IMPLEMENTATION-ROADMAP.md` (now archived at `development-records/archive/docs-cap/IMPLEMENTATION-ROADMAP.md` after lean docs prune).
 - [x] Reframe cost work as waste reduction.
 - [x] Mark component-fast as historical evidence.
 - [x] Remove component-fast runtime surface.

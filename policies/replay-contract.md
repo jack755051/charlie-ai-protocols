@@ -3,8 +3,8 @@
 > 本文件定義 `cap replay` 的行為邊界、verdict 語意與 consumer 義務。v1.3 (H4 minimal) 加 `--strict-unverifiable` opt-in flag 與 `workflow_yaml_baseline.source_layer` audit fix；schema_version 仍為 1。Per-axis precision / shared layer / real replay execution 全部 deferred 到 H5+。
 > SSOT：`policies/replay-contract.md`（本檔）。
 > Schema：[`schemas/replay-verdict.schema.yaml`](../schemas/replay-verdict.schema.yaml)。
-> Design rationale：[`docs/cap/REPLAY-CONTRACT-DESIGN.md`](../docs/cap/REPLAY-CONTRACT-DESIGN.md) (H1)、[`docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md`](../docs/cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md) (H2)、[`docs/cap/H3-DRIFT-EXPANSION-DESIGN.md`](../docs/cap/H3-DRIFT-EXPANSION-DESIGN.md) (H3)、[`docs/cap/H4-SCOPE-SPLIT-DESIGN.md`](../docs/cap/H4-SCOPE-SPLIT-DESIGN.md) (H4)。
-> User guide：[`docs/cap/REPLAY-USER-GUIDE.md`](../docs/cap/REPLAY-USER-GUIDE.md)。
+> Design rationale：[`REPLAY-CONTRACT-DESIGN.md`](../development-records/archive/docs-cap/REPLAY-CONTRACT-DESIGN.md) (H1)、[`H2-PROJECT-SKILL-DRIFT-DESIGN.md`](../development-records/archive/docs-cap/H2-PROJECT-SKILL-DRIFT-DESIGN.md) (H2)、[`H3-DRIFT-EXPANSION-DESIGN.md`](../development-records/archive/docs-cap/H3-DRIFT-EXPANSION-DESIGN.md) (H3)、[`H4-SCOPE-SPLIT-DESIGN.md`](../development-records/archive/docs-cap/H4-SCOPE-SPLIT-DESIGN.md) (H4)。
+> User guide：[`REPLAY-USER-GUIDE.md`](../development-records/archive/docs-cap/REPLAY-USER-GUIDE.md)。
 
 ## 1. 範圍與定位
 

@@ -24,7 +24,7 @@
 
 ## 3. 自訂路徑（How to Customize）
 
-CAP 的 source resolver 已實作 `project > shared > builtin` 三層覆蓋（見 `docs/cap/P9-SOURCE-RESOLVER-DESIGN.md` §3 / §5）：
+CAP 的 source resolver 已實作 `project > shared > builtin` 三層覆蓋（見 `development-records/archive/docs-cap/P9-SOURCE-RESOLVER-DESIGN.md` §3 / §5）：
 
 | Layer | Skill registry 路徑 | 寫入者 | 進 git？ | 預設 allowed |
 |---|---|---|---|---|
@@ -40,8 +40,8 @@ CAP 的 source resolver 已實作 `project > shared > builtin` 三層覆蓋（�
 
 ## 3.5 User-Imported New Role (v0.24.11+)
 
-> 範圍：使用者**新增**自己的 agent role（如 `mobile`、`api-reviewer`），而非覆蓋 builtin。covers Phase 3 of `docs/cap/ROLE-SKILL-REGISTRY-MODEL-MEMO.md`。
-> 完整 how-to 與範例：[`docs/cap/AGENT-SKILLS-CUSTOMIZATION.md`](../docs/cap/AGENT-SKILLS-CUSTOMIZATION.md) 場景 5。
+> 範圍：使用者**新增**自己的 agent role（如 `mobile`、`api-reviewer`），而非覆蓋 builtin。covers Phase 3 of `development-records/archive/docs-cap/ROLE-SKILL-REGISTRY-MODEL-MEMO.md`。
+> 完整 how-to 與範例：[`AGENT-SKILLS-CUSTOMIZATION.md`](../development-records/archive/docs-cap/AGENT-SKILLS-CUSTOMIZATION.md) 場景 5。
 
 ### 3.5.1 Registry contract
 
@@ -66,7 +66,7 @@ CAP 的 source resolver 已實作 `project > shared > builtin` 三層覆蓋（�
 | `project` | `<project_root>/.cap/skills.yaml`（或 `.cap/skills/<id>.yaml`） | ✓ 自動允許 | 無；project 層 user role 開箱即可被選中 |
 | `shared` | `<cap_home>/shared/skills.yaml`（或 `shared/skills/<id>.yaml`） | ✗ 預設**不**允許 | 必須在 project constitution 顯式宣告 `workflow_policy.enforce_allowed_source_roots: true` 且把 shared 路徑加進 `allowed_source_roots` |
 
-> Shared layer 不被預設允許是 P9 source policy 的設計（見 `docs/cap/P9-SOURCE-RESOLVER-DESIGN.md` §3.1）。理由：cross-project 共享資源需要每個 repo 顯式同意，否則 supply-chain 風險（任何本機 cap_home 改動即可影響所有 repo）不可控。
+> Shared layer 不被預設允許是 P9 source policy 的設計（見 `development-records/archive/docs-cap/P9-SOURCE-RESOLVER-DESIGN.md` §3.1）。理由：cross-project 共享資源需要每個 repo 顯式同意，否則 supply-chain 風險（任何本機 cap_home 改動即可影響所有 repo）不可控。
 
 未在 `allowed_source_roots` 宣告的 shared-layer source 一旦被選中，runtime 會以 `SkillSourcePolicyError` halt binding（不得 degrade 為 fallback 隱藏越界）。
 
@@ -173,8 +173,8 @@ skills:
 
 - **`policies/agent-registry.md`**：定義 `.cap.agents.json` legacy adapter 與 `.cap.skills.yaml` 的關係；本 policy 補上「為何 agent-skills/ 唯讀」的部分。
 - **`schemas/skill-registry.schema.yaml`**：定義 skill registry 的 schema；`disabled` / `replaces` 欄位 normative source 在 schema，本 policy 只解釋語意。
-- **`docs/cap/P9-SOURCE-RESOLVER-DESIGN.md`**：定義三層 resolver 的解析順序、`allowed_source_roots` 守護與 binding provenance；本 policy 補上「使用者該怎麼覆蓋」的 how-to。
-- **`docs/cap/AGENT-SKILLS-CUSTOMIZATION.md`**：使用者導向 quickstart，承載完整範例與遷移指南。
+- **`development-records/archive/docs-cap/P9-SOURCE-RESOLVER-DESIGN.md`**：定義三層 resolver 的解析順序、`allowed_source_roots` 守護與 binding provenance；本 policy 補上「使用者該怎麼覆蓋」的 how-to。
+- **`development-records/archive/docs-cap/AGENT-SKILLS-CUSTOMIZATION.md`**：使用者導向 quickstart，承載完整範例與遷移指南。
 
 ## 7. Versioning 與 Baseline Snapshot
 

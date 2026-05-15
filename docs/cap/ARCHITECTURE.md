@@ -205,9 +205,9 @@ CAP 的核心不是某一套特定方法論，而是能把不同方法論收斂�
 核心說明文件優先採大寫檔名，以便區分正式架構文件與一般流程文件：
 
 - `docs/cap/ARCHITECTURE.md`
-- `docs/cap/IMPLEMENTATION-ROADMAP.md`
+- `docs/cap/CAP-LEAN-ROADMAP.md`
 - `docs/cap/PLATFORM-GOAL.md`
-- `docs/cap/SKILL-RUNTIME-ARCHITECTURE.md`
+- `docs/cap/CAP-POSITIONING.md`
 
 `agent-skills/`、`policies/` 與 `workflows/` 不是純說明文件，因此不再放入 `docs/`。它們可維持語義化小寫檔名，因為這些路徑會被 scripts、CLAUDE/Codex 入口、workflow 註解與 policy 引用。
 
@@ -416,11 +416,11 @@ supervisor sub-agent  →  envelope JSON (fence-wrapped)
 
 | 階段 | 內容 | 主要 commit |
 |---|---|---|
-| P3 #1 | Boundary memo（5-surface 切分）| `e81a203` (`docs/cap/SUPERVISOR-ORCHESTRATION-BOUNDARY.md`) |
+| P3 #1 | Boundary memo（5-surface 切分）| `e81a203` (`development-records/archive/docs-cap/SUPERVISOR-ORCHESTRATION-BOUNDARY.md`) |
 | P3 #2 | Schema tightening（envelope `failure_routing` required） | `619e913` |
 | P3 #3 | Producer 規範（`agent-skills/01-supervisor-agent.md` §3.8）+ envelope helpers | `4bf13a0` |
 | P3 #4 | Runtime validation hook（schema-class shell executor + capability） | `d7e5358` |
-| P3 #5 boundary memo | Storage / compile-bind transition 邊界 | `4e3b4b1` (`docs/cap/ORCHESTRATION-STORAGE-BOUNDARY.md`) |
+| P3 #5 boundary memo | Storage / compile-bind transition 邊界 | `4e3b4b1` (`development-records/archive/docs-cap/ORCHESTRATION-STORAGE-BOUNDARY.md`) |
 | P3 #5-a | Storage writer（four-part snapshot 模組）| `0adc2da` |
 | P3 #5-b | Compile entry（`compile_task_from_envelope`） | `79bfc88` |
 | P3 #5-c | Workflow YAML wire（minimal binding test） | `6acb9a8` |
@@ -443,7 +443,7 @@ supervisor sub-agent  →  envelope JSON (fence-wrapped)
 - **Per-stage pipeline 整合**：既有 `project-spec-pipeline` / `project-implementation-pipeline` / `project-qa-pipeline` 不引用 envelope flow；它們繼續走 task constitution + handoff ticket 老路。
 - **Snapshot writer + compile entry 的 capability 包裝**：兩個模組目前是 standalone Python helpers，沒有 capability registration、沒有 shell executor，因此不能被 workflow YAML 直接引用。
 
-完整 boundary 細節在 [`docs/cap/SUPERVISOR-ORCHESTRATION-BOUNDARY.md`](./SUPERVISOR-ORCHESTRATION-BOUNDARY.md) 與 [`docs/cap/ORCHESTRATION-STORAGE-BOUNDARY.md`](./ORCHESTRATION-STORAGE-BOUNDARY.md)；本章節故意只摘要 + 引用，避免雙寫漂移。
+完整 boundary 細節在 [`SUPERVISOR-ORCHESTRATION-BOUNDARY.md`](../../development-records/archive/docs-cap/SUPERVISOR-ORCHESTRATION-BOUNDARY.md) 與 [`ORCHESTRATION-STORAGE-BOUNDARY.md`](../../development-records/archive/docs-cap/ORCHESTRATION-STORAGE-BOUNDARY.md)；本章節故意只摘要 + 引用，避免雙寫漂移。
 
 ---
 
@@ -651,7 +651,7 @@ CAP 的多層 helper / executor / workflow 結構容易誘發「重複實作」�
 2. **Shell executor as wrapper only** — `scripts/workflows/*.sh` 是 thin wrapper，職責是接 `CAP_WORKFLOW_INPUT_CONTEXT` 與處理 exit code（per `policies/workflow-executor-exit-codes.md`），**不重寫** Python domain logic。如果 shell 要做的事超過 input parsing + subprocess invocation + exit-code mapping，應該抽 Python helper。
 3. **Workflow YAML 重用 capability / executor** — 新 workflow 優先引用既有 capability 與 executor，不為單一 case 新增 capability。引入新 capability 必須在 `schemas/capabilities.yaml` 註冊，並在 `.cap.constitution.yaml` `allowed_capabilities` 列入（缺第二步會永遠 `blocked_by_constitution`）。
 4. **Smoke 分層**：每個 commit 跑 focused fixture（該 commit 改的部分），**只在收斂點 / release gate 跑** `scripts/workflows/smoke-per-stage.sh` full smoke（避免 commit 級別反覆跑全 36 step）。Full smoke 用於 phase closeout、release tag 前、或跨多 module 改動的最終確認。
-5. **Module map first, grep second** — agent 查 repo 時先看本檔的 module map（前一章節）以及目標 phase 的 boundary memo（如 `docs/cap/CONSTITUTION-BOUNDARY.md` / `docs/cap/SUPERVISOR-ORCHESTRATION-BOUNDARY.md` / `docs/cap/ORCHESTRATION-STORAGE-BOUNDARY.md`），確認入口模組 / 既有 capability 後再開 grep；避免從 0 重新探索 repo 結構。
+5. **Module map first, grep second** — agent 查 repo 時先看本檔的 module map（前一章節）以及目標 phase 的 boundary memo（active boundary：`docs/cap/CONSTITUTION-BOUNDARY.md`；historical / archived boundaries：`development-records/archive/docs-cap/SUPERVISOR-ORCHESTRATION-BOUNDARY.md` / `development-records/archive/docs-cap/ORCHESTRATION-STORAGE-BOUNDARY.md`），確認入口模組 / 既有 capability 後再開 grep；避免從 0 重新探索 repo 結構。
 
 違反這 5 條的 commit 會增加 token / 維護成本，且容易讓「同一邏輯三處實作」變成隱性技術債。Watcher / Logger 在 milestone gate 應審視這條 discipline，PR review 也應引用本章節作為簡要審視 checklist。
 

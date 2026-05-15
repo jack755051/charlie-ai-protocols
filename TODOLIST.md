@@ -1,55 +1,48 @@
 # CAP Platform TODO
 
-> 本檔只保留「下一步該做什麼」。歷史完成紀錄、逐批工程細節與 release evidence 不再複製到這裡，避免和 `docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md`、`docs/cap/RELEASE-NOTES.md` 形成三份平行事實來源。
+> 本檔只保留「下一步該做什麼」。Lean 重構（2026-05-15 起）後，
+> docs/cap/ 只保留 active core docs；歷史 backlog / phase roadmap
+> / dogfood profile 等已搬到 `development-records/archive/docs-cap/`。
+> 本 TODO 不再複製這些歷史層；需要時直接讀 archive。
 
 ## SSOT
 
 | 需求 | 來源 |
 |---|---|
-| 目前完成狀態 / 工程待辦 | [docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md](docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md) |
-| 產品路線與 Phase / P 對照 | [docs/cap/IMPLEMENTATION-ROADMAP.md](docs/cap/IMPLEMENTATION-ROADMAP.md) |
-| 架構與模組邊界 | [docs/cap/ARCHITECTURE.md](docs/cap/ARCHITECTURE.md) |
-| 實務 dogfood profiles / stack 範圍 | [docs/cap/DOGFOOD-PROFILES.md](docs/cap/DOGFOOD-PROFILES.md) |
-| Release tag 對應功能 | [docs/cap/RELEASE-NOTES.md](docs/cap/RELEASE-NOTES.md) |
+| 目前定位與 active 工作項 | [docs/cap/CAP-LEAN-ROADMAP.md](docs/cap/CAP-LEAN-ROADMAP.md) |
+| 確認 CAP 是什麼 / 不是什麼 | [docs/cap/CAP-POSITIONING.md](docs/cap/CAP-POSITIONING.md) |
+| Provider readiness 實作任務 | [docs/cap/PROVIDER-READINESS-TASKS.md](docs/cap/PROVIDER-READINESS-TASKS.md) |
 | 文件入口 | [docs/cap/README.md](docs/cap/README.md) |
+| Release tag 對應功能 | [docs/cap/RELEASE-NOTES.md](docs/cap/RELEASE-NOTES.md) |
 
 ## Current Focus
 
-1. **Dogfood profile baseline**
-   - 目標：先用 [docs/cap/DOGFOOD-PROFILES.md](docs/cap/DOGFOOD-PROFILES.md) 鎖定 Component / Maintenance / Product 三類 repo 與 primary stack。
-   - 理由：先把實務測試場景分層，避免 runtime、framework、Docker、repo 型態問題混在一起。
+對齊 `docs/cap/CAP-LEAN-ROADMAP.md`：
 
-2. **Project Constitution workflow output contract**
-   - 目標：讓 `schemas/workflows/project-constitution.yaml` 直接輸出 Markdown + JSON artifact。
-   - 理由：`cap project constitution` runner 已具備 validation / snapshot / promote；剩下要消除「runner 從自由文字抽 JSON」這條多餘路徑。
+- P1（provider readiness + preflight）— **已落地**（commits `4dc7af8` /
+  `21312a1` / `6061e0b`）。
+- P2（skill model reclassification）— **已落地**（commit `5cb3cb6`）。
+- Audit-derived removal queue — slice #1 / #2 landed（marketplace docs
+  + detached stub）；slice #3（Karpathy runtime）+ slice #4（design
+  source runtime）仍 pending operator 授權。
+- Lean docs prune — **已落地**（commit `a9baecb`，docs/cap 34 → 12）。
 
-3. **Supervisor Orchestrator producer**
-   - 目標：實作 supervisor prompt builder + structured output parser，產出可驗證的 Supervisor Orchestration Envelope。
-   - 理由：envelope schema、helper、snapshot writer、compile entry、release-gate e2e 已落地；缺的是真正 producer，不是更多 parallel contract。
+下一個 active 待決：
+- 是否進入 audit slice #3（Karpathy runtime removal）？
+- 是否做新一輪 dogfood，讓收斂後的形狀面對真實使用？
 
-4. **Envelope to runtime consumption**
-   - 目標：打通 Envelope → Type C ticket → runtime dispatcher 的最小閉環。
-   - 理由：目前 `failure_routing` 可解析但 production runtime 尚未完整消費；需避免誤讀成 supervisor 已能控制 retry / route_back / escalate。
+## Deferred (do not re-open without dogfood pain)
 
-5. **Role / Skill attachment dogfood**
-   - 目標：只有在 attachment 可對應到 dogfood profile 的第一條 vertical slice 時，才進 Phase 5 runtime。
-   - 理由：v0.24 已完成 registry schema 與 resolver 基礎；沒有 profile-bound use case 前不再預先擴張。
-
-6. **Deferred work remains deferred**
-   - H5 / H6 / H7 replay precision、detached runtime、publish workflow、TUI / background run 等項目維持 deferred。
-   - 只有在真實 dogfood 產生痛點時才開新批次。
+- H5 / H6 / H7 replay precision
+- detached / background runtime
+- publish / marketplace workflow
+- TUI / dashboard
+- Karpathy / design source runtime（pending audit slice 授權）
 
 ## Verification Entry Points
-
-快速分層檢查：
 
 ```bash
 scripts/workflows/smoke-layer.sh contracts
 scripts/workflows/smoke-layer.sh orchestration
-```
-
-完整 release gate：
-
-```bash
 scripts/workflows/smoke-per-stage.sh
 ```

@@ -226,7 +226,7 @@ target written, success JSON / text
 
 - **`policies/run-archive.md`**：本文件管 promote (run → repo)，run-archive.md 管 lifecycle (run → archive → prune)；兩者**互不取代**。一個 run 可以同時被 archived 與被 promoted（promote 拷貝出去，archive 不變）。
 - **`policies/cap-storage.md`**：本文件依賴其定義的 `<cap_home>/projects/<id>/` 子樹結構。
-- **`docs/cap/P9-SOURCE-RESOLVER-DESIGN.md`**：本文件 §3.1 / §3.2 的 target path 直接對齊 P9 §3 三層 resolver 表的 project 路徑（`<project_root>/.cap/{constitution.yaml,workflows/<id>.yaml}`）。
+- **`development-records/archive/docs-cap/P9-SOURCE-RESOLVER-DESIGN.md`**：本文件 §3.1 / §3.2 的 target path 直接對齊 P9 §3 三層 resolver 表的 project 路徑（`<project_root>/.cap/{constitution.yaml,workflows/<id>.yaml}`）。
 
 ## 11. 變更紀錄 (Changelog)
 
