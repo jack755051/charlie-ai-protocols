@@ -68,21 +68,32 @@ This task list keeps that boundary explicit:
 
 ## P1 — Doctor Surface
 
-- [ ] Extend `cap provider doctor`.
+- [x] Extend `cap provider doctor`.
   - Show CLI availability and auth readiness separately.
   - Add or preserve `--json`.
   - Keep the command read-only.
-- [ ] Add provider-specific remediation text.
+  - `--json` output now conforms to `schemas/provider-readiness.schema.yaml`;
+    state column reports `provider_missing` (CLI absent) or `auth_unknown`
+    (CLI present, no safe no-token auth probe in v1). Text mode unchanged.
+- [~] Add provider-specific remediation text.
   - Claude: `cap claude` or `claude`
   - Codex: `cap codex`, `codex`, or `OPENAI_API_KEY`
   - DeepSeek: `DEEPSEEK_API_KEY` when a DeepSeek adapter exists
   - Local model: local server / binary readiness when supported
-- [ ] Add deterministic tests for doctor output.
+  - Partial: Claude + Codex CLI providers carry remediation strings
+    in v1; DeepSeek API-key adapter and local-model adapter still
+    have no doctor surface — out of scope for P1, queued for P3 / P4.
+- [x] Add deterministic tests for doctor output.
   - provider missing
   - provider installed / auth unknown
   - default provider override
   - JSON shape
   - no login invocation
+  - Lives in `tests/scripts/test-cap-provider-doctor.sh`: 11 cases /
+    33 assertions covering both branches (auth_unknown via the real
+    PATH, provider_missing via a stripped PATH sandbox) plus
+    structural assertions for `probe_policy` locked-true,
+    additionalProperties=false, and remediation non-emptiness.
 
 ## P2 — Workflow Preflight
 

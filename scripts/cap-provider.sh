@@ -85,20 +85,78 @@ EOF
   IFS=$'\t' read -r codex_status codex_path codex_version <<<"${codex_row}"
 
   if [ "${format}" = "json" ]; then
-    # Hand-roll JSON to avoid pulling in python for a 3-field report; values
-    # are CLI paths and version strings, both already shell-safe in practice
-    # but we still escape backslashes and double-quotes defensively.
-    local escape='s/\\/\\\\/g; s/"/\\"/g'
-    printf '{"default_cli":"%s","providers":{' "$(printf '%s' "${default_cli}" | sed "${escape}")"
-    printf '"claude":{"status":"%s","path":"%s","version":"%s"},' \
-      "${claude_status}" \
-      "$(printf '%s' "${claude_path}" | sed "${escape}")" \
-      "$(printf '%s' "${claude_version}" | sed "${escape}")"
-    printf '"codex":{"status":"%s","path":"%s","version":"%s"}' \
-      "${codex_status}" \
-      "$(printf '%s' "${codex_path}" | sed "${escape}")" \
-      "$(printf '%s' "${codex_version}" | sed "${escape}")"
-    printf '}}\n'
+    # Emit a report conforming to schemas/provider-readiness.schema.yaml.
+    # Python3 already powers every CAP validator path; using it here keeps
+    # the conditional-field / array-of-objects shape readable instead of
+    # hand-rolled. Inputs are passed positionally so the heredoc body
+    # carries no shell interpolation.
+    #
+    # State mapping (P1 conservative — no_token / no_interactive /
+    # no_mutation are all respected):
+    #   - CLI missing on PATH                → state=provider_missing
+    #   - CLI present, no safe auth probe    → state=auth_unknown
+    # No login is invoked. No model token is spent. Provider state is
+    # never mutated. A future slice may upgrade `auth_unknown` to
+    # `auth_required` / `auth_ok` per-provider where a safe no-token
+    # probe is feasible.
+    "${PYTHON_BIN:-python3}" - \
+      "${claude_status}" "${claude_path}" "${claude_version}" \
+      "${codex_status}"  "${codex_path}"  "${codex_version}" <<'PY'
+import json
+import sys
+from datetime import datetime, timezone
+
+(claude_status, claude_path, claude_version,
+ codex_status, codex_path, codex_version) = sys.argv[1:7]
+
+REMEDIATION_MISSING = {
+    "claude": "Install Claude Code: see https://docs.claude.com/claude-code",
+    "codex": "Install Codex CLI: see https://developers.openai.com/codex",
+}
+
+def provider_entry(name, status, path, version):
+    if status == "missing":
+        return {
+            "name": name,
+            "source": "cli",
+            "state": "provider_missing",
+            "remediation": REMEDIATION_MISSING.get(
+                name, "install the provider CLI before retrying"
+            ),
+            "probe_source": "cap-provider-doctor-v1",
+        }
+    entry = {
+        "name": name,
+        "source": "cli",
+        "cli_path": path,
+        "state": "auth_unknown",
+        "remediation": (
+            f"run `cap {name}` once to complete provider login if not yet "
+            "done; CAP does not probe auth state to respect the no-token "
+            "and no-interactive readiness rules"
+        ),
+        "probe_source": "cap-provider-doctor-v1",
+    }
+    if version and version != "(version unavailable)":
+        entry["version"] = version
+    return entry
+
+report = {
+    "schema_version": 1,
+    "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "probe_policy": {
+        "no_token": True,
+        "no_interactive": True,
+        "no_mutation": True,
+    },
+    "providers": [
+        provider_entry("claude", claude_status, claude_path, claude_version),
+        provider_entry("codex", codex_status, codex_path, codex_version),
+    ],
+}
+json.dump(report, sys.stdout, indent=2)
+sys.stdout.write("\n")
+PY
     return 0
   fi
 
