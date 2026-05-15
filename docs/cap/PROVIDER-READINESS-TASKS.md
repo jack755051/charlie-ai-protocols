@@ -22,19 +22,25 @@ This task list keeps that boundary explicit:
 
 ## P0 — Boundary And Contract
 
-- [ ] Write provider-readiness boundary ADR.
+- [x] Write provider-readiness boundary ADR.
   - Decision: CAP does not own provider login, but owns provider readiness
     checks and workflow preflight.
   - Decision: provider-to-provider proxying is not the default cost-control
     strategy; CAP routes providers directly.
-- [ ] Define provider readiness states.
+  - Landed in `development-records/decisions/cap-provider-readiness-boundary-2026-05-15.md`
+    (commit `738d1ae`). Five rulings + three probe rules + six-state
+    enum + three-layer architecture all ratified there.
+- [x] Define provider readiness states.
   - `provider_missing`
   - `installed`
   - `auth_unknown`
   - `auth_required`
   - `auth_ok`
   - `error`
-- [ ] Define provider readiness JSON shape.
+  - Locked as an enum in `schemas/provider-readiness.schema.yaml`
+    `properties.providers.items.properties.state.enum` and exercised
+    by `tests/scripts/test-provider-readiness-schema.sh` Cases 2 + 10.
+- [x] Define provider readiness JSON shape.
   - provider name
   - cli path or API key source
   - version when available
@@ -43,13 +49,22 @@ This task list keeps that boundary explicit:
   - remediation command
   - probe source
   - probe safety level
-- [ ] Define no-token probe rule.
+  - All shipped as `schemas/provider-readiness.schema.yaml` v1 with
+    `additionalProperties: false` at both top-level and provider-item
+    level so future field drift fails schema validation.
+- [x] Define no-token probe rule.
   - Readiness probes must not send a prompt that consumes model quota.
   - Interactive login probes are disallowed in doctor/preflight.
-- [ ] Define command boundary.
+  - Encoded as `probe_policy.{no_token,no_interactive,no_mutation}`
+    locked-true booleans in the schema. A report that does not assert
+    all three fails validation.
+- [x] Define command boundary.
   - Read-only CAP commands never require provider auth.
   - Shell-only workflows never require provider auth.
   - AI-backed workflows preflight the selected provider before the first AI step.
+  - Defined in ADR-3 §5 ("Behavior by workflow class"). Schema
+    validation is the structural part; CLI / preflight wiring lives in
+    P1 + P2.
 
 ## P1 — Doctor Surface
 

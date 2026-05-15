@@ -1,0 +1,211 @@
+# Provider Readiness Schema (v1)
+#
+# Structural contract for `cap provider doctor` / `cap doctor` /
+# any other CAP surface that reports whether the configured
+# AI providers are usable.
+#
+# Ratified by:
+#   - development-records/decisions/cap-provider-readiness-boundary-2026-05-15.md
+#     (ADR-3 — CAP owns provider readiness; provider auth stays in
+#     the provider layer; AI-backed workflows must fail fast on
+#     missing / not-ready providers)
+#   - docs/cap/PROVIDER-ONBOARDING-MEMO.md §"Auth Probe Contract"
+#   - docs/cap/PROVIDER-READINESS-TASKS.md P0
+#
+# What this schema is:
+#   - The shape every provider-readiness report MUST satisfy
+#     before downstream consumers (workflow preflight, first-run
+#     doctor, cost guard) trust it.
+#   - Validates via
+#     `engine/step_runtime.py validate-jsonschema <report.json>
+#       schemas/provider-readiness.schema.yaml`.
+#
+# What this schema is NOT (out of scope per ADR-3 §7):
+#   - It does NOT prescribe how each provider's auth state is
+#     probed; per-provider probe code is a later slice.
+#   - It does NOT decide the CLI surface (`cap doctor` vs
+#     `cap provider doctor`) or output format.
+#   - It does NOT authorize any change to scripts/cap-provider.sh
+#     or scripts/cap-workflow-exec.sh.
+#   - It does NOT relax the convergence-memo freeze.
+#
+# Conservative-first scope: every field below derives from
+# ADR-3 §4 or PROVIDER-READINESS-TASKS.md P0. Future fields
+# (timing budgets, multi-tenant credentials, cost telemetry)
+# need a schema_version bump or additive optional fields.
+
+schema_version: 1
+title: CAP Provider Readiness Report Schema
+description: |
+  Machine-readable result of a no-token, no-interactive,
+  no-mutation provider readiness probe. Produced by
+  `cap provider doctor` and consumed by workflow preflight.
+
+type: object
+additionalProperties: false
+
+required:
+  - schema_version
+  - generated_at
+  - probe_policy
+  - providers
+
+properties:
+
+  schema_version:
+    type: integer
+    enum: [1]
+    description: |
+      Locks the report to this schema version. Bump only on
+      breaking changes.
+
+  generated_at:
+    type: string
+    pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+    description: |
+      ISO-8601 timestamp of when the readiness probe was run.
+      Loose pattern: requires `YYYY-MM-DDTHH:MM:SS` prefix; the
+      trailing zone / fractional-second segment is implementation
+      detail.
+
+  probe_policy:
+    type: object
+    additionalProperties: false
+    required:
+      - no_token
+      - no_interactive
+      - no_mutation
+    properties:
+      no_token:
+        type: boolean
+        enum: [true]
+        description: |
+          Locked-true. Readiness probes MUST NOT consume model
+          quota; a probe that would need to send a prompt MUST
+          resolve to `auth_unknown` instead.
+      no_interactive:
+        type: boolean
+        enum: [true]
+        description: |
+          Locked-true. Readiness probes MUST NOT trigger
+          interactive login flows. `cap claude` / `cap codex`
+          are the operator's explicit login surfaces.
+      no_mutation:
+        type: boolean
+        enum: [true]
+        description: |
+          Locked-true. Readiness probes MUST NOT write provider
+          state, config files, or credential stores. A probe that
+          would have to mutate state to determine readiness MUST
+          resolve to `auth_unknown` or `error` instead.
+    description: |
+      ADR-3 §4 binds three probe rules. All three MUST be true
+      for the report to be conforming. The locked-true enums
+      here mean a non-compliant report fails schema validation,
+      not just lint.
+
+  providers:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - source
+        - state
+        - remediation
+      properties:
+        name:
+          type: string
+          pattern: "^[a-z][a-z0-9_-]*$"
+          description: |
+            Provider identifier, kebab- or snake-case lowercase.
+            Examples: `claude`, `codex`, `deepseek`, `openai`,
+            `local_llama`. Matches the operator's `--cli`
+            argument vocabulary.
+        source:
+          type: string
+          enum:
+            - cli
+            - api_key
+            - local_runtime
+          description: |
+            Which provider surface this entry covers — a CLI
+            binary (`cli`), an environment-variable API key
+            (`api_key`), or a local model runtime endpoint
+            (`local_runtime`). The probe path differs per
+            source: `cli` checks PATH + version; `api_key`
+            checks env presence + non-empty + plausible shape;
+            `local_runtime` checks endpoint reachability.
+        state:
+          type: string
+          enum:
+            - provider_missing
+            - installed
+            - auth_required
+            - auth_unknown
+            - auth_ok
+            - error
+          description: |
+            Six terminal readiness states per ADR-3 §4.
+            `installed` is an intermediate state for `source=cli`
+            providers — present-but-not-yet-probed-for-auth;
+            doctor should resolve it to `auth_*` before the
+            report is delivered to downstream consumers.
+            `auth_unknown` is a legitimate terminal state for
+            providers without a safe no-token probe.
+        cli_path:
+          type: string
+          description: |
+            Optional. Absolute path to the provider CLI binary
+            (resolved via `command -v` or equivalent). Set when
+            `source=cli` and the binary is present. Omitted
+            when `source=api_key` / `local_runtime` or when the
+            CLI is missing.
+        api_key_env:
+          type: string
+          pattern: "^[A-Z][A-Z0-9_]*$"
+          description: |
+            Optional. Name of the environment variable that
+            holds the API key when `source=api_key`. Example:
+            `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`. The key VALUE
+            is intentionally never recorded in the report; only
+            the variable name appears here.
+        version:
+          type: string
+          description: |
+            Optional. Provider CLI version string when
+            `source=cli` and `--version` is safe to invoke. Not
+            required; missing version does not block readiness.
+        remediation:
+          type: string
+          minLength: 1
+          description: |
+            Required. Human-readable, copy-pasteable next-step
+            instruction tailored to the provider's current
+            `state`. Examples: `cap claude` / `claude` /
+            `export OPENAI_API_KEY=...` / `npm install -g
+            @anthropic-ai/claude-code`. Empty string is not
+            acceptable — every entry must have actionable text,
+            even an `auth_ok` entry can carry a confirmation
+            like `provider ready; no action needed`.
+        probe_source:
+          type: string
+          description: |
+            Optional. Short identifier of the probe routine
+            that produced this entry's state — useful for
+            debugging when readiness diverges between runs.
+            Free-form; no enum lock in v1.
+        failure_reason:
+          type: string
+          description: |
+            Optional. Set when `state=error` (and only then) to
+            explain why the probe failed without violating
+            no_token / no_interactive / no_mutation. Free-form;
+            v1 does not enum-lock reasons.
+    description: |
+      Per-provider entries. v1 requires at least one entry; an
+      empty list is a meaningless report. Each entry covers
+      one provider surface (one CLI binary, one API key var,
+      or one local runtime).
