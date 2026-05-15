@@ -1,3 +1,20 @@
+# Status: legacy / not default.
+#
+# Per docs/cap/CAP-POSITIONING.md and docs/cap/CAP-LEAN-ROADMAP.md
+# §"Workflow Surface", AI-heavy multi-agent pipelines like this one
+# are no longer CAP's default entry point. CAP's lean core is
+# governance + observability + provider readiness — not the prompt
+# execution entry for product-grade pipelines.
+#
+# This workflow file is retained for:
+#   - operators who explicitly opt in to the older multi-agent flow;
+#   - replay / archive / debug of previously executed runs;
+#   - future profile-extraction work that may reuse fragments.
+#
+# Reopen / re-default criteria: see docs/cap/CAP-LEAN-ROADMAP.md
+# §"Workflow Surface" exit criteria. Removal (not just deprecation)
+# is a later, separate slice.
+
 workflow_id: supervisor-orchestration
 version: 1
 name: Supervisor Orchestration Envelope Validation

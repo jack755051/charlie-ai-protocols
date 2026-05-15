@@ -183,11 +183,15 @@ Goal: workflows become governance / check / record flows by default.
   - `project-constitution-reconcile`;
   - provider readiness / preflight tests;
   - inspect / analyze / archive flows.
-- [ ] Mark as legacy / not default:
+- [x] Mark as legacy / not default:
   - `project-spec-pipeline`;
   - `project-implementation-pipeline`;
   - `project-qa-pipeline`;
   - `supervisor-orchestration`.
+  - Each YAML now opens with a "Status: legacy / not default"
+    comment header pointing back to CAP-POSITIONING.md +
+    CAP-LEAN-ROADMAP.md exit criteria. Removal (not just
+    classification) is a later, separate slice.
 - [ ] Remove README examples that suggest CAP is the general prompt
   execution entry.
 - [ ] Ensure `cap workflow list` or adjacent docs make AI-heavy workflows
