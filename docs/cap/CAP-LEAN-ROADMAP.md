@@ -327,14 +327,23 @@ Exit criteria:
 
 ## Next Slice
 
-Recommended next slice:
+Slices already landed (most recent first):
 
 ```text
-docs(skills): classify agent skills by CAP usage tier
+docs(cap): audit deferred expansion surfaces            (2026-05-15)
+chore(dogfood): remove provider parity runtime surface  (3ed5f64)
+docs(skills): classify agent skills by CAP usage tier   (5cb3cb6)
+docs(workflows): classify AI-heavy workflows as legacy  (a1b4851)
 ```
 
-Then:
+Per the audit at
+[`development-records/findings/cap-deferred-expansion-audit-2026-05-15.md`](../../development-records/findings/cap-deferred-expansion-audit-2026-05-15.md),
+the next four cleanup slices, in priority order:
 
-```text
-docs(workflows): classify workflows by governance tier
-```
+1. `docs(cap): drop marketplace / publish aspiration from active docs` — text-only.
+2. `chore(workflow): remove detached run stub` — ~20-line cleanup, no test impact.
+3. `chore(skills): remove karpathy workflows + capabilities` — retires AI-entry-shaped karpathy workflows; skill file stays Tier 3.
+4. `chore(workflows): remove design source runtime` — retires the design ingestion runtime; Figma skill stays Tier 3.
+
+Each removal slice must cite the audit's §3 entry for the affected
+surface; promote and replay remain **keep** per audit verdict.
