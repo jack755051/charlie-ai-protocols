@@ -242,7 +242,11 @@ CAP 的核心不是某一套特定方法論，而是能把不同方法論收斂�
 - **draft / 下一階段**
   - `.cap.skills.yaml`
   - `schemas/skill-registry.schema.yaml`（v2，含原 manifest 欄位）
-  - skill marketplace 與 LangGraph backend
+
+> skill marketplace 與 LangGraph backend 不是 CAP lean core 的方向，
+> 已退出本節「draft / 下一階段」，見
+> [`CAP-POSITIONING.md`](CAP-POSITIONING.md) 與
+> [`CAP-LEAN-ROADMAP.md`](CAP-LEAN-ROADMAP.md) §"Not In Scope"。
 
 > 品質門禁與 phase 定義以 `schemas/workflows/` 現役模板為準；目前主要收斂在 `version-control.yaml`、`readme-to-devops.yaml` 與 `workflow-smoke-test.yaml`。
 

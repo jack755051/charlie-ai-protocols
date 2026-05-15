@@ -233,22 +233,37 @@ remove detached run stub` micro-slice. Recommend doing it
 **Files / surface area**
 
 - Active code: none.
-- Aspirational mentions only:
-  - `docs/cap/PLATFORM-GOAL.md:110` ("- marketplace / publish flows;")
-  - `docs/cap/IMPLEMENTATION-ROADMAP.md:66` ("- publish / marketplace work;")
-  - `docs/cap/ARCHITECTURE.md:245` ("skill marketplace 與 LangGraph backend")
+- Mentions across active docs (re-classified by execution slice
+  `docs(cap): drop marketplace publish aspiration from active docs`):
+  - `docs/cap/PLATFORM-GOAL.md:110` — already framed inside the
+    "Frozen Until Reopened" section as "not current platform
+    goals". **No edit needed**; the wording was already correct.
+  - `docs/cap/IMPLEMENTATION-ROADMAP.md:66` — already framed
+    inside the "Frozen Tracks" section. **No edit needed**;
+    the wording was already correct.
+  - `docs/cap/ARCHITECTURE.md:245` — listed under "draft / 下一階段"
+    as an aspirational next-phase bullet. **This was the only
+    real edit point.** Removed by the slice; ARCHITECTURE.md now
+    points readers at CAP-POSITIONING.md / CAP-LEAN-ROADMAP.md
+    §"Not In Scope" instead.
 
 **Q1** **No** — zero runtime entry. No CLI, no engine, no
 workflow, no test.
-**Q2** **Yes** — marketplace framing is exactly the "CAP
-expansion ambition" the lean positioning narrows away from.
+**Q2** **Yes** — marketplace framing is the "CAP expansion
+ambition" the lean positioning narrows away from. Note: only
+ARCHITECTURE.md actually positioned it as aspirational; the
+other two were already in frozen-section context.
 **Q3** **No** — selling / distributing skills is not governance.
-**Q4** Trivial. No tests gated on marketplace. Removal is
-text-only edits in 3 doc files.
-**Q5** → **remove (docs only).** Edit the 3 mentions to either
-remove the bullet entirely or mark explicitly "out of scope for
-lean CAP". Concrete slice: `docs(cap): drop marketplace /
-publish aspiration from active docs`. Risk: zero.
+**Q4** Trivial. No tests gated on marketplace; the edit set
+turned out to be one file, not three.
+**Q5** → **remove (docs only). DONE** by the
+`docs(cap): drop marketplace publish aspiration from active
+docs` slice. Initial audit estimated 3 doc edits; actual edit
+landed in 1 doc because the other two were already in their
+frozen/out-of-scope sections. Audit imprecision: §3.6 originally
+listed the three mentions as a flat "aspirational mentions only"
+list without distinguishing context. Verdict and conclusion
+unchanged.
 
 ## 4. Summary table
 
