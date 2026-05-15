@@ -129,36 +129,48 @@ Exit criteria:
 Goal: skills become provider-facing guidance, not CAP's automatic agent
 army.
 
-- [ ] Update `agent-skills/README.md` with usage tiers.
-- [ ] Define tiers:
+- [x] Update `agent-skills/README.md` with usage tiers.
+- [x] Define tiers:
   - core governance;
   - execution advisory;
   - deferred / optional.
-- [ ] Mark governance skills as CAP-core aligned:
+- [x] Mark governance skills as CAP-core aligned:
   - supervisor;
   - devops;
   - qa;
   - security;
   - watcher;
   - logger;
-  - troubleshoot.
-- [ ] Mark execution skills as advisory:
+  - troubleshoot;
+  - readme (101-readme-agent.md, added to governance tier per slice
+    review since repo-intake / README normalization is itself a
+    governance surface).
+- [x] Mark execution skills as advisory:
   - frontend;
   - backend;
   - ui;
   - dba;
   - techlead;
-  - ba.
-- [ ] Mark integration / expansion skills as deferred:
+  - ba;
+  - sre (added to advisory tier per slice review since SRE
+    optimization is provider-facing domain advice, not CAP-platform
+    governance work).
+- [x] Mark integration / expansion skills as deferred:
   - figma;
   - analytics;
-  - external guardrail packs.
-- [ ] Update docs to say:
+  - external guardrail packs (Karpathy);
+  - framework-specific strategies (`strategies/*` beyond Karpathy
+    are listed under Tier 3 as provider-loadable on demand, not
+    CAP-default).
+- [x] Update docs to say:
 
 ```text
 Skills are prompt / policy material that providers may read.
 They are not automatically launched as a CAP default team.
 ```
+
+  - Quoted verbatim at the top of `agent-skills/README.md` §"Skills
+    是什麼 / 不是什麼".
 
 Exit criteria:
 
