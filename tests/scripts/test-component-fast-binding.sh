@@ -67,7 +67,12 @@ show_rc=$?
 assert_eq        "show exit 0"                   "0"                                          "${show_rc}"
 assert_contains "show emits workflow id"          "${show_out}"  "ID:          component-fast"
 assert_contains "show emits workflow version"     "${show_out}"  "VERSION:     1"
-assert_contains "show emits status ready"         "${show_out}"  "STATUS:      ready"
+# NOTE: the STATUS: line in `cap workflow show` reflects the workflow's
+# last-run state from the status-store (engine/workflow_cli.py:602 —
+# `status.get('state', 'ready')`), NOT current binding readiness. After
+# any real run, it becomes `failed` / `completed` / `running`. Binding
+# readiness is asserted decisively by Case 3 below
+# (`cap workflow bind component-fast` → `binding_status: ready`).
 
 # ── Case 2: cap workflow plan compiles to 7-phase shape ──────────────
 echo ""
