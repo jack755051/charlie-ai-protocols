@@ -33,7 +33,18 @@ them should be skipped on the day of the run.
 
 ### 2.1 Binding stays ready (regression guard)
 
+> ⚠️ **cwd discipline**: `cap workflow bind` and `cap workflow run`
+> both resolve `binding_policy.allowed_capabilities` from the
+> **current project's** `.cap/constitution.yaml`, NOT from the
+> framework repo's `.cap.constitution.yaml`. The two constitutions
+> can drift independently — for example, the framework repo gained
+> the 6 P1b component-fast capabilities in slice 6b-0 but the
+> target repo's constitution may predate that. This preflight
+> therefore MUST run from the **target repo cwd**, not the
+> framework repo cwd, or it will report a false-green `ready`.
+
 ```bash
+cd ~/Desktop/01_private/cap-test/component-feedback-widget
 cap workflow bind component-fast
 ```
 
@@ -44,11 +55,22 @@ binding_status: ready
 summary: total=7, resolved=7, fallback=0, required_unresolved=0
 ```
 
-If anything other than `ready` shows up — STOP, go investigate
-slice 6b-1 / 6b-0 regressions before running. The corresponding
-deterministic test:
+If anything other than `ready` shows up — STOP. Two common causes:
+1. Skill registry regression in `.cap/skills.yaml` (slice 6b-1
+   territory) — re-run the deterministic test below.
+2. Target repo constitution drift — its
+   `binding_policy.allowed_capabilities` may not include the 6
+   P1b capabilities (`component_fast_inputs`,
+   `deterministic_scaffold`, `deterministic_compliance_checklist`,
+   `runtime_smoke`, `component_repo_compact_review`,
+   `component_repo_repair`). See §6 failure log entry
+   "Preflight binding".
+
+The corresponding deterministic test (run from framework repo
+cwd; it operates on the framework registry, not the target repo):
 
 ```bash
+cd ~/Desktop/01_private/charlie-ai-protocols
 bash tests/scripts/test-component-fast-binding.sh
 ```
 
@@ -56,14 +78,21 @@ should still print `45 passed, 0 failed`.
 
 ### 2.2 Dry-run path stays zero-token
 
+> ⚠️ Same cwd discipline as §2.1 — must run from target repo cwd
+> so the dry-run reads the target repo's constitution.
+
 ```bash
+cd ~/Desktop/01_private/cap-test/component-feedback-widget
 cap workflow run --dry-run --cli claude component-fast "preflight smoke"
 ```
 
 Expected: exit 0 + `Binding: ready` block + 7 phases listed +
 trailer `Dry run only — no step was executed.`
 
-If dry-run halts or prints `binding_status: degraded` — STOP.
+If dry-run halts or prints `binding_status: degraded` /
+`binding_status: blocked` — STOP. If the halt reason is
+`blocked_by_constitution` for any P1b capability, fix the target
+repo constitution (see §6 entry "Preflight binding") and retry.
 
 ### 2.3 Docker daemon up
 
@@ -236,13 +265,13 @@ slice.
 
 | Phase | Symptom | Root cause | Classification | Next fix |
 |---|---|---|---|---|
-| _____ | _____ | _____ | _____ | _____ |
+| Preflight binding (first attempt 2026-05-15 09:20) | `cap workflow run` halted at `binding_status: blocked`; all 7 steps reported `blocked_by_constitution`. No run id, no AI calls, zero tokens spent. | Target repo `~/Desktop/01_private/cap-test/component-feedback-widget/.cap/constitution.yaml` `binding_policy.allowed_capabilities` predates P1b (last touched 2026-05-13); missing the 6 P1b capabilities (`component_fast_inputs`, `deterministic_scaffold`, `deterministic_compliance_checklist`, `runtime_smoke`, `component_repo_compact_review`, `component_repo_repair`) that slice 6b-0 added only to the framework repo's `.cap.constitution.yaml`. Framework-cwd preflight in §2.1 returned a false-green `ready` because it resolved against the framework constitution, not the target constitution. | `environment_bug` (target constitution drift; not a CAP framework bug per se, but exposed a missing guardrail) | Append the 6 P1b capabilities to the target repo's `.cap/constitution.yaml:binding_policy.allowed_capabilities`, re-run §2.1 / §2.2 from target cwd, then resume §3. Target repo mutation is dogfood-fixture territory and MUST NOT be committed to the framework repo. Future-CAP work: `cap workflow bind` should diff workflow's required capabilities against the **target** project constitution and surface a promote/update suggestion (or add `cap component doctor`). |
 
 Classification enum (pick exactly one per row):
 
 - `cap_bug` — CAP itself wrote the wrong shape (workflow / capability / runtime).
 - `template_bug` — Component Fast Path templates need a fix (registry / source files).
-- `environment_bug` — host docker / port / image issue.
+- `environment_bug` — host docker / port / image issue, or target-repo configuration drift from framework.
 - `provider_behavior` — Claude / Codex emitted something the contract did not anticipate.
 - `prompt_drift` — operator passed a different prompt from the baseline (invalidates threshold comparison; not a CAP failure).
 
