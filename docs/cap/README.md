@@ -21,7 +21,8 @@
 | 看收斂重構任務清單 | [CAP-LEAN-ROADMAP.md](CAP-LEAN-ROADMAP.md) |
 | 看完整架構與模組關係 | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | 找 P0–P6 任一概念的 SSOT 在哪個檔 / 哪個 schema | [ARCHITECTURE.md §P0–P6 Runtime Module Map](ARCHITECTURE.md#p0p6-runtime-module-map-convergence-checkpoint-2) |
-| 看 release tag 對應的功能 | [RELEASE-NOTES.md](RELEASE-NOTES.md) |
+| 看 lean 重構以後的 release 摘要 | [RELEASE-NOTES.md](RELEASE-NOTES.md) |
+| 查 lean 重構之前（v0.19 → v0.24.11）完整 release narrative | [../../development-records/archive/release-notes/cap-release-notes-pre-lean.md](../../development-records/archive/release-notes/cap-release-notes-pre-lean.md) |
 | 操作 / debug 一個正在跑或剛結束的 workflow run（logs / watch / inspect） | [RUN-OBSERVABILITY-GUIDE.md](RUN-OBSERVABILITY-GUIDE.md) |
 | 整理安裝後 Claude Code / Codex provider readiness 與首次登入導引 | [PROVIDER-ONBOARDING-MEMO.md](PROVIDER-ONBOARDING-MEMO.md) |
 | 追 provider readiness 實作任務 | [PROVIDER-READINESS-TASKS.md](PROVIDER-READINESS-TASKS.md) |
