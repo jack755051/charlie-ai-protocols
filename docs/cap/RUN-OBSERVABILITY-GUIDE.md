@@ -2,7 +2,7 @@
 
 > Status: user-facing operations guide
 > Scope: 操作說明 — 什麼時候用 `logs` / `watch` / `inspect`，以及背後的 fallback 規則。
-> Planning history（為什麼要做、四個 phase 的 roadmap）見 [`RUN-OBSERVABILITY-MEMO.md`](RUN-OBSERVABILITY-MEMO.md)。
+> Planning history（為什麼要做、四個 phase 的 roadmap）見 [`RUN-OBSERVABILITY-MEMO.md`](../../development-records/archive/docs-cap/RUN-OBSERVABILITY-MEMO.md)。
 
 ## TL;DR
 
@@ -168,6 +168,6 @@ cap workflow watch --once run_test --cap-home ./fixture/cap
 
 ## 相關文件
 
-- [RUN-OBSERVABILITY-MEMO.md](RUN-OBSERVABILITY-MEMO.md) — 為什麼做、四 Phase roadmap
+- [RUN-OBSERVABILITY-MEMO.md](../../development-records/archive/docs-cap/RUN-OBSERVABILITY-MEMO.md) — 為什麼做、四 Phase roadmap
 - [ARCHITECTURE.md](ARCHITECTURE.md) — run_dir / workflow_result.json schema、P7 builder
-- [SUPERVISOR-ORCHESTRATION-BOUNDARY.md](SUPERVISOR-ORCHESTRATION-BOUNDARY.md) — handoff ticket / agent session 的儲存規則
+- [SUPERVISOR-ORCHESTRATION-BOUNDARY.md](../../development-records/archive/docs-cap/SUPERVISOR-ORCHESTRATION-BOUNDARY.md) — handoff ticket / agent session 的儲存規則

@@ -4,7 +4,7 @@
 > Scope: Phase 5 backlog items #4–#6 — provider raw output capture, background `run -d`, TUI / dashboard.
 > Sibling docs:
 > - [`RUN-OBSERVABILITY-MEMO.md`](RUN-OBSERVABILITY-MEMO.md) — original 4-phase roadmap (Phase 1–4 shipped v0.24.3 → v0.24.5).
-> - [`RUN-OBSERVABILITY-GUIDE.md`](RUN-OBSERVABILITY-GUIDE.md) — user-facing operations guide for what is currently shipped.
+> - [`RUN-OBSERVABILITY-GUIDE.md`](../../docs/cap/RUN-OBSERVABILITY-GUIDE.md) — user-facing operations guide for what is currently shipped.
 > - [`CHANGELOG.md`](../../CHANGELOG.md) §v0.24.6 — Phase 5 read-only filters that *did* ship.
 
 ## Recap
@@ -214,6 +214,6 @@ If a future PR proposes adding `textual` / `blessed` / `fastapi` as a dependency
 ## Cross-links
 
 - [`RUN-OBSERVABILITY-MEMO.md`](RUN-OBSERVABILITY-MEMO.md) — Phase 1–4 planning history.
-- [`RUN-OBSERVABILITY-GUIDE.md`](RUN-OBSERVABILITY-GUIDE.md) — operations guide for shipped surfaces.
-- [`ARCHITECTURE.md`](ARCHITECTURE.md) — runtime module map (where `cap-workflow-exec.sh` and the run_dir live).
+- [`RUN-OBSERVABILITY-GUIDE.md`](../../docs/cap/RUN-OBSERVABILITY-GUIDE.md) — operations guide for shipped surfaces.
+- [`ARCHITECTURE.md`](../../docs/cap/ARCHITECTURE.md) — runtime module map (where `cap-workflow-exec.sh` and the run_dir live).
 - [`SUPERVISOR-ORCHESTRATION-BOUNDARY.md`](SUPERVISOR-ORCHESTRATION-BOUNDARY.md) — handoff ticket / agent session storage rules (the schemas a dashboard would consume).

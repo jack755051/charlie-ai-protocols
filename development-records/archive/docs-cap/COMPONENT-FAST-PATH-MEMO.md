@@ -1,7 +1,7 @@
 # Component Fast Path Memo
 
 > Status: runtime removed; evidence memo retained.
-> Product boundary: [CAP-POSITIONING.md](CAP-POSITIONING.md).
+> Product boundary: [CAP-POSITIONING.md](../../docs/cap/CAP-POSITIONING.md).
 >
 > This file is retained as historical evidence and as a possible future
 > profile reference. It is not an active CAP core roadmap item.

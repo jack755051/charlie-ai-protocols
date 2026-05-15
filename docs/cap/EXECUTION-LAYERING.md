@@ -1,7 +1,7 @@
 # Execution Layering — Shell / Python / AI 的職責邊界
 
 > 本文件定義 CAP runtime 的執行分層。Shell、Python 與 AI 不是亂混的關係，而是各自負責不同的工作；本文件把「程式形狀已存在但未明文化」的分層規則固定下來。
-> 工程整理優先序與長期 roadmap 以 [IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md) 為主；本文件聚焦於分層職責與邊界判準。
+> 工程整理優先序與長期 roadmap 以 [IMPLEMENTATION-ROADMAP.md](../../development-records/archive/docs-cap/IMPLEMENTATION-ROADMAP.md) 為主；本文件聚焦於分層職責與邊界判準。
 
 ## 1. 為什麼要分層
 
@@ -91,7 +91,7 @@ steps:
 
 ## 5. 目前狀態與過渡項
 
-完整重構與待辦項以 [IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md) 為主。本節只列「分層上仍處於過渡」的項目：
+完整重構與待辦項以 [IMPLEMENTATION-ROADMAP.md](../../development-records/archive/docs-cap/IMPLEMENTATION-ROADMAP.md) 為主。本節只列「分層上仍處於過渡」的項目：
 
 - `scripts/cap-workflow-exec.sh` 是第 2 層中最大的一支（約 1300 行），同時負責 step flatten、prompt 組裝、shell/AI 執行、watchdog、artifact 寫入、handoff、session ledger 與錯誤分類。**長期應逐段瘦身**：
   - 已抽到 Python：runtime registry / session ledger / artifact materialization / plan metadata 解析（`engine/step_runtime.py`）。
@@ -113,6 +113,6 @@ steps:
 - 分層職責：本文件
 - workflow schema 與 step 欄位：[workflow-schema.md](../../workflows/workflow-schema.md)
 - shell executor exit code 契約：[workflow-executor-exit-codes.md](../../policies/workflow-executor-exit-codes.md)
-- skill registry 與 binding：[SKILL-RUNTIME-ARCHITECTURE.md](SKILL-RUNTIME-ARCHITECTURE.md)
+- skill registry 與 binding：[SKILL-RUNTIME-ARCHITECTURE.md](../../development-records/archive/docs-cap/SKILL-RUNTIME-ARCHITECTURE.md)
 - 平台目標：[PLATFORM-GOAL.md](PLATFORM-GOAL.md)
-- 完整實現路線：[IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md)
+- 完整實現路線：[IMPLEMENTATION-ROADMAP.md](../../development-records/archive/docs-cap/IMPLEMENTATION-ROADMAP.md)

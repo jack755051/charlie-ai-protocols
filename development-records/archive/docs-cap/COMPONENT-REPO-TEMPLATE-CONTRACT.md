@@ -3,7 +3,7 @@
 > Status: frozen profile-specific contract.
 > Scope: Full-stack Component Repo shape for the primary stack
 > (Next.js + C#/.NET + PostgreSQL + Docker Compose).
-> Product boundary: [CAP-POSITIONING.md](CAP-POSITIONING.md).
+> Product boundary: [CAP-POSITIONING.md](../../docs/cap/CAP-POSITIONING.md).
 >
 > This contract is retained as historical dogfood evidence and possible
 > future profile material. It is not CAP core and should not drive new

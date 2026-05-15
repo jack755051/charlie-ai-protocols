@@ -1,7 +1,7 @@
 # CAP Dogfood Profiles
 
 > Status: reset on 2026-05-15.
-> Product boundary: [CAP-POSITIONING.md](CAP-POSITIONING.md).
+> Product boundary: [CAP-POSITIONING.md](../../docs/cap/CAP-POSITIONING.md).
 
 ## Purpose
 

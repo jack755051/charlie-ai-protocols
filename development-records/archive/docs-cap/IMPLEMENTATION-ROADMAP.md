@@ -1,7 +1,7 @@
 # CAP Implementation Roadmap
 
 > Status: reset on 2026-05-15.
-> Product boundary: [CAP-POSITIONING.md](CAP-POSITIONING.md).
+> Product boundary: [CAP-POSITIONING.md](../../docs/cap/CAP-POSITIONING.md).
 >
 > Older phase narratives treated CAP as a full local AI workflow runtime
 > that would compile prompts into multi-agent execution plans. That path

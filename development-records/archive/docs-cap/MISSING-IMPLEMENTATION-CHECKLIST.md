@@ -2,7 +2,7 @@
 
 > Status: historical engineering backlog.
 > Current product direction lives in
-> [CAP-POSITIONING.md](CAP-POSITIONING.md) and
+> [CAP-POSITIONING.md](../../docs/cap/CAP-POSITIONING.md) and
 > [IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md).
 >
 > This file is no longer the product roadmap SSOT. It remains useful for

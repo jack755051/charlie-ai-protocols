@@ -6,9 +6,9 @@
 > CAP 現在是 AI CLI governance / observability layer，不是 Claude
 > Code / Codex replacement，也不是 stack-specific generator。
 >
-> **導覽**：使用手冊看 [README.md](../../README.md)；目前收斂後路線看 [IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md)；歷史工程 backlog 看 [MISSING-IMPLEMENTATION-CHECKLIST.md](MISSING-IMPLEMENTATION-CHECKLIST.md)；其他工程文件入口看 [docs/cap/README.md](README.md)。
+> **導覽**：使用手冊看 [README.md](../../README.md)；目前收斂後路線看 [IMPLEMENTATION-ROADMAP.md](../../development-records/archive/docs-cap/IMPLEMENTATION-ROADMAP.md)；歷史工程 backlog 看 [MISSING-IMPLEMENTATION-CHECKLIST.md](../../development-records/archive/docs-cap/MISSING-IMPLEMENTATION-CHECKLIST.md)；其他工程文件入口看 [docs/cap/README.md](README.md)。
 >
-> **跨模組邊界**：要動 capability、storage layout、執行流程之前，請先讀對應 boundary memo（[CONSTITUTION-BOUNDARY.md](CONSTITUTION-BOUNDARY.md) / [SUPERVISOR-ORCHESTRATION-BOUNDARY.md](SUPERVISOR-ORCHESTRATION-BOUNDARY.md) / [ORCHESTRATION-STORAGE-BOUNDARY.md](ORCHESTRATION-STORAGE-BOUNDARY.md) / [EXECUTION-LAYERING.md](EXECUTION-LAYERING.md)）。本文件涵蓋整體架構，不重複 boundary 細節。
+> **跨模組邊界**：要動 capability、storage layout、執行流程之前，請先讀對應 boundary memo（[CONSTITUTION-BOUNDARY.md](CONSTITUTION-BOUNDARY.md) / [SUPERVISOR-ORCHESTRATION-BOUNDARY.md](../../development-records/archive/docs-cap/SUPERVISOR-ORCHESTRATION-BOUNDARY.md) / [ORCHESTRATION-STORAGE-BOUNDARY.md](../../development-records/archive/docs-cap/ORCHESTRATION-STORAGE-BOUNDARY.md) / [EXECUTION-LAYERING.md](EXECUTION-LAYERING.md)）。本文件涵蓋整體架構，不重複 boundary 細節。
 
 ---
 
