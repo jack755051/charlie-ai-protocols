@@ -18,11 +18,12 @@
 |---|---|
 | 先確認 CAP 現在到底是什麼 / 不是什麼 | [CAP-POSITIONING.md](CAP-POSITIONING.md) |
 | 知道 CAP 整體目標與設計理念 | [PLATFORM-GOAL.md](PLATFORM-GOAL.md) |
+| 看收斂重構任務清單 | [CAP-LEAN-ROADMAP.md](CAP-LEAN-ROADMAP.md) |
 | 看完整架構與模組關係 | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | 找 P0–P6 任一概念的 SSOT 在哪個檔 / 哪個 schema | [ARCHITECTURE.md §P0–P6 Runtime Module Map](ARCHITECTURE.md#p0p6-runtime-module-map-convergence-checkpoint-2) |
 | 查舊 P0-P10 工程 backlog / release gate 歷史 | [MISSING-IMPLEMENTATION-CHECKLIST.md](MISSING-IMPLEMENTATION-CHECKLIST.md) |
 | 看 release tag 對應的功能 | [RELEASE-NOTES.md](RELEASE-NOTES.md) |
-| 看收斂後的開發路線 | [IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md) |
+| 看收斂後的開發路線摘要 | [IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md) |
 | 決定 dogfood 要測 readiness / preflight / observability 哪一層 | [DOGFOOD-PROFILES.md](DOGFOOD-PROFILES.md) |
 | 只跑某一層 smoke，不想每次跑完整 release gate | [`scripts/workflows/smoke-layer.sh`](../../scripts/workflows/smoke-layer.sh) |
 | 操作 / debug 一個正在跑或剛結束的 workflow run（logs / watch / inspect） | [RUN-OBSERVABILITY-GUIDE.md](RUN-OBSERVABILITY-GUIDE.md) |

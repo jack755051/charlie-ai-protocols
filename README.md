@@ -210,6 +210,7 @@ charlie-ai-protocols/
 - Current positioning: [docs/cap/CAP-POSITIONING.md](docs/cap/CAP-POSITIONING.md)
 - Docs index: [docs/cap/README.md](docs/cap/README.md)
 - Platform goal: [docs/cap/PLATFORM-GOAL.md](docs/cap/PLATFORM-GOAL.md)
+- Lean roadmap: [docs/cap/CAP-LEAN-ROADMAP.md](docs/cap/CAP-LEAN-ROADMAP.md)
 - Roadmap: [docs/cap/IMPLEMENTATION-ROADMAP.md](docs/cap/IMPLEMENTATION-ROADMAP.md)
 - Provider readiness: [docs/cap/PROVIDER-READINESS-TASKS.md](docs/cap/PROVIDER-READINESS-TASKS.md)
 - Run observability: [docs/cap/RUN-OBSERVABILITY-GUIDE.md](docs/cap/RUN-OBSERVABILITY-GUIDE.md)
