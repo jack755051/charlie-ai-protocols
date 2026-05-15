@@ -23,6 +23,12 @@ PATH_HELPER="${SCRIPT_DIR}/cap-paths.sh"
 : "${CAP_HOME:=${HOME}/.cap}"
 export CAP_HOME
 
+# Provider readiness preflight helper. Dot-sourced so the run-flow can
+# call workflow_has_ai_step / provider_preflight_check /
+# provider_preflight_render_{halt,warn} without spawning extra shells.
+# Pure parse helpers — no provider IO inside the helper itself.
+. "${SCRIPT_DIR}/cap-provider-preflight.sh"
+
 usage() {
   cat <<'EOF' >&2
 Usage:
@@ -945,6 +951,53 @@ WATCH_HELP
       "${PYTHON_BIN}" "${CLI_PY}" print-binding-degraded "${BINDING_JSON}" "${BINDING_SNAPSHOT_JSON}"
       echo ""
       echo "Continuing in degraded mode."
+    fi
+
+    # ── Provider readiness preflight (P2 — ADR-3) ──────────────────────
+    # Halt before any AI step is reached when the selected provider is
+    # missing / unauthed / errored. Skipped entirely when the workflow
+    # has no AI step (shell-only / deterministic). Dry-run / plan /
+    # blocked-binding paths already exit before this point so they are
+    # never gated by this preflight.
+    if workflow_has_ai_step "${PLAN_JSON}"; then
+      # CAP_PROVIDER_DOCTOR_JSON_OVERRIDE is a deterministic test hook
+      # mirroring CAP_CLAUDE_BIN / CAP_CODEX_BIN: when set, the wiring
+      # consumes the env value verbatim and skips the live doctor
+      # invocation. Production paths leave it unset.
+      if [ -n "${CAP_PROVIDER_DOCTOR_JSON_OVERRIDE:-}" ]; then
+        _PREFLIGHT_DOCTOR_JSON="${CAP_PROVIDER_DOCTOR_JSON_OVERRIDE}"
+      else
+        _PREFLIGHT_DOCTOR_JSON="$(bash "${SCRIPT_DIR}/cap-provider.sh" doctor --json 2>/dev/null || true)"
+      fi
+      # provider_preflight_check returns 0/1/2/3/10 with semantic
+      # meanings; the if/else pattern captures both stdout and exit code
+      # without triggering errexit on non-zero rc.
+      if _PREFLIGHT_RESULT_LINE="$(provider_preflight_check "${RUN_CLI}" "${_PREFLIGHT_DOCTOR_JSON}")"; then
+        _PREFLIGHT_RC=0
+      else
+        _PREFLIGHT_RC=$?
+      fi
+      case "${_PREFLIGHT_RC}" in
+        0)
+          : # auth_ok — silent proceed
+          ;;
+        1)
+          # auth_unknown — proceed with warning per ADR-3 §4 Q6.
+          provider_preflight_render_warn "${WORKFLOW_NAME}" "${RUN_CLI}" "${_PREFLIGHT_RESULT_LINE}"
+          ;;
+        2|3|10)
+          # halt | unknown_cli | parse_error — never reach a provider call.
+          provider_preflight_render_halt "${WORKFLOW_NAME}" "${RUN_CLI}" "${_PREFLIGHT_RESULT_LINE}"
+          exit 4
+          ;;
+        *)
+          # Defensive: any unexpected rc is treated as halt so the
+          # workflow does not silently proceed under undefined readiness.
+          provider_preflight_render_halt "${WORKFLOW_NAME}" "${RUN_CLI}" "${_PREFLIGHT_RESULT_LINE}"
+          exit 4
+          ;;
+      esac
+      unset _PREFLIGHT_DOCTOR_JSON _PREFLIGHT_RESULT_LINE _PREFLIGHT_RC
     fi
 
     if [ "${DETACH}" -eq 1 ]; then

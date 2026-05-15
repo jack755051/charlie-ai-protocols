@@ -97,20 +97,51 @@ This task list keeps that boundary explicit:
 
 ## P2 — Workflow Preflight
 
-- [ ] Add shared provider readiness helper.
+- [x] Add shared provider readiness helper.
   - Use the same logic from `cap provider doctor` and workflow preflight.
   - Keep probes non-interactive and no-token.
-- [ ] Wire preflight before AI-backed workflow execution.
+  - Shipped as `scripts/cap-provider-preflight.sh`, dot-sourced by
+    `cap-workflow.sh`. Helper performs zero IO itself — it only
+    parses the doctor JSON the caller provides. Reuses the same
+    schema (`schemas/provider-readiness.schema.yaml`) that
+    `cap provider doctor --json` emits.
+- [x] Wire preflight before AI-backed workflow execution.
   - `cap workflow run --cli claude ...`
   - `cap workflow run --cli codex ...`
   - future API-backed providers
-- [ ] Ensure shell-only workflows bypass provider readiness.
-- [ ] Ensure dry-run / bind / compile do not require provider auth.
-- [ ] Add tests.
+  - Wired in `scripts/cap-workflow.sh` between the binding-degraded
+    check and the DETACH / exec path (after line ~948). Halts with
+    exit 4 when state ∈ {provider_missing, auth_required, error,
+    unknown_cli, parse_error}; warns + proceeds when state =
+    auth_unknown; silent when state = auth_ok. Halt block follows
+    the same WORKFLOW PREFLIGHT BLOCKED — <name> format as the
+    binding-blocked block so operator UX stays consistent.
+- [x] Ensure shell-only workflows bypass provider readiness.
+  - `workflow_has_ai_step` guard inspects `binding.steps[].executor`
+    + `fallback.executor`; preflight only runs when at least one
+    step (or its fallback) declares `executor: ai`. The CAP default
+    for a missing executor is "ai" so legacy plans are gated
+    correctly.
+- [x] Ensure dry-run / bind / compile do not require provider auth.
+  - `cap workflow run --dry-run` exits at the plan-print branch in
+    `cap-workflow.sh` (~line 893) BEFORE reaching the preflight.
+    `cap workflow bind` lives in a separate `bind` case and never
+    enters the run flow. `cap workflow compile` is read-only and
+    does not touch the run flow. Regression covered by Cases 15
+    and 16 in `tests/scripts/test-workflow-provider-preflight.sh`.
+- [x] Add tests.
   - AI workflow + missing provider fails before provider spawn.
   - Shell-only workflow proceeds without provider.
   - Dry-run proceeds without provider.
   - Error message includes remediation.
+  - Lives in `tests/scripts/test-workflow-provider-preflight.sh`:
+    19 cases / 60 assertions covering helper unit branches
+    (workflow_has_ai_step, provider_preflight_check, render_halt,
+    render_warn), structural wiring checks (helper sourced, halt
+    exits 4, override env hook present), and live-dispatch
+    integration with `CAP_PROVIDER_DOCTOR_JSON_OVERRIDE` so the
+    test never touches the host's installed Claude / Codex
+    binaries and spends zero tokens.
 
 ## P3 — First-Run UX
 
