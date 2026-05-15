@@ -1,10 +1,14 @@
 # Component Repo Template Contract
 
-> Status: active template contract for Component Repo dogfood.
+> Status: frozen profile-specific contract.
 > Scope: Full-stack Component Repo shape for the primary stack
 > (Next.js + C#/.NET + PostgreSQL + Docker Compose).
-> Purpose: define what CAP should ask frontend, backend, UI, QA, and DevOps
-> agents to produce before Product Repo expansion.
+> Product boundary: [CAP-POSITIONING.md](CAP-POSITIONING.md).
+>
+> This contract is retained as historical dogfood evidence and possible
+> future profile material. It is not CAP core and should not drive new
+> platform work while provider readiness / preflight / observability are
+> the active priorities.
 
 ## Decision
 

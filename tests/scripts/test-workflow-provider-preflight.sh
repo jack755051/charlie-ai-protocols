@@ -41,6 +41,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 HELPER="${REPO_ROOT}/scripts/cap-provider-preflight.sh"
 WORKFLOW_SH="${REPO_ROOT}/scripts/cap-workflow.sh"
 CAP_ENTRY="${REPO_ROOT}/scripts/cap-entry.sh"
+TEST_CAP_HOME="$(mktemp -d "${TMPDIR:-/tmp}/cap-provider-preflight.XXXXXX")"
+trap 'rm -rf "${TEST_CAP_HOME}"' EXIT
 
 [ -f "${HELPER}" ]      || { echo "FAIL: ${HELPER} missing"; exit 1; }
 [ -f "${WORKFLOW_SH}" ] || { echo "FAIL: ${WORKFLOW_SH} missing"; exit 1; }
@@ -258,7 +260,7 @@ assert_contains "doctor override env hook present"  "${WORKFLOW_BODY}"  "CAP_PRO
 # ── Case 15: cap workflow bind never reaches preflight (no AI step probe) ─
 echo ""
 echo "Case 15: cap workflow bind does not invoke preflight (different code path)"
-BIND_OUT="$(bash "${CAP_ENTRY}" workflow bind component-fast 2>&1 || true)"
+BIND_OUT="$(CAP_HOME="${TEST_CAP_HOME}" bash "${CAP_ENTRY}" workflow bind project-constitution 2>&1 || true)"
 assert_not_contains "bind output has no preflight halt block"     "${BIND_OUT}"  "WORKFLOW PREFLIGHT BLOCKED"
 assert_not_contains "bind output has no preflight warn block"     "${BIND_OUT}"  "WORKFLOW PREFLIGHT WARNING"
 assert_not_contains "bind output has no provider_not_ready"       "${BIND_OUT}"  "blocked_reason: provider_not_ready"
@@ -268,8 +270,9 @@ echo ""
 echo "Case 16: --dry-run does not trigger preflight (dry-run exits upstream)"
 # Force the override to "provider_missing" — if preflight were running
 # during dry-run, this would produce a halt block in the output.
-DRY_OUT="$(CAP_PROVIDER_DOCTOR_JSON_OVERRIDE='{"schema_version":1,"generated_at":"2026-05-15T00:00:00Z","probe_policy":{"no_token":true,"no_interactive":true,"no_mutation":true},"providers":[{"name":"claude","source":"cli","state":"provider_missing","remediation":"Install Claude Code"}]}' \
-  bash "${CAP_ENTRY}" workflow run --dry-run --cli claude component-fast "smoke" 2>&1 || true)"
+DRY_OUT="$(CAP_HOME="${TEST_CAP_HOME}" \
+  CAP_PROVIDER_DOCTOR_JSON_OVERRIDE='{"schema_version":1,"generated_at":"2026-05-15T00:00:00Z","probe_policy":{"no_token":true,"no_interactive":true,"no_mutation":true},"providers":[{"name":"claude","source":"cli","state":"provider_missing","remediation":"Install Claude Code"}]}' \
+  bash "${CAP_ENTRY}" workflow run --dry-run --cli claude project-constitution "smoke" 2>&1 || true)"
 assert_not_contains "dry-run output has no halt block"            "${DRY_OUT}"  "WORKFLOW PREFLIGHT BLOCKED"
 assert_not_contains "dry-run output has no provider_not_ready"    "${DRY_OUT}"  "blocked_reason: provider_not_ready"
 assert_contains "dry-run still emits its own dry-run trailer"      "${DRY_OUT}"  "Dry run only"
@@ -283,8 +286,9 @@ echo "Case 17: real run path + provider_missing override → halt block emitted,
 # host's installed binaries; halt happens BEFORE any AI invocation, so
 # no tokens are spent and the workflow runtime never starts.
 set +e
-RUN_OUT="$(CAP_PROVIDER_DOCTOR_JSON_OVERRIDE='{"schema_version":1,"generated_at":"2026-05-15T00:00:00Z","probe_policy":{"no_token":true,"no_interactive":true,"no_mutation":true},"providers":[{"name":"claude","source":"cli","state":"provider_missing","remediation":"Install Claude Code: see https://docs.claude.com/claude-code"}]}' \
-  bash "${CAP_ENTRY}" workflow run --cli claude component-fast "preflight halt smoke" 2>&1)"
+RUN_OUT="$(CAP_HOME="${TEST_CAP_HOME}" \
+  CAP_PROVIDER_DOCTOR_JSON_OVERRIDE='{"schema_version":1,"generated_at":"2026-05-15T00:00:00Z","probe_policy":{"no_token":true,"no_interactive":true,"no_mutation":true},"providers":[{"name":"claude","source":"cli","state":"provider_missing","remediation":"Install Claude Code: see https://docs.claude.com/claude-code"}]}' \
+  bash "${CAP_ENTRY}" workflow run --cli claude project-constitution "preflight halt smoke" 2>&1)"
 RUN_RC=$?
 set -e
 assert_eq        "halt path exits 4"                          "4"                                              "${RUN_RC}"
@@ -299,8 +303,9 @@ assert_contains "halt path confirms no tokens spent"           "${RUN_OUT}"  "No
 echo ""
 echo "Case 18: real run path + auth_required override → halt block"
 set +e
-RUN_OUT="$(CAP_PROVIDER_DOCTOR_JSON_OVERRIDE='{"schema_version":1,"generated_at":"2026-05-15T00:00:00Z","probe_policy":{"no_token":true,"no_interactive":true,"no_mutation":true},"providers":[{"name":"claude","source":"cli","cli_path":"/usr/bin/claude","state":"auth_required","remediation":"run `cap claude` once to complete login"}]}' \
-  bash "${CAP_ENTRY}" workflow run --cli claude component-fast "preflight halt smoke" 2>&1)"
+RUN_OUT="$(CAP_HOME="${TEST_CAP_HOME}" \
+  CAP_PROVIDER_DOCTOR_JSON_OVERRIDE='{"schema_version":1,"generated_at":"2026-05-15T00:00:00Z","probe_policy":{"no_token":true,"no_interactive":true,"no_mutation":true},"providers":[{"name":"claude","source":"cli","cli_path":"/usr/bin/claude","state":"auth_required","remediation":"run `cap claude` once to complete login"}]}' \
+  bash "${CAP_ENTRY}" workflow run --cli claude project-constitution "preflight halt smoke" 2>&1)"
 RUN_RC=$?
 set -e
 assert_eq        "auth_required halt exits 4"                  "4"                                              "${RUN_RC}"
@@ -312,8 +317,9 @@ assert_contains "auth_required remediation surfaces"            "${RUN_OUT}"  "c
 echo ""
 echo "Case 19: real run path + override missing the selected CLI → halt block"
 set +e
-RUN_OUT="$(CAP_PROVIDER_DOCTOR_JSON_OVERRIDE='{"schema_version":1,"generated_at":"2026-05-15T00:00:00Z","probe_policy":{"no_token":true,"no_interactive":true,"no_mutation":true},"providers":[{"name":"codex","source":"cli","state":"auth_ok","remediation":"ready"}]}' \
-  bash "${CAP_ENTRY}" workflow run --cli claude component-fast "preflight halt smoke" 2>&1)"
+RUN_OUT="$(CAP_HOME="${TEST_CAP_HOME}" \
+  CAP_PROVIDER_DOCTOR_JSON_OVERRIDE='{"schema_version":1,"generated_at":"2026-05-15T00:00:00Z","probe_policy":{"no_token":true,"no_interactive":true,"no_mutation":true},"providers":[{"name":"codex","source":"cli","state":"auth_ok","remediation":"ready"}]}' \
+  bash "${CAP_ENTRY}" workflow run --cli claude project-constitution "preflight halt smoke" 2>&1)"
 RUN_RC=$?
 set -e
 assert_eq        "unknown_cli halt exits 4"                    "4"                                              "${RUN_RC}"

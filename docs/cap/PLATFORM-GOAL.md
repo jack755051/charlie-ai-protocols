@@ -1,247 +1,114 @@
 # CAP Platform Goal
 
-> 本文件定義 CAP 的產品目標、目標執行模型、目前完成度與後續重構方向。
-> 完整開發路線見 [IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md)。
+> Status: active goal statement.
+> Primary boundary: [CAP-POSITIONING.md](CAP-POSITIONING.md).
 
-## 1. 目標定位
+## Goal
 
-CAP 的目標不是單一 agent prompt 集合，而是一個本機 AI workflow runtime 平台。
+CAP exists to make local AI CLI work **governed, observable, and
+repeatable**.
 
-使用者安裝 CAP 後，平台應提供：
+It does not exist to replace Claude Code, Codex, or any other provider
+CLI as the fastest way to write code. For small one-off coding tasks,
+direct provider use is expected to be faster and simpler.
 
-- 內建 agent skills
-- 內建 workflow templates
-- capability contracts
-- provider adapters
-- project constitution 產生與保存
-- task workflow compile / bind / run
-- agent session lifecycle 紀錄
-- 本機 runtime artifact storage
+CAP should be used when a repo or task needs:
 
-CAP 應讓使用者在登入 Codex CLI 與 Claude Code CLI 後，可以直接在任一資料夾或 repo 中使用基礎 agent skills 與 workflows，並把執行成果保存到本機 CAP storage。
+- project identity and constitution boundaries;
+- provider readiness checks before AI work;
+- workflow binding and capability gates;
+- deterministic validation;
+- run archives and artifact indexes;
+- session analysis for time, prompt size, token availability, and
+  failure hotspots.
 
-## 2. 使用者目標流程
+## Product Posture
 
-預期使用流程如下：
-
-```text
-install CAP
-  -> login Codex / Claude Code CLI
-  -> use base agent-skills and workflow templates
-  -> run CAP inside a folder or repo
-  -> generate Project Constitution
-  -> Supervisor reads user prompt and repo context
-  -> Supervisor decides required capabilities and agent roles
-  -> CAP compiles task workflow
-  -> CAP binds workflow steps to agent skills / provider CLI
-  -> CAP creates short-lived agent sessions
-  -> agent sessions produce artifacts and handoff summaries
-  -> CAP archives constitution, workflow, binding, sessions and result report
-```
-
-CAP 的關鍵價值是讓「AI 多代理協作」從臨時口頭指令，升級成可治理、可追蹤、可重複執行的 runtime。
-
-## 3. 儲存模型
-
-CAP 應明確區分正式來源與 runtime 產物。
+The platform posture is:
 
 ```text
-Project repo
-├── .cap.project.yaml
-├── .cap.constitution.yaml
-├── .cap.skills.yaml
-├── workflows/ or schemas/workflows/
-└── docs/
-
-~/.cap/projects/<project_id>/
-├── constitutions/
-├── compiled-workflows/
-├── bindings/
-├── reports/
-├── traces/
-├── logs/
-├── drafts/
-├── handoffs/
-├── cache/
-└── sessions/
+CAP = AI CLI governance layer + observability ledger + deterministic gates
 ```
 
-原則：
-
-- repo 放 source of truth
-- `~/.cap/projects/<project_id>/` 放 runtime state
-- Project Constitution 的正式版本應屬於 repo
-- 單次任務推導出的 task constitution / compiled workflow / binding snapshot / run output 應屬於 CAP storage
-- 成熟且需長期維護的 custom workflow 或 skill，才應 promote 回 repo 或 shared registry
-
-## 4. Constitution 分層
-
-CAP 應拆分兩種 constitution。
-
-### Project Constitution
-
-Project Constitution 是某個 repo 的長期治理規則。
-
-應包含：
-
-- project goal
-- project constraints
-- source-of-truth paths
-- allowed agents
-- allowed capabilities
-- workflow source policy
-- binding policy
-- artifact policy
-- executor policy
-- security / risk stop conditions
-
-建立方式：
-
-```bash
-cap workflow run project-constitution "這個 repo 是一個..."
-```
-
-或由更高階入口包裝：
-
-```bash
-cap project constitution "這個 repo 是一個..."
-```
-
-### Task Constitution
-
-Task Constitution 是單次 prompt 的執行憲法。
-
-應包含：
-
-- source request
-- inferred goal stage
-- success criteria
-- non-goals
-- required capabilities
-- risk profile
-- unresolved policy
-- stop conditions
-- expected artifacts
-
-它應由 Project Constitution、user prompt 與 repo context 推導而來。
-
-## 5. Supervisor Orchestration
-
-Supervisor 是 CAP 的編排決策者，不應只是一般 workflow step。
-
-Supervisor 應負責：
-
-- 讀取 Project Constitution
-- 讀取 user prompt
-- 讀取 repo context
-- 判斷任務類型與風險
-- 決定需要哪些 capabilities
-- 決定應啟動哪些 agent roles
-- 產出 structured task constitution
-- 產出 capability graph
-- 產出 compiled workflow draft
-- 決定哪些步驟需要 Watcher / Security / QA / Logger
-
-Supervisor 的輸出不得只靠自然語言。正式派工前必須落成 JSON / YAML artifact，供 runtime 驗證與追蹤。
-
-## 6. Agent Session Model
-
-CAP 的 sub-agent 不應直接等同於 Codex 或 Claude 的原生能力。
-
-CAP 應定義自己的抽象：
+Not:
 
 ```text
-Agent Session = CAP runtime 根據 role / capability / prompt / inputs 啟動的一次性 worker session
+CAP = universal AI coding agent
+CAP = provider replacement
+CAP = component generator platform
 ```
 
-每個 agent session 至少應紀錄：
+This distinction matters. CAP should not add abstraction unless it
+reduces wasted runs, hidden failures, or untraceable provider work.
 
-- `session_id`
-- `run_id`
-- `workflow_id`
-- `step_id`
-- `capability`
-- `agent_alias`
-- `prompt_file`
-- `provider`
-- `provider_cli`
-- `input_artifacts`
-- `output_artifacts`
-- `handoff_path`
-- `status`
-- `started_at`
-- `completed_at`
-- `failure_reason`
+## Runtime Model
 
-Provider adapter 可以對應：
-
-- Codex: `codex exec`
-- Claude: `claude -p`
-- CrewAI: future graph / crew runtime
-- LangGraph or other runtime: future backend
-
-workflow 不應綁死 provider 細節，只宣告 capability、agent role、inputs、outputs 與 lifecycle。
-
-## 7. 目標 Runtime Lifecycle
-
-一次完整 CAP run 的 lifecycle 應為：
+The desired lifecycle is intentionally narrow:
 
 ```text
-intake
-  -> load project context
-  -> load Project Constitution
-  -> supervisor orchestration
-  -> task constitution
-  -> capability graph
-  -> compile workflow
-  -> bind agents
-  -> preflight
-  -> create agent sessions
-  -> execute steps
+resolve project
+  -> load constitution / policy
+  -> bind workflow
+  -> preflight provider only when AI work is needed
+  -> execute deterministic steps first
+  -> execute AI steps only for ambiguity / judgement / repair
   -> validate artifacts
-  -> archive result
-  -> mark sessions recycled
+  -> archive logs, sessions, and results
+  -> analyze run hotspots
 ```
 
-CAP 應遵守：
+The platform rule is:
 
 ```text
 deterministic-first, AI-on-ambiguity, halt-on-risk
 ```
 
-也就是：
+## Core Ownership
 
-- 可重複且低語意判斷的工作優先交給 shell / parser / deterministic scripts
-- 語意判斷、規格推導、例外診斷與設計決策才交給 AI agent
-- 遇到高風險、缺少必要輸入、binding 不完整或安全疑慮時 halt
+CAP owns:
 
-## 8. 目前完成度
+- repo identity and CAP storage layout;
+- project constitution governance;
+- workflow binding and capability policy;
+- provider readiness boundary;
+- run observability and session ledger;
+- deterministic workflow execution;
+- artifact validation and result reporting.
 
-完成度與待辦項目以 [IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md) §2「目前基線」與 §17「Milestone Rollup」為單一事實來源；本文件不重複列出，避免兩處狀態漂移。
+CAP does not own:
 
-## 9. 目標架構調整
+- provider login state;
+- provider credentials;
+- provider billing or quota policy;
+- direct coding performance;
+- stack-specific code generation as platform core;
+- hidden provider-to-provider routing.
 
-為了達成平台目標，CAP 應優先調整以下部分：
+## Current Priority
 
-1. 補正式 Project Constitution schema
-2. 讓 `project-constitution.yaml` 真的透過 Supervisor agent 產出 Project Constitution Markdown / JSON
-3. 將 `cap workflow constitution` 的語意改清楚，避免和 task constitution 混用
-4. 建立 Supervisor structured orchestration output
-5. 將 current step execution 升級為 Agent Session Runner
-6. 擴充 `agent-sessions.json`，補 provider-native session id、prompt snapshot 與 recycle state
-7. 擴充 `result.md`，納入 constitution、binding 與 failure summary
-8. 補 project initializer
-9. 補 repo-specific source resolver
-10. 補 promote / publish workflow
+The active platform priority is provider readiness and workflow
+preflight:
 
-## 10. 非目標
+1. `cap provider doctor` must explain whether the selected provider is
+   visible and what the readiness state is.
+2. AI-backed workflows must fail fast before the first provider call
+   when the provider is missing or clearly unusable.
+3. Read-only, dry-run, bind, compile, and shell-only flows must remain
+   usable without provider auth.
 
-短期內 CAP 不應優先做：
+After this, CAP should refine observability and remove documentation /
+workflow bloat before adding new profile features.
 
-- Web UI
-- 遠端 SaaS 控制台
-- 複雜多人即時協作
-- 完整 marketplace 商業分發
-- 綁死某單一 provider 的 sub-agent 能力
+## Frozen Until Reopened
 
-短期重點應放在本機 CLI runtime 的可追蹤性、可重複性與治理閉環。
+The following are not current platform goals:
+
+- expanding `component-fast`;
+- adding new component templates;
+- adding more product/spec/implementation pipeline variants;
+- broad multi-provider dogfood runs;
+- marketplace / publish flows;
+- complex background or remote orchestration.
+
+They may remain in the repository as historical work, but they are not
+the active direction.

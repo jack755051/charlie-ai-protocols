@@ -5,324 +5,216 @@
 </p>
 
 <p align="center">
-  <code>shared constitution</code> · <code>agent skills</code> · <code>workflow schema</code> · <code>runtime storage</code>
+  <code>provider readiness</code> · <code>workflow preflight</code> · <code>run observability</code> · <code>deterministic gates</code>
 </p>
 
 <p align="center">
-  本地 AI agent 協作規範與 CLI 工具，用來整理角色分工、workflow 與執行紀錄。
+  CAP is an AI CLI governance and observability layer for Claude Code,
+  Codex, and other local provider tools.
 </p>
 
 <p align="center">
-  <a href="docs/cap/README.md">📚 Docs Index</a>
+  <a href="docs/cap/CAP-POSITIONING.md">Positioning</a>
   ·
-  <a href="docs/cap/ARCHITECTURE.md">Architecture</a>
+  <a href="docs/cap/README.md">Docs Index</a>
   ·
-  <a href="docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md">Progress</a>
+  <a href="docs/cap/PROVIDER-READINESS-TASKS.md">Provider Readiness</a>
   ·
-  <a href="docs/cap/RELEASE-NOTES.md">Release Notes</a>
+  <a href="docs/cap/RUN-OBSERVABILITY-GUIDE.md">Run Observability</a>
 </p>
 
-<p align="center">
-  <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white">
-  <img alt="CrewAI" src="https://img.shields.io/badge/CrewAI-1.14+-000000">
-  <img alt="Shell" src="https://img.shields.io/badge/Shell-Bash%2FZsh-4EAA25?logo=gnubash&logoColor=white">
-  <img alt="Agents" src="https://img.shields.io/badge/Agents-17-blueviolet">
-  <img alt="Status" src="https://img.shields.io/badge/status-active-22c55e">
-</p>
+## Position
 
-```bash
-cap workflow run --strategy auto version-control "版本更新"
+CAP is **not** a replacement for Claude Code or Codex.
+
+For small one-off coding tasks, direct provider use is expected to be
+faster and simpler. CAP is valuable when a repo or task needs governance
+and evidence:
+
+- provider readiness before AI-backed work;
+- repo identity and constitution boundaries;
+- workflow binding and capability checks;
+- deterministic shell / schema / smoke gates;
+- run logs, artifacts, and session analysis;
+- clear halt reasons before wasting provider quota.
+
+The current product boundary is documented in
+[docs/cap/CAP-POSITIONING.md](docs/cap/CAP-POSITIONING.md).
+
+## Current Direction
+
+The active CAP direction is narrow:
+
+```text
+install / sync
+  -> provider doctor
+  -> project init / doctor
+  -> workflow bind / dry-run
+  -> provider preflight before AI steps
+  -> deterministic checks first
+  -> AI only when ambiguity / judgement / repair is needed
+  -> inspect / analyze the run
 ```
 
-## Status
+Frozen until reopened:
 
-- **Latest tag**：`v0.24.11` — Role / Skill Registry Phase 3 user-imported role registration (docs / schema example / resolver tests only; runtime untouched)
-- **Current baseline**：v0.22 完成 platform P0-P10 closeout；v0.23 收斂 replay / project-skill drift harness；v0.24 收斂安裝後 CLI、observability、provider isolation、Role / Skill Registry 與 Karpathy guardrails dogfood。
-- **下一條主線**：以真實 dogfood 觸發後續 Role / Skill attachment 與 replay H5+；在沒有明確 user pain 前，H5 / H6 / H7 與 detached / publish 類工作維持 deferred。
-- **單一進度來源**：[docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md](docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md)；完整 release 紀錄見 [docs/cap/RELEASE-NOTES.md](docs/cap/RELEASE-NOTES.md)
-- **測試入口**：快速分層檢查用 `scripts/workflows/smoke-layer.sh <contracts|runtime|project|orchestration|e2e|promote|replay>`；完整 release gate 仍用 `scripts/workflows/smoke-per-stage.sh`
-
-| Protocol Layer | Runtime Surface | Contract |
-|---|---|---|
-| Constitution | `.cap.constitution.yaml` | repo governance |
-| Agent Skills | `agent-skills/` | role boundaries |
-| Workflows | `schemas/workflows/` | repeatable execution |
-| Storage | `~/.cap/projects/<project_id>/` | traces, reports, bindings |
-
-## Purpose
-
-CAP 想處理的問題是：當多位 AI Agent 共同參與軟體開發流程時，如何把角色分工、交接內容、執行紀錄與常用流程整理成可追蹤的形式。
-
-它提供四個核心能力：
-
-- **Agent Skills**：定義 17 位 Agent 的角色邊界與輸出責任
-- **Core Protocol**：以共享憲法統一所有 Agent 的行為準則
-- **Workflow Schema**：把固定流程抽成可重複使用的結構化定義
-- **CAP CLI**：提供安裝、調用、workflow 檢視、trace 與版本管理
-
-完整目標與設計理念見 [docs/cap/PLATFORM-GOAL.md](docs/cap/PLATFORM-GOAL.md)；架構細節見 [docs/cap/ARCHITECTURE.md](docs/cap/ARCHITECTURE.md)。
+- component-fast expansion;
+- new stack-specific templates;
+- broad product/spec/implementation pipeline dogfood;
+- marketplace / publish work;
+- hidden provider-to-provider routing.
 
 ## Install
 
 ```bash
 bash install.sh
-
-# 或使用遠端安裝腳本
-curl -fsSL https://raw.githubusercontent.com/jack755051/charlie-ai-protocols/main/install.sh | bash
 source ~/.zshrc
 
 cap setup
 cap sync
 ```
 
-## First Repo Flow
+Install only sets up CAP and syncs skills. It does not log you into
+Claude Code, Codex, or any provider.
 
-CAP is useful when a repo should keep identity, governance, workflow records, and repeatable AI runs. For a one-off prototype, calling Claude / Codex directly may be faster; for a repo you want to keep evolving, start with CAP setup and then run workflows.
+## First Use
 
 ```bash
-# 1. Create or enter the repo you want CAP to manage
-mkdir 2248-game
-cd 2248-game
-git init
+# 1. Check provider visibility / readiness.
+cap provider doctor
+cap provider doctor --json
 
-# 2. Attach this repo to CAP
+# 2. If needed, enter the native provider login/session flow.
+cap claude
+cap codex
+
+# 3. Attach a repo to CAP.
+cd /path/to/repo
 cap project init
 cap project doctor
 
-# 3. Discover and preview workflows
+# 4. Inspect workflow binding before any AI work.
 cap workflow list
-cap workflow run --dry-run project-constitution "這是一個可維護的 2248 puzzle game repo"
+cap workflow bind version-control
+cap workflow run --dry-run --cli claude version-control "版本更新"
 
-# 4. Run the governance workflow when you want repo-level rules and history
-cap workflow run project-constitution "這是一個可維護的 2248 puzzle game repo"
-cap project constitution --latest
+# 5. Run only when readiness and binding are acceptable.
+cap workflow run --cli claude version-control "版本更新"
 ```
 
-`cap project *` is repo setup / identity / health. `cap workflow *` executes a workflow inside a CAP-attached repo.
-
-Shortcuts are available for common namespaces: `cap p ...` / `cap proj ...` for `cap project ...`, `cap wf ...` for `cap workflow ...`, and `cap prov ...` for `cap provider ...`.
+Read-only commands, dry-run, bind, compile, and shell-only workflows
+must remain usable without provider auth. AI-backed workflows should
+preflight provider readiness before the first provider call.
 
 ## Common Commands
 
 ```bash
-# Repo setup / identity / health
-cap version
-cap update latest
-cap release-check --recent 10
+# Provider readiness
+cap provider doctor
+cap provider doctor --json
+
+# Repo identity / health
 cap project init
 cap project status
 cap project doctor
-cap project migrate-config --dry-run                # 預覽 .cap.* → .cap/<name> 搬移計畫
-cap project migrate-config                          # 預設 copy + 保留 legacy
-cap project migrate-config --remove-legacy          # 驗證新路徑後刪除舊 .cap.* 散檔
 
-# Workflow execution / planning
+# Workflow planning / execution
 cap workflow list
 cap workflow show version-control
-cap workflow plan version-control
 cap workflow bind version-control
-cap workflow compile "用 Tauri 做個 AI 額度監控小工具，先不要直接實作"
-cap workflow run-task --dry-run "用 Tauri 做個 AI 額度監控小工具，先不要直接實作"
-cap workflow run --strategy auto version-control "版本更新"
+cap workflow run --dry-run --cli claude version-control "版本更新"
+cap workflow run --cli claude version-control "版本更新"
 
-# Session ledger（runtime observability）
-cap session inspect <session_id>
-cap session inspect --run-id <run_id> --json
-cap session analyze --top 10                       # 彙整 token/time 熱點分析
-cap session analyze --run-id <run_id> --json
-
-# CAP-managed provider session（顯式入口；非 CAP 目錄會退回原生 provider）
-cap claude [ARGS...]                               # CAP project 內記錄 trace；非 CAP 目錄退回原生 Claude
-cap codex  [ARGS...]                               # CAP project 內記錄 trace；非 CAP 目錄退回原生 Codex
-```
-
-完整 CLI 入口由 `scripts/cap-entry.sh` 派發；策略 / dry-run / agent-session 等行為以 [docs/cap/ARCHITECTURE.md](docs/cap/ARCHITECTURE.md) 為準。
-
-## Observe / Debug Workflow Runs
-
-`cap workflow run` 啟動的每個 run 都會在 `~/.cap/projects/<project_id>/reports/workflows/<workflow_id>/<run_id>/` 留下 `workflow.log` / `runtime-state.json` / `agent-sessions.json` / `<phase>-<step>.md` 等檔案。下列指令是純讀取的觀察層，**不會重跑 provider**、**不會增加 token 消耗**。
-
-```bash
-# Run 級 log（類似 docker logs）
-cap workflow logs <run-id>                          # cat workflow.log
-cap workflow logs -f <run-id>                       # tail -f workflow.log
-
-# Step 級 provider output（fallback：raw.log → md → handoff.md）
+# Run observability
+cap workflow inspect <run-id>
+cap workflow logs <run-id>
 cap workflow logs <run-id> --step <step-id>
-cap workflow logs -f <run-id> --step <step-id>
-
-# Live 狀態畫面（類似 watch / kubectl get -w）
-cap workflow watch <run-id>                         # tty: 2 秒刷新；pipe 自動 single-shot
-cap workflow watch --once <run-id>                  # CI / scripts 一次性
-cap workflow watch --compact <run-id>               # 單螢幕簡潔模式（< 15 行）
-cap workflow watch --json <run-id>                  # 給 dashboard / jq 消費
-cap workflow watch --interval 1 --tail 20 <run-id>  # 自訂刷新與 last log 行數
-
-# 完整一次性詳情（六區塊：Run Header / Summary / Failures / Sessions / Artifacts / Logs Pointer / Follow-up）
-cap workflow inspect <run-id>
-cap workflow inspect <run-id> --json
-
-# 跨 repo / 沙箱觀察
-cap workflow logs <run-id> --cap-home /path/to/sandbox/.cap
-cap workflow watch <run-id> --cap-home /path/to/sandbox/.cap
-```
-
-完整使用情境、fallback 規則與 run_dir 佈局見 [docs/cap/RUN-OBSERVABILITY-GUIDE.md](docs/cap/RUN-OBSERVABILITY-GUIDE.md)。
-
-### 常見除錯流程
-
-實際在用 CAP 時，以下三個情境覆蓋 80% 的觀察需求。每個流程都是純 read-only，不會重跑 provider 或增加 token 開銷。
-
-**情境一：Run 失敗了，下一步**
-
-```bash
-# 1. 看 inspect 找最後 final_state / failures（六區塊一次到位）
-cap workflow inspect <run-id>
-
-# 2. inspect 的 # Follow-up Next: 區塊已直接給你下一行命令；
-#    或者根據 failures 區塊裡的 step_id 自己跳
-cap workflow logs <run-id> --step <failed-step>
-
-# 3. 看 session ledger 的 token / time 軌跡
-cap session inspect --run-id <run-id>
-```
-
-**情境二：Run 還在跑，想看進度**
-
-```bash
-# 1. 列出活躍 run（底部 Tip 已直接給你下一行命令）
-cap workflow ps
-
-# 2. live 狀態畫面（tty 預設 2s ANSI 重繪；compact 模式 < 15 行）
 cap workflow watch <run-id>
-cap workflow watch --compact <run-id>
+cap session inspect --run-id <run-id>
+cap session analyze --run-id <run-id>
 
-# 3. 想跟著看新 log（類似 docker logs -f）
-cap workflow logs -f <run-id>
-
-# 4. 跟著看單一 step 的 stream
-cap workflow logs -f <run-id> --step <step-id>
+# Native-provider sessions with CAP trace when inside a CAP project
+cap claude [ARGS...]
+cap codex [ARGS...]
 ```
 
-**情境三：想看某個 step 的實際 provider output**
+## Provider Isolation
 
-```bash
-# step 名不需要記 phase 編號，resolver 自己 glob
-# 解析順序：raw.log → md → handoff.md（legacy raw.log 仍會被優先採用）
-cap workflow logs <run-id> --step <step-id>
+CAP does not hijack bare provider commands.
 
-# 配合 --tail 只看尾段
-cap workflow logs --tail 50 <run-id> --step <step-id>
-```
+- `claude` and `codex` remain native provider CLIs.
+- `cap claude` and `cap codex` are explicit CAP-managed entry points.
+- CAP readiness checks must not consume tokens, trigger interactive
+  login, or mutate provider state.
 
-需要更深入的 flag 參考可以走：
+Provider auth and account lifecycle belong to the provider. CAP only
+checks readiness and records CAP-managed runs.
 
-```bash
-cap help observe                  # observability surface 全貌與情境對照
-cap help workflow                 # cap workflow 全 subcommand 索引
-cap workflow logs --help          # logs dispatcher 完整 flag 與範例
-cap workflow watch --help         # watch dispatcher 完整 flag 與行為矩陣
-```
+## What CAP Stores
 
-### Provider Isolation
-
-CAP **不會**預設包裹（hijack）裸 `claude` / `codex`：
-
-- **裸 `claude` / `codex`** — 永遠是原生 provider CLI；在 `~` 或任何非 CAP 目錄呼叫不會觸發 `cap-paths`、`project_id` resolver 或要求 `.cap.project.yaml`。
-- **`cap claude` / `cap codex`** — CAP-managed provider 入口；在 git repo、`.cap.project.yaml` 或 `CAP_PROJECT_ID_OVERRIDE` 可解析時寫入 session trace；若在 `~` 這類非 CAP 目錄執行，會退回原生 provider，不觸發 `cap-paths` 錯誤。
-- **舊行為（CAP 包裹原生 CLI）** — 從 v0.22.x 起為 opt-in，`CAP_WRAP_NATIVE_CLI=1 make install` 才會把裸命令重導向 CAP。
-
-理由：global `~/.zshrc` 的 shell function 影響範圍橫跨所有目錄；專案級 runtime 不該預設劫持 provider 命令。詳見 [docs/cap/ARCHITECTURE.md §Provider Isolation](docs/cap/ARCHITECTURE.md#provider-isolation)。
-
-## Usage Modes
-
-### Skill Mode
-
-適合單點任務、人工主導流程：
+CAP separates repo source from runtime output.
 
 ```text
-$qa 請幫我針對這段 API 寫單元測試。
-$readme 請幫我把這個 repo 的 README 正規化成可機器解析格式。
+project repo
+├── .cap.project.yaml
+├── .cap.constitution.yaml
+├── .cap.skills.yaml
+└── optional workflow / policy sources
+
+~/.cap/projects/<project_id>/
+├── bindings/
+├── reports/workflows/<workflow_id>/<run_id>/
+├── traces/
+├── sessions/
+├── logs/
+└── cache/
 ```
 
-或用 CLI：
+Runtime reports may include `workflow.log`, `runtime-state.json`,
+`agent-sessions.json`, result files, step outputs, and artifact indexes.
 
-```bash
-cap agent frontend "幫我檢查 auth module"
-cap agent troubleshoot "根據這段 log 找 root cause"
-```
+## When To Use CAP
 
-### Workflow Mode
+Use CAP when:
 
-適合固定步驟、依賴明確、需要可重複交付的流程。`cap workflow` 子命令包含 `list / ps / show / inspect / plan / constitution / compile / run-task / run`，並支援 `--strategy fast|governed|strict|auto` 與 `--dry-run`。常用 workflow：
+- the task must be auditable;
+- workflow gates matter;
+- provider readiness should be checked before AI work;
+- you need run evidence for later debugging;
+- deterministic validation can remove unnecessary AI calls.
 
-- `workflow-smoke-test`：workflow CLI 與 capability binding 的煙霧測試
-- `version-control`：三段 pipeline（vc_scan → vc_compose → vc_apply）+ strategy + lint 守門
-- `project-constitution`：從一句話需求產出 Project Constitution
+Use Claude Code / Codex directly when:
 
-完整 workflow 清單見 [workflows/README.md](workflows/README.md)；版本控制 strategy 與 vc-class executor 規範見 [docs/cap/ARCHITECTURE.md](docs/cap/ARCHITECTURE.md)。
-
-## Architecture Overview
-
-CAP 採用 shared constitution + specialized agents + workflow schema 的多層架構：
-
-- `agent-skills/` 定義角色邊界
-- `schemas/workflows/` 定義流程契約
-- `engine/` 負責載入 / compile / bind / runner
-- `scripts/` 提供 `cap` CLI 包裝與本機操作入口
-- `~/.cap/projects/<project_id>/` 是 runtime storage（constitutions / compiled-workflows / bindings / reports / traces / sessions）
-
-CAP 區分三種資產：
-
-- **平台內建**：base agent-skills、base workflows、capability contracts、binder / compiler / promote 機制
-- **專案來源**：各 repo 自己的 `Project Constitution`、skill registry、workflow definitions
-- **Runtime Workspace**：`~/.cap/projects/<project_id>/` 的 snapshot / bindings / traces / reports
-
-執行生命週期、Constitution 模型、Workflow Storage Model、Project Constitution vs Task Constitution 5-surface 分流等細節，請看 [docs/cap/README.md](docs/cap/README.md) index 並依需求進入對應 boundary memo。
+- the task is small and local;
+- you only need quick code edits;
+- no long-term workflow evidence is needed;
+- CAP would add more explanation than value.
 
 ## Project Structure
 
 ```text
 charlie-ai-protocols/
-├── agent-skills/                     # Agent 角色 prompt SSOT
-├── policies/                         # 跨工具規範（git / storage / readme）
-├── schemas/                          # capability 契約 + workflow / runtime contract
-│   └── workflows/
-├── engine/                           # workflow loader / compiler / binder / session runner
-├── scripts/                          # cap CLI wrappers
-├── workflows/                        # 已使用中的 workflow 模板
-├── docs/cap/                         # 工程文件（見 docs/cap/README.md）
-├── tests/                            # bash + python fixtures + e2e
-├── .cap.constitution.yaml            # repo 級 Project Constitution
-├── .cap.project.yaml                 # 專案 identity / runtime path
-├── .cap.skills.example.yaml          # skill registry 範例
-└── repo.manifest.yaml                # repo metadata
+├── agent-skills/             # role prompts and guardrails
+├── policies/                 # cross-tool policies
+├── schemas/                  # workflow / runtime / readiness contracts
+├── engine/                   # loaders, binders, validators, inspectors
+├── scripts/                  # cap CLI wrappers and workflow scripts
+├── workflows/                # workflow templates
+├── docs/cap/                 # active docs and frozen reference memos
+├── development-records/      # ADRs, dogfood logs, closeouts
+└── tests/                    # shell / python / e2e fixtures
 ```
-
-執行期資料寫到：`~/.cap/projects/<project_id>/{constitutions,compiled-workflows,bindings,reports/workflows,traces,sessions}/`
-
-## Interfaces / Dependencies
-
-- **CLI**：主入口為 `scripts/cap-entry.sh` 與 `Makefile`
-- **API / Worker / Cron / Web UI**：none
-- **Python** ≥ 3.10、**CrewAI** ≥ 1.14、`python-dotenv`、`PyYAML`、Bash / Zsh、GNU Make
-
-選用消費端：
-
-- Claude Code：透過 `@import` 掛載協議
-- OpenAI Codex：透過 `$prefix` 與 `cap agent` 使用 Agent Skills
 
 ## Links
 
-- 文件總入口：[docs/cap/README.md](docs/cap/README.md)
-- 平台目標：[docs/cap/PLATFORM-GOAL.md](docs/cap/PLATFORM-GOAL.md)
-- 架構：[docs/cap/ARCHITECTURE.md](docs/cap/ARCHITECTURE.md)
-- 進度（SSOT）：[docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md](docs/cap/MISSING-IMPLEMENTATION-CHECKLIST.md)
-- 開發路線：[docs/cap/IMPLEMENTATION-ROADMAP.md](docs/cap/IMPLEMENTATION-ROADMAP.md)
-- Release 歷史：[docs/cap/RELEASE-NOTES.md](docs/cap/RELEASE-NOTES.md)
-- Agent 清單：[AGENTS.md](AGENTS.md)
-- Workflow 清單：[workflows/README.md](workflows/README.md)
-- Portfolio: <https://jack755051.github.io/charlie_portfolio_frontend/portfolio>
+- Current positioning: [docs/cap/CAP-POSITIONING.md](docs/cap/CAP-POSITIONING.md)
+- Docs index: [docs/cap/README.md](docs/cap/README.md)
+- Platform goal: [docs/cap/PLATFORM-GOAL.md](docs/cap/PLATFORM-GOAL.md)
+- Roadmap: [docs/cap/IMPLEMENTATION-ROADMAP.md](docs/cap/IMPLEMENTATION-ROADMAP.md)
+- Provider readiness: [docs/cap/PROVIDER-READINESS-TASKS.md](docs/cap/PROVIDER-READINESS-TASKS.md)
+- Run observability: [docs/cap/RUN-OBSERVABILITY-GUIDE.md](docs/cap/RUN-OBSERVABILITY-GUIDE.md)
+- Architecture reference: [docs/cap/ARCHITECTURE.md](docs/cap/ARCHITECTURE.md)
+- Release history: [docs/cap/RELEASE-NOTES.md](docs/cap/RELEASE-NOTES.md)
 
 ## License
 

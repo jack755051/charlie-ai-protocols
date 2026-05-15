@@ -1,6 +1,7 @@
 # Provider Readiness / Onboarding Memo
 
-> Status: design memo.
+> Status: active boundary memo; implementation tracked in
+> [PROVIDER-READINESS-TASKS.md](PROVIDER-READINESS-TASKS.md).
 > Scope: first-run CAP UX for Claude Code / Codex provider readiness.
 > Trigger: dogfood showed that users can install CAP successfully, then only discover missing provider login after `cap workflow run` reaches an AI step.
 
@@ -31,12 +32,23 @@ CAP should keep three separate gates:
    - If auth is missing, stop before launching a long workflow and print explicit login instructions.
    - `cap claude` / `cap codex` may still launch the native provider as the login path.
 
-## Current Repo State
+## Original Repo State
 
-- `cap provider doctor` only checks whether `claude` / `codex` are on `PATH`; it explicitly does not handle login: `scripts/cap-provider.sh:5`.
-- The workflow executor classifies auth failures only after a provider step has already failed: `scripts/cap-workflow-exec.sh:1981`.
+- Earlier CAP versions only checked whether `claude` / `codex` were on `PATH`; login/auth readiness was not surfaced as a first-class state.
+- Earlier workflow execution classified auth failures only after a provider step had already failed.
 - `cap claude` / `cap codex` launch the native CLI through `cap-session.sh`, so interactive provider login can happen there: `scripts/cap-session.sh:128`.
 - README already defines the right provider isolation boundary: bare `claude` / `codex` are not hijacked by CAP by default: `README.md:229`.
+
+## Current Direction
+
+Provider readiness is now a CAP core surface:
+
+- readiness schema: `schemas/provider-readiness.schema.yaml`
+- doctor surface: `cap provider doctor --json`
+- preflight helper: `scripts/cap-provider-preflight.sh`
+- task list: [PROVIDER-READINESS-TASKS.md](PROVIDER-READINESS-TASKS.md)
+
+Readiness remains read-only: no token, no interactive login, no mutation.
 
 ## Target First-Run UX
 

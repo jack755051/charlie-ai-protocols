@@ -1,185 +1,100 @@
 # CAP Dogfood Profiles
 
-> Status: active boundary for practical CAP testing.
-> Purpose: keep runtime work grounded in a small set of repeatable repo shapes.
+> Status: reset on 2026-05-15.
+> Product boundary: [CAP-POSITIONING.md](CAP-POSITIONING.md).
 
-## Decision
+## Purpose
 
-CAP dogfood starts with **dockerized frontend/backend software repos**. The first full automation target is one primary stack, while other common stacks are compatibility targets until real evidence justifies expansion.
+Dogfood should test CAP's current product value:
 
-```text
-Primary stack:
-  Next.js + C#/.NET + PostgreSQL + Docker Compose
+- readiness;
+- preflight;
+- deterministic gates;
+- observability;
+- failure clarity.
 
-Compatibility stack A:
-  Nuxt + Node/NestJS
+Dogfood should not use CAP as a default code generator or force every
+small task through a product-scale multi-agent pipeline.
 
-Compatibility stack B:
-  Angular + Java/Spring Boot
-```
+## Active Dogfood Profiles
 
-This does not mean CAP will never support other stacks. It means Phase-level runtime changes must first prove they work on the primary stack before adding framework-specific branches.
+### 1. Provider Readiness
 
-## Primary Component Runtime Profile
-
-Component Repo dogfood defaults to a single golden path until the
-implementation pipeline can reliably produce code and tests:
-
-```yaml
-profile: component-repo
-stack: primary
-frontend:
-  framework: nextjs
-  version_floor: "14"
-backend:
-  framework: dotnet
-  version_floor: "8"
-database:
-  engine: postgresql
-  version_floor: "16"
-runtime:
-  orchestrator: docker-compose
-  compose_spec: "v2"
-```
-
-The default is intentionally narrow. Specification, implementation, QA,
-DevOps, and runtime-smoke prompts should assume this stack unless the task
-constitution explicitly selects a supported compatibility stack. A
-compatibility stack may be used for intake, diagnosis, or planning, but it
-does not replace the primary stack until it has equivalent dogfood evidence.
-
-Runtime validation for this profile must prove, at minimum:
-
-- `docker compose build` succeeds.
-- `docker compose up` launches PostgreSQL, backend, and frontend services.
-- Backend exposes a health endpoint that proves database reachability.
-- Backend exposes at least one API contract endpoint from the generated spec.
-- Frontend serves HTTP from the host and can reach the backend server-side.
-- A repo-local smoke script records the checks and exits non-zero on failure.
-
-Template structure and adapter boundaries are defined by
-`docs/cap/COMPONENT-REPO-TEMPLATE-CONTRACT.md`.
-
-## Profiles
-
-### 1. Component Repo
-
-Goal: small reusable feature / component repo.
-
-Initial stack:
-
-```text
-Next.js frontend component
-C#/.NET backend package or small API module
-PostgreSQL persistence when backend state exists
-Docker Compose runtime
-```
+Goal: prove CAP fails before AI work when the provider is missing or not
+ready.
 
 Acceptance:
 
-- `cap project init`
-- `cap project doctor`
-- `cap workflow run project-constitution`
-- `cap workflow run project-spec-pipeline`
-- `cap workflow run project-implementation-pipeline`
-- `cap workflow run project-qa-pipeline`
-- `cap promote inspect`
-- repo-local runtime smoke for the Primary Component Runtime Profile
+- `cap provider doctor` has human and JSON output;
+- JSON validates against `schemas/provider-readiness.schema.yaml`;
+- missing provider is reported clearly;
+- installed-but-auth-unknown is reported conservatively;
+- remediation is visible;
+- no token, login, or provider state mutation occurs.
 
-Use this first because failures are easier to attribute.
+### 2. Workflow Preflight
 
-Current gate after the 2026-05-10 Component Repo closeout:
-
-- Component Repo implementation artifacts must follow the layer contract in
-  `docs/cap/COMPONENT-REPO-TEMPLATE-CONTRACT.md`.
-- Frontend / Backend implementation steps must apply the Component Repo
-  sections in `agent-skills/04-frontend-agent.md` and
-  `agent-skills/05-backend-agent.md`.
-- Do not advance a Component Repo run from Phase D to Phase E only because
-  `project-implementation-pipeline` reports `completed / success`.
-- Phase D must prove actual implementation artifacts exist on disk, not only
-  non-empty AI stdout. This depends on the AI step result contract and the
-  separate AI write contract.
-- Phase F runtime smoke may validate an operator-authored skeleton, but that
-  does not count as CAP-produced implementation evidence.
-- Re-run Phase E only after Phase D has produced real frontend, backend,
-  deployment, and test artifacts under the agreed write contract.
-
-### 2. Maintenance Repo
-
-Goal: existing repo intake for bugfix / feature / refactor work.
-
-Allowed stacks:
-
-```text
-Primary stack
-Nuxt + Node/NestJS
-Angular + Java/Spring Boot
-```
+Goal: prove AI-backed workflow execution checks provider readiness before
+the first AI step.
 
 Acceptance:
 
-- detect stack
-- summarize architecture
-- identify build / test commands
-- create task constitution
-- plan minimal change
-- run discovered tests when safe
+- AI-backed workflow halts before provider spawn when readiness is
+  blocked;
+- shell-only workflow bypasses provider readiness;
+- dry-run / bind / compile remain provider-independent;
+- halt output includes provider, readiness state, blocked reason, and
+  remediation.
 
-Non-goal: full autonomous implementation across every framework. Maintenance dogfood should prove CAP can understand and plan safely before it edits broadly.
+### 3. Observability
 
-### 3. Product Repo
-
-Goal: complete frontend/backend product repo.
-
-Initial stack:
-
-```text
-Next.js + C#/.NET + PostgreSQL + Docker Compose
-```
+Goal: prove an operator can understand a run without reading the whole
+CAP repo.
 
 Acceptance:
 
-- project constitution
-- spec pipeline
-- implementation pipeline
-- QA pipeline
-- Dockerized local run
-- promote candidate inspection
-- release-gate smoke before tagging
+- `cap workflow inspect <run-id>` identifies final state and failed step;
+- `cap workflow logs <run-id> --step <step>` finds the relevant output;
+- `cap session analyze --run-id <run-id>` shows duration hotspots and
+  token availability / byte proxies;
+- failure records are written even when the workflow halts early.
 
-Use this after Component Repo and Maintenance Repo expose enough baseline evidence.
+### 4. Deterministic Workflow
 
-## Scope
+Goal: prove CAP adds value without requiring AI inference.
 
-In scope for first dogfood cycle:
+Acceptance:
 
-- web software repos
-- frontend + backend
-- Dockerized local development
-- task-driven maintenance and feature work
-- monorepo or split repo, if the primary stack remains recognizable
+- schema validation;
+- repo identity checks;
+- shell audits;
+- smoke scripts;
+- artifact indexing;
+- result rendering.
 
-Out of scope until explicit dogfood evidence appears:
+## Frozen Dogfood Profiles
 
-- mobile apps
-- data pipelines
-- plugin marketplace / extension platform
-- non-web desktop apps
-- first-class full implementation for every framework
+### Component Repo / Component-Fast
 
-## Runtime Implication
+Frozen.
 
-Do not start broad runtime work, including Role / Skill attachment runtime, unless the change can be validated against at least one dogfood profile above.
+The historical component dogfood remains useful evidence, but it should
+not drive the next platform cycle. It tested too many things at once:
+project constitution, spec pipeline, implementation pipeline, templates,
+structured inputs, smoke runtime, provider cost, and profile design.
 
-Phase 5 Role / Skill attachment may start only when its first vertical slice is scoped to:
+Future component dogfood requires a separate reopen decision.
 
-```text
-Component Repo or Product Repo
-Primary stack
-capability -> selected role -> attached skills
-legacy binding fields preserved
-no agent-skills directory move
-```
+### Product-Strict Pipeline
 
-Compatibility stacks should remain intake / diagnosis / planning targets until the primary stack path is stable.
+Frozen as default dogfood.
+
+Use only when explicitly testing product-scale governance. It is not a
+normal regression target.
+
+## Rule
+
+Prefer the smallest dogfood that can prove the platform boundary.
+
+If a dogfood run needs more than one paragraph to explain why it is
+necessary, it is probably too broad for the current CAP direction.

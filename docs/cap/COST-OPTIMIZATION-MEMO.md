@@ -1,120 +1,70 @@
-# CAP Cost Optimization Memo
+# CAP Cost And Waste Reduction Memo
 
-> Source dogfood: `component-feedback-widget`, successful implementation run `run_20260513212143_defe3f1c`.
-> Purpose: define the runtime cost visibility and component fast-path work required before broad live dogfood.
+> Status: reframed on 2026-05-15.
+> Product boundary: [CAP-POSITIONING.md](CAP-POSITIONING.md).
 
-## Problem
+## Reframe
 
-The first complete `component-feedback-widget` implementation dogfood proved that CAP can now push a small Component Repo through the implementation pipeline, but the cost profile is not acceptable:
+The goal is not generic "token saving." The goal is **waste
+reduction**.
 
-- Total implementation duration: 2665s (44m25s).
-- Result: 15/15 steps completed successfully.
-- Operator-observed provider pressure: Claude reached 87% of the rolling 5-hour usage limit.
-- The run covered implementation only; the preceding spec pipeline took 1902s (31m42s). Spec + implementation therefore cost roughly 76 minutes before human review / verification intervention.
+Waste means:
 
-The current system primarily optimizes correctness, governance, traceability, and failure recovery. It does not yet optimize wall time or token usage.
+- starting a workflow when the provider is missing or not ready;
+- discovering auth failure only after setup work has run;
+- using a full product pipeline for a small direct coding task;
+- asking AI to re-derive deterministic structure;
+- retrying because the run output is not inspectable;
+- hiding provider choice or cost behind another layer.
 
-## Implementation Cost Breakdown
+CAP should reduce those losses. It should not claim that it will beat
+direct Claude Code / Codex for small implementation tasks.
 
-Top implementation steps by wall time:
+## Evidence
 
-| Rank | Step | Capability | Duration | Share of run |
-|---:|---|---|---:|---:|
-| 1 | `backend` | `backend_implementation` | 619s | 23.2% |
-| 2 | `frontend` | `frontend_implementation` | 553s | 20.8% |
-| 3 | `devops_packaging` | `devops_delivery` | 377s | 14.1% |
-| 4 | `qa_testing` | `qa_testing` | 326s | 12.2% |
-| 5 | `security_audit` | `security_audit` | 272s | 10.2% |
-| 6 | `impl_audit` | `code_structure_audit` | 176s | 6.6% |
-| 7 | `archive` | `technical_logging` | 176s | 6.6% |
-| 8 | `draft_task_constitution` | `task_constitution_planning` | 149s | 5.6% |
+The `component-feedback-widget` dogfood showed:
 
-Interpretation:
+- direct component work through full CAP pipelines was too slow;
+- a small component paid product-scale workflow cost;
+- provider quota pressure was high;
+- correctness and observability improved, but operator value did not
+  clearly beat direct provider use.
 
-- The top five steps consume roughly 80.5% of the implementation run.
-- `backend` + `frontend` alone consume roughly 44% of the run.
-- The cost is not one isolated slow step. The fixed multi-agent workflow treats a small reusable component like a full product delivery cycle.
-- CAP did not persist per-step provider token usage for this run, so token hotspots cannot be ranked directly. Wall time plus prompt/output size is only a proxy.
-
-## Cost Optimization Decisions
-
-1. **P0: Provider token telemetry before further optimization.**
-   CAP needs first-class per-step usage telemetry in `agent-sessions.json`, `workflow-result.json`, and rendered `result.md`: prompt bytes, output bytes, provider input tokens, provider output tokens, cache tokens when available, total tokens, approximate cost or quota pressure, and provider/model identifiers. Without this, CAP can only guess from duration and artifact size, which is not good enough for cost engineering.
-
-2. **P1: Add a single-step component dogfood path.**
-   Future component dogfood should not start with the full `project-spec-pipeline` + `project-implementation-pipeline` chain. Add a one-step workflow/profile for known Component Repo fixtures: deterministic template generation + required files + runtime-smoke script + compact AI review. The goal is to test CAP's component repo contract without spending a full multi-agent product lifecycle.
-
-3. **P1: Add component fast path / deterministic templates.**
-   For known stacks such as Next.js + .NET + PostgreSQL + Docker Compose, generate the skeleton, design assets, store abstraction, `InMemoryFeedbackStore`, compose file, and smoke script deterministically. Use AI for ambiguous deltas, contract repair, and final review only.
-
-4. **P2: Keep full governance as an explicit strict mode.**
-   The current full workflow is still useful for product-scale or ambiguous systems, but it should not be the default dogfood loop for a small component. Profiles should be explicit: `component-fast`, `component-governed`, and `product-strict`.
-
-## Prioritized Follow-up Roadmap
-
-This roadmap orders the next repair stream after the 2026-05-13 dogfood.
-Broad live dogfood should pause until P0 and the first P1 fast path are usable.
-
-| Priority | Track | Why it comes here | Required outcome |
-|---|---|---|---|
-| P0 | Usage telemetry and cost visibility | The completed component implementation consumed 87% of the Claude 5-hour quota, but CAP still cannot rank true token hotspots. Optimizing without telemetry is guesswork. | Every AI step persists normalized usage in `agent-sessions.json` and `workflow-result.json`; `result.md` shows prompt bytes, output bytes, provider/model, token values when available, and explicit "tokens unavailable" when not available. |
-| P1a | Component fast path — design + contract sketch | A small reusable Component Repo should not pay the full project constitution + spec pipeline + implementation pipeline cost. P0b-2 dogfood evidence: backend (23.2%) + frontend (20.8%) dominate wall time even for a small reusable component. | **Status: design memo landed** — see `docs/cap/COMPONENT-FAST-PATH-MEMO.md`. Defines inputs / deterministic file catalog / 2 AI steps cap / compressed governance / 5 success thresholds (< 10 min wall / <= 2 AI steps / <= 30% prompt bytes / 100% catalog files / smoke exit 0). |
-| P1b | Component fast path — implementation | P1a is design only; implementation is the actual deliverable. | Write the catalog registry, template files, 6 new capabilities, workflow YAML, deterministic scripts, and the AI write-contract wiring. Validate the five P1a thresholds against the same `component-feedback-widget` fixture. |
-| P1 | Stop using product-strict as default dogfood path | The current workflow treats component work like a full product lifecycle. That makes every regression test expensive. | Component dogfood defaults to the fast path; full governance remains available only when explicitly requested. |
-| P2 | Workflow profile split | CAP needs clear operator intent rather than one heavy path for every task. | Define and document at least `component-fast`, `component-governed`, and `product-strict`, including which steps are deterministic, AI-backed, skipped, or audit-only. |
-| P2 | Handoff/result materialization normalization | Dogfood repeatedly failed on markdown formatting variants of `result: success`. Parser tolerance helped, but relying on AI markdown shape is brittle. | Runtime should normalize or materialize the final handoff result into a machine-readable form before gating; parser fallbacks remain compatibility, not the main contract. |
-| P2 | Open CAP correctness / UX bugs from dogfood | Known bugs still create noisy failures unrelated to component quality. | Fix or issue-track nested `cap-paths.sh` project resolution, prompt/project-id/bootstrap alignment, provider readiness/onboarding, and safer long-prompt input (`--prompt-file` / prompt capture). |
-| P3 | Resume broad dogfood | More large live runs before P0/P1 will burn quota while mostly rediscovering known cost problems. | Resume multi-provider dogfood only after telemetry can explain cost and a component fast path can serve as the default regression target. |
-
-## Telemetry Contract
-
-Every session should carry a normalized `usage` object. Provider-specific adapters may populate exact token counts; when a provider does not expose usage, the runtime must still persist byte-count proxies.
-
-```json
-{
-  "available": false,
-  "source": "runtime_byte_counts",
-  "provider": "claude",
-  "provider_cli": "claude",
-  "model": null,
-  "input_tokens": null,
-  "output_tokens": null,
-  "cache_read_tokens": null,
-  "cache_write_tokens": null,
-  "total_tokens": null,
-  "prompt_size_bytes": 5624,
-  "output_size_bytes": 20430,
-  "quota_pressure": null,
-  "reason": "provider did not expose token usage; byte counts recorded"
-}
-```
-
-CLI progress should surface the same truth without inventing token values:
+That evidence changes the product direction:
 
 ```text
-✓ draft_task_constitution (149s · tokens unavailable · prompt 5624B · out 20430B)
+Stop expanding component generation.
+Keep provider readiness, preflight, deterministic gates, and run analysis.
 ```
 
-When provider token usage is available, the same display can become:
+## Active Waste-Reduction Tracks
 
-```text
-✓ frontend (553s · 62.8k tokens · in 41.0k / out 12.6k / cache 9.2k)
-```
+| Track | Status | Why it remains core |
+|---|---|---|
+| Provider readiness | Active | Prevents AI-backed work from starting when no usable provider exists. |
+| Workflow preflight | Active | Moves failure before the first provider call. |
+| Run observability | Active | Makes time, prompt bytes, token availability, and failure hotspots visible. |
+| Deterministic gates | Active | Keeps checks, schema validation, and smoke tests out of AI inference. |
 
-## Provider Parity
+## Frozen Tracks
 
-Codex and Claude will not expose usage identically. CAP should normalize shared fields while preserving provider-specific source metadata:
+| Track | Status | Reason |
+|---|---|---|
+| Component fast path | Runtime removed; records retained | Did not prove better real-world outcome than direct provider use. |
+| Product-strict dogfood as default | Frozen | Too expensive for ordinary regression and component testing. |
+| More templates / stack catalogs | Frozen | Expands CAP into a generator instead of a governance layer. |
+| Cost-aware provider routing | Deferred | Requires trustworthy provider metadata and token telemetry first. |
 
-- `provider`
-- `provider_cli`
-- `model`
-- `source`
-- `input_tokens`
-- `output_tokens`
-- `cache_read_tokens`
-- `cache_write_tokens`
-- `total_tokens`
-- `quota_pressure`
-- `reason`
+## Measurement Rule
 
-This allows later comparisons such as "same workflow under Codex vs Claude" without losing each provider's native reporting limitations.
+Future CAP work should be judged by:
+
+- fewer bad starts;
+- earlier halt points;
+- clearer remediation;
+- fewer repeated runs;
+- clearer session analysis;
+- less AI use for deterministic work.
+
+It should not be judged by whether CAP can generate a small component
+faster than a direct Claude Code / Codex session.
